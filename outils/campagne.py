@@ -1,7 +1,8 @@
 """Une seule campagne de tests à la fois sur le poste : deux suites lancées ensemble se disputent la mémoire, le disque
 et le processeur, et chacune devient jusqu'à dix fois plus lente (mesure du 2026-11-16 : 1 861 s au lieu de 253 s).
 
-Le verrou est `~/MyIAFactory/tests-en-cours.json` ({pid, debut, racine}) ; celui d'un processus mort est repris. Une
+Le verrou est `~/MyIAFactory/tests-en-cours.json` ({pid, demarre, debut, racine}) ; celui d'un processus mort, ou d'un
+pid repris par un autre programme (date de création différente, `vivant_et_meme`), est repris. Une
 suite lancée sans le lanceur (`python -m unittest …`, `vitest run`, `jest`, `playwright test`) ne prend pas le verrou :
 elle est repérée parmi les processus du poste, et la campagne attend aussi qu'elle finisse.
 
@@ -21,13 +22,43 @@ from datetime import datetime
 from pathlib import Path
 from typing import BinaryIO, List, Optional, Tuple  # noqa: F401 — annotations en commentaires (Python 3.9)
 
-VERROU = Path("~/MyIAFactory/tests-en-cours.json").expanduser()
-# Les campagnes qui attendent leur tour, une par fichier `<pid>.json` ({pid, depuis, racine, tache, motif}) : le bureau
-# dit sur la fiche de la tâche que son agent attend le poste (essai réel du 2026-11-18 : Hugo attendait le verrou, sa
-# fiche n'en disait rien et l'utilisateur le croyait bloqué). `tache` : la clé de l'agent (`MYIAFACTORY_TACHE`).
-ATTENTES = Path("~/MyIAFactory/tests-en-attente").expanduser()
+# Le vrai dossier d'état du poste. `VERROU` et `ATTENTES` restent ses vrais chemins (la garde des tests les refuse) ;
+# les fonctions les résolvent à l'appel par `dossier_etat()`, jamais par une valeur par défaut figée à l'import.
+DOSSIER_ETAT = Path("~/MyIAFactory").expanduser()
+VERROU = DOSSIER_ETAT / "tests-en-cours.json"
+# Les campagnes qui attendent leur tour, une par fichier `<pid>.json` ({pid, demarre, depuis, racine, tache, motif}) :
+# le bureau dit sur la fiche de la tâche que son agent attend le poste (essai réel du 2026-11-18 : Hugo attendait le
+# verrou, sa fiche n'en disait rien et l'utilisateur le croyait bloqué). `tache` : la clé de l'agent
+# (`MYIAFACTORY_TACHE`). `demarre` : la date de création du processus (voir `vivant_et_meme`).
+ATTENTES = DOSSIER_ETAT / "tests-en-attente"
 VARIABLE_TACHE = "MYIAFACTORY_TACHE"
+# Posée par le lanceur de la suite (`outils/tests_paralleles.py`) pour chaque processus de test, jamais pour lui-même :
+# un test qui appelle `executer` ou `attendre_son_tour` sans chemins n'atteint plus le vrai verrou ni la vraie file
+# (blocages du 2026-11-23 : un test attendait derrière une campagne qui attendait le verrou tenu par son propre parent).
+VARIABLE_ETAT = "MYIAFACTORY_ETAT_TESTS"
 PAS_S = 10
+# Écart toléré entre la date de création d'un processus et celle notée (arrondi à la seconde, horloges).
+TOLERANCE_S = 2.0
+
+
+def isole():
+    """Vrai dans un processus de test lancé par le lanceur de la suite (`VARIABLE_ETAT` posée)."""
+    return bool(os.environ.get(VARIABLE_ETAT, "").strip())
+
+
+def dossier_etat():
+    """Le dossier où vivent le verrou et la file : celui de `VARIABLE_ETAT` dans un processus de test, sinon le vrai
+    `~/MyIAFactory`. Résolu à chaque appel (`tests_serveur.ATTENTES_SERVEUR` pourra s'y ranger)."""
+    v = os.environ.get(VARIABLE_ETAT, "").strip()
+    return Path(v).resolve() if v else DOSSIER_ETAT
+
+
+def verrou_par_defaut():
+    return VERROU if not isole() else dossier_etat() / VERROU.name
+
+
+def attentes_par_defaut():
+    return ATTENTES if not isole() else dossier_etat() / ATTENTES.name
 
 
 def pid_vivant(pid):
@@ -51,6 +82,126 @@ def pid_vivant(pid):
     except PermissionError:
         return True
     return True
+
+
+_EPOQUE_WINDOWS_S = 11644473600      # du 1601-01-01 (FILETIME) au 1970-01-01
+
+
+def _demarrage_windows(pid):
+    import ctypes
+    from ctypes import wintypes
+    k = ctypes.WinDLL("kernel32", use_last_error=True)    # une instance à nous : les prototypes ne débordent pas
+    k.OpenProcess.restype = wintypes.HANDLE
+    k.OpenProcess.argtypes = (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
+    k.GetProcessTimes.restype = wintypes.BOOL
+    k.GetProcessTimes.argtypes = (wintypes.HANDLE,) + (ctypes.POINTER(wintypes.FILETIME),) * 4
+    k.GetExitCodeProcess.restype = wintypes.BOOL
+    k.GetExitCodeProcess.argtypes = (wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD))
+    k.CloseHandle.argtypes = (wintypes.HANDLE,)
+    h = k.OpenProcess(0x1000, False, pid)    # PROCESS_QUERY_LIMITED_INFORMATION
+    if not h:
+        return False, None
+    try:
+        code = wintypes.DWORD()
+        if not k.GetExitCodeProcess(h, ctypes.byref(code)) or code.value != 259:    # STILL_ACTIVE
+            return False, None
+        t = [wintypes.FILETIME() for _ in range(4)]
+        if not k.GetProcessTimes(h, *(ctypes.byref(x) for x in t)):
+            return True, None
+        cent_ns = (t[0].dwHighDateTime << 32) | t[0].dwLowDateTime
+        return True, cent_ns / 1e7 - _EPOQUE_WINDOWS_S
+    finally:
+        k.CloseHandle(h)
+
+
+def _demarrage_proc(pid):
+    """Linux : `starttime` (22e champ de `/proc/<pid>/stat`, en tops depuis le démarrage) + `btime` de `/proc/stat`."""
+    try:
+        stat = Path(f"/proc/{pid}/stat").read_text()
+        champs = stat[stat.rindex(")") + 2:].split()      # le nom du programme peut contenir espaces et parenthèses
+        tops = int(champs[19])
+        for ligne in Path("/proc/stat").read_text().splitlines():
+            if ligne.startswith("btime "):
+                return int(ligne.split()[1]) + tops / os.sysconf("SC_CLK_TCK")
+    except (OSError, ValueError, IndexError):
+        pass
+    return None
+
+
+def _etat_reel(pid):
+    """`(vivant, demarre)` : le processus `pid` existe-t-il, et sa date de création (secondes depuis 1970, `None` si on
+    ne sait pas la lire). Ne lève jamais."""
+    if not isinstance(pid, int) or isinstance(pid, bool) or pid <= 0:
+        return False, None
+    try:
+        if sys.platform == "win32":
+            return _demarrage_windows(pid)
+        if not pid_vivant(pid):
+            return False, None
+        return True, _demarrage_proc(pid)
+    except Exception:  # noqa: BLE001 — repli : la seule existence du pid, comme avant
+        return pid_vivant(pid), None
+
+
+etat_processus = _etat_reel      # remplacé dans les tests ; `mon_demarrage` lit toujours le vrai
+_MON_DEMARRAGE = {}
+
+
+def mon_demarrage():
+    """La date de création de ce processus (gardée par pid : un processus fils né d'un `fork` relit la sienne), notée
+    dans le verrou et la file."""
+    pid = os.getpid()
+    if pid not in _MON_DEMARRAGE:
+        _MON_DEMARRAGE[pid] = _etat_reel(pid)[1]
+    return _MON_DEMARRAGE[pid]
+
+
+def _nombre(x):
+    return float(x) if isinstance(x, (int, float)) and not isinstance(x, bool) else None
+
+
+def _epoque(texte):
+    """Une date ISO (`depuis`, `debut`) en secondes depuis 1970 ; `None` si elle est absente, illisible ou sans fuseau."""
+    if not isinstance(texte, str):
+        return None
+    try:
+        d = datetime.fromisoformat(texte)
+    except ValueError:
+        return None
+    return d.timestamp() if d.tzinfo is not None else None
+
+
+def vivant_et_meme(pid, demarre_epoch=None, note_epoch=None, etat=None):
+    """Le processus d'une note (file ou verrou) tourne-t-il encore, et est-ce bien LE MÊME ? Un pid repris par un autre
+    programme (essai réel du 2026-11-23 : la note `23232.json` d'une campagne morte, son pid repris par un `conhost.exe`,
+    retenait la file sans fin) n'est plus pris pour la campagne :
+    - `demarre_epoch` (noté par les versions récentes) : la date de création doit être la même, à `TOLERANCE_S` près ;
+    - sinon (ancienne note) `note_epoch`, la date écrite dans la note : un processus créé après elle n'est pas le sien ;
+    - date de création illisible : la seule existence du pid, comme avant.
+    `etat` : `etat_processus` par défaut (remplacé dans les tests)."""
+    vivant, reel = (etat or etat_processus)(pid)
+    if not vivant:
+        return False
+    if reel is None:
+        return True
+    demarre = _nombre(demarre_epoch)
+    if demarre is not None:
+        return abs(reel - demarre) <= TOLERANCE_S
+    note = _nombre(note_epoch)
+    if note is not None:
+        return reel <= note + TOLERANCE_S
+    return True
+
+
+def _note_vivante(note, vivant, date="depuis"):
+    """Une note de la file ou du verrou est-elle celle d'une campagne en vie ? `vivant` : `None` (défaut, identité
+    complète par `vivant_et_meme`) ou un prédicat sur le pid (tests anciens)."""
+    pid = note.get("pid")
+    if not isinstance(pid, int) or isinstance(pid, bool):
+        return False
+    if vivant is not None:
+        return bool(vivant(pid))
+    return vivant_et_meme(pid, note.get("demarre"), _epoque(note.get(date)))
 
 
 # Les suites de tests JavaScript lancées sans le verrou (le serveur `vite` seul n'en est pas une).
@@ -98,32 +249,44 @@ def _lire(verrou):
         return None
 
 
-def prendre(verrou=VERROU, racine="", vivant=pid_vivant):
-    """Pose le verrou pour ce processus. `None` si c'est fait, sinon ce que dit le verrou d'une autre campagne."""
-    verrou = Path(verrou)
+def _age_s(chemin):
+    try:
+        return time.time() - Path(chemin).stat().st_mtime
+    except OSError:
+        return float("inf")
+
+
+def prendre(verrou=None, racine="", vivant=None):
+    """Pose le verrou pour ce processus. `None` si c'est fait, sinon ce que dit le verrou d'une autre campagne. Le
+    verrou d'une campagne morte, ou dont le pid a été repris par un autre processus (`vivant_et_meme`, date `debut`),
+    est repris. `vivant` : prédicat sur le pid (tests) ; par défaut l'identité complète."""
+    verrou = Path(verrou_par_defaut() if verrou is None else verrou)
     verrou.parent.mkdir(parents=True, exist_ok=True)
     for _ in range(3):
         try:
             fd = os.open(verrou, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
         except FileExistsError:
             autre = _lire(verrou)
-            if autre and vivant(autre.get("pid")) and autre.get("pid") != os.getpid():
+            if isinstance(autre, dict) and autre.get("pid") != os.getpid() and _note_vivante(autre, vivant, "debut"):
                 return autre
+            if autre is None and _age_s(verrou) < TOLERANCE_S:
+                return {"pid": None}      # créé à l'instant par une autre campagne, pas encore écrit : pas repris
             try:
                 verrou.unlink()       # le verrou d'une campagne morte : repris
             except OSError:
                 pass
             continue
         with os.fdopen(fd, "w", encoding="utf-8") as f:
-            json.dump({"pid": os.getpid(), "debut": datetime.now().astimezone().isoformat(timespec="seconds"),
-                       "racine": str(racine)}, f)
+            json.dump({"pid": os.getpid(), "demarre": mon_demarrage(),
+                       "debut": datetime.now().astimezone().isoformat(timespec="seconds"), "racine": str(racine)}, f)
         return None
     return _lire(verrou) or {"pid": None}
 
 
-def liberer(verrou=VERROU):
+def liberer(verrou=None):
+    verrou = verrou_par_defaut() if verrou is None else verrou
     autre = _lire(verrou)
-    if autre and autre.get("pid") == os.getpid():
+    if isinstance(autre, dict) and autre.get("pid") == os.getpid():
         try:
             Path(verrou).unlink()
         except OSError:
@@ -134,8 +297,9 @@ def _noter_l_attente(attentes, racine, motif, depuis, arrivee):
     try:
         Path(attentes).mkdir(parents=True, exist_ok=True)
         (Path(attentes) / f"{os.getpid()}.json").write_text(json.dumps(
-            {"pid": os.getpid(), "depuis": depuis, "arrivee": arrivee, "racine": str(racine),
-             "tache": os.environ.get(VARIABLE_TACHE) or None, "motif": motif}), encoding="utf-8")
+            {"pid": os.getpid(), "demarre": mon_demarrage(), "depuis": depuis, "arrivee": arrivee,
+             "racine": str(racine), "tache": os.environ.get(VARIABLE_TACHE) or None, "motif": motif}),
+            encoding="utf-8")
     except OSError:
         pass      # une aide pour le bureau : l'attente continue sans elle
 
@@ -147,9 +311,10 @@ def _oublier_l_attente(attentes):
         pass
 
 
-def _file(attentes, vivant=pid_vivant):
+def _file(attentes, vivant=None):
     """Les campagnes vivantes qui attendent, dans leur ordre d'arrivée : `[(arrivee, pid, note)]`. Une note sans
-    `arrivee` (ancienne version) prend la date du fichier. Lecture seule, ne lève jamais."""
+    `arrivee` (ancienne version) prend la date du fichier. Une note dont le pid tourne encore mais n'est plus le même
+    processus (`vivant_et_meme`) est ignorée. Lecture seule, ne lève jamais."""
     try:
         fichiers = list(Path(attentes).glob("*.json"))
     except OSError:
@@ -157,7 +322,7 @@ def _file(attentes, vivant=pid_vivant):
     file = []
     for f in fichiers:
         x = _lire(f)
-        if not isinstance(x, dict) or not isinstance(x.get("pid"), int) or not vivant(x["pid"]):
+        if not isinstance(x, dict) or not _note_vivante(x, vivant):
             continue
         arrivee = x.get("arrivee")
         if not isinstance(arrivee, (int, float)) or isinstance(arrivee, bool):
@@ -170,31 +335,40 @@ def _file(attentes, vivant=pid_vivant):
     return file
 
 
-def _devant(attentes, arrivee, vivant=pid_vivant):
+def _devant(attentes, arrivee, vivant=None):
     """Les campagnes qui attendent avant nous (toutes, tant que nous ne sommes pas encore dans la file)."""
     moi = os.getpid()
     return [e for e in _file(attentes, vivant)
             if e[1] != moi and (arrivee is None or (e[0], e[1]) < (arrivee, moi))]
 
 
-def en_attente(attentes=ATTENTES, vivant=pid_vivant):
+def en_attente(attentes=None, vivant=None):
     """Les campagnes qui attendent leur tour, par clé d'agent : `{tache: {depuis, motif, rang, total}}` ; `rang` est la
     position dans la file (1 : la prochaine à passer), `total` le nombre de campagnes qui attendent (celles sans agent
     comptent dans la file ; celles d'un processus mort sont ignorées). Lecture seule, ne lève jamais."""
     sortie = {}
-    file = _file(attentes, vivant)
+    file = _file(attentes_par_defaut() if attentes is None else attentes, vivant)
     for rang, (_, _, x) in enumerate(file, 1):
         if isinstance(x.get("tache"), str) and x["tache"] and x["tache"] not in sortie:
             sortie[x["tache"]] = {"depuis": x.get("depuis"), "motif": x.get("motif"), "rang": rang, "total": len(file)}
     return sortie
 
 
-def attendre_son_tour(racine, attendre=True, verrou=VERROU, lister=processus, dormir=time.sleep, dire=print,
-                      attentes=ATTENTES):
+def _lister_par_defaut():
+    """Les processus du poste, sauf dans un processus de test isolé (`VARIABLE_ETAT`) : ses voisins `unittest` de la
+    même suite y passeraient pour des suites sans verrou, et deux tests s'attendraient l'un l'autre sans fin."""
+    return (lambda: []) if isole() else processus
+
+
+def attendre_son_tour(racine, attendre=True, verrou=None, lister=None, dormir=time.sleep, dire=print,
+                      attentes=None):
     """Prend le verrou dès que le poste est libre et que personne n'attend avant nous (premier arrivé, premier servi :
     le bureau affiche la position dans la file, elle doit dire vrai). Rend vrai quand c'est fait, faux si `attendre`
     est faux et que le poste est pris. Pendant qu'elle attend, la campagne est notée dans `attentes` (voir
-    `en_attente`)."""
+    `en_attente`). Sans `verrou`, `attentes`, `lister` : ceux du poste, résolus à l'appel (`dossier_etat`)."""
+    verrou = verrou_par_defaut() if verrou is None else verrou
+    attentes = attentes_par_defaut() if attentes is None else attentes
+    lister = _lister_par_defaut() if lister is None else lister
     deja_dit, depuis, arrivee = None, None, None
     try:
         while True:
@@ -312,8 +486,8 @@ def _noter_par_defaut(racine, **mesure):
     return tests_mesures.noter_campagne(racine, **mesure)
 
 
-def executer(commande, dossier=None, attendre=True, verrou=VERROU, lister=processus, dormir=time.sleep, dire=print,
-             lancer=_lancer, attentes=ATTENTES, env=None, horloge=time.monotonic, noter=None):
+def executer(commande, dossier=None, attendre=True, verrou=None, lister=None, dormir=time.sleep, dire=print,
+             lancer=_lancer, attentes=None, env=None, horloge=time.monotonic, noter=None):
     """Les tests d'un projet, une campagne à la fois sur le poste : attend son tour, lance `commande` dans `dossier`,
     rend son code (3 si refusé sans attendre) et libère toujours le verrou. `env` : variables ajoutées à
     l'environnement de la commande (sans `env`, `lancer` est appelé comme avant, à deux arguments).
@@ -325,6 +499,8 @@ def executer(commande, dossier=None, attendre=True, verrou=VERROU, lister=proces
     appel = horloge()
     commande = list(commande)
     racine = str(Path(dossier or os.getcwd()).resolve())
+    verrou = verrou_par_defaut() if verrou is None else verrou      # résolu une fois : pris et libéré au même endroit
+    attentes = attentes_par_defaut() if attentes is None else attentes
     if not attendre_son_tour(racine, attendre=attendre, verrou=verrou, lister=lister, dormir=dormir, dire=dire,
                              attentes=attentes):
         return 3

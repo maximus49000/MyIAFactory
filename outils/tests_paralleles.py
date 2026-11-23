@@ -9,7 +9,9 @@
 Rien à installer : la bibliothèque standard seule. Un morceau est un module de test ; les modules de `DECOUPAGE`, les
 plus longs, sont découpés (par classe ou par test) pour ne pas tenir toute la suite à eux seuls. Chaque morceau tourne
 dans son propre processus, comme `py -3.12 -m unittest tests.<module>[.<Classe>[.<test>]]` : les variables
-d'environnement qu'un test modifie ne débordent pas sur un autre. Les morceaux les plus longs connus (fichier
+d'environnement qu'un test modifie ne débordent pas sur un autre. Chaque morceau a aussi son propre dossier d'état des
+campagnes (`MYIAFACTORY_ETAT_TESTS`, voir `campagne.dossier_etat`) : aucun test n'atteint le vrai verrou du poste, que
+le lanceur tient pendant toute la suite. Les morceaux les plus longs connus (fichier
 `.durees-tests.json`, hors dépôt) partent en premier.
 
 `--touches [référence]` (`outils/impact_tests.py`) ne garde que les modules de test qui atteignent un fichier modifié
@@ -24,6 +26,7 @@ import argparse
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -99,6 +102,18 @@ def _environnement():
     return {**env, "PYTHONIOENCODING": "utf-8", "TEMP": temp, "TMP": temp, "TMPDIR": temp}
 
 
+# Chaque processus de test reçoit son propre dossier d'état (`campagne.VARIABLE_ETAT`) : un test qui appelle
+# `campagne.executer` ou `attendre_son_tour` sans chemins n'atteint jamais le vrai verrou ni la vraie file (blocages du
+# 2026-11-23). Le lanceur, lui, garde le vrai verrou : la variable n'est posée que dans l'environnement des morceaux.
+VARIABLE_ETAT = "MYIAFACTORY_ETAT_TESTS"
+
+
+def _env_du_morceau(env, etat, numero):
+    dossier = Path(etat) / str(numero)
+    dossier.mkdir(parents=True, exist_ok=True)
+    return {**env, VARIABLE_ETAT: str(dossier)}
+
+
 def lancer(morceau, env):
     debut = time.monotonic()
     try:
@@ -120,7 +135,8 @@ def _ignores(sortie):
     return int(m.group(1)) if m else 0
 
 
-def main(argv=None):
+def main(argv=None, lancer_morceau=None, poste=None):
+    """`lancer_morceau(morceau, env)` et `poste` (le module `campagne`) : remplacés dans les tests."""
     a = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     a.add_argument("filtres", nargs="*", help="textes contenus dans le nom des modules à lancer")
     a.add_argument("-j", type=int, default=os.cpu_count() or 4, help="morceaux lancés à la fois (défaut : les cœurs)")
@@ -145,23 +161,33 @@ def main(argv=None):
     if not liste:
         print("Aucun module de test ne correspond.")
         return 1
-    import campagne   # une seule campagne à la fois sur le poste (outils/campagne.py)
-    if not campagne.attendre_son_tour(RACINE, attendre=not o.sans_attendre):
+    if poste is None:
+        import campagne as poste   # une seule campagne à la fois sur le poste (outils/campagne.py)
+    if os.environ.get(VARIABLE_ETAT, "").strip():
+        # lancé depuis un test (déjà isolé) : son verrou est celui du test, jamais celui que tient le lanceur parent
+        print(f"État des tests isolé ({VARIABLE_ETAT}={os.environ[VARIABLE_ETAT]}).", flush=True)
+    verrou, attentes = poste.verrou_par_defaut(), poste.attentes_par_defaut()   # résolus une fois, avant tout morceau
+    if not poste.attendre_son_tour(RACINE, attendre=not o.sans_attendre, verrou=verrou, attentes=attentes):
         return 3
     try:
-        return _campagne(o, liste)
+        etat = tempfile.mkdtemp(prefix="myiafactory-etat-tests-", dir=str(Path(tempfile.gettempdir()).resolve()))
+        try:
+            return _campagne(o, liste, etat, lancer_morceau or lancer)
+        finally:
+            shutil.rmtree(etat, ignore_errors=True)
     finally:
-        campagne.liberer()
+        poste.liberer(verrou)
 
 
-def _campagne(o, liste):
+def _campagne(o, liste, etat, lancer_morceau=lancer):
     connues, env = _lire_durees(), _environnement()
     parts = morceaux(liste, connues, o.decouper)
     parts.sort(key=lambda n: -connues.get(n, 1e9))   # inconnus d'abord (prudence), puis les plus longs
     debut, resultats, echecs, ignores = time.monotonic(), [], [], 0
     print(f"{len(liste)} modules en {len(parts)} morceaux, {o.j} à la fois.", flush=True)
     with ThreadPoolExecutor(max_workers=max(1, o.j)) as pool:
-        for f in as_completed([pool.submit(lancer, n, env) for n in parts]):
+        for f in as_completed([pool.submit(lancer_morceau, n, _env_du_morceau(env, etat, i))
+                               for i, n in enumerate(parts)]):
             morceau, code, duree, nb, sortie, ign = f.result()
             resultats.append((morceau, code, duree, nb))
             ignores += ign
@@ -170,8 +196,8 @@ def _campagne(o, liste):
             if code != 0:
                 echecs.append(morceau)
     instables, vrais = [], []
-    for morceau in sorted(echecs):   # relancé seul : la charge parallèle n'est plus en cause
-        _, code, duree, _, sortie, _ = lancer(morceau, env)
+    for i, morceau in enumerate(sorted(echecs)):   # relancé seul : la charge parallèle n'est plus en cause
+        _, code, duree, _, sortie, _ = lancer_morceau(morceau, _env_du_morceau(env, etat, f"relance-{i}"))
         print(f"relance seule : {'ok' if code == 0 else 'ÉCHEC':5} {duree:7.1f} s  {morceau}", flush=True)
         (instables if code == 0 else vrais).append((morceau, sortie))
     total = time.monotonic() - debut

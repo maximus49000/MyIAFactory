@@ -37,14 +37,6 @@ case "$mode" in
   s) grep -q -e CLE-VALIDE -e TROUSSEAU "$entree" || exit 2;;
 esac'''
 
-from tests import plateforme_tests  # noqa: E402
-
-
-def setUpModule():
-    plateforme_tests.module_pas_encore_linux(
-        "89 des 119 tests échouent au conteneur Linux (scripts serveur_ovh simulés sous bash/docker), cause à préciser")
-
-
 def lancer(etape, simuler=True, entree="", env=None):
     args = ["bash", SCRIPT.as_posix(), "--etape", etape] + (["--simuler"] if simuler else [])
     e = dict(os.environ, **(env or {}))

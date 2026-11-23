@@ -1588,7 +1588,6 @@ class TestMotifs(unittest.TestCase):
                                           "attendre", "capturer", "journal", "arreter", "filmer", "finfilm"})
 
     @unittest.skipUnless(shutil.which("bash"), "bash absent")
-    @plateforme_tests.pas_encore_linux("rejoue les verbes sur le Banc de test_serveur_pont (non hermétique sous Linux)")
     def test_motifs_python_et_pont_s_accordent(self):
         from tests.test_serveur_pont import Banc
         with Banc(PONT_PAQUET="com.exemple.app") as banc:

@@ -1,14 +1,15 @@
-#!/usr/bin/env bash
+#!/bin/bash
 # Sonde d'audit du bac à sable Unity (conception § 5.16, option A ; audit du jalon J14, tâche 14h). Lancée DANS l'unité, à la
 # place de l'éditeur, par `sudo -n /usr/local/lib/myiafactory/unity-bac-a-sable.sh auditer <id> <cpus> <memoire_mo> <duree_s>
 # <version> <reseau>` : MÊMES propriétés que pour une campagne. Elle constate (jamais ne suppose) ce que le code d'un projet
 # verrait. Une ligne par contrôle : `ok <nom>` ou `echec <nom> : <raison>` ; code 0 si tout est ok, 1 sinon. Elle n'écrit AUCUN
 # marqueur : ~/.myiafactory/unity-bac-a-sable.version est écrit par l'audit J14 (le Directeur ou son agent), après lecture de ce
-# résultat. La licence n'est JAMAIS lue : seulement `test -r` / `test -w` sur ses noms.
+# résultat, et SEULEMENT si le bilan est « 0 echec(s) » (un contrôle réseau non éprouvé est un échec : pas de marqueur). La licence n'est JAMAIS lue : seulement `test -r` / `test -w` sur ses noms.
 # Variables posées par le script racine : HOME (dans la campagne), MYIAFACTORY_SONDE_PRINCIPAL (le dossier de l'utilisateur
 # principal), MYIAFACTORY_SONDE_RESEAU (aucun|licence), MYIAFACTORY_UNITY_EDITEUR, ENTREE_TESTS_RACINE (la campagne).
 set -u
 exec </dev/null
+IFS=$' \t\n'
 export LC_ALL=C
 
 ECHECS=0
@@ -61,12 +62,34 @@ done
 verifier processus "$autres processus d'autres utilisateurs visibles" test "$autres" = 0
 # Périphériques : privés.
 verifier peripheriques "/dev/kvm ou un disque visible" bash -c '! [ -e /dev/kvm ] && ! ls /dev/sd* /dev/nvme* >/dev/null 2>&1'
-# Réseau.
+# Réseau : ÉPROUVÉ, jamais supposé (relecture 14h, I5). Une connexion vers une adresse hors mandataire doit échouer ; avec
+# reseau=licence, le mandataire doit répondre et les sockets Unix joignables sont listées (les abstraites de l'hôte le restent
+# dans ce mode : risque connu du § 5.16). Sans moyen de lister : échec (rien n'a été testé).
+DELAI="${MYIAFACTORY_SONDE_DELAI_S:-5}"
+[[ $DELAI =~ ^[1-9][0-9]?$ ]] || DELAI=5
+connecter() { timeout "$DELAI" bash -c 'exec 3<>"/dev/tcp/$1/$2"' _ "$1" "$2" </dev/null >/dev/null 2>&1; }
+if connecter 1.1.1.1 443; then ko reseau-hors-mandataire "connexion vers 1.1.1.1:443 ouverte"
+else ok reseau-hors-mandataire; fi
 interfaces=$(ls /sys/class/net 2>/dev/null | tr '\n' ' ')
 if [ "$RESEAU" = aucun ]; then
   verifier reseau-prive "interfaces visibles : $interfaces" test "$interfaces" = "lo "
 else
-  ok "reseau-licence (interfaces : $interfaces ; IPAddressDeny/Allow à éprouver par une connexion à l'audit)"
+  m="${MYIAFACTORY_SONDE_MANDATAIRE:-}"
+  if [[ $m =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]]; then
+    verifier reseau-licence-mandataire "mandataire $m:3128 injoignable" connecter "$m" 3128
+  else
+    ko reseau-licence-mandataire "adresse du mandataire absente : rien de testé"
+  fi
+  if liste=$(ss -xl 2>/dev/null) && [ -n "$liste" ]; then source_unix="ss -xl"
+  elif [ -r /proc/self/net/unix ]; then liste=$(cat /proc/self/net/unix 2>/dev/null); source_unix="/proc/self/net/unix"
+  else liste=""; source_unix=""; fi
+  if [ -n "$source_unix" ]; then
+    printf '%s\n' "$liste" | tr -c '[:print:]\n' '?' | head -n 200 | sed 's/^/info sockets-unix /'
+    abstraites=$(printf '%s\n' "$liste" | grep -c ' @' || true)
+    ok "sockets-unix ($source_unix : ${abstraites:-0} abstraite(s) joignable(s), risque connu du mode licence)"
+  else
+    ko sockets-unix "ni ss -xl ni /proc/self/net/unix : rien de testé"
+  fi
 fi
 # Licence : lisible, non inscriptible ; jamais lue.
 droits="$HOME/.config/unity3d/Unity/licenses"

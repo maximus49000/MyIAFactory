@@ -996,7 +996,7 @@ etape_unity_cli() {
 
 # Étape unity_bac_a_sable : prépare ce qui permet à l'enveloppe des tests de lancer l'éditeur Unity de l'HÔTE dans une unité
 # systemd confinée (code de projet non fiable sur l'hôte) : utilisateur système unity-tests (sans shell, mot de passe verrouillé,
-# hors docker/kvm/sudo/adm/lxd), /var/lib/unity-tests et campagnes/ (0700, à lui), le script racine et ses entrées dans
+# hors docker/kvm/sudo/adm/lxd), /var/lib/unity-tests (0700, à lui) et campagnes/ (root, 0711), le script racine et ses entrées dans
 # /usr/local/lib/myiafactory (root, 0755), la règle /etc/sudoers.d/myiafactory-unity limitée au SEUL chemin du script racine
 # (vérifiée par visudo -c avant ET après la pose, retirée si refus), une ACL de lecture pour unity-tests sur les SEULS fichiers
 # de licence (et une ACL par défaut sur licenses/ pour qu'un rafraîchissement par Hub la garde). Vérifie d'abord que
@@ -1044,8 +1044,11 @@ etape_unity_bac_a_sable() {
   sudo -n usermod --shell /usr/sbin/nologin "$BAC_UTILISATEUR" >/dev/null 2>&1 &&
     sudo -n passwd --lock "$BAC_UTILISATEUR" >/dev/null 2>&1 ||
     repondre bloque "Shell ou mot de passe de ${BAC_UTILISATEUR} non verrouillés."
-  sudo -n install -d -o "$BAC_UTILISATEUR" -g "$BAC_UTILISATEUR" -m 0700 "$BAC_VAR" "$BAC_VAR/campagnes" >/dev/null 2>&1 ||
+  sudo -n install -d -o "$BAC_UTILISATEUR" -g "$BAC_UTILISATEUR" -m 0700 "$BAC_VAR" >/dev/null 2>&1 ||
     repondre bloque "Dossier ${BAC_VAR} non créable."
+  # campagnes/ à root, 0711 : chaque campagne (root, 0711) y est créée par le script racine ; le projet ne peut rien y renommer
+  sudo -n install -d -o root -g root -m 0711 "$BAC_VAR/campagnes" >/dev/null 2>&1 ||
+    repondre bloque "Dossier ${BAC_VAR}/campagnes non créable."
   sudo -n install -d -o root -g root -m 0755 "$BAC_LIB" >/dev/null 2>&1 || repondre bloque "Dossier ${BAC_LIB} non créable."
   for f in unity-bac-a-sable.sh sonde-bac-a-sable.sh images/tests/entree-tests.sh images/tests/entree-unity.sh; do
     sudo -n install -o root -g root -m 0755 "$racine/$f" "$BAC_LIB/${f##*/}" >/dev/null 2>&1 ||

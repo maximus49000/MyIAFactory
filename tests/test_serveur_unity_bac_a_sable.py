@@ -39,18 +39,29 @@ FIGEES = {"User", "ProtectHome", "ProtectSystem", "PrivateTmp", "PrivateDevices"
           "ProtectProc", "ProcSubset", "ProtectKernelTunables", "ProtectKernelModules", "ProtectKernelLogs", "RestrictNamespaces",
           "RestrictSUIDSGID", "LockPersonality", "SystemCallFilter", "InaccessiblePaths", "ReadWritePaths", "BindReadOnlyPaths",
           "PrivateNetwork", "IPAddressDeny", "IPAddressAllow", "MemoryMax", "MemorySwapMax", "CPUQuota", "TasksMax",
-          "LimitNOFILE", "RuntimeMaxSec"}
+          "LimitNOFILE", "RuntimeMaxSec",
+          # relecture 14h (I4)
+          "PrivateIPC", "RemoveIPC", "TemporaryFileSystem", "LimitCORE", "ProtectControlGroups", "SystemCallArchitectures",
+          "RestrictRealtime", "ProtectHostname", "ProtectClock", "UMask", "RestrictAddressFamilies"}
 FIXES = {"User": "unity-tests", "ProtectHome": "tmpfs", "ProtectSystem": "strict", "PrivateTmp": "yes", "PrivateDevices": "yes",
          "NoNewPrivileges": "yes", "CapabilityBoundingSet": "", "ProtectProc": "invisible", "ProcSubset": "pid",
          "ProtectKernelTunables": "yes", "ProtectKernelModules": "yes", "ProtectKernelLogs": "yes", "RestrictNamespaces": "yes",
          "RestrictSUIDSGID": "yes", "LockPersonality": "yes", "SystemCallFilter": "@system-service",
-         "InaccessiblePaths": "-/run/docker.sock -/var/run/docker.sock", "MemorySwapMax": "0", "TasksMax": "2048",
-         "LimitNOFILE": "8192"}
+         "InaccessiblePaths": "-/run/docker.sock -/var/run/docker.sock -/dev/mqueue", "MemorySwapMax": "0", "TasksMax": "2048",
+         "LimitNOFILE": "8192", "PrivateIPC": "yes", "RemoveIPC": "yes", "TemporaryFileSystem": "/dev/shm:size=512M,mode=1777",
+         "LimitCORE": "0", "ProtectControlGroups": "yes", "SystemCallArchitectures": "native", "RestrictRealtime": "yes",
+         "ProtectHostname": "yes", "ProtectClock": "yes", "UMask": "0077"}
+TRAVAIL = "10"
 
 SYSTEMD_RUN = r'''n=0; while [ -e "$FAUX_ETAT/systemd-run-$n.txt" ]; do n=$((n + 1)); done
 printf '%s\n' "$@" > "$FAUX_ETAT/systemd-run-$n.txt"
 echo "systemd-run $*" >> "$FAUX_JOURNAL"
 cat > "$FAUX_ETAT/unite-entree-$n"
+c=""; for a in "$@"; do case "$a" in --setenv=ENTREE_TESTS_RACINE=*) c="${a#--setenv=ENTREE_TESTS_RACINE=}" ;; esac; done
+case "${FAUX_PROJET_HOSTILE:-}" in                       # le code du projet déplace ou remplace work/
+  mv) mv "$c/work" "$c/x" && mkdir "$c/work" ;;
+  lien) rm -rf "$c/work" && ln -s "$FAUX_AILLEURS" "$c/work" ;;
+esac
 echo "sortie de l'unité"
 echo "erreur de l'unité" >&2
 if [ -n "${FAUX_UNITE_ATTENDRE:-}" ]; then
@@ -62,9 +73,9 @@ SYSTEMCTL = r'''echo "systemctl $*" >> "$FAUX_JOURNAL"
 case "$1" in
   --version) echo "systemd ${FAUX_SYSTEMD:-255} (255.4-1ubuntu8)" ;;
   stop) [ -n "${FAUX_ETAT:-}" ] && : > "$FAUX_ETAT/unite-arretee" ;;
-  list-units) [ -n "${FAUX_UNITES:-}" ] && for u in $FAUX_UNITES; do echo "$u loaded active running x"; done ;;
+  list-units) for u in ${FAUX_UNITES:-}; do echo "$u loaded active running x"; done ;;
   show) echo "${FAUX_DEPUIS_US:-1}" ;;
-  is-active) exit 3 ;;
+  is-active) [ -n "${FAUX_ACTIF:-}" ] && exit 0; exit 3 ;;
 esac
 exit 0'''
 # Le faux sudo journalise TOUT ; il n'exécute que les faux (et le script racine du dépôt à la place de son chemin installé).
@@ -89,10 +100,23 @@ if [ -n "$f" ]; then cp "$f" "$FAUX_ETAT/sudoers"; [ "${FAUX_VISUDO_ECHEC:-}" = 
 exit 0'''
 JOURNALISER = 'echo "{nom} $*" >> "$FAUX_JOURNAL"\nexit {code}'
 CP = 'echo "cp $*" >> "$FAUX_JOURNAL"\nPATH="${PATH#*:}" exec cp "$@"'
+# Montages : $FAUX_ETAT/montes (un chemin par ligne) ; mount l'ajoute (FAUX_MOUNT_CODE=0), umount le retire, findmnt le lit.
+MOUNT = r'''echo "mount $*" >> "$FAUX_JOURNAL"
+c="${FAUX_MOUNT_CODE:-32}"; [ "$c" = 0 ] || exit "$c"
+[ "$1" = --make-private ] && exit 0
+for a in "$@"; do p="$a"; done; echo "$p" >> "$FAUX_ETAT/montes"'''
+UMOUNT = r'''echo "umount $*" >> "$FAUX_JOURNAL"
+for a in "$@"; do p="$a"; done
+[ -f "$FAUX_ETAT/montes" ] && { grep -vxF -- "$p" "$FAUX_ETAT/montes" > "$FAUX_ETAT/montes.tmp"; mv "$FAUX_ETAT/montes.tmp" "$FAUX_ETAT/montes"; }
+exit 0'''
+FINDMNT = r'''for a in "$@"; do p="$a"; done
+[ -f "$FAUX_ETAT/montes" ] && grep -qxF -- "$p" "$FAUX_ETAT/montes" && { echo "$p"; exit 0; }
+exit 1'''
+DU_CAMPAGNE = ('for a in "$@"; do p="$a"; done\n'
+               'case "$p" in */campagnes/*) printf \'%s\\t%s\\n\' "${FAUX_DU_CAMPAGNE_KO:-4}" "$p"; exit 0 ;; esac\n' + D.DU)
 FAUX = dict(D.FAUX, **{"systemd-run": SYSTEMD_RUN, "systemctl": SYSTEMCTL, "sudo": SUDO, "id": ID_FAUX, "visudo": VISUDO,
                        "setfacl": JOURNALISER.format(nom="setfacl", code=0), "useradd": JOURNALISER.format(nom="useradd", code=0),
-                       "mount": 'echo "mount $*" >> "$FAUX_JOURNAL"\nexit "${FAUX_MOUNT_CODE:-32}"',
-                       "umount": JOURNALISER.format(nom="umount", code=0), "mountpoint": "exit 1", "cp": CP})
+                       "mount": MOUNT, "umount": UMOUNT, "findmnt": FINDMNT, "cp": CP, "du": DU_CAMPAGNE})
 
 
 def _ecrire(chemin, texte, mode=0o644):
@@ -120,7 +144,7 @@ class TestBacASable(D.Banc):
                     SERVEUR / "images" / "tests" / "entree-unity.sh"):
             shutil.copy(src, lib / src.name)
         (r / "var" / "lib" / "unity-tests" / "campagnes").mkdir(parents=True)
-        (r / "run" / "lock").mkdir(parents=True)
+        (r / "run").mkdir(parents=True)
         self.editeur(VERSION)
         self.droits = self.home / ".config" / "unity3d" / "Unity" / "licenses"
         _ecrire(self.droits / "UnityEntitlementLicense.xml", FACTICE, 0o600)
@@ -188,11 +212,16 @@ class TestBacASable(D.Banc):
         return [b for a, b in zip(args, args[1:]) if a == "-p"]
 
     def direct(self, *args, entree=b"", env=None):
-        etat = self.t / "etat" / "direct"
+        self.directs = getattr(self, "directs", 0) + 1                                       # un dossier d'état par appel
+        etat = self.t / "etat" / f"direct-{self.directs}"
         etat.mkdir(parents=True, exist_ok=True)
         e = dict(self.env, FAUX_ETAT=etat.as_posix(), **(env or {}))
         r = subprocess.run(["bash", SCRIPT_RACINE.as_posix(), *args], input=entree, capture_output=True, env=e, timeout=60)
         return r, etat
+
+    def lancer_direct(self, ident=ID, version=VERSION, reseau="aucun", env=None, mode="lancer"):
+        entree = (json.dumps(U.COMMANDE_UNITY) + "\n").encode() if mode == "lancer" else b""
+        return self.direct(mode, ident, "4", "8192", "1800", version, reseau, TRAVAIL, entree=entree, env=env)
 
     def campagnes(self):
         return sorted(p.name for p in (self.r / "var" / "lib" / "unity-tests" / "campagnes").iterdir())
@@ -208,6 +237,7 @@ class TestBacASable(D.Banc):
         self.assertEqual(set(cles) - FIGEES, set(), props)                                 # rien hors de la liste figée
         for cle, valeur in FIXES.items():
             self.assertIn(f"{cle}={valeur}", props)
+        self.assertIn("RestrictAddressFamilies=AF_UNIX", props)                             # reseau=aucun : AF_UNIX seul
         c = self.campagne()
         self.assertEqual([p for p in props if p.startswith("ReadWritePaths=")], [f"ReadWritePaths={c}"])
         liees = sorted(p.split("=", 1)[1] for p in props if p.startswith("BindReadOnlyPaths="))
@@ -218,7 +248,10 @@ class TestBacASable(D.Banc):
         self.assertFalse([a for a in args if a.startswith(("BindPaths", "--property", "-E"))], args)
         self.assertIn("MemoryMax=8192M", props)
         self.assertIn("CPUQuota=400%", props)
-        self.assertIn("RuntimeMaxSec=1830", props)
+        # durée de la campagne moins l'attente (bornée, décomptée) moins 5 s de marge : l'enveloppe ne coupe jamais la première
+        duree = [int(p.split("=", 1)[1]) for p in props if p.startswith("RuntimeMaxSec=")]
+        self.assertEqual(len(duree), 1)
+        self.assertTrue(1785 <= duree[0] <= 1795, duree)
         self.assertEqual(args[:6], ["--quiet", "--pipe", "--wait", "--collect", "--unit", f"unity-tests-{ID}"])
         options = [a for a in args[:args.index("--")] if a.startswith("-") and a != "-p" and not a.startswith("--setenv=")]
         self.assertEqual(options, ["--quiet", "--pipe", "--wait", "--collect", "--unit"])
@@ -229,41 +262,52 @@ class TestBacASable(D.Banc):
                                "MYIAFACTORY_UNITY_EDITEUR": f"{self.rm}/opt/unity/editors/{VERSION}/Editor/Unity"})
         self.assertEqual(args[args.index("--") + 1:],
                          ["/bin/bash", f"{self.rm}/usr/local/lib/myiafactory/unity-bac-a-sable.sh", "unite"])
-        # L'instantané passe par l'entrée de l'unité (la racine n'ouvre aucun fichier de l'utilisateur principal) ; la sortie
-        # suit le chemin commun (préfixe `| ` de la sortie d'erreur) ; aucun conteneur ; la campagne est effacée.
         self.assertEqual((etat / "unite-entree-0").read_bytes(), D.TAR_NODE)
         self.assertIn("sortie de l'unité", out)
         self.assertIn("| erreur de l'unité", err)
-        self.assertIn(f"sudo -n {CHEMIN_RACINE} lancer {ID} 4 8192 1800 {VERSION} aucun", self.journal)
+        self.assertIn(f"sudo -n {CHEMIN_RACINE} lancer {ID} 4 8192 1800 {VERSION} aucun {TRAVAIL}", self.journal)
         self.assertNotIn("docker run", self.journal)
         self.assertNotIn("docker image inspect", self.journal)
         self.assertEqual(self.campagnes(), [])
         self.assertFalse((self.home / "tests" / ID).exists())
         self.assertNotIn(FACTICE, self.journal + out + "\n".join(err))
+        self.assertIn(f"flock -n 9", self.journal)                                         # le verrou de /run/myiafactory
+        self.assertTrue((self.r / "run" / "myiafactory" / "unity-bac-a-sable.verrou").exists())
 
     def test_arguments_hostiles_refuses(self):
-        bons = [ID, "4", "8192", "1800", VERSION, "aucun"]
+        # I6 : tout refus du script racine rend 77 (jamais 2, le code « des tests échouent »).
+        bons = [ID, "4", "8192", "1800", VERSION, "aucun", TRAVAIL]
         mauvais = {0: ["../x", "t20261123-101500-ab12/../x", "t20261123-101500-AB12", "t20261123-101500-ab12\nx", "$(id)"],
                    1: ["0", "65", "04", "4;id"], 2: ["255", "65537", "08192", "-1"], 3: ["0", "3601", "01800", "1e3"],
                    4: ["6000.6.7f1;id", "6000.6.7f1 ", "../6000.6.7f1", "6000.6.7", "x6000.6.7f1", "6000.6.7f1/.."],
-                   5: ["bridge", "host", "aucun;id", "LICENCE", ""]}
+                   5: ["bridge", "host", "aucun;id", "LICENCE", ""], 6: ["0", "201", "010", "1;id"]}
         for i, valeurs in mauvais.items():
             for v in valeurs:
                 with self.subTest(position=i, valeur=v):
                     args = list(bons)
                     args[i] = v
                     r, etat = self.direct("lancer", *args, entree=(json.dumps(U.COMMANDE_UNITY) + "\n").encode())
-                    self.assertEqual(r.returncode, 2, r.stderr)
+                    self.assertEqual(r.returncode, 77, r.stderr)
                     self.assertIsNone(self.unite(etat))
-        for extra in (["lancer", *bons, "x"], ["lancer", *bons[:5]], ["arreter", "../x"], ["arreter", ID, "x"],
-                      ["inconnu", *bons], ["unite"], []):
+        for extra in (["lancer", *bons, "x"], ["lancer", *bons[:6]], ["arreter", "../x"], ["arreter", ID, "x"],
+                      ["inconnu", *bons], []):
             with self.subTest(args=extra):
                 r, etat = self.direct(*extra)
-                self.assertEqual(r.returncode, 2, r.stderr)
+                self.assertEqual(r.returncode, 77, r.stderr)
         for commande in ('["bash","-c","id"]', '["unity-editor"', "x", '["unity-editor","a\tb"]', "[" + "x" * 4100 + "]"):
             with self.subTest(commande=commande):
                 r, etat = self.direct("lancer", *bons, entree=(commande + "\n").encode())
-                self.assertEqual(r.returncode, 2, r.stderr)
+                self.assertEqual(r.returncode, 77, r.stderr)
+        # Mode unite : instantané non reçu (dossier de campagne absent) -> 77, jamais 2 ni 70.
+        r, _ = self.direct("unite", env={"ENTREE_TESTS_RACINE": f"{self.rm}/nulle-part/{ID}"})
+        self.assertEqual(r.returncode, 77, r.stderr)
+        # Identifiant déjà pris : 77, la campagne existante n'est pas touchée.
+        pris = self.r / "var" / "lib" / "unity-tests" / "campagnes" / ID
+        (pris / "work").mkdir(parents=True)
+        r, etat = self.lancer_direct()
+        self.assertEqual(r.returncode, 77, r.stderr)
+        self.assertTrue((pris / "work").exists())
+        shutil.rmtree(pris)
         self.assertNotIn("systemd-run", self.journal)
         self.assertEqual(self.campagnes(), [])
         # Par l'enveloppe : une version de repli hors motif est refusée avant tout (aucun sudo, rien écrit).
@@ -271,7 +315,6 @@ class TestBacASable(D.Banc):
         self.assertEqual(code, 2, err)
         self.assertEqual(err[-2], "#refus 2")
         self.assertNotIn(CHEMIN_RACINE, self.journal)
-        # L'exécuteur hôte est réservé à la famille unity ; une version de repli exige l'exécuteur hôte.
         code, err, _ = self.lancer("10", "myiafactory/tests", "node", "-", "refuse", "40", "16", "hote_bac_a_sable", "-",
                                    deps="-", ident=E.ident(60))
         self.assertEqual(code, 2, err)
@@ -289,25 +332,21 @@ class TestBacASable(D.Banc):
         self.assertTrue(all(p.startswith("BindReadOnlyPaths=") for p in liees), liees)    # en lecture seule, jamais BindPaths
         self.assertNotIn(FACTICE, self.journal + out + "\n".join(err))
         self.assertEqual(self.droits.joinpath("UnityEntitlementLicense.xml").read_text(encoding="utf-8"), FACTICE)
-        # Sans le .ulf : seuls les droits ; sans aucune licence : 77 (refus), aucune unité.
         self.ulf.unlink()
         code, out, err, etat = self.hote(ident=ID_B)
         self.assertEqual(code, 0, err)
         self.assertFalse([p for p in self.proprietes(self.unite(etat)) if ".ulf" in p])
         shutil.rmtree(self.droits)
-        r, etat = self.direct("lancer", E.ident(70), "4", "8192", "1800", VERSION, "aucun",
-                              entree=(json.dumps(U.COMMANDE_UNITY) + "\n").encode())
+        r, etat = self.lancer_direct(E.ident(70))
         self.assertEqual(r.returncode, 77, r.stderr)
         self.assertIsNone(self.unite(etat))
-        # Un lien à la place du dossier de licence n'est jamais lié (il pourrait viser n'importe quoi de lisible par root).
         if os.name != "nt":
             ailleurs = self.t / "ailleurs"
             ailleurs.mkdir()
             (ailleurs / "secret").write_text("x", encoding="utf-8")
             self.droits.parent.mkdir(parents=True, exist_ok=True)
             os.symlink(ailleurs, self.droits)
-            r, etat = self.direct("lancer", E.ident(71), "4", "8192", "1800", VERSION, "aucun",
-                                  entree=(json.dumps(U.COMMANDE_UNITY) + "\n").encode())
+            r, etat = self.lancer_direct(E.ident(71))
             self.assertEqual(r.returncode, 77, r.stderr)
 
     def test_reseau_prive_par_defaut(self):
@@ -315,19 +354,20 @@ class TestBacASable(D.Banc):
         self.assertEqual(code, 0, err)
         props = self.proprietes(self.unite(etat))
         self.assertIn("PrivateNetwork=yes", props)
+        self.assertIn("RestrictAddressFamilies=AF_UNIX", props)
         self.assertFalse([p for p in props if p.startswith("IPAddress")], props)
         self.assertFalse([a for a in self.unite(etat) if "PROXY" in a.upper()])
-        # B3 (accord vérifié par la route) : le mandataire de la campagne seul, jamais le réseau de l'hôte entier.
         code, out, err, etat = self.hote("license.unity3d.com", ident=ID_B, licence="B3")
         self.assertEqual(code, 0, err)
         args = self.unite(etat)
         props = self.proprietes(args)
         self.assertNotIn("PrivateNetwork=yes", props)
+        self.assertIn("RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6", props)
         self.assertEqual([p for p in props if p.startswith("IPAddress")],
                          ["IPAddressDeny=any", f"IPAddressAllow={D.IP_MANDATAIRE}/32"])
         self.assertIn(f"--setenv=HTTPS_PROXY=http://{D.IP_MANDATAIRE}:3128", args)
-        self.assertIn(f"sudo -n {CHEMIN_RACINE} lancer {ID_B} 4 8192 1800 {VERSION} licence", self.journal)
-        self.assertIn(f"docker rm -f mandataire-{ID_B}", self.journal)                       # fermé par l'enveloppe
+        self.assertIn(f"sudo -n {CHEMIN_RACINE} lancer {ID_B} 4 8192 1800 {VERSION} licence {TRAVAIL}", self.journal)
+        self.assertIn(f"docker rm -f mandataire-{ID_B}", self.journal)
 
     def test_arreter_arrete_l_unite(self):
         lance = self.demarrer_hote(env={"FAUX_UNITE_ATTENDRE": "1", "ENVELOPPE_SONDE_S": "0.05"})
@@ -342,25 +382,21 @@ class TestBacASable(D.Banc):
         self.assertIn(f"sudo -n {CHEMIN_RACINE} arreter {ID}", self.journal)
         self.assertIn(f"systemctl stop unity-tests-{ID}.service", self.journal)
         self.assertEqual(self.campagnes(), [])
-        # arreter seul : l'unité de cet identifiant, rien d'autre.
         r, _ = self.direct("arreter", ID_B)
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertIn(f"systemctl stop unity-tests-{ID_B}.service", self.journal)
 
     def test_version_absente_refusee(self):
-        r, etat = self.direct("lancer", ID, "4", "8192", "1800", REPLI, "aucun",
-                              entree=(json.dumps(U.COMMANDE_UNITY) + "\n").encode())
+        r, etat = self.lancer_direct(version=REPLI)
         self.assertEqual(r.returncode, 77, r.stderr)
         self.assertIn(REPLI, r.stderr.decode())
         self.assertIsNone(self.unite(etat))
         self.assertEqual(self.campagnes(), [])
-        code, out, err, etat = self.hote("-", REPLI, ident=ID_B)                                 # par l'enveloppe : refus 77
+        code, out, err, etat = self.hote("-", REPLI, ident=ID_B)                            # par l'enveloppe : refus 77
         self.assertEqual(code, 77, err)
         self.assertEqual(err[-2], "#refus 77")
         self.assertIsNone(self.unite(etat))
-        # Sans l'utilisateur unity-tests : 77 aussi.
-        r, etat = self.direct("lancer", E.ident(72), "4", "8192", "1800", VERSION, "aucun",
-                              entree=(json.dumps(U.COMMANDE_UNITY) + "\n").encode(), env={"FAUX_SANS_UNITY": "1"})
+        r, etat = self.lancer_direct(E.ident(72), env={"FAUX_SANS_UNITY": "1"})
         self.assertEqual(r.returncode, 77, r.stderr)
         self.assertIsNone(self.unite(etat))
 
@@ -369,9 +405,9 @@ class TestBacASable(D.Banc):
         code, out, err, etat = self.hote("-", REPLI)
         self.assertEqual(code, 0, err)
         self.assertEqual(out.splitlines()[0], f"Éditeur {REPLI} au lieu de {VERSION} : résultats indicatifs")
-        self.assertIn(f"sudo -n {CHEMIN_RACINE} lancer {ID} 4 8192 1800 {REPLI} aucun", self.journal)
+        self.assertIn(f"sudo -n {CHEMIN_RACINE} lancer {ID} 4 8192 1800 {REPLI} aucun {TRAVAIL}", self.journal)
         self.assertIn(f"BindReadOnlyPaths={self.rm}/opt/unity/editors/{REPLI}", self.proprietes(self.unite(etat)))
-        for ident, plus in ((ID_B, ()), (E.ident(73), ("-", VERSION))):                       # la version du projet : rien à dire
+        for ident, plus in ((ID_B, ()), (E.ident(73), ("-", VERSION))):
             with self.subTest(plus=plus):
                 code, out, err, _ = self.hote(*plus, ident=ident)
                 self.assertEqual(code, 0, err)
@@ -384,50 +420,118 @@ class TestBacASable(D.Banc):
                 self.assertEqual(code, code_unite, err)
                 self.assertNotIn(f"#refus {code_unite}", err)
 
-    def test_library_en_overlay_sinon_copie(self):
+    def test_travail_au_dela_de_travail_go(self):
+        code, out, err, etat = self.hote(env={"FAUX_DU_CAMPAGNE_KO": str(11 * 1048576), "FAUX_UNITE_ATTENDRE": "1",
+                                              "BAC_A_SABLE_DU_S_TEST": "0.1"})
+        self.assertEqual(code, 74, err)
+        self.assertEqual(err[-2], "#refus 74")
+        self.assertIn(f"systemctl stop unity-tests-{ID}.service", self.journal)
+        self.assertEqual(self.campagnes(), [])
+
+    def test_library_copiee_si_overlay_refuse(self):
         cache = self.r / "var" / "lib" / "unity-tests" / "library" / VERSION
         _ecrire(cache / "ArtifactDB", "cache")
         code, out, err, etat = self.hote()
         self.assertEqual(code, 0, err)
         c = self.campagne()
         self.assertIn(f"mount -t overlay overlay -o lowerdir={self.rm}/var/lib/unity-tests/library/{VERSION},"
-                      f"upperdir={c}/library-haut,workdir={c}/library-ov {c}/work/Library", self.journal)
-        self.assertIn(f"cp -a --reflink=auto -- {self.rm}/var/lib/unity-tests/library/{VERSION}/. {c}/work/Library/",
-                      self.journal)                                                          # overlay refusé : copie
+                      f"upperdir={c}/library-haut,workdir={c}/library-ov {c}/library", self.journal)
+        self.assertIn(f"cp -a --reflink=auto -- {self.rm}/var/lib/unity-tests/library/{VERSION}/. {c}/library/", self.journal)
+        self.assertNotIn("umount", self.journal)                                           # rien de monté : rien à démonter
         self.assertEqual(self.campagnes(), [])
-        self.assertTrue((cache / "ArtifactDB").exists())                                    # le cache figé n'est jamais touché
+        self.assertTrue((cache / "ArtifactDB").exists())
 
-    def test_balayage_des_unites_anciennes(self):
-        vieille = "t20261122-010000-0000"
-        try:
-            demarre_depuis_s = float(Path("/proc/uptime").read_text().split()[0])
-        except (OSError, ValueError, IndexError):
-            self.skipTest("/proc/uptime illisible ici")
-        if demarre_depuis_s < 6 * 3600 + 60:
-            self.skipTest("machine démarrée depuis moins de 6 h : aucune unité ne peut être plus ancienne")
-        r, _ = self.direct("lancer", ID, "4", "8192", "1800", VERSION, "aucun",
-                           entree=(json.dumps(U.COMMANDE_UNITY) + "\n").encode(),
-                           env={"FAUX_UNITES": f"unity-tests-{vieille}.service unity-tests-x;id.service"})
+    def test_library_overlay_demonte_par_le_chemin_note(self):
+        # I2/I3 : le montage est HORS de work/ (sous le contrôle du projet) ; il est démonté par le chemin noté à la pose
+        # (findmnt), sans suivre de lien : un projet qui déplace work/ ou le remplace par un lien ne fait rien démonter d'autre.
+        cache = self.r / "var" / "lib" / "unity-tests" / "library" / VERSION
+        _ecrire(cache / "ArtifactDB", "cache")
+        ailleurs = self.t / "ailleurs"
+        ailleurs.mkdir()
+        autre = f"{E._msys(ailleurs)}/Library"
+        for i, hostile in enumerate(("", "mv", "lien")):
+            with self.subTest(hostile=hostile):
+                ident = E.ident(90 + i)
+                etat = self.t / "etat" / ident
+                etat.mkdir(parents=True)
+                (etat / "montes").write_text(autre + "\n", encoding="utf-8")              # un autre montage, joignable par un lien
+                avant = len(self.journal.splitlines())
+                code, out, err, _ = self.hote(ident=ident, env={"FAUX_MOUNT_CODE": "0", "FAUX_PROJET_HOSTILE": hostile,
+                                                                "FAUX_AILLEURS": E._msys(ailleurs)})
+                self.assertEqual(code, 0, err)
+                c = self.campagne(ident)
+                demontages = [x for x in self.journal.splitlines()[avant:] if x.startswith("umount")]
+                self.assertEqual(demontages, [f"umount -c -- {c}/library"])
+                self.assertEqual((etat / "montes").read_text(encoding="utf-8").split(), [autre])
+        self.assertEqual(self.campagnes(), [])
+        self.assertTrue((cache / "ArtifactDB").exists())
+
+    def test_unites_orphelines_arretees_et_campagne_occupee(self):
+        # I1 : sous le verrou, une unité dont le script n'existe plus est arrêtée avant le départ.
+        orpheline = "t20261122-010000-0000"
+        r, _ = self.lancer_direct(env={"FAUX_UNITES": f"unity-tests-{orpheline}.service unity-tests-x;id.service"})
         self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertIn(f"systemctl stop unity-tests-{vieille}.service", self.journal)
+        self.assertIn(f"systemctl stop unity-tests-{orpheline}.service", self.journal)
         self.assertNotIn("x;id", self.journal.replace("list-units", ""))
+        # Une unité active dont le script vit encore : on attend (borné), puis refus 77 ; elle n'est jamais arrêtée.
+        if os.name == "nt":
+            self.skipTest("/proc/<pid>/cmdline absent sous Windows")
+        vivante = "t20261122-020000-0000"
+        p = subprocess.Popen(["bash", "-c", "sleep 30; :", "unity-bac-a-sable.sh", vivante])   # « ; : » : bash reste (pas d'exec)
+        self.addCleanup(p.wait)
+        self.addCleanup(p.kill)
+        run = self.r / "run" / "myiafactory"
+        run.mkdir(parents=True, exist_ok=True)
+        (run / f"unity-tests-{vivante}.pid").write_text(f"{p.pid}\n", encoding="utf-8")
+        recente = max(1, int(float(Path("/proc/uptime").read_text().split()[0]) * 1e6) - 10_000_000)   # active depuis 10 s
+        r, etat = self.lancer_direct(E.ident(74), env={"FAUX_UNITES": f"unity-tests-{vivante}.service", "FAUX_ACTIF": "1",
+                                                       "BAC_A_SABLE_ATTENTE_MAX_TEST": "2", "FAUX_DEPUIS_US": str(recente)})
+        self.assertEqual(r.returncode, 77, r.stderr)
+        self.assertIn("occupé", r.stderr.decode())
+        self.assertIsNone(self.unite(etat))
+        self.assertNotIn(f"systemctl stop unity-tests-{vivante}.service", self.journal)
+
+    @unittest.skipIf(os.name == "nt", "droits de fichier sans effet sous Windows")
+    def test_dossiers_prives_reverifies_a_chaque_lancement(self):
+        for d in ("agent-identifiants", ".ssh", "taches"):
+            with self.subTest(dossier=d):
+                p = self.home / d
+                p.mkdir(exist_ok=True)
+                p.chmod(0o755)
+                r, etat = self.lancer_direct(E.ident(75))
+                self.assertEqual(r.returncode, 77, r.stderr)
+                self.assertIn(d, r.stderr.decode())
+                self.assertIsNone(self.unite(etat))
+                p.chmod(0o700)
 
     def test_sonde_d_audit(self):
-        r, etat = self.direct("auditer", ID, "4", "8192", "1800", VERSION, "aucun")
+        r, etat = self.lancer_direct(mode="auditer")
         self.assertEqual(r.returncode, 0, r.stderr)
         args = self.unite(etat)
         self.assertEqual(args[args.index("--") + 1:], ["/bin/bash", f"{self.rm}/usr/local/lib/myiafactory/sonde-bac-a-sable.sh"])
         self.assertIn("PrivateNetwork=yes", self.proprietes(args))
         self.assertIn(f"--setenv=MYIAFACTORY_SONDE_PRINCIPAL={self.h}", args)
         self.assertFalse((self.home / ".myiafactory" / "unity-bac-a-sable.version").exists())   # l'audit J14 seulement
-        # La sonde, hors unité : des échecs constatés, une ligne par contrôle, jamais la licence.
-        s = subprocess.run(["bash", SONDE.as_posix()], capture_output=True, text=True, timeout=60,
-                           env=dict(os.environ, HOME=self.h, MYIAFACTORY_SONDE_PRINCIPAL=self.h, MYIAFACTORY_SONDE_RESEAU="aucun"))
-        self.assertEqual(s.returncode, 1, s.stdout)
-        for ligne in s.stdout.splitlines():
-            self.assertRegex(ligne, r"^(ok|echec|bilan) ")
-        self.assertIn("echec utilisateur", s.stdout)
-        self.assertNotIn(FACTICE, s.stdout + s.stderr)
+        r, etat = self.lancer_direct(E.ident(76), reseau="licence", mode="auditer")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn(f"--setenv=MYIAFACTORY_SONDE_MANDATAIRE={D.IP_MANDATAIRE}", self.unite(etat))
+        # La sonde, hors unité : des échecs constatés, une ligne par contrôle, jamais la licence ; en mode licence, le réseau est
+        # ÉPROUVÉ (connexion hors mandataire, liste des sockets Unix), jamais un « ok » sans essai.
+        for reseau in ("aucun", "licence"):
+            with self.subTest(reseau=reseau):
+                s = subprocess.run(["bash", SONDE.as_posix()], capture_output=True, text=True, timeout=60,
+                                   env=dict(os.environ, HOME=self.h, MYIAFACTORY_SONDE_PRINCIPAL=self.h,
+                                            MYIAFACTORY_SONDE_RESEAU=reseau, MYIAFACTORY_SONDE_MANDATAIRE="192.0.2.1",
+                                            MYIAFACTORY_SONDE_DELAI_S="2"))
+                self.assertEqual(s.returncode, 1, s.stdout)
+                for ligne in s.stdout.splitlines():
+                    self.assertRegex(ligne, r"^(ok|echec|info|bilan) ")
+                self.assertIn("echec utilisateur", s.stdout)
+                self.assertNotIn(FACTICE, s.stdout + s.stderr)
+                self.assertRegex(s.stdout, r"(?m)^(ok|echec) reseau-hors-mandataire")
+                if reseau == "licence":
+                    self.assertRegex(s.stdout, r"(?m)^(ok|echec) sockets-unix")
+                    self.assertNotRegex(s.stdout, r"(?m)^ok reseau-licence \(")              # l'ancien « ok » sans essai
 
     # --- étape unity_bac_a_sable de mise_en_place.sh ------------------------------------------------------------------
     def etape(self, simuler=False, env=None):
@@ -456,6 +560,7 @@ class TestBacASable(D.Banc):
         j = self.journal
         self.assertIn("sudo -n install -o root -g root -m 0755 " + SERVEUR.as_posix() + "/unity-bac-a-sable.sh " + CHEMIN_RACINE, j)
         self.assertIn("sudo -n install -d -o unity-tests -g unity-tests -m 0700 /var/lib/unity-tests", j)
+        self.assertIn("sudo -n install -d -o root -g root -m 0711 /var/lib/unity-tests/campagnes", j)
         self.assertEqual((etat / "sudoers").read_text(encoding="utf-8"),
                          f"principal ALL=(root) NOPASSWD: {CHEMIN_RACINE}\n")                  # le script exact, rien d'autre
         self.assertIn("sudo -n install -o root -g root -m 0440 ", j)

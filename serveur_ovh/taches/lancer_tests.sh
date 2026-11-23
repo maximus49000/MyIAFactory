@@ -10,11 +10,12 @@
 #   executeur_<nom>_lancer / executeur_<nom>_arreter sont les SEULES différences ; places, jetons, file, laisse, timeout, coupe
 #   à 50 Mo, préfixe `| `, `#fin` et nettoyage sont communs. hote_bac_a_sable (option A, § 5.16, tâche 14h ; famille unity
 #   seulement) : `sudo -n /usr/local/lib/myiafactory/unity-bac-a-sable.sh lancer <id> <cpus> <memoire_mo> <duree_s> <version>
-#   <reseau>` (unité systemd confinée sous l'utilisateur unity-tests ; voir ce script), entrée = la commande puis l'instantané ;
-#   arrêt : `… arreter <id>`. reseau = licence pour B3 (le mandataire de la campagne, ouvert ici), aucun sinon (B1 et B2 :
-#   l'hôte EST la machine de la licence). Aucune image Docker n'est demandée. Son code 77 (prérequis absent sur l'hôte :
-#   utilisateur, éditeur, licence, scripts ; rien n'a tourné) devient un refus (#refus 77) : la commande de l'unité ne rend
-#   jamais 77.
+#   <reseau> <travail_go>` (unité systemd confinée sous l'utilisateur unity-tests ; voir ce script), entrée = la commande puis
+#   l'instantané ; arrêt : `… arreter <id>`. reseau = licence pour B3 (le mandataire de la campagne, ouvert ici), aucun sinon
+#   (B1 et B2 : l'hôte EST la machine de la licence). Aucune image Docker n'est demandée. Ses codes propres sont traduits ici
+#   (la commande de l'unité ne les rend jamais) : 77 refus du script (argument, commande, identifiant pris, instantané non
+#   reçu, prérequis, dossiers privés lisibles, bac à sable occupé ; rien n'a tourné) -> #refus 77 ; 74 campagne au-delà de
+#   travail_go -> #refus 74 ; 124 durée -> #refus 124.
 #   version_hote (18e) « - » (défaut : la version du projet, celle de l'image ^myiafactory/tests-unity-<v>$) ou une version Unity
 #   (même motif), avec hote_bac_a_sable seulement : la version de repli décidée par le Directeur (tests.profil_force.
 #   unity_version_hote) ; différente de celle du projet, la sortie commence par « Éditeur <v> au lieu de <v projet> : résultats
@@ -409,7 +410,7 @@ executeur_hote_lancer() {
   [ "$LICENCE" = B3 ] && reseau=licence
   [ "$v" = "$VERSION_PROJET" ] || printf 'Éditeur %s au lieu de %s : résultats indicatifs\n' "$v" "$VERSION_PROJET"
   { printf '%s\n' "$COMMANDE_JSON"; cat -- "$ENTREE/entree.tar"; } |
-    timeout "$DUREE" sudo -n "$BAC_A_SABLE" lancer "$ID" "$CPUS" "$MEMOIRE" "$DUREE" "$v" "$reseau"
+    timeout "$DUREE" sudo -n "$BAC_A_SABLE" lancer "$ID" "$CPUS" "$MEMOIRE" "$DUREE" "$v" "$reseau" "$TRAVAIL_GO"
 }
 executeur_hote_arreter() { timeout 130 sudo -n "$BAC_A_SABLE" arreter "$ID" </dev/null >/dev/null 2>&1 8>&-; }
 case "$EXECUTEUR" in
@@ -1139,12 +1140,15 @@ PID_SURVEILLANT=""
 [ -e "$DOSSIER/echeance" ] && echouer 74 "échéance du surveillant dépassée (${DUREE} s + ${MARGE} s) : conteneur arrêté."
 code=""; [ -f "$DOSSIER/code" ] && IFS= read -r code < "$DOSSIER/code"
 [[ $code =~ ^[0-9]{1,3}$ ]] || echouer 1 "code de docker run illisible."
-# Exécuteur hôte : pas de conteneur à inspecter. 124 : timeout (CONTENEUR reste 1 : finir arrête l'unité) ; 77 : refus du script
-# racine (prérequis absent, rien n'a tourné ; la commande de l'unité ne rend jamais 77) ; sinon le code de la commande.
+# Exécuteur hôte : pas de conteneur à inspecter. Table des codes du script racine (unity-bac-a-sable.sh) : 124 durée (timeout
+# de l'enveloppe ou RuntimeMaxSec ; CONTENEUR reste 1 : finir arrête l'unité) ; 77 refus du script, rien n'a tourné (argument,
+# commande, identifiant pris, instantané non reçu, prérequis, dossiers privés lisibles, occupé) ; 74 campagne au-delà de
+# travail_go, arrêtée ; sinon le code de la commande (jamais 74, 77 ni 124), rendu sans #refus.
 if [ "$EXECUTEUR" = hote_bac_a_sable ]; then
   [ "$code" = 124 ] && echouer 124 "durée maximale dépassée (${DUREE} s)."
   CONTENEUR=0                                           # --wait : l'unité est finie et ramassée
-  [ "$code" = 77 ] && echouer 77 "bac à sable Unity : prérequis absent sur l'hôte (utilisateur unity-tests, éditeur, licence ou scripts) ; rien n'a tourné."
+  [ "$code" = 77 ] && echouer 77 "bac à sable Unity : refus du script racine (voir la ligne précédente) ; rien n'a tourné."
+  [ "$code" = 74 ] && echouer 74 "campagne au-delà de ${TRAVAIL_GO} Go dans le bac à sable : unité arrêtée."
   finir "$code" conteneur
 fi
 # État final : « jamais démarré » SEULEMENT si le conteneur est absent, ou « created » avec StartedAt à la date nulle ; fini

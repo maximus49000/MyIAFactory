@@ -563,10 +563,29 @@ Le problème : le code C# des tests (et les greffons natifs du projet) tournerai
   mandataire des hôtes de licence), et le cgroup : `MemoryMax=10G`, `MemorySwapMax=0`, `CPUQuota=400%`, `TasksMax=2048`,
   `LimitNOFILE=8192`, `RuntimeMaxSec=3600`. Ubuntu 24.04 (systemd 255) les connaît tous ; bubblewrap n'est pas nécessaire
   (seulement si l'audit montre une propriété inopérante).
+  **Amendement (relecture 14h)** : la liste figée comprend en plus `PrivateIPC=yes`, `RemoveIPC=yes`,
+  `TemporaryFileSystem=/dev/shm:size=512M,mode=1777`, `/dev/mqueue` dans `InaccessiblePaths`, `LimitCORE=0`,
+  `ProtectControlGroups=yes`, `SystemCallArchitectures=native`, `RestrictRealtime=yes`, `ProtectHostname=yes`,
+  `ProtectClock=yes`, `UMask=0077`, et `RestrictAddressFamilies=AF_UNIX` (`reseau=aucun`) ou `AF_UNIX AF_INET AF_INET6`
+  (`reseau=licence`). Sont admises les valeurs issues d'arguments validés par motif : `MemoryMax=<memoire_mo>M`,
+  `CPUQuota=<cpus × 100>%`, `RuntimeMaxSec=<duree_s − attente − 5>` (l'attente du verrou est bornée à 300 s et décomptée :
+  l'unité s'arrête avant l'échéance de l'enveloppe). `PrivateUsers=yes` : à essayer à J14, pas dans la liste. **Risque connu
+  du mode `reseau=licence`** : sans `PrivateNetwork`, les sockets Unix abstraites de l'hôte restent joignables par le code des
+  tests ; la sonde d'audit les liste (`ss -xl`) et tente une connexion hors mandataire (elle doit échouer) ; sans ces deux
+  essais, l'audit n'écrit pas le marqueur. Codes du script racine : 77 tout refus (rien n'a tourné : argument, commande,
+  identifiant pris, instantané non reçu, prérequis, dossiers privés lisibles, occupé), 74 campagne au-delà de `travail_go`,
+  124 durée ; jamais confondus avec les codes des tests (l'enveloppe les traduit en `#refus`). Une campagne A à la fois
+  (verrou `/run/myiafactory`), et jamais tant qu'une unité `unity-tests-*` est active : celles dont le script n'existe plus,
+  ou actives depuis plus de 6 h, sont arrêtées. `~/agent-identifiants`, `~/.ssh`, `~/taches` sont revérifiés en 0700 à
+  chaque lancement.
 - **Copie du projet** : l'instantané est extrait **dans l'unité** (comme dans le conteneur) dans
   `/var/lib/unity-tests/campagnes/<id>/work`, jamais l'original ; `Library/` : même règle que le § 5.13 (couche basse
   figée, couche haute par campagne ; montage `overlay` fait par le script racine dans un espace de montage privé, à défaut
-  copie `cp --reflink=auto` du cache figé, choix mesuré à J14) ; tout est effacé à la fin.
+  copie `cp --reflink=auto` du cache figé, choix mesuré à J14) ; tout est effacé à la fin. **Écart (relecture 14h)** :
+  l'espace de montage privé de l'unité n'est pas atteignable avec la liste figée (l'unité n'a aucune capacité) ; l'overlay est
+  donc monté par le script racine sur l'hôte en `<campagne>/library` (dossier de campagne à root, 0711, HORS de `work/`,
+  `work/Library` n'en est qu'un lien), `chown` fait avant le montage, démonté par le chemin noté à la pose (`findmnt`,
+  `umount -c`, jamais en suivant un lien ni par un chemin sous le contrôle du projet).
 - **La licence reste avec Hub** : jamais copiée dans le projet ni dans le dossier de campagne ; les fichiers de licence de
   l'utilisateur principal sont seulement **liés en lecture** dans le `HOME` de l'unité, avec une ACL de lecture pour
   `unity-tests` posée sur **ces seuls fichiers** (ACL par défaut sur `licenses/` pour qu'un rafraîchissement par Hub la

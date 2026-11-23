@@ -8,7 +8,7 @@
 #   image (facultatif, 9e argument) ^myiafactory/tests(-[a-z0-9]{1,24})?$, défaut myiafactory/tests : l'image du catalogue (§ 5.12) ;
 #   famille (facultatif, 10e) dans FAMILLES, défaut python : table FERMÉE de l'enveloppe qui ajoute montages et variables du
 #   conteneur (gradle-android : SDK de l'hôte ~/android-sdk monté en lecture seule sur /opt/android-sdk, ANDROID_HOME,
-#   GRADLE_OPTS ; gradle-jvm : GRADLE_OPTS). Jamais une valeur venue du poste hors de ces motifs : image et famille ne sont
+#   GRADLE_OPTS, GRADLE_USER_HOME=/tmp/gradle, GRADLE_RO_DEP_CACHE=/deps si un cache est monté ; gradle-jvm : sans le SDK). Jamais une valeur venue du poste hors de ces motifs : image et famille ne sont
 #   que des clés, les montages et variables sont écrits ici. Sans ces deux arguments : le conteneur d'avant, à l'identique.
 #   Chaque valeur est validée par un motif strict AVANT tout usage ; rien n'est jamais interprété par un shell (tableaux).
 # Entrée standard : 1re ligne = la commande, tableau JSON de chaînes (4 096 octets au plus, contrôlé par tests_hote.py
@@ -327,9 +327,13 @@ COMMANDE=(run --pull never --init --name "tests-$ID" --label myiafactory.genre=t
   -v "$DOSSIER/travail:/work" -v "$ENTREE:/entree:ro")
 if [ -n "$DEPS_DOSSIER" ]; then COMMANDE+=(-v "$DEPS_DOSSIER:/deps:ro"); fi
 # Table fermée par famille : montages et variables écrits ici, jamais lus du poste.
+# Gradle : GRADLE_USER_HOME dans /tmp (tmpfs, seul endroit inscriptible : la racine est en lecture seule et /deps l'est aussi) ;
+# un cache de dépendances monté en :ro sous /deps n'est lu que par GRADLE_RO_DEP_CACHE.
 case "$FAMILLE" in
-  gradle-android) COMMANDE+=(-v "$HOME/android-sdk:/opt/android-sdk:ro" -e ANDROID_HOME=/opt/android-sdk -e "GRADLE_OPTS=$GRADLE_OPTS_FERME") ;;
-  gradle-jvm) COMMANDE+=(-e "GRADLE_OPTS=$GRADLE_OPTS_FERME") ;;
+  gradle-android|gradle-jvm)
+    if [ "$FAMILLE" = gradle-android ]; then COMMANDE+=(-v "$HOME/android-sdk:/opt/android-sdk:ro" -e ANDROID_HOME=/opt/android-sdk); fi
+    COMMANDE+=(-e "GRADLE_OPTS=$GRADLE_OPTS_FERME" -e GRADLE_USER_HOME=/tmp/gradle)
+    if [ -n "$DEPS_DOSSIER" ]; then COMMANDE+=(-e GRADLE_RO_DEP_CACHE=/deps); fi ;;
 esac
 COMMANDE+=(-e HOME=/tmp -e MYIAFACTORY_TESTS_CONTENEUR=1 "$IMAGE")
 

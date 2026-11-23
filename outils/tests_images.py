@@ -9,6 +9,11 @@ import re
 from typing import Optional
 
 IMAGE_DEFAUT = "myiafactory/tests"
+# Sans réseau, une campagne Gradle ne réussit qu'avec un cache de dépendances préchauffé (§ 5.13). TÂCHE 14d : passer à vrai quand
+# l'échauffement existe, ET traiter deux prérequis relevés à la relecture de 14b : (1) une sonde réelle du SDK de l'hôte, passée
+# en `sdk_android` à `choisir_image` (plateformes, build-tools et licences présentes dans ~/android-sdk) ; (2) AGP écrit dans le
+# SDK, monté en :ro par l'enveloppe (licences, composants manquants, cache de build) : à prévoir (copie, couche haute ou sonde).
+CACHE_GRADLE_PRET = False
 # Motifs fermés (les mêmes que ceux de l'enveloppe hôte `taches/lancer_tests.sh`, qui ne croit jamais le poste).
 MOTIF_IMAGE = re.compile(r"myiafactory/tests(-[a-z0-9]{1,24})?", re.ASCII)
 

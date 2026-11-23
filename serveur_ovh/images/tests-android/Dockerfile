@@ -2,7 +2,8 @@
 # de construction, sans curl ni wget, utilisateur 1000) + JDK 17 et JDK 21 de la distribution (paquets Ubuntu signés), rien
 # d'autre. Le SDK Android est celui de l'hôte (~/android-sdk), monté en LECTURE SEULE sur /opt/android-sdk par l'enveloppe
 # hôte (taches/lancer_tests.sh, famille gradle-android) ; Gradle vient du wrapper du projet (distribution mise en cache à
-# l'échauffement) ; GRADLE_USER_HOME est le cache des dépendances monté sur /deps. Le conteneur tourne sans réseau, racine en
+# l'échauffement) ; GRADLE_USER_HOME est posé par l'enveloppe sur /tmp/gradle
+# (inscriptible) ; le cache monté en lecture seule sur /deps n'est lu que par GRADLE_RO_DEP_CACHE. Le conteneur tourne sans réseau, racine en
 # lecture seule, sous l'utilisateur 1000, comme myiafactory/tests (entrée et ENTRYPOINT hérités).
 FROM myiafactory/tests
 
@@ -14,7 +15,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/* \
     && update-alternatives --set java /usr/lib/jvm/java-17-openjdk-amd64/bin/java \
     && update-alternatives --set javac /usr/lib/jvm/java-17-openjdk-amd64/bin/javac \
-    && install -d -m 0755 /opt/android-sdk /deps
+    && install -d -m 0755 /opt/android-sdk
 
 # Vérifié à la construction : java par défaut en 17 (21 présent pour les projets qui le demandent), ni curl ni wget.
 RUN java -version 2>&1 | grep -q '"17\.' \
@@ -22,8 +23,7 @@ RUN java -version 2>&1 | grep -q '"17\.' \
     && ! command -v curl && ! command -v wget
 
 ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64 \
-    ANDROID_HOME=/opt/android-sdk \
-    GRADLE_USER_HOME=/deps/gradle
+    ANDROID_HOME=/opt/android-sdk
 
 USER 1000:1000
 WORKDIR /work

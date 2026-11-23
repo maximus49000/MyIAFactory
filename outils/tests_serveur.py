@@ -306,6 +306,9 @@ def _image_de_la_campagne(profil, sdk_android):
         raise Repli("indisponible (aucune image du catalogue ne convient à ce projet : image dérivée à construire)")
     if choix["manque"]:
         raise Repli("indisponible (SDK Android du serveur incomplet : " + ", ".join(choix["manque"]) + ")")
+    if not tests_images.CACHE_GRADLE_PRET and any(f.startswith("gradle") for f in profil.familles):
+        # TÂCHE 14d : voir tests_images.CACHE_GRADLE_PRET (cache préchauffé, sonde réelle du SDK, AGP et SDK en :ro)
+        raise Repli("indisponible (cache Gradle du serveur pas encore préparé : 14d)")
     image = choix["image"]
     requises = tuple(choix["capacites"])
     if image == tests_images.IMAGE_DEFAUT:

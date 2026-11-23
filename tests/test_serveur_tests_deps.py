@@ -300,6 +300,7 @@ class TestEchauffement(Banc):
         self.assertIn(f"docker rm -f mandataire-{ID_B}", self.journal)
         self.assertEqual([b for a, b in self.paires(self.run_de(etat, f"tests-{ID_B}")) if a == "--network"], ["none"])
         self.assertIn(f"timeout -k 30 1800 sudo -n docker run", self.journal)    # M3
+        self.assertEqual(mandataire[mandataire.index("--entrypoint") + 2], "myiafactory/tests")   # M5 : image de base fixe
 
     def test_distribution_gradle_par_l_hote(self):
         # I4 : la distribution est téléchargée par l'hôte, vérifiée, déposée dans le cache ; redirection hors liste refusée.
@@ -458,7 +459,7 @@ class TestEchauffement(Banc):
             self.lacher(p)
         self.assertTrue(self.cache(nom="npm-1111111111111111").exists())
         self.assertFalse(self.cache(nom="npm-2222222222222222").exists())
-        self.assertFalse((self.deps_racine() / ".npm-2222222222222222.verrou").exists())
+        self.assertTrue((self.deps_racine() / ".npm-2222222222222222.verrou").exists())   # M3 (relecture 2) : jamais effacé
         self.assertTrue(self.cache().exists())
         self.assertFalse((self.cache() / ".verrou").exists())
 
@@ -480,6 +481,49 @@ class TestEchauffement(Banc):
         deps_run = self.run_de(etat, f"deps-{ID}")
         self.assertIn(("--tmpfs", "/work:size=2g,nr_inodes=500000,mode=1777,exec"), self.paires(deps_run))
         self.assertFalse([a for a in deps_run if a.endswith(":/work")])
+
+    def test_distribution_tronquee_et_liste_incomplete(self):
+        # I1 (relecture 2) : un zip présent mais tronqué n'est jamais copié tel quel ; fichiers temporaires propres à la
+        # campagne ; une liste des versions incomplète ne pose pas `.liste`.
+        dist = self.home / "tests" / ".deps" / ".gradle-wrapper" / "dist"
+        dist.mkdir(parents=True)
+        (dist / "gradle-8.7-bin.zip").write_bytes(ZIP[:5])
+        code, err, etat = self.lancer(*GRADLE, "accorde", "40", tar=TAR_GRADLE)
+        self.assertEqual(code, 0, err)
+        zip_ = self.cache(nom=f"gradle-{DEPS}") / "contenu" / "gradle" / "wrapper" / "dists" / "gradle-8.7-bin" / HACHE_DIST / \
+            "gradle-8.7-bin.zip"
+        self.assertEqual(zip_.read_bytes(), ZIP)
+        self.assertIn(f"gradle-8.7-bin.zip.tmp-{ID}", self.journal)
+        versions = json.dumps([{"version": v, "wrapperChecksumUrl":
+                                f"https://services.gradle.org/distributions/gradle-{v}-wrapper.jar.sha256"} for v in ("8.7", "8.6")])
+        autre = _tar({"gradlew": b"", "settings.gradle": b"", "gradle/wrapper/gradle-wrapper.jar": b"autre",
+                      "gradle/wrapper/gradle-wrapper.properties": PROPS})
+        code, err, etat = self.lancer(*GRADLE, "accorde", "40", tar=autre, ident=ID_B, env={"FAUX_VERSIONS": versions})
+        self.assertEqual(code, 79, err)                                           # 8.6 injoignable : liste incomplète
+        self.assertFalse((self.home / "tests" / ".deps" / ".gradle-wrapper" / ".liste").exists())
+
+    def test_panne_memoire_non_retenue(self):
+        # I2 (relecture 2) : /work (tmpfs) est ajouté à la mémoire ; un 137 sans marque du surveillant = `memoire`, jamais
+        # retenu une heure.
+        code, err, etat = self.lancer(*NPM, "refuse", "40", env={"FAUX_DEPS_CODE": "137"})
+        self.assertEqual(code, 79, err)
+        self.assertIn("#deps-echec memoire", err)
+        self.assertFalse(list(self.deps_racine().glob("*.echec")))
+        deps_run = self.run_de(etat, f"deps-{ID}")
+        self.assertIn(("--memory", f"{8192 + 2 * 1024}m"), self.paires(deps_run))
+        self.assertIn(("--memory-swap", f"{8192 + 2 * 1024}m"), self.paires(deps_run))
+
+    def test_pannes_passageres_retenues_cinq_minutes(self):
+        # M4 (relecture 2) : mandataire, réseau interne, distribution injoignable : 5 min, pas 1 h.
+        self.deps_racine().mkdir(parents=True)
+        marque = self.deps_racine() / f"npm-{DEPS}.echec"
+        marque.write_text("%d mandataire\n" % (time.time() - 100), encoding="utf-8")
+        code, err, etat = self.lancer(*NPM, "refuse", "40")
+        self.assertEqual(code, 79, err)
+        self.assertIn("#deps-echec mandataire", err)
+        marque.write_text("%d mandataire\n" % (time.time() - 400), encoding="utf-8")
+        code, err, etat = self.lancer(*NPM, "refuse", "40", ident=ID_B)
+        self.assertEqual(code, 0, err)
 
     def test_balayage_des_restes(self):
         # M2 : <cache>.tmp dont la préparation est morte et .supprime-* effacés (chmod d'abord)

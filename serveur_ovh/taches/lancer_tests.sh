@@ -148,15 +148,17 @@ VERSIONS_GRADLE_URL="https://services.gradle.org/versions/all"
 DIST_HOTES=" services.gradle.org downloads.gradle.org "  # redirections admises pour la distribution (hôte), jamais d'autre
 INODES_MAX=500000                                      # inodes d'un cache en préparation et de son /work (tmpfs)
 ECHAUFFEMENTS_MAX=2                                    # échauffements simultanés au serveur (~/taches/.echauffement-1..2)
-# Mots fermés de `#deps-echec` (tout autre : « inconnue ») ; RAISONS_MEMOIRE : échecs d'échauffement retenus une heure.
+# Mots fermés de `#deps-echec` (tout autre : « inconnue »). Échecs d'échauffement retenus pour CETTE empreinte (repli immédiat,
+# même raison) : RAISONS_MEMOIRE une heure, RAISONS_BREVES (pannes passagères) cinq minutes ; `memoire` (137 sans marque du
+# surveillant) n'est jamais retenu : une panne de mémoire ne doit pas interdire le serveur au projet.
 RAISONS=" reseau-non-accorde wrapper-modifie wrapper-absent wrapper-illisible distribution-hors-services-gradle
   somme-gradle-injoignable somme-gradle-illisible sommes-gradle-inaccessibles curl-absent distribution-injoignable
-  distribution-redirection distribution-somme echauffement plafond inodes duree disque copie-sur-ecriture unity-tache-14g
-  cache-inaccessible echauffement-concurrent ecriture reseau-interne mandataire reseau-sans-liste cache-verrou cache-disparu "
+  distribution-redirection distribution-somme echauffement plafond inodes duree memoire disque copie-sur-ecriture
+  unity-tache-14g cache-inaccessible echauffement-concurrent ecriture reseau-interne mandataire reseau-sans-liste cache-verrou
+  cache-disparu "
 RAISONS="${RAISONS//$'\n'/ }"
-RAISONS_MEMOIRE=" echauffement plafond inodes duree distribution-injoignable distribution-redirection distribution-somme
-  mandataire reseau-interne "
-RAISONS_MEMOIRE="${RAISONS_MEMOIRE//$'\n'/ }"
+RAISONS_MEMOIRE=" echauffement plafond inodes duree distribution-redirection distribution-somme "
+RAISONS_BREVES=" distribution-injoignable mandataire reseau-interne "
 PLACES_MAX=4
 DUREE_MAX=3600
 DISQUE_MIN_KO=5242880                    # 5 Go libres au départ
@@ -261,7 +263,7 @@ finir() {   # finir <code> [conteneur] : « conteneur » = le code vient du cont
   if [ -n "$TMP_CACHE" ] && [ -d "$TMP_CACHE" ] && [ ! -L "$TMP_CACHE" ]; then   # échauffement inachevé : rien n'est prêt
     chmod -R u+rwX -- "$TMP_CACHE" 2>/dev/null; rm -rf -- "$TMP_CACHE"
   fi
-  exec 5>&- 6>&- 7>&-                                  # cache, place d'échauffement et préparation rendus
+  exec 3>&- 5>&- 6>&- 7>&-                             # sommes Gradle, cache, place d'échauffement, préparation rendus
   [ -n "$TICKET" ] && rm -f -- "$TICKET"
   liberer_creneau
   if [ -e "$DOSSIER/sortie-coupee" ]; then printf '%s\n' "Sortie coupée à 50 Mo" >&2; fi
@@ -415,25 +417,26 @@ ECHAUFFE=0
 deps_echec() {   # deps_echec <raison> : `#deps-echec <mot fermé>`, retenu une heure si c'est un échec d'échauffement, puis 79
   local r="$1"
   [[ $RAISONS == *" $r "* ]] || r=inconnue
-  if [ "$ECHAUFFE" = 1 ] && [[ $RAISONS_MEMOIRE == *" $r "* ]] && [ -n "$DEPS_RACINE" ]; then
+  if [ "$ECHAUFFE" = 1 ] && [[ $RAISONS_MEMOIRE$RAISONS_BREVES == *" $r "* ]] && [ -n "$DEPS_RACINE" ]; then
     printf '%s %s\n' "$(date +%s)" "$r" > "$DEPS_RACINE/.$ECH_CLE-$DEPS.echec.tmp" 2>/dev/null &&
       mv -f -- "$DEPS_RACINE/.$ECH_CLE-$DEPS.echec.tmp" "$DEPS_RACINE/$ECH_CLE-$DEPS.echec" 2>/dev/null
   fi
   printf '#deps-echec %s\n' "$r" >&2
   echouer 79 "échauffement des dépendances impossible ($r) : les tests ne partent pas au serveur."
 }
-memoire_echec() {   # un échec d'échauffement de moins d'une heure, pour CETTE empreinte : repli immédiat, même raison
-  local f="$DEPS_RACINE/$ECH_CLE-$DEPS.echec" quand raison
+memoire_echec() {   # un échec retenu (1 h, ou 5 min pour une panne passagère), pour CETTE empreinte : repli immédiat
+  local f="$DEPS_RACINE/$ECH_CLE-$DEPS.echec" quand raison delai=3600
   [ -f "$f" ] && [ ! -L "$f" ] || return 0
   read -r quand raison < "$f" 2>/dev/null || return 0
-  [[ $quand =~ ^[0-9]{1,12}$ ]] && [[ $RAISONS_MEMOIRE == *" $raison "* ]] || { rm -f -- "$f"; return 0; }
-  if [ $(($(date +%s) - quand)) -lt 3600 ]; then
-    printf '%s\n' "lancer_tests : échauffement en échec il y a moins d'une heure pour ces dépendances : pas de nouvel essai." >&2
+  [[ $quand =~ ^[0-9]{1,12}$ ]] && [[ $RAISONS_MEMOIRE$RAISONS_BREVES == *" $raison "* ]] || { rm -f -- "$f"; return 0; }
+  [[ $RAISONS_BREVES == *" $raison "* ]] && delai=300
+  if [ $(($(date +%s) - quand)) -lt "$delai" ]; then
+    printf '%s\n' "lancer_tests : échauffement en échec il y a moins de $((delai / 60)) min pour ces dépendances : pas de nouvel essai." >&2
     deps_echec "$raison"
   fi
   rm -f -- "$f"
 }
-verrou_de() { printf '%s/.%s.verrou' "${1%/*}" "${1##*/}"; }   # HORS du dossier du cache (qui peut être renommé, effacé)
+verrou_de() { printf '%s/.%s.verrou' "${1%/*}" "${1##*/}"; }   # HORS du dossier du cache ; jamais effacé (voir effacer_cache)
 cache_pret() { [ -f "$1/.pret" ] && [ -d "$1/contenu" ] && [ ! -L "$1" ] && [ ! -L "$1/contenu" ]; }
 cache_perime() { [ -f "$1/.non-verrouille" ] && [ -n "$(find "$1/.pret" -mmin +10080 2>/dev/null)" ]; }   # 7 jours
 du_ko() { local k; k=$(timeout 120 du -sk -- "$1" 2>/dev/null 8>&- | cut -f1); [[ $k =~ ^[0-9]{1,15}$ ]] && printf '%s' "$k"; }
@@ -446,7 +449,8 @@ effacer_cache() {   # effacer_cache <cache> : seulement si personne ne le tient 
   if ! flock -x -n 4; then exec 4>&-; return 1; fi
   t="${c%/*}/.supprime-$(date +%s%N)-${c##*/}"
   if ! mv -- "$c" "$t"; then exec 4>&-; return 1; fi   # atomique : plus aucune campagne ne le trouve prêt
-  rm -f -- "$v"
+  # Le fichier .verrou n'est JAMAIS effacé : effacé, une campagne qui l'a ouvert juste avant tiendrait un verrou sur un inode
+  # orphelin pendant qu'une autre en crée un nouveau (deux « verrous » pour le même cache). Quelques octets par empreinte.
   exec 4>&-
   chmod -R u+rwX -- "$t" 2>/dev/null                   # le cache de modules Go (entre autres) est en lecture seule
   rm -rf -- "$t"
@@ -502,14 +506,18 @@ telecharger() {   # telecharger <url> <fichier> : https seulement, sans suivre d
 somme_publiee() {   # somme_publiee <version> : 0 si $SOMMES/<version>.sha256 (somme officielle) est là, récupérée au besoin
   local v="$1" f="$SOMMES/$1.sha256" o
   [ -f "$f" ] && [ ! -L "$f" ] && return 0
-  rm -f -- "$f.tmp"
-  telecharger "$SOMMES_GRADLE_URL/gradle-$v-wrapper.jar.sha256" "$f.tmp" || { rm -f -- "$f.tmp"; return 1; }
-  o=$(head -c 200 -- "$f.tmp" 2>/dev/null | tr -d ' \r\n'); rm -f -- "$f.tmp"
+  rm -f -- "$f.tmp-$ID"
+  telecharger "$SOMMES_GRADLE_URL/gradle-$v-wrapper.jar.sha256" "$f.tmp-$ID" || { rm -f -- "$f.tmp-$ID"; return 1; }
+  o=$(head -c 200 -- "$f.tmp-$ID" 2>/dev/null | tr -d ' \r\n'); rm -f -- "$f.tmp-$ID"
   [[ $o =~ ^[0-9a-f]{64}$ ]] || return 2
-  printf '%s\n' "$o" > "$f.tmp" && mv -f -- "$f.tmp" "$f"
+  printf '%s\n' "$o" > "$f.tmp-$ID" && mv -f -- "$f.tmp-$ID" "$f"
 }
 somme_connue() { local f; for f in "$SOMMES"/*.sha256; do [ -f "$f" ] && grep -qxF -- "$1" "$f" && return 0; done; return 1; }
 GRADLE_VERSION=""; GRADLE_GENRE=""; GRADLE_HACHE=""
+# Le dossier des sommes et des distributions est partagé par les campagnes : une seule à la fois l'écrit (descripteur 3,
+# rendu à la fin de chaque fonction ; finir le ferme aussi). Les temporaires portent en plus l'identifiant de la campagne.
+tenir_sommes() { exec 3>> "$SOMMES/.verrou" && flock -x -w 1200 3 || deps_echec sommes-gradle-inaccessibles; }
+lacher_sommes() { exec 3>&-; }
 verifier_wrapper() {   # le jar de l'instantané doit être l'un des wrappers PUBLIÉS par Gradle (toutes versions), sinon 79
   local ligne r raison somme v debut
   ligne=$(python3 -I "$AIDE" --wrapper "$ENTREE/entree.tar" 2>"$DOSSIER/.wrapper.err"); r=$?
@@ -522,58 +530,75 @@ verifier_wrapper() {   # le jar de l'instantané doit être l'un des wrappers PU
   mkdir -p -m 700 -- "$SOMMES" 2>/dev/null
   [ -d "$SOMMES" ] && [ ! -L "$SOMMES" ] && [ -O "$SOMMES" ] || deps_echec sommes-gradle-inaccessibles
   command -v curl >/dev/null 2>&1 || deps_echec curl-absent
+  tenir_sommes
   somme_publiee "$GRADLE_VERSION"; r=$?
   [ "$r" = 1 ] && deps_echec somme-gradle-injoignable
   [ "$r" = 2 ] && deps_echec somme-gradle-illisible
-  somme_connue "$somme" && return 0
+  somme_connue "$somme" && { lacher_sommes; return 0; }
   # Jar d'une autre version : la liste officielle de toutes les versions (rafraîchie au plus une fois par jour), puis la somme
   # publiée de chacune (seulement l'URL officielle attendue, jamais une URL lue dans la réponse ; 600 s au plus).
+  # `.liste` n'est posée (pour 24 h) que si la liste est COMPLÈTE : non vide, chaque somme obtenue, avant les 600 s.
   if [ -z "$(find "$SOMMES/.liste" -mmin -1440 2>/dev/null)" ]; then
-    telecharger "$VERSIONS_GRADLE_URL" "$SOMMES/versions.json" || deps_echec somme-gradle-injoignable
+    local json="$SOMMES/versions.json.$ID" complete=1 vues=0
+    rm -f -- "$json"
+    telecharger "$VERSIONS_GRADLE_URL" "$json" || { rm -f -- "$json"; deps_echec somme-gradle-injoignable; }
     debut=$(date +%s)
     while IFS= read -r v; do
       v="${v%$'\r'}"                                   # python sous Windows (bancs) écrit \r\n
       [[ $v =~ ^[0-9]{1,2}\.[0-9]{1,2}(\.[0-9]{1,2})?(-rc-[0-9]{1,2})?$ ]] || continue
-      [ $(($(date +%s) - debut)) -lt 600 ] || break
-      somme_publiee "$v"
-    done < <(python3 -I "$AIDE" --versions-gradle "$SOMMES/versions.json" 2>/dev/null)
-    rm -f -- "$SOMMES/versions.json"
-    : > "$SOMMES/.liste"
+      if [ $(($(date +%s) - debut)) -ge 600 ]; then complete=0; break; fi
+      vues=$((vues + 1))
+      somme_publiee "$v" || complete=0
+    done < <(python3 -I "$AIDE" --versions-gradle "$json" 2>/dev/null)
+    rm -f -- "$json"
+    [ "$complete" = 1 ] && [ "$vues" -gt 0 ] && : > "$SOMMES/.liste"
   fi
+  lacher_sommes
   somme_connue "$somme" || deps_echec wrapper-modifie
 }
 distribution_gradle() {   # distribution_gradle <contenu du cache en préparation> : téléchargée par l'HÔTE, vérifiée, copiée
-  local nom="gradle-$GRADLE_VERSION-$GRADLE_GENRE.zip" d="$SOMMES/dist" url r loc h i officielle somme dest
+  local nom="gradle-$GRADLE_VERSION-$GRADLE_GENRE.zip" d="$SOMMES/dist" url r loc h i officielle somme dest t
   mkdir -p -m 700 -- "$d" 2>/dev/null
   [ -d "$d" ] && [ ! -L "$d" ] || deps_echec sommes-gradle-inaccessibles
-  if ! { [ -f "$d/$nom" ] && [ ! -L "$d/$nom" ]; }; then
-    url="$SOMMES_GRADLE_URL/$nom"; rm -f -- "$d/$nom.tmp"
+  tenir_sommes
+  t="$d/$nom.tmp-$ID"
+  # Une distribution gardée n'est crue que si sa somme est celle, OFFICIELLE, gardée avec elle (zip tronqué, somme absente ou
+  # différente : effacée et retéléchargée) ; jamais seulement parce que le fichier existe.
+  if [ -f "$d/$nom" ] && [ ! -L "$d/$nom" ] && [ -f "$d/$nom.sha256" ] &&
+     [ "$(sha256sum -- "$d/$nom" 2>/dev/null | cut -d' ' -f1)" = "$(head -c 64 -- "$d/$nom.sha256" 2>/dev/null)" ]; then
+    :
+  else
+    rm -f -- "$d/$nom" "$d/$nom.sha256" "$t"
+    url="$SOMMES_GRADLE_URL/$nom"
     for i in 1 2 3 4 5; do
-      [ "$i" = 5 ] && deps_echec distribution-redirection
-      r=$(timeout -k 10 900 curl -sS --proto =https --max-time 880 -o "$d/$nom.tmp" -w '%{http_code} %{redirect_url}' \
-            "$url" </dev/null 2>/dev/null 8>&-) || deps_echec distribution-injoignable
+      [ "$i" = 5 ] && { rm -f -- "$t"; deps_echec distribution-redirection; }
+      r=$(timeout -k 10 900 curl -sS --proto =https --max-time 880 -o "$t" -w '%{http_code} %{redirect_url}' \
+            "$url" </dev/null 2>/dev/null 8>&-) || { rm -f -- "$t"; deps_echec distribution-injoignable; }
       case "$r" in
         "200 "*) break ;;
         30[1278]\ https://*)                            # redirection suivie à la main : seulement vers DIST_HOTES
           loc="${r#* }"; h="${loc#https://}"; h="${h%%/*}"
           [[ $DIST_HOTES == *" $h "* ]] && [[ $loc =~ ^https://[a-z0-9.-]{1,253}/[A-Za-z0-9._/%+=-]{1,500}$ ]] ||
-            { rm -f -- "$d/$nom.tmp"; deps_echec distribution-redirection; }
+            { rm -f -- "$t"; deps_echec distribution-redirection; }
           url="$loc" ;;
-        *) rm -f -- "$d/$nom.tmp"; deps_echec distribution-injoignable ;;
+        *) rm -f -- "$t"; deps_echec distribution-injoignable ;;
       esac
     done
-    telecharger "$SOMMES_GRADLE_URL/$nom.sha256" "$d/$nom.sha256.tmp" || deps_echec distribution-injoignable
-    officielle=$(head -c 200 -- "$d/$nom.sha256.tmp" 2>/dev/null | tr -d ' \r\n'); rm -f -- "$d/$nom.sha256.tmp"
-    somme=$(sha256sum -- "$d/$nom.tmp" 2>/dev/null | cut -d' ' -f1)
+    telecharger "$SOMMES_GRADLE_URL/$nom.sha256" "$t.sha256" || { rm -f -- "$t" "$t.sha256"; deps_echec distribution-injoignable; }
+    officielle=$(head -c 200 -- "$t.sha256" 2>/dev/null | tr -d ' \r\n'); rm -f -- "$t.sha256"
+    somme=$(sha256sum -- "$t" 2>/dev/null | cut -d' ' -f1)
     if ! [[ $officielle =~ ^[0-9a-f]{64}$ ]] || [ "$somme" != "$officielle" ]; then
-      rm -f -- "$d/$nom.tmp"; deps_echec distribution-somme
+      rm -f -- "$t"; deps_echec distribution-somme
     fi
-    mv -f -- "$d/$nom.tmp" "$d/$nom" || deps_echec ecriture
+    printf '%s\n' "$officielle" > "$d/$nom.sha256" && mv -f -- "$t" "$d/$nom" || { rm -f -- "$t"; deps_echec ecriture; }
   fi
   # Là où le wrapper la cherche (GRADLE_USER_HOME=/deps/gradle) : une COPIE (jamais un lien dur : le conteneur écrit dans
-  # contenu/ et ne doit pas pouvoir altérer la distribution vérifiée de l'hôte).
+  # contenu/ et ne doit pas pouvoir altérer la distribution vérifiée de l'hôte), revérifiée APRÈS la copie.
   dest="$1/gradle/wrapper/dists/gradle-$GRADLE_VERSION-$GRADLE_GENRE/$GRADLE_HACHE"
   mkdir -p -- "$dest" && cp -- "$d/$nom" "$dest/$nom" || deps_echec ecriture
+  [ "$(sha256sum -- "$dest/$nom" 2>/dev/null | cut -d' ' -f1)" = "$(head -c 64 -- "$d/$nom.sha256")" ] ||
+    { rm -f -- "$dest/$nom"; deps_echec distribution-somme; }
+  lacher_sommes
 }
 
 # SDK Android de l'hôte en copie sur écriture : AGP peut écrire (.temp, licences, .knownPackages) dans la couche haute, effacée
@@ -616,6 +641,7 @@ prendre_echauffement() {   # une des ECHAUFFEMENTS_MAX places d'échauffement (d
 echauffer() {
   local duree plafond code r ko hotes p ip de="$DOSSIER/deps-entree" tmp="$CACHE.tmp"
   read -r duree plafond code <<< "${ECH[$ECH_CLE]}"
+  local memoire=$((MEMOIRE + plafond * 1024)) depart   # le tmpfs /work compte dans --memory : il s'y ajoute
   [ "$ECH_CLE" = unity ] && deps_echec unity-tache-14g
   [ "$code" = 1 ] && [ "$RESEAU" != accorde ] && deps_echec reseau-non-accorde
   mkdir -p -m 700 -- "$DEPS_RACINE" 2>/dev/null
@@ -640,7 +666,7 @@ echauffer() {
   local -a run=(run --pull never --init --name "deps-$ID" --label myiafactory.genre=tests-deps --log-driver none
     --read-only --cap-drop ALL --security-opt no-new-privileges --user 1000:1000
     --pids-limit 2048 --ulimit nofile=8192:8192 --ulimit core=0
-    --memory "${MEMOIRE}m" --memory-swap "${MEMOIRE}m" --cpus "$CPUS"
+    --memory "${memoire}m" --memory-swap "${memoire}m" --cpus "$CPUS"
     --tmpfs /tmp:size=4g,mode=1777,exec --tmpfs "/work:size=${plafond}g,nr_inodes=$INODES_MAX,mode=1777,exec"
     -v "$de:/entree:ro" -v "$tmp/contenu:/deps" -v "$tmp/meta:/deps-meta"
     -v "$AIDE:/opt/myiafactory/tests_hote.py:ro" "${SDK_MONTAGE[@]}")
@@ -650,11 +676,12 @@ echauffer() {
   DEPS_RESEAU="deps-$ID"
   dk 30 network create --internal --label myiafactory.genre=tests-deps "deps-$ID" >/dev/null 2>&1 || deps_echec reseau-interne
   MANDATAIRE=1
-  # Créé sur le réseau INTERNE seul (il y écoute, et seulement là), puis branché au bridge pour sortir.
+  # Créé sur le réseau INTERNE seul (il y écoute, et seulement là), puis branché au bridge pour sortir ; toujours l'image de
+  # base myiafactory/tests (jamais une image dérivée : elle porte des outils de plus et ne sert qu'au code du projet).
   dk 60 run -d --pull never --init --name "mandataire-$ID" --label myiafactory.genre=tests-deps --log-driver none \
     --network "deps-$ID" --read-only --cap-drop ALL --security-opt no-new-privileges --user 1000:1000 \
     --pids-limit 256 --memory 256m --memory-swap 256m --cpus 1 --tmpfs /tmp:size=16m \
-    -v "$AIDE:/opt/myiafactory/tests_hote.py:ro" --entrypoint python3 "$IMAGE" \
+    -v "$AIDE:/opt/myiafactory/tests_hote.py:ro" --entrypoint python3 myiafactory/tests \
     -I /opt/myiafactory/tests_hote.py --mandataire 3128 $((duree + 120)) "${hotes[@]}" >/dev/null 2>&1 || deps_echec mandataire
   dk 30 network connect bridge "mandataire-$ID" >/dev/null 2>&1 || deps_echec mandataire
   ip=$(dk 20 inspect -f "{{(index .NetworkSettings.Networks \"deps-$ID\").IPAddress}}" "mandataire-$ID" 2>/dev/null)
@@ -685,6 +712,7 @@ echauffer() {
     done ) >/dev/null 2>&1 6>&- 7>&- &
   PID_SURVEILLANT=$!
   DEPS_CONTENEUR=1
+  depart=$(date +%s)
   timeout -k 30 "$duree" sudo -n docker "${run[@]}" </dev/null 2>&1 6>&- 7>&- 8>&- |
     python3 -I "$AIDE" --couper "$DOSSIER/deps-journal-coupe" 1048576 > "$DOSSIER/deps.log" 6>&- 7>&- 8>&-
   r=${PIPESTATUS[0]}
@@ -699,7 +727,10 @@ echauffer() {
   { [ -e "$DOSSIER/deps-plafond" ] || [ "$ko" -gt $((plafond * 1048576)) ]; } && deps_echec plafond
   n=$(du_inodes "$tmp") || n=0
   { [ -e "$DOSSIER/deps-inodes" ] || [ "$n" -gt "$INODES_MAX" ]; } && deps_echec inodes
-  [ "$r" = 124 ] || [ "$r" = 137 ] && [ ! -f "$tmp/meta/ok" ] && deps_echec duree
+  if [ ! -f "$tmp/meta/ok" ]; then
+    if [ "$r" = 124 ] || { [ "$r" = 137 ] && [ $(($(date +%s) - depart)) -ge "$duree" ]; }; then deps_echec duree; fi
+    [ "$r" = 137 ] && deps_echec memoire                 # tué sans marque du surveillant ni échéance : mémoire (OOM)
+  fi
   if [ "$r" != 0 ] || [ ! -f "$tmp/meta/ok" ]; then
     tail -n 20 -- "$DOSSIER/deps.log" 2>/dev/null | tr '\000-\011\013-\037\177' '?' |
       sed -e 's/\xc2\x85/?/g' -e 's/\xe2\x80\xa8/?/g' -e 's/\xe2\x80\xa9/?/g' -e 's/^/| /' | head -c 4096 >&2

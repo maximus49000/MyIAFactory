@@ -695,6 +695,9 @@ def wrapper_gradle(chemin):
     m = _membres(chemin, {jar, props})
     if jar not in m or props not in m:
         raise ValueError("wrapper-absent")
+    # LIMITE CONNUE (relecture M2) : ce n'est pas un analyseur java.util.Properties complet (lignes continuées par « \\ »,
+    # échappements \\uXXXX, clés échappées) : une telle forme est refusée (URL hors motif) ou ignorée, jamais suivie. La somme du
+    # jar et le mandataire restent les garde-fous.
     derniere = None
     for ligne in m[props].decode("utf-8", "replace").splitlines():
         c = _CLE_DISTRIBUTION.fullmatch(ligne)

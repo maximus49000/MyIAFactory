@@ -325,13 +325,17 @@ class Projet:
                if genre else None,
                "projet": ctx["lieux_projet"].get(action)}
         valeurs = {n: v for n, v in lus.items() if n in niveaux and v is not None}
-        servie = deport_types.servie_au_serveur(action, catalogue if applicable else deport_types.catalogue_union())
+        cat = catalogue if applicable else deport_types.catalogue_union()
+        servie = deport_types.servie_au_serveur(action, cat)
+        routee = deport_types.routee_au_serveur(action, cat)
         return {"id": "deport." + action, "section": "actions", "libelle": entree["libelle"],
                 "aide": entree["bientot"] or "", "forme": "lieu", "choix": list(entree["lieux"]), "niveaux": niveaux,
                 "valeur": lieu, "origine": origine, "valeurs": valeurs, "applicable": applicable,
                 "defaut": None if deport_types.sans_poste(entree) else "poste",
                 # « Serveur » n'est réglable que pour une action que `deporter` y sert (sinon : « bientôt »)
-                "servie_au_serveur": servie}
+                "servie_au_serveur": servie,
+                # les tests : « Serveur » réglable aussi (`lancer.py tests` les route ; l'accord se vérifie au lancement)
+                "routee_au_serveur": routee}
 
     def _ligne_reglage(self, r, ctx):
         """La ligne d'un réglage déclaré au registre (booléen) : valeur, origine et valeur posée à chaque niveau."""
@@ -414,7 +418,8 @@ class Projet:
                 raise ValueError("« %s » ne tourne pas au lieu « %s » (choix : %s)."
                                  % (entree["libelle"], valeur, ", ".join(entree["lieux"])))
             if valeur == "serveur":   # les mêmes garde-fous que les cases grisées de la page
-                if not deport_types.servie_au_serveur(action, catalogue if applicable else union):
+                cat = catalogue if applicable else union
+                if not (deport_types.servie_au_serveur(action, cat) or deport_types.routee_au_serveur(action, cat)):
                     raise ValueError("« %s » : le lieu « serveur » n'est pas encore disponible (bientôt)."
                                      % entree["libelle"])
                 if not modserveurs.declare():

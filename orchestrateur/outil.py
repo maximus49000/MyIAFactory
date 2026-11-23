@@ -3918,7 +3918,7 @@ def _depart_d_un_lot(ctx, e):
                                           contexte=" ".join(depart.contexte_de_tache(
                                               t, su.fonctionnalite(s, t["fonctionnalite"]) if t.get("fonctionnalite")
                                               else None) for t in taches),
-                                          deport=_deport_du_depart(ctx))}
+                                          deport=_deport_du_depart(ctx), route=_route_du_depart(ctx))}
 
 
 BUREAU_DEPORT = "~/MyIAFactory/bureau.json"   # remplacé par les tests
@@ -3961,6 +3961,16 @@ def _deport_du_depart(ctx, bureau=None):
         return ""
 
 
+def _route_du_depart(ctx):
+    """Vrai si les tests de ce projet partent au serveur (`deport_types.refus_route` ne refuse pas) : la consigne de
+    l'agent local le dit alors. Faux au moindre souci (une consigne du poste vaut mieux qu'un départ cassé)."""
+    try:
+        from bureau import deport_types
+        return deport_types.refus_route(_projet(ctx), "tests") is None
+    except Exception:
+        return False
+
+
 def cmd_depart(ctx, e):
     if not isinstance(e.get("moteur", False), bool):
         raise Refus("« moteur » est vrai ou faux.")
@@ -3991,7 +4001,7 @@ def cmd_depart(ctx, e):
                                       (fonc or {}).get("glossaire") or [], partenaires[0],
                                       regles_projet=rp.lire(ctx.f), inscrits=partenaires[1], ecartes=partenaires[2],
                                       metiers_=metiers_, contexte=depart.contexte_de_tache(tache_suivie, fonc),
-                                      deport=_deport_du_depart(ctx))}
+                                      deport=_deport_du_depart(ctx), route=_route_du_depart(ctx))}
 
 
 def cmd_lieux(ctx, e):

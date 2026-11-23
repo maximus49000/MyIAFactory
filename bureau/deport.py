@@ -3,7 +3,7 @@
 Reste compatible Python 3.9 : le code déporté est aussi lancé par les agents.
 """
 
-from .deport_types import GENERIQUE, SERVIES_AU_SERVEUR, catalogue_union, sans_poste
+from .deport_types import GENERIQUE, ROUTEES_AU_SERVEUR, SERVIES_AU_SERVEUR, catalogue_union, sans_poste
 
 # Vue d'ensemble du catalogue générique (compatibilité) : ce que chaque action produit et consomme.
 ACTIONS = {nom: {"produit": e["produit"], "consomme": list(e["consomme"])} for nom, e in GENERIQUE.items()}
@@ -18,7 +18,8 @@ _NOMS_LIEUX = {"poste": "poste", "github": "GitHub", "serveur": "serveur"}
 def valider_lieux(lieux, etape_serveur=False, catalogue=GENERIQUE):
     """Vérifie un dictionnaire {action: lieu} et le renvoie copié ; lève ValueError (message en français).
     Seules les actions du catalogue existent ; un lieu que l'action n'offre pas est refusé avec son explication. Le
-    serveur n'est permis (hors `etape_serveur`) qu'aux actions que `deporter` y sert (`SERVIES_AU_SERVEUR`)."""
+    serveur n'est permis (hors `etape_serveur`) qu'aux actions que `deporter` y sert (`SERVIES_AU_SERVEUR`) ou que `lancer.py tests` y route (`ROUTEES_AU_SERVEUR`;
+    l'accord du projet se vérifie au lancement, `refus_route`)."""
     if not isinstance(lieux, dict):
         raise ValueError("Les lieux doivent être un dictionnaire {action: lieu}.")
     permis = LIEUX if etape_serveur else LIEUX_ETAPE_1
@@ -34,7 +35,7 @@ def valider_lieux(lieux, etape_serveur=False, catalogue=GENERIQUE):
         if lieu not in entree["lieux"]:
             raison = entree["bientot"] or "ce lieu n'est pas prévu pour ce type de projet"
             raise ValueError("« %s » ne tourne pas au lieu « %s » : %s." % (action, _NOMS_LIEUX[lieu], raison))
-        if lieu not in permis and not (lieu == "serveur" and action in SERVIES_AU_SERVEUR):
+        if lieu not in permis and not (lieu == "serveur" and action in SERVIES_AU_SERVEUR + ROUTEES_AU_SERVEUR):
             raise ValueError("Le lieu « %s » n'est pas encore disponible pour « %s »." % (lieu, action))
     return dict(lieux)
 

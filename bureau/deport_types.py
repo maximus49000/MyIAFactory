@@ -349,7 +349,8 @@ def sans_poste(entree):
 
 
 def actions_exposees(catalogue):
-    """La liste `[{id, libelle, lieux, bientot, servie_au_serveur}]` que le bureau affiche pour ce catalogue."""
+    """La liste `[{id, libelle, lieux, bientot, servie_au_serveur, routee_au_serveur}]` que le bureau affiche pour ce catalogue."""
     return [{"id": nom, "libelle": e["libelle"], "lieux": list(e["lieux"]), "bientot": e["bientot"],
-             "servie_au_serveur": servie_au_serveur(nom, catalogue)}
+             "servie_au_serveur": servie_au_serveur(nom, catalogue),
+             "routee_au_serveur": routee_au_serveur(nom, catalogue)}
             for nom, e in catalogue.items()]

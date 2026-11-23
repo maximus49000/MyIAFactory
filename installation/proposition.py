@@ -38,6 +38,16 @@ ECART_API_PAR_DEFAUT = ("environ 0,05 $ de décisions par fonctionnalité, factu
                         "ces décisions passent par votre abonnement, sans frais en plus)")
 
 
+def lieu_tests_propose(capacites_serveurs):
+    """Le lieu proposé pour les tests du projet (décision de Direction, comme les autres lieux) : `serveur` quand un
+    serveur déclaré a la capacité `tests-image` présente (`capacites_serveurs` : un `{capacité: statut}` par serveur,
+    d'après l'état lu), sinon `poste`."""
+    for caps in capacites_serveurs or ():
+        if isinstance(caps, dict) and caps.get("tests-image") in ("presente", "fait"):
+            return "serveur"
+    return "poste"
+
+
 def question_api(ecart=None):
     """La question du paramétrage sur la couche d'appel des décisions (défaut : non, l'abonnement)."""
     return QUESTION_API.format(ecart=ecart or ECART_API_PAR_DEFAUT)

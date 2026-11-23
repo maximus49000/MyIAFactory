@@ -235,9 +235,17 @@ manque, dis-le dans ton résultat plutôt que de la chercher partout."""
 LANCEUR_DE_TESTS = Path(__file__).resolve().parent.parent / "lancer.py"
 
 
-def tests_un_a_la_fois():
+def tests_un_a_la_fois(route=False):
     """La consigne des tests d'un agent local : une seule campagne de tests à la fois sur le poste (essai réel du
-    2026-11-17 : deux agents lançaient chacun la suite vitest du projet en même temps, plus de six minutes chacun)."""
+    2026-11-17 : deux agents lançaient chacun la suite vitest du projet en même temps, plus de six minutes chacun).
+    `route` : les tests de ce projet partent au serveur (conception § 5.10) ; même lanceur, la consigne le dit."""
+    if route:
+        return f"""## Tes tests : par le lanceur, au serveur
+**Lance tes tests uniquement par le lanceur** : `python "{LANCEUR_DE_TESTS}" tests --dossier <dossier où lancer> -- <ta commande de test>`.
+Il les envoie au serveur, où plusieurs campagnes tournent en parallèle ; si le serveur est injoignable, il les passe au
+poste, une campagne à la fois. Jamais une suite lancée directement, ni par un script à toi. Lance **seulement les tests
+touchés** par ta tâche (les fichiers de test concernés) ; la suite complète, une fois au plus, à la fin, et seulement si
+ta tâche le demande."""
     return f"""## Tes tests : une seule campagne de tests à la fois sur le poste
 D'autres agents travaillent sur ce poste : deux suites de tests lancées ensemble se disputent la machine et chacune
 devient bien plus lente. **Lance toujours tes tests par le lanceur du poste**, qui attend son tour, lance ta commande et
@@ -585,7 +593,7 @@ def _partenaires_inscrits(inscrits, ecartes):
 
 
 def message(factory, fiche, tache, brief_du_role, lecons_memoire, glossaire=(), regles=(), regles_projet=(), inscrits=(),
-            ecartes=(), metiers_=None, contexte="", deport=""):
+            ecartes=(), metiers_=None, contexte="", deport="", route=False):
     """Le message de départ d'un agent. `lecons_memoire` : `{"skill": [...], "genre": [...]}`, déjà filtré sur le
     rôle de l'agent. En cloud, il commence par « Tu repars de zéro. »."""
     parties = _entete(factory, fiche, lecons_memoire, regles_projet, metiers_)
@@ -599,7 +607,7 @@ def message(factory, fiche, tache, brief_du_role, lecons_memoire, glossaire=(), 
         parties.append(_partenaires_inscrits(inscrits, ecartes))
     parties.append(SOBRIETE)
     if fiche["lieu"] not in LIEUX_SANS_POSTE:
-        parties.append(tests_un_a_la_fois())
+        parties.append(tests_un_a_la_fois(route))
         if deport:
             parties.append(deport)
     parties.append(FIN_D_ETAPE)
@@ -629,7 +637,7 @@ COMPTE_RENDU_MOTEUR = ("Enchaîne ces tâches d'une traite, dans cet ordre, avec
 
 
 def message_lot(factory, fiche, taches, briefs, lecons_memoire, glossaire=(), regles=(), par_le_moteur=False,
-                regles_projet=(), inscrits=(), ecartes=(), metiers_=None, contexte="", deport=""):
+                regles_projet=(), inscrits=(), ecartes=(), metiers_=None, contexte="", deport="", route=False):
     """Le message de départ d'un lot : un seul message pour toutes les tâches, dans l'ordre du lot. `briefs` : liste de
     `(rôle, texte | None)`, un par rôle présent dans le lot. `par_le_moteur` : le moteur procédural lance le lot et
     tient le suivi d'après le rapport (aucun `lancer tache` demandé à l'agent)."""
@@ -653,7 +661,7 @@ def message_lot(factory, fiche, taches, briefs, lecons_memoire, glossaire=(), re
         parties.append(_partenaires_inscrits(inscrits, ecartes))
     parties.append(SOBRIETE)
     if fiche["lieu"] not in LIEUX_SANS_POSTE:
-        parties.append(tests_un_a_la_fois())
+        parties.append(tests_un_a_la_fois(route))
         if deport:
             parties.append(deport)
     parties.append(FIN_D_ETAPE.replace("## À la fin de ton étape", "## À la fin de ton lot")

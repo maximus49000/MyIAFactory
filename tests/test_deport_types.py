@@ -66,7 +66,8 @@ class TestCatalogues(unittest.TestCase):
         liste = actions_exposees(ANDROID)
         self.assertEqual([a["id"] for a in liste], list(ANDROID))
         release = liste[list(ANDROID).index("release")]
-        self.assertEqual(set(release), {"id", "libelle", "lieux", "bientot", "servie_au_serveur"})
+        self.assertEqual(set(release), {"id", "libelle", "lieux", "bientot", "servie_au_serveur",
+                                       "routee_au_serveur"})
         self.assertIs(release["servie_au_serveur"], False)
         self.assertEqual(release["libelle"], "APK signé (release)")
         self.assertEqual(release["lieux"], ["poste"])
@@ -133,8 +134,10 @@ class TestRecetteEmulateur(unittest.TestCase):
             for lieu in ("poste", "github"):
                 with self.assertRaises(ValueError):
                     deport.valider_lieux({self.RECETTE: lieu}, catalogue=catalogue)
+        # les tests sont ROUTÉS au serveur (`lancer.py tests`) : « serveur » leur est permis (l'accord se vérifie au lancement)
+        self.assertEqual(deport.valider_lieux({"tests": "serveur"}), {"tests": "serveur"})
         with self.assertRaises(ValueError) as c:
-            deport.valider_lieux({"tests": "serveur"})
+            deport.valider_lieux({"apk": "serveur"})
         self.assertIn("pas encore disponible", str(c.exception))
 
     def test_pas_de_defaut_au_poste(self):

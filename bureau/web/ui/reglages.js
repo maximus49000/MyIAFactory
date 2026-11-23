@@ -109,7 +109,7 @@ function ligneReglage(ctx, l, niveau, message, groupe, fetchFn) {
   } else {
     // « Serveur » : seulement pour une action que `deporter` y sert, et une fois un serveur déclaré (comme l'ancien bloc)
     const serveurDeclare = ctx.etat?.deport?.serveur_declare === true;
-    const raisonServeur = l.servie_au_serveur === true ? (serveurDeclare ? "" : MSG_SANS_SERVEUR) : MSG_SERVEUR;
+    const raisonServeur = (l.servie_au_serveur === true || l.routee_au_serveur === true) ? (serveurDeclare ? "" : MSG_SANS_SERVEUR) : MSG_SERVEUR;
     for (const lieu of Array.isArray(l.choix) ? l.choix : []) {
       const label = el("label", "lecons-auto-label deport-choix");
       const r = document.createElement("input");

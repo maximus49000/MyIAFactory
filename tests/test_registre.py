@@ -50,8 +50,8 @@ class TestLieuxEffectifs(unittest.TestCase):
         b = bureau(lieux_global={"tests": "github"}, lieux_type={"tests": "poste"})
         self.assertEqual(lieux_effectifs(ANDROID, {}, b, "android")["tests"], ("poste", "type:android"))
         # un lieu que le fichier du bureau n'accepte pas au niveau type (`reglages.lire_bureau`) est écarté
-        b_serveur = bureau(lieux_global={"tests": "github"}, lieux_type={"tests": "serveur"})
-        self.assertEqual(lieux_effectifs(ANDROID, {}, b_serveur, "android")["tests"], ("github", "global"))
+        b_serveur = bureau(lieux_global={"apk": "github"}, lieux_type={"apk": "serveur"})
+        self.assertEqual(lieux_effectifs(ANDROID, {}, b_serveur, "android")["apk"], ("github", "global"))
         self.assertEqual(lieux_du_type(b_serveur, "android"), {})
         self.assertEqual(lieux_du_type(b, "android"), {"tests": "poste"})
         self.assertEqual((lieux_du_type(b, None), lieux_du_type(b, "generique")), ({}, {}))

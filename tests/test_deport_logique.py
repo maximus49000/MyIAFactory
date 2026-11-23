@@ -19,7 +19,10 @@ class TestDeportLogique(unittest.TestCase):
 
     def test_serveur_refuse_a_l_etape_1(self):
         with self.assertRaises(ValueError):
-            deport.valider_lieux({"tests": "serveur"})
+            deport.valider_lieux({"apk": "serveur"})       # ni servie ni routée au serveur
+
+    def test_serveur_accepte_pour_les_tests_routes(self):
+        self.assertEqual(deport.valider_lieux({"tests": "serveur"}), {"tests": "serveur"})
 
     def test_serveur_accepte_a_l_etape_serveur(self):
         self.assertEqual(deport.valider_lieux({"tests": "serveur"}, etape_serveur=True), {"tests": "serveur"})

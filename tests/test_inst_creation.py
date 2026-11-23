@@ -174,16 +174,24 @@ class TestCreation(Base):
         r = json.loads((self.parent / "Casse-briques" / ".factory" / "reglages.json").read_text(encoding="utf-8"))
         self.assertTrue(r["prix_automatiques"])
 
-    @plateforme_tests.windows_seulement("règles de noms de Windows (noms réservés CON/nul, casse insensible, « fin. »)")
     def test_nom_refuse(self):
+        """Les règles de noms de Windows (CON, nul, « fin. »…) valent partout : le projet peut être ouvert d'un poste
+        Windows."""
         (self.parent / "Existe").mkdir()
-        for nom in ("", "   ", "Existe", "existe", "..", ".", "a/b", "a\\b", "a:b", "CON", "nul", "Com1", "lpt3.txt",
+        for nom in ("", "   ", "Existe", "..", ".", "a/b", "a\\b", "a:b", "CON", "nul", "Com1", "lpt3.txt",
                     "a*b", "a?b", 'a"b', "a<b", "fin.", "x" * 101):
             with self.subTest(nom=nom):
                 with self.assertRaises(Echec) as c:
                     self.creer(nom)
                 self.assertTrue(str(c.exception))
         self.assertFalse(self.bureau.exists())
+        self.assertEqual(sorted(p.name for p in self.parent.iterdir()), ["Existe", "Petit projet"])
+
+    @plateforme_tests.windows_seulement("système de fichiers insensible à la casse : « existe » y désigne « Existe »")
+    def test_nom_existant_a_la_casse_pres_refuse(self):
+        (self.parent / "Existe").mkdir()
+        with self.assertRaises(Echec):
+            self.creer("existe")
         self.assertEqual(sorted(p.name for p in self.parent.iterdir()), ["Existe", "Petit projet"])
 
     def test_parent_absent_ou_dans_la_skill_refuse(self):

@@ -1150,14 +1150,18 @@ class TestTilde(unittest.TestCase):
             self.assertEqual(os.path.normcase(sortie.decode().strip()), os.path.normcase(sys.executable))
         self.assertEqual(releve.commande_python(["git", "python"]), ["git", "python"])
 
-    @plateforme_tests.windows_seulement("développe aussi « ~\\ » (séparateur Windows)")
     def test_developper(self):
         home = self._home()
-        for debut in ("~/", "~\\"):
-            self.assertEqual(releve.developper(debut + "s"), os.path.expanduser(debut + "s"))
-            self.assertTrue(releve.developper(debut + "s").startswith(str(home)))
+        self.assertEqual(releve.developper("~/s"), os.path.expanduser("~/s"))
+        self.assertTrue(releve.developper("~/s").startswith(str(home)))
         for texte in ("a~b", "~x", "x/~/y", "", "py"):
             self.assertEqual(releve.developper(texte), texte)
+
+    @plateforme_tests.windows_seulement("« ~\\ » : l'antislash n'est un séparateur de chemin que sous Windows")
+    def test_developper_antislash(self):
+        home = self._home()
+        self.assertEqual(releve.developper("~\\s"), os.path.expanduser("~\\s"))
+        self.assertTrue(releve.developper("~\\s").startswith(str(home)))
 
     def test_commande_releve_tilde(self):
         home = self._home()

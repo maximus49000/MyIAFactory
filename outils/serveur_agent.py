@@ -17,6 +17,7 @@ import tempfile
 import threading
 import time
 from dataclasses import dataclass, replace
+from datetime import datetime, timezone
 from pathlib import Path
 from types import MappingProxyType
 
@@ -372,25 +373,37 @@ def changements_non_commites(projet, git=_git):
 
 
 def controle_branche_agent(projet, tache, base, git=_git):
-    """Message de refus si la branche locale `agent/<tâche>` existe déjà et n'est pas un ancêtre de `base` : le résultat de
-    l'agent ne pourrait pas la faire avancer (récupération sans réécriture). Même nom de tâche avec une base nouvelle, après
-    un travail non fusionné : choisir un autre nom (ou fusionner ou supprimer l'ancienne branche). Refus aussi, AVANT tout
-    envoi, si `agent/<tâche>` est la branche extraite d'un dossier de travail du projet (le travail de l'agent ne pourrait
-    pas y être récupéré). None sinon."""
+    """Message de refus, AVANT tout envoi, si `agent/<tâche>` est la branche extraite d'un dossier de travail du projet (le
+    travail de l'agent ne pourrait pas y être récupéré). None sinon. (Une branche existante qui n'est pas un ancêtre de la
+    base n'est plus un refus : `ranger_branche_agent` la renomme.)"""
     ref = f"refs/heads/agent/{tache}"
     code, sortie, _e = git(Path(projet), ["worktree", "list", "--porcelain"], max_octets=4 * 1024 * 1024)
     if code == 0 and f"branch {ref}" in sortie.decode("utf-8", "replace").splitlines():
         return (f"La branche agent/{tache} est extraite dans un dossier de travail du projet : changez de branche avant de "
                 "lancer l'agent (son travail ne pourrait pas y être récupéré).")
+    return None
+
+
+def ranger_branche_agent(projet, tache, base, git=_git, maintenant=None):
+    """Règle seul le cas d'une tâche relancée : si `agent/<tâche>` existe déjà et n'est pas un ancêtre de `base`, elle est
+    RENOMMÉE en `agent/<tâche>-ancienne-<horodatage>` (`git branch -m` : même commit, rien supprimé ni réécrit), de sorte que
+    la branche repart de la base. Rend le nouveau nom, ou None si rien n'a été renommé (branche absente, ancêtre de la base,
+    ou renommage impossible : le résultat de l'agent sera alors refusé à la récupération, sans rien perdre)."""
+    ref = f"refs/heads/agent/{tache}"
     code, _o, _e = git(Path(projet), ["rev-parse", "--verify", "-q", ref])
     if code != 0:
         return None
     code, _o, _e = git(Path(projet), ["merge-base", "--is-ancestor", ref, base])
     if code == 0:
         return None
-    return (f"La branche agent/{tache} existe déjà dans le projet et n'est pas un ancêtre de la base envoyée : le résultat "
-            "de l'agent ne pourrait pas la mettre à jour. Choisissez un autre nom de tâche, ou fusionnez ou supprimez "
-            "d'abord cette branche.")
+    horodatage = (maintenant or datetime.now(timezone.utc)).strftime("%Y%m%d-%H%M%S")
+    for i in range(100):
+        nouveau = f"agent/{tache}-ancienne-{horodatage}" + (f"-{i}" if i else "")
+        if git(Path(projet), ["rev-parse", "--verify", "-q", f"refs/heads/{nouveau}"])[0] == 0:
+            continue
+        code, _o, _e = git(Path(projet), ["branch", "-m", f"agent/{tache}", nouveau])
+        return nouveau if code == 0 else None
+    return None
 
 
 def _analyser_entete(paquet, ref, base):
@@ -656,10 +669,12 @@ def lancer_agent(demande, paquet, argv, consigne, message, apk=None, dossier=pla
     ne serait pas un ancêtre de la base est refusée avant tout envoi."""
     d = _demande_sure(demande)
     avertissement = None
+    sauvegarde = None
     if projet is not None:
         message_branche = controle_branche_agent(projet, d.tache, d.base, git)
         if message_branche:
             raise st.RefusLancement(message_branche)
+        sauvegarde = ranger_branche_agent(projet, d.tache, d.base, git)
         lignes = changements_non_commites(projet, git)
         if lignes is None:
             avertissement = ("État des fichiers du projet illisible (git status en échec) : d'éventuels changements non "
@@ -669,6 +684,10 @@ def lancer_agent(demande, paquet, argv, consigne, message, apk=None, dossier=pla
                              "l'agent (" + st._court(" ; ".join(l.strip() for l in lignes[:5]), 200)
                              + (" ; ..." if len(lignes) > 5 else "") + ").")
     resultat = _lancer_agent(d, paquet, argv, consigne, message, apk, dossier, ssh, attente_max_s, dormir)
+    if sauvegarde and isinstance(resultat, dict) and resultat.get("id"):
+        ligne = (f"{st._maintenant_iso()} La branche agent/{d.tache} existait déjà sans être un ancêtre de la base : "
+                 f"renommée en {sauvegarde} (sauvegarde, rien supprimé) ; la tâche repart de la base.")
+        st._noter(dossier, resultat["id"], {"branche_sauvegardee": sauvegarde, "journal": [ligne]})
     if avertissement and isinstance(resultat, dict):
         resultat["avertissement"] = avertissement
     return resultat
@@ -683,8 +702,8 @@ def _lancer_agent(demande, paquet, argv, consigne, message, apk, dossier, ssh, a
     `RefusLancement` avant tout envoi : demande, paquet, argv, APK ou délai invalide, aucun serveur prêt, tâche du même
     nom déjà active (à la casse près).
 
-    Rejouer le même nom de tâche avec une base nouvelle : refusé tant que `agent/<tâche>` existe localement sans être un
-    ancêtre de la base (voir `controle_branche_agent`) ; sinon la nouvelle branche avance l'ancienne."""
+    Rejouer le même nom de tâche avec une base nouvelle : une `agent/<tâche>` locale qui n'est pas un ancêtre de la base
+    est renommée en sauvegarde (voir `ranger_branche_agent`) ; sinon la nouvelle branche avance l'ancienne."""
     d = demande
     if not isinstance(d, DemandeAgent):
         d = _demande_sure(demande)

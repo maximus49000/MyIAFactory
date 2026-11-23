@@ -30,23 +30,29 @@
 #   ne peut commencer par `#`.
 # Codes : celui du conteneur (la commande ; 2 commande invalide, 70 extraction : entree-tests.sh), sans `#refus` ; avec
 #   `#refus` : 2 argument, commande, dossier ou entree.tar refusés, ou identifiant déjà utilisé (rien écrit, rien effacé) ;
-#   70 instantané refusé par l'hôte ; 74 campagne ARRÊTÉE EN COURS par l'enveloppe (le conteneur a tourné : le poste ne la
-#   rejoue jamais) : disque < 2 Go, inodes < 5 %, travail/ > travail_go ou échéance du surveillant (duree_s + 30 s) ;
-#   76 disque libre < 5 Go ou inodes libres < 5 % AU DÉPART (rien n'a tourné) ; 77 image absente, python3 absent, contrôle
-#   impossible ou utilisateur du serveur autre que 1000 ; 78 cache Node absent ; 124 durée dépassée (`timeout`) ; 125-127 et
-#   autres codes de docker quand le conteneur n'a jamais démarré (docker inspect : absent ou « created ») ; 130 laisse
-#   coupée ou signal ; 1 erreur de l'enveloppe. Après un refus 2, rien n'est effacé ; après tout autre départ, ~/tests/<id>
-#   est effacé, le ticket retiré et la place libérée. `#fin` est la toute dernière écriture (les fils tués sont attendus
-#   avant, leurs avis de fin jetés).
+#   70 instantané refusé par l'hôte (refus explicite du vérificateur, code 3) ; 74 campagne ARRÊTÉE EN COURS par
+#   l'enveloppe (le conteneur a pu tourner : le poste ne la rejoue jamais) : disque libre < 2 Go, inodes libres < 5 %,
+#   travail/ au-delà de travail_go, échéance du surveillant (duree_s + 30 s), ou état final inattendu (running,
+#   restarting, paused, removing, created déjà démarré, docker inspect en panne : conteneur tué puis supprimé) ;
+#   76 disque libre < 5 Go ou inodes libres < 5 % AU DÉPART (rien n'a tourné) ; 77 image absente, python3 absent ou en
+#   panne, utilisateur du serveur autre que 1000 ; 78 cache Node absent (ou pas à nous) ; 124 durée dépassée
+#   (`timeout`) ; code de docker run (125-127…) quand le conteneur n'a JAMAIS démarré (absent, ou « created » avec
+#   StartedAt à la date nulle) ; 130 laisse coupée ou signal ; 1 erreur de l'enveloppe. Après un refus 2, rien n'est
+#   effacé ; après tout autre départ, ~/tests/<id> est effacé (sans chmod -R si l'arrêt du conteneur n'est pas confirmé),
+#   le ticket retiré et la place libérée. `#refus` et `#fin` sont précédés d'un retour à la ligne (lignes vides ignorées
+#   par le poste) ; `#fin` est la toute dernière écriture (les fils tués sont attendus avant, leurs avis jetés).
 # File : ticket ~/tests/.file/<date +%s%N>-<id> (contenu : le PID de l'enveloppe, écrit par un temporaire puis mv) ; tour
 #   quand aucun ticket vivant (processus_vivant : PID dont la ligne de commande porte lancer_tests.sh et l'identifiant) n'est
 #   plus ancien ; les tickets morts sont effacés. Place : le premier `flock -n` libre parmi ~/taches/.creneau-tests-1..4
 #   (descripteur 8), et seulement si moins de <places> verrous sont tenus (comme lancer_agent.sh).
-# Balayage à chaque lancement : ~/tests/t* de plus de 6 h sans enveloppe vivante -> effacés ; conteneurs étiquetés
-#   myiafactory.genre=tests dont l'enveloppe ne vit plus -> supprimés (docker rm -f).
+# Balayage à chaque lancement, dans cet ordre : conteneurs étiquetés myiafactory.genre=tests dont l'enveloppe ne vit plus
+#   -> supprimés (docker rm -f) ; PUIS ~/tests/t* de plus de 6 h sans enveloppe vivante et dont le conteneur tests-<id> est
+#   confirmé absent -> effacés (sinon laissés, au balayage suivant). Pas d'échéance dans l'image (ce serait changer
+#   l'empreinte) : la défense en profondeur reste le surveillant, la laisse et ce balayage.
 # Surveillant (fils, pendant le conteneur, toutes les 0,5 s) : disque libre < 2 Go, inodes libres < 5 %, travail/ au-delà
-#   de travail_go (du -sk toutes les 5 s), échéance duree_s + 30 s (si `timeout` n'a pas suffi : le client docker relaie
-#   le TERM et attend), laisse coupée ou enveloppe disparue -> docker kill tests-<id>. RÉSIDUEL CONNU : ce sont des
+#   de travail_go (du -sk en arrière-plan, sous timeout 60 et nice/ionice -c3, relancé 5 s après sa FIN), échéance duree_s + 30 s (si `timeout` n'a pas suffi : le client docker relaie
+#   le TERM et attend), laisse coupée ou enveloppe disparue -> docker kill tests-<id>. Il est arrêté et attendu dès la
+#   fin de docker run, AVANT la lecture de ses marques (une marque tardive ne change jamais un code rendu). RÉSIDUEL CONNU : ce sont des
 #   sondages, pas des quotas ; entre deux sondages un test peut écrire en rafale (au plus ~0,5 s de débit disque, 5 s pour
 #   travail/). Pas de --ulimit fsize : il casserait un gros artefact de construction légitime sans fermer la rafale
 #   (plusieurs fichiers) ; le plafond passe par du et df.
@@ -64,7 +70,7 @@ umask 077
 T0=$(date +%s)
 DEBUT=""; ATTENTE=0
 
-fin_simple() { printf '#refus %s\n#fin %s %s %s 0\n' "$1" "$1" "$T0" "$(date +%s)" >&2; exit "$1"; }
+fin_simple() { printf '\n#refus %s\n\n#fin %s %s %s 0\n' "$1" "$1" "$T0" "$(date +%s)" >&2; exit "$1"; }
 refuser() { printf '%s\n' "lancer_tests : $1" >&2; fin_simple 2; }
 
 ICI="$(cd "$(dirname "$0")" && pwd)"
@@ -129,9 +135,9 @@ chmod 700 -- "$TESTS" "$DOSSIER" "$ENTREE" 2>/dev/null   # 0700 imposé (créés
 
 A_NOUS=1; TICKET=""; PID_LAISSE=""; PID_SURVEILLANT=""; CONTENEUR=0
 
-conteneur_absent() {   # 0 seulement si docker répond nettement « pas de tel conteneur »
+conteneur_absent() {   # conteneur_absent [<id>] : 0 seulement si docker répond nettement « pas de tel conteneur »
   local e
-  e=$(dk 20 inspect -f '{{.State.Status}}' "tests-$ID" 2>&1 >/dev/null) && return 1
+  e=$(dk 20 inspect --type container -f '{{.State.Status}}' "tests-${1:-$ID}" 2>&1 >/dev/null) && return 1
   case "${e,,}" in *"no such"*|*"not found"*) return 0 ;; esac
   return 1
 }
@@ -158,8 +164,9 @@ finir() {   # finir <code> [conteneur] : « conteneur » = le code vient du cont
     fi
     rm -rf -- "$DOSSIER"
   fi
-  [ "$origine" = conteneur ] || printf '#refus %s\n' "$code" >&2
-  printf '#fin %s %s %s %s\n' "$code" "${DEBUT:-$T0}" "$(date +%s)" "$ATTENTE" >&2
+  # Un retour à la ligne d'abord, toujours (le poste ignore les lignes vides) : jamais collé à une ligne inachevée.
+  [ "$origine" = conteneur ] || printf '\n#refus %s\n' "$code" >&2
+  printf '\n#fin %s %s %s %s\n' "$code" "${DEBUT:-$T0}" "$(date +%s)" "$ATTENTE" >&2
   exit "$code"
 }
 echouer() { printf '%s\n' "lancer_tests : $2" >&2; finir "$1"; }
@@ -195,7 +202,9 @@ inodes_bas() {   # 0 si moins de 5 % d'inodes libres (un système sans inodes co
   [[ $l =~ ^([0-9]{1,15})\ ([0-9]{1,15})$ ]] || return 1
   [ "${BASH_REMATCH[1]}" -gt 0 ] && [ $((BASH_REMATCH[2] * 100)) -lt $((BASH_REMATCH[1] * INODES_MIN_PC)) ]
 }
-une_ligne() { tr -d '\000-\037' | sed -e 's/\xc2\x85//g' -e 's/\xe2\x80\xa8//g' -e 's/\xe2\x80\xa9//g' | head -c 300; }
+# Un message sur une ligne : contrôles puis NEL, LS, PS REMPLACÉS par « ? » (jamais retirés : un retrait rapprocherait
+# deux octets qui reformeraient un séparateur).
+une_ligne() { tr '\000-\037\177' '?' | sed -e 's/\xc2\x85/?/g' -e 's/\xe2\x80\xa8/?/g' -e 's/\xe2\x80\xa9/?/g' | head -c 300; }
 
 # --- Contrôles avant la file ------------------------------------------------
 
@@ -210,31 +219,35 @@ if [ "$DEPS" != - ]; then
   DEPS_DOSSIER="$TESTS/.deps/$PROJET/$DEPS"
   for d in "$TESTS/.deps" "$TESTS/.deps/$PROJET" "$DEPS_DOSSIER"; do
     [ -d "$d" ] && [ ! -L "$d" ] || echouer 78 "cache des dépendances Node absent (~/tests/.deps/$PROJET/$DEPS)."
+    [ -O "$d" ] || echouer 78 "cache des dépendances Node à un autre propriétaire (~/tests/.deps/$PROJET/$DEPS)."
   done
 fi
 raison=$(python3 -I "$AIDE" --archive "$ENTREE/entree.tar" 2>&1 >/dev/null); r=$?
-if [ "$r" = 1 ]; then echouer 70 "$(printf '%s' "$raison" | une_ligne)"; fi
-[ "$r" = 0 ] || echouer 77 "contrôle de l'instantané impossible (python3)."
+if [ "$r" = 3 ]; then echouer 70 "$(printf '%s' "$raison" | une_ligne)"; fi   # 3 : refus explicite du vérificateur
+[ "$r" = 0 ] || echouer 77 "contrôle de l'instantané impossible (python3, code $r)."
 rm -f -- "$ENTREE/commande.json"                    # jamais écrit à travers un lien
 ( set -C; printf '%s' "$COMMANDE_JSON" > "$ENTREE/commande.json" ) 2>/dev/null || echouer 1 "commande.json non écrit."
 
 # --- Balayage ----------------------------------------------------------------
 
-while IFS= read -r -d '' d; do
-  nom="${d##*/}"
-  [[ $nom =~ $MOTIF_ID ]] && [ "$nom" != "$ID" ] || continue
-  if [ -L "$d" ]; then rm -f -- "$d"; continue; fi
-  [ -d "$d" ] || continue
-  enveloppe_vivante "$nom" && continue
-  [ -L "$d/travail" ] || chmod -R u+rwX -- "$d/travail" 2>/dev/null   # chmod suit un lien nommé : jamais sur un lien
-  rm -rf -- "$d"
-done < <(find "$TESTS" -mindepth 1 -maxdepth 1 -name 't*' -mmin +360 -print0 2>/dev/null)
+# Les conteneurs d'abord (sans enveloppe vivante : supprimés), puis les dossiers : un dossier dont le conteneur tests-<id>
+# n'est pas CONFIRMÉ absent est laissé tel quel (ni chmod -R, ni rm -rf : le conteneur pourrait encore y écrire).
 noms=$(dk 20 ps -a --filter "label=myiafactory.genre=tests" --format '{{.Names}}' 2>/dev/null)
 while IFS= read -r n; do
   [[ $n =~ ^tests-(t[0-9]{8}-[0-9]{6}-[0-9a-f]{4})$ ]] || continue
   autre="${BASH_REMATCH[1]}"
   [ "$autre" = "$ID" ] || enveloppe_vivante "$autre" || dk 30 rm -f "tests-$autre" >/dev/null 2>&1
 done <<< "$noms"
+while IFS= read -r -d '' d; do
+  nom="${d##*/}"
+  [[ $nom =~ $MOTIF_ID ]] && [ "$nom" != "$ID" ] || continue
+  if [ -L "$d" ]; then rm -f -- "$d"; continue; fi
+  [ -d "$d" ] || continue
+  enveloppe_vivante "$nom" && continue
+  conteneur_absent "$nom" || continue
+  [ -L "$d/travail" ] || chmod -R u+rwX -- "$d/travail" 2>/dev/null   # chmod suit un lien nommé : jamais sur un lien
+  rm -rf -- "$d"
+done < <(find "$TESTS" -mindepth 1 -maxdepth 1 -name 't*' -mmin +360 -print0 2>/dev/null)
 
 # --- File et place -------------------------------------------------------------
 
@@ -305,9 +318,16 @@ COMMANDE+=(-e HOME=/tmp -e MYIAFACTORY_TESTS_CONTENEUR=1 "$IMAGE")
 # Surveillant : garde la place (descripteur 8) tant qu'il vit ; tue le conteneur (marque d'abord) si le disque, les inodes
 # ou travail/ débordent, si l'échéance est dépassée malgré timeout, si la laisse est coupée (et arrête l'enveloppe, tant
 # qu'elle vit), ou si l'enveloppe a disparu.
+# du : en arrière-plan (les autres sondes restent à 0,5 s), borné (timeout 60), de basse priorité (nice, ionice -c3 si
+# présents) ; son résultat arrive par le fichier .du (temporaire puis mv) et la période repart quand il est FINI.
+DU=(du -sk --)
+if command -v ionice >/dev/null 2>&1; then DU=(ionice -c3 "${DU[@]}"); fi
+if command -v nice >/dev/null 2>&1; then DU=(nice -n 19 "${DU[@]}"); fi
+DU=(timeout 60 "${DU[@]}" "$DOSSIER/travail")
 ( trap - TERM INT HUP PIPE
   arreter() { : > "$DOSSIER/$1"; dk 30 kill "tests-$ID" >/dev/null 2>&1; }
-  echeance=$(( $(date +%s) + DUREE + MARGE )); du_t=0
+  echeance=$(( $(date +%s) + DUREE + MARGE )); du_t=0; du_en_cours=0
+  rm -f -- "$DOSSIER/.du" "$DOSSIER/.du.tmp"
   while sleep "$SONDE" 8>&-; do
     if [ -e "$DOSSIER/laisse-coupee" ]; then
       dk 30 kill "tests-$ID" >/dev/null 2>&1
@@ -319,10 +339,15 @@ COMMANDE+=(-e HOME=/tmp -e MYIAFACTORY_TESTS_CONTENEUR=1 "$IMAGE")
     if [[ $l =~ ^[0-9]{1,15}$ ]] && [ "$l" -lt "$DISQUE_ARRET_KO" ]; then arreter disque-plein; continue; fi
     if inodes_bas; then arreter inodes; continue; fi
     maintenant=$(date +%s)
-    if [ $((maintenant - du_t)) -ge "$DU_S" ]; then
-      du_t=$maintenant
-      ko=$(du -sk -- "$DOSSIER/travail" 2>/dev/null | cut -f1)
+    if [ "$du_en_cours" = 1 ] && [ -f "$DOSSIER/.du" ]; then
+      ko=""; IFS= read -r ko < "$DOSSIER/.du"; rm -f -- "$DOSSIER/.du"
+      du_en_cours=0; du_t=$maintenant                    # la période repart à la FIN de du
       if [[ $ko =~ ^[0-9]{1,15}$ ]] && [ "$ko" -gt "$TRAVAIL_MAX_KO" ]; then arreter travail-plein; continue; fi
+    fi
+    if [ "$du_en_cours" = 0 ] && [ $((maintenant - du_t)) -ge "$DU_S" ]; then
+      du_en_cours=1
+      ( ko=$("${DU[@]}" 2>/dev/null 8>&- | cut -f1)
+        printf '%s\n' "$ko" > "$DOSSIER/.du.tmp" && mv -f -- "$DOSSIER/.du.tmp" "$DOSSIER/.du" ) 8>&- &
     fi
     [ "$maintenant" -lt "$echeance" ] || arreter echeance
   done ) >/dev/null 2>&1 &
@@ -336,6 +361,10 @@ CONTENEUR=1
   } | python3 -I "$AIDE" --prefixer "$DOSSIER/erreur-coupee" "$SORTIE_MAX" >&2 3>&- 8>&-
 } 3>&1 | python3 -I "$AIDE" --couper "$DOSSIER/sortie-coupee" "$SORTIE_MAX" 8>&-
 
+# Le surveillant est arrêté (et attendu) AVANT de lire ses marques : une marque posée après la fin du conteneur ne change
+# jamais un code rendu par lui.
+{ kill "$PID_SURVEILLANT"; wait "$PID_SURVEILLANT"; } 2>/dev/null
+PID_SURVEILLANT=""
 # Origine du code : les marques de l'hôte d'abord (posées AVANT tout kill), puis l'état final lu par docker inspect.
 [ -e "$DOSSIER/laisse-coupee" ] && finir 130
 [ -e "$DOSSIER/disque-plein" ] && echouer 74 "disque presque plein pendant la campagne : conteneur arrêté."
@@ -344,10 +373,28 @@ CONTENEUR=1
 [ -e "$DOSSIER/echeance" ] && echouer 74 "échéance du surveillant dépassée (${DUREE} s + ${MARGE} s) : conteneur arrêté."
 code=""; [ -f "$DOSSIER/code" ] && IFS= read -r code < "$DOSSIER/code"
 [[ $code =~ ^[0-9]{1,3}$ ]] || echouer 1 "code de docker run illisible."
-etat=$(dk 20 inspect -f '{{.State.Status}} {{.State.ExitCode}}' "tests-$ID" 2>/dev/null)
-if ! [[ $etat =~ ^(exited|dead)\ ([0-9]{1,3})$ ]]; then  # jamais démarré (absent, « created ») ou état inconnu : docker
+# État final : « jamais démarré » SEULEMENT si le conteneur est absent, ou « created » avec StartedAt à la date nulle ; fini
+# (exited, dead) après un vrai départ : code du conteneur ; tout le reste (running, restarting, paused, removing, inspect
+# en panne, réponse illisible) : conteneur tué puis supprimé, 74 (le code de docker n'est jamais rendu comme un refus).
+ZERO='0001-01-01T00:00:00Z'
+etat=$(dk 20 inspect --type container -f '{{.State.Status}} {{.State.ExitCode}} {{.State.StartedAt}}' "tests-$ID" \
+  2>"$DOSSIER/.inspect.err"); r=$?
+erreur=$(head -c 4096 -- "$DOSSIER/.inspect.err" 2>/dev/null); rm -f -- "$DOSSIER/.inspect.err"
+if [ "$r" != 0 ]; then
+  case "${erreur,,}" in
+    *"no such"*|*"not found"*)
+      [ "$code" = 0 ] && code=1
+      CONTENEUR=0
+      echouer "$code" "le conteneur n'a jamais démarré (docker run : code $code ; conteneur absent)." ;;
+  esac
+  echouer 74 "état final du conteneur illisible (docker inspect en échec) : conteneur arrêté."
+fi
+if [[ $etat =~ ^created\ [0-9]{1,3}\ (.*)$ ]] && [ "${BASH_REMATCH[1]}" = "$ZERO" ]; then
   [ "$code" = 0 ] && code=1
-  echouer "$code" "le conteneur n'a pas tourné (docker run : code $code, état « ${etat:0:40} »)."
+  echouer "$code" "le conteneur n'a jamais démarré (docker run : code $code ; état created)."
+fi
+if ! [[ $etat =~ ^(exited|dead)\ ([0-9]{1,3})\ (.+)$ ]] || [ "${BASH_REMATCH[3]}" = "$ZERO" ]; then
+  echouer 74 "conteneur dans un état inattendu après docker run (« $(printf '%s' "${etat:0:60}" | une_ligne) ») : arrêté."
 fi
 sortie_conteneur="${BASH_REMATCH[2]}"
 if [ "$code" = 124 ] && [ "$sortie_conteneur" != 124 ]; then echouer 124 "durée maximale dépassée (${DUREE} s)."; fi

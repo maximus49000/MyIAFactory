@@ -57,11 +57,13 @@ case "$1" in
   image) [ -n "${FAUX_SANS_IMAGE:-}" ] && exit 1; exit 0 ;;
   ps) [ -n "${FAUX_PS_NOMS:-}" ] && printf '%s\n' "$FAUX_PS_NOMS"; exit 0 ;;
   inspect) n=$(dernier "$@")
+           [ -n "${FAUX_INSPECT_PANNE:-}" ] && { echo "Cannot connect to the Docker daemon" >&2; exit 1; }
            if [ -f "$ET/etat-$n" ]; then cat "$ET/etat-$n"; exit 0; fi
            echo "Error: No such object: $n" >&2; exit 1 ;;
   kill) if [ -n "${FAUX_CREATION_TARDIVE:-}" ] && [ ! -e "$ET/cree" ]; then echo "Error: No such container" >&2; exit 1; fi
         touch "$ET/tue"; exit 0 ;;
-  rm) rm -f "$ET/etat-$(dernier "$@")"; exit 0 ;;
+  rm) n=$(dernier "$@"); [ "${FAUX_RM_ECHEC:-}" = "$n" ] && exit 1
+      rm -f "$ET/etat-$n"; exit 0 ;;
   run)
     nom=""; prec=""
     for a in "$@"; do [ "$prec" = --name ] && nom="$a"; prec="$a"; done
@@ -69,19 +71,20 @@ case "$1" in
     cp "$HOME/tests/${nom#tests-}/entree/commande.json" "$ET/commande-$nom.json"
     echo "$nom" >> "${FAUX_ORDRE:-$ET/ordre}"
     if [ -n "${FAUX_JAMAIS_DEMARRE:-}" ]; then
-      echo "created 0" > "$ET/etat-$nom"; echo "docker: Error response from daemon: boom" >&2; exit 125
+      echo "created 0 0001-01-01T00:00:00Z" > "$ET/etat-$nom"; echo "docker: Error response from daemon: boom" >&2; exit 125
     fi
+    if [ -n "${FAUX_ETAT_FINAL:-}" ]; then echo "$FAUX_ETAT_FINAL" > "$ET/etat-$nom"; exit "${FAUX_CODE:-0}"; fi
     if [ -n "${FAUX_CREATION_TARDIVE:-}" ]; then
       while [ ! -e "$HOME/tests/${nom#tests-}/laisse-coupee" ]; do sleep 0.05; done
       sleep 0.3; touch "$ET/cree"
     fi
     if [ -n "${FAUX_ATTENDRE:-}" ] || [ -n "${FAUX_CREATION_TARDIVE:-}" ]; then
       while [ ! -e "$ET/tue" ]; do sleep 0.05; done
-      echo "exited 137" > "$ET/etat-$nom"; exit 137
+      echo "exited 137 2026-11-23T10:00:00.1Z" > "$ET/etat-$nom"; exit 137
     fi
     [ -f "$ET/sortie" ] && cat "$ET/sortie"
     [ -f "$ET/erreur" ] && cat "$ET/erreur" >&2
-    echo "exited ${FAUX_CODE:-0}" > "$ET/etat-$nom"
+    echo "exited ${FAUX_CODE:-0} 2026-11-23T10:00:00.1Z" > "$ET/etat-$nom"
     exit "${FAUX_CODE:-0}" ;;
 esac
 exit 0'''
@@ -114,7 +117,13 @@ FAUX = {
           'echo "/dev/sda1 100000000 1 $k 1% /"',
     "du": 'k=4; [ -f "$FAUX_ETAT/du_ko" ] && read -r k < "$FAUX_ETAT/du_ko"\nprintf \'%s\\t%s\\n\' "$k" "$3"',
     "id": 'echo "${FAUX_UID:-1000}"',
-    "python3": f'exec "{Path(sys.executable).as_posix()}" "$@"',
+    "chmod": 'echo "chmod $*" >> "$FAUX_JOURNAL"\nexec /usr/bin/chmod "$@"',
+    # FAUX_ARCHIVE_MESSAGE : le vérificateur refuse (3) avec ce message ; FAUX_PYTHON_PLANTE : il plante (1)
+    "python3": 'if [ "${3:-}" = --archive ]; then\n'
+               '  [ -n "${FAUX_PYTHON_PLANTE:-}" ] && { echo "Traceback (most recent call last):" >&2; exit 1; }\n'
+               '  [ -n "${FAUX_ARCHIVE_MESSAGE:-}" ] && { cat "$FAUX_ARCHIVE_MESSAGE" >&2; exit 3; }\n'
+               'fi\n'
+               f'exec "{Path(sys.executable).as_posix()}" "$@"',
 }
 
 
@@ -146,6 +155,19 @@ class TestEnveloppeTests(unittest.TestCase):
             (cls.bin / nom).chmod(0o755)
         cls.tar = _instantane()
         cls.n = 0
+        # Un PATH sans python3 : les faux sauf python3, puis /usr/bin du bash (Git bash : sans python3). Ignoré si python3
+        # y est quand même (Linux : /usr/bin/python3).
+        sans = cls.racine / "bin-sans-python"
+        sans.mkdir()
+        for nom, corps in FAUX.items():
+            if nom != "python3":
+                (sans / nom).write_text("#!/bin/sh\n" + corps + "\n", newline="\n")
+                (sans / nom).chmod(0o755)
+        r = subprocess.run(["bash", "-c", 'command -v cygpath >/dev/null && cygpath -m /usr/bin || echo /usr/bin:/bin'],
+                           capture_output=True, text=True)
+        systeme = r.stdout.strip()
+        chemin = sans.as_posix() + os.pathsep + systeme
+        cls.chemin_sans_python = None if shutil.which("python3", path=systeme) else chemin
 
     @classmethod
     def tearDownClass(cls):
@@ -158,7 +180,7 @@ class TestEnveloppeTests(unittest.TestCase):
         self.home.mkdir(parents=True)
         self.journal_fichier = t / "appels.txt"
         self.env = dict(os.environ, HOME=_msys(self.home), PATH=self.bin.as_posix() + os.pathsep + os.environ["PATH"],
-                        FAUX_JOURNAL=self.journal_fichier.as_posix(), ENVELOPPE_SONDE_S="0.05",
+                        FAUX_JOURNAL=self.journal_fichier.as_posix(), ENVELOPPE_SONDE_S="0.2",
                         FAUX_ORDRE=(t / "ordre").as_posix())
         self.deposer(ID)
 
@@ -244,8 +266,10 @@ class TestEnveloppeTests(unittest.TestCase):
     def verrous(self):
         return sorted(p.name for p in (self.home / "taches").glob("*.tenu")) if (self.home / "taches").exists() else []
 
-    def verifier_fin(self, err, code, refus, ident=ID):
-        """Dernière ligne `#fin <code>` ; `#refus <code>` juste avant si et seulement si le code vient de l'enveloppe."""
+    def verifier_fin(self, err, code, refus, ident=ID, efface=True):
+        """Dernière ligne `#fin <code>` ; `#refus <code>` juste avant (lignes vides ignorées, comme le poste) si et
+        seulement si le code vient de l'enveloppe."""
+        err = [x for x in err if x != ""]
         m = FIN.match(err[-1]) if err else None
         self.assertIsNotNone(m, err)
         self.assertEqual(int(m.group(1)), code, err)
@@ -255,6 +279,8 @@ class TestEnveloppeTests(unittest.TestCase):
         else:
             self.assertFalse(any(x.startswith("#refus") for x in err), err)
         self.assertFalse([x for x in err[:-2] if x.startswith("#") and not x.startswith("#attente")], err)
+        if not efface:
+            return
         self.assertFalse((self.home / "tests" / ident).exists())       # dossier effacé
         self.assertEqual(self.verrous(), [])                          # place libérée
         self.assertFalse([p for p in (self.home / "tests" / ".file").glob("*") if ident in p.name])   # ticket retiré
@@ -282,8 +308,7 @@ class TestEnveloppeTests(unittest.TestCase):
             with self.subTest(quoi=quoi):
                 code, out, err = self.finir(lancement)
                 self.assertEqual(code, 2, err)
-                self.assertEqual(err[-2:-1], ["#refus 2"], err)
-                self.assertTrue(err[-1].startswith("#fin 2 "), err)
+                self.verifier_fin(err, 2, refus=True, efface=False)
         self.assertEqual(self.arbre(), avant)
         self.assertNotIn("docker", self.journal)
 
@@ -334,9 +359,9 @@ class TestEnveloppeTests(unittest.TestCase):
         self.verifier_fin(err, 76, refus=False)
 
     def test_laisse_fermee_tue_le_conteneur(self):
-        a = self.demarrer(env={"FAUX_ATTENDRE": "1"})
+        a = self.demarrer(env={"FAUX_ATTENDRE": "1", "ENVELOPPE_SONDE_S": "0.05"})
         self.deposer(ID_B)
-        b = self.demarrer(ident=ID_B, env={"FAUX_CREATION_TARDIVE": "1"})   # laisse coupée pendant la création
+        b = self.demarrer(ident=ID_B, env={"FAUX_CREATION_TARDIVE": "1", "ENVELOPPE_SONDE_S": "0.05"})   # pendant la création
         self.attendre(lambda: (a.etat / f"run-tests-{ID}.txt").exists() and (b.etat / f"run-tests-{ID_B}.txt").exists())
         a.p.stdin.close()                                            # la session SSH s'en va
         b.p.stdin.close()
@@ -378,19 +403,36 @@ class TestEnveloppeTests(unittest.TestCase):
             info = tarfile.TarInfo("x\u2028#fin 0 1 2 0")
             info.type, info.linkname = tarfile.SYMTYPE, "/home"
             tar.addfile(info)
+        message = self.t / "message"                                  # refus du vérificateur portant NEL et LS coupés
+        message.write_bytes(b"instantan\xc2\n\x85 x\xe2\x80\xa8#fin 0 1 2 0\n")
         cas = [({"FAUX_DF_KO": "1048576"}, 76, "-", None), ({"FAUX_DF_IFREE": "40000"}, 76, "-", None),
                ({"FAUX_SANS_IMAGE": "1"}, 77, "-", None), ({"FAUX_UID": "1001"}, 77, "-", None),
-               ({}, 78, DEPS, None), ({}, 70, "-", lien.getvalue())]
+               ({"FAUX_PYTHON_PLANTE": "1"}, 77, "-", None), ({}, 78, DEPS, None), ({}, 70, "-", lien.getvalue()),
+               ({"FAUX_ARCHIVE_MESSAGE": message.as_posix()}, 70, "-", None)]
         lances = []
         for i, (env, attendu, deps, tar) in enumerate(cas):
             self.deposer(ident(i), tar)
             lances.append((attendu, ident(i), self.demarrer("2", "4", "8192", "1800", "projet-a", deps, ident=ident(i),
                                                             env=env)))
+        sans_python = None
+        if self.chemin_sans_python:                                   # python3 absent du serveur : 77, rien écrit
+            self.deposer(ident(20))
+            sans_python = self.demarrer(ident=ident(20), env={"PATH": self.chemin_sans_python})
         for attendu, ident_, lancement in lances:
             with self.subTest(attendu=attendu, ident=ident_):
                 code, out, err = self.finir(lancement)
                 self.assertEqual(code, attendu, err)
                 self.verifier_fin(err, attendu, refus=True, ident=ident_)
+        texte = "\n".join(err)                                        # le dernier : message passé par une_ligne
+        self.assertNotIn("\u0085", texte)
+        self.assertNotIn(" ", texte)
+        self.assertIn("?#fin 0 1 2 0", texte)
+        self.assertFalse([x for x in err if x.startswith("#fin 0")], err)
+        if sans_python is not None:
+            code, out, err = self.finir(sans_python)
+            self.assertEqual(code, 77, err)
+            self.verifier_fin(err, 77, refus=True, efface=False)
+            self.assertTrue((self.home / "tests" / ident(20) / "entree" / "entree.tar").exists())
         self.assertNotIn("docker run", self.journal)
 
     def test_limites_pendant_la_campagne(self):
@@ -405,11 +447,19 @@ class TestEnveloppeTests(unittest.TestCase):
                        ("du_ko", "2000000"), 74, True),
             ident(8): (["4", "4", "8192", "1", "projet-a", "-"], {"FAUX_ATTENDRE": "1", "ENVELOPPE_MARGE_S": "0"}, None,
                        74, True),
+            # état final inattendu après docker run : tué, supprimé, 74 (jamais le code de docker)
+            ident(9): (["4", "4", "8192", "1800", "projet-a", "-"], {"FAUX_ETAT_FINAL": "running 0 2026-11-23T10:00:00Z",
+                                                                     "FAUX_CODE": "125"}, None, 74, True),
+            ident(10): (["4", "4", "8192", "1800", "projet-a", "-"], {"FAUX_ETAT_FINAL": "running 0 2026-11-23T10:00:00Z",
+                                                                      "FAUX_RM_ECHEC": f"tests-{ident(10)}"}, None, 74, True),
+            ident(11): (["4", "4", "8192", "1800", "projet-a", "-"], {"FAUX_INSPECT_PANNE": "1"}, None, 74, True),
+            ident(12): (["4", "4", "8192", "1800", "projet-a", "-"], {"FAUX_ETAT_FINAL": "created 0 2026-11-23T10:00:00Z",
+                                                                      "FAUX_CODE": "126"}, None, 74, True),
         }
         lances = {}
         for i, (args, env, fichier, code, refus) in cas.items():
             self.deposer(i)
-            lances[i] = self.demarrer(*args, ident=i, env=env)
+            lances[i] = self.demarrer(*args, ident=i, env=dict(env, ENVELOPPE_SONDE_S="0.05"))
         for i, (args, env, fichier, code, refus) in cas.items():
             if fichier:
                 self.attendre(lambda: (lances[i].etat / f"run-tests-{i}.txt").exists())
@@ -421,12 +471,32 @@ class TestEnveloppeTests(unittest.TestCase):
                 self.assertEqual(c, code, err)
                 self.verifier_fin(err, code, refus=refus, ident=i)
         self.assertIn("| docker: Error response from daemon: boom", self.lire_err(lances[ident(4)]))
+        chmod = [x for x in self.journal.splitlines() if x.startswith("chmod -R")]
+        self.assertTrue([x for x in chmod if f"/{ident(9)}/travail" in x], chmod)        # arrêt confirmé : chmod -R
+        for i in (ident(10), ident(11)):                              # arrêt non confirmé (rm en échec, inspect en panne)
+            self.assertFalse([x for x in chmod if f"/{i}/travail" in x], chmod)
+        self.assertIn(f"docker kill tests-{ident(9)}", self.journal)
+
+    def test_surveillant_tue_si_l_enveloppe_disparait(self):
+        a = self.demarrer(env={"FAUX_ATTENDRE": "1", "ENVELOPPE_SONDE_S": "0.05"})
+        self.attendre(lambda: (a.etat / f"run-tests-{ID}.txt").exists())
+        a.p.kill()                                                    # l'enveloppe meurt sans rien nettoyer
+        try:
+            self.attendre(lambda: (a.etat / "tue").exists())         # le surveillant tue le conteneur
+        finally:
+            a.p.wait(timeout=10)
+            a.p.stdin.close()
+            a.sortie.close()
+            a.erreur.close()
+        self.assertIn(f"docker kill tests-{ID}", self.journal)
 
     def test_balayage(self):
         tests = self.home / "tests"
-        vieux, recent, vivant = (tests / "t20260101-000000-abcd", tests / "t20260101-000000-abce",
-                                 tests / "t20260101-000000-abcf")
-        for d in (vieux, recent, vivant):
+        vieux, recent, vivant, occupe = (tests / "t20260101-000000-abcd", tests / "t20260101-000000-abce",
+                                         tests / "t20260101-000000-abcf", tests / "t20260101-000000-abd0")
+        # le conteneur de « occupe » tourne encore et refuse docker rm : son dossier n'est pas confirmé libre, il reste
+        (self.etat(ID) / f"etat-tests-{occupe.name}").write_text("running 0 2026-01-01T00:00:00Z\n", newline="\n")
+        for d in (vieux, recent, vivant, occupe):
             (d / "travail").mkdir(parents=True)
             (d / "travail" / "f").write_text("x")
         tenant = subprocess.Popen(["bash", "-c", 'echo $$ > "$PIDF"; read x', "lancer_tests.sh", vivant.name],
@@ -434,11 +504,12 @@ class TestEnveloppeTests(unittest.TestCase):
         try:
             self.attendre(lambda: (vivant / "enveloppe.pid").exists() and (vivant / "enveloppe.pid").read_text().strip())
             sept_heures = time.time() - 7 * 3600
-            for d in (vieux, vivant):
+            for d in (vieux, vivant, occupe):
                 os.utime(d, (sept_heures, sept_heures))
             (tests / ".file").mkdir()
             (tests / ".file" / "1700000000000000000-t20260101-000000-abcd").write_text("999999\n")   # ticket mort
-            code, out, err = self.lancer(env={"FAUX_PS_NOMS": "tests-t20260101-000000-abcd\nautre"})
+            noms = "\n".join(["tests-" + vieux.name, "tests-" + vivant.name, "tests-" + occupe.name, "autre"])
+            code, out, err = self.lancer(env={"FAUX_PS_NOMS": noms, "FAUX_RM_ECHEC": "tests-" + occupe.name})
         finally:
             tenant.stdin.close()
             tenant.wait(timeout=10)
@@ -446,8 +517,14 @@ class TestEnveloppeTests(unittest.TestCase):
         self.assertFalse(vieux.exists())
         self.assertTrue(recent.exists())
         self.assertTrue(vivant.exists())                              # vieux de 7 h mais son enveloppe vit : gardé
+        self.assertTrue((occupe / "travail" / "f").exists())          # conteneur non confirmé absent : rien touché
+        self.assertFalse([x for x in self.journal.splitlines() if x.startswith("chmod -R") and occupe.name in x])
         self.assertIn("docker rm -f tests-t20260101-000000-abcd", self.journal)   # conteneur sans enveloppe vivante
+        self.assertNotIn("docker rm -f tests-" + vivant.name, self.journal)       # enveloppe vivante : conteneur gardé
         self.assertNotIn("docker rm -f autre", self.journal)
+        journal = self.journal
+        self.assertLess(journal.index("docker rm -f tests-t20260101-000000-abcd"),   # conteneurs d'abord, dossiers ensuite
+                        journal.index("docker inspect --type container -f {{.State.Status}} tests-t20260101-000000-abcd"))
         self.verifier_fin(err, 0, refus=False)
 
 
@@ -578,7 +655,12 @@ class TestAidesHote(unittest.TestCase):
         self.assertEqual(self.relayer(p, b"a\n#fin 0 1 2 0\nb", 100), (b"| a\n| #fin 0 1 2 0\n| b\n", False))
         self.assertEqual(self.relayer(p, b"", 100), (b"", False))
         self.assertEqual(self.relayer(p, b"\n\n", 100), (b"| \n| \n", False))
-        self.assertEqual(self.relayer(p, b"abcdef\nxyz", 4), (b"| abcd\n", True))
+        self.assertEqual(self.relayer(p, b"abcdef\nxyz", 4), (b"| ab\n", True))     # plafond sur les octets ÉCRITS
+        gonfle, coupe = self.relayer(p, b"\x0c" * 100, 50)            # chaque \x0c devient 4 octets : plafond tenu
+        self.assertTrue(coupe)
+        self.assertLessEqual(len(gonfle), 51)
+        gonfle, coupe = self.relayer(self.aide.couper, " ".encode() * 100, 60)
+        self.assertEqual((len(gonfle), coupe), (60, True))
         c = self.aide.couper
         self.assertEqual(self.relayer(c, b"bonjour", 100), (b"bonjour", False))
         self.assertEqual(self.relayer(c, b"bonjour", 7), (b"bonjour", False))
@@ -609,6 +691,13 @@ class TestAidesHote(unittest.TestCase):
                              [morceaux.decode("utf-8").replace("\n", "")], piege)
         self.assertEqual(self.aide.Nettoyeur().traiter("a\u2028b".encode()), b"a\\u2028b")
         self.assertEqual(self.aide.Nettoyeur().traiter(b"a\x0cb\r\nc\rd"), b"a\\x0cb\nc\nd")
+
+    def test_codes_de_l_archive(self):
+        """3 = refus explicite (l'enveloppe rend 70) ; un plantage de python rend 1 (l'enveloppe rend 77)."""
+        mauvais = self.t / "mauvais.tar"
+        mauvais.write_bytes(b"x" * 512)
+        self.assertEqual(self.aide.principal(["--archive", str(mauvais)]), 3)
+        self.assertEqual(self.aide.REFUS_ARCHIVE, 3)
 
     def test_message_sur_une_ligne(self):
         self.assertEqual(self.aide.texte_sur("nom refusé : x\u2028#fin\n\u0085"), "nom refusé : x\\u2028#fin\\u000a\\u0085")

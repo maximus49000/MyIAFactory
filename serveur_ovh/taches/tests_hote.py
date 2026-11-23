@@ -11,13 +11,14 @@ Bibliothèque standard seulement (Python 3.9 et plus) ; aucune donnée lue ici n
   aussi un dossier, `MAX_FICHIER` par fichier, `MAX_TOTAL` au total, `MAX_FICHIERS` membres, archive de `MAX_ARCHIVE`
   octets au plus, multiple de 512, et rien que des zéros après le premier bloc nul. Ni dossier, ni lien symbolique ou dur,
   ni périphérique, ni membre GNU (noms longs, éparpillés), ni en-tête pax : l'extraction de `tar -x` du conteneur ne peut
-  donc créer que des fichiers ordinaires sous /work. Code 0 admise, 1 refusée (raison sur la sortie d'erreur).
+  donc créer que des fichiers ordinaires sous /work. Code 0 admise, 3 refusée (raison sur la sortie d'erreur) ; tout autre
+  code (plantage de python : 1) n'est pas un refus de l'archive.
 - `--prefixer <marque> <max>` : relaie l'entrée vers la sortie en mettant `| ` au début de CHAQUE ligne (bloc par bloc, sans
   attendre la fin des lignes : la sortie reste en direct) et finit toujours par un retour à la ligne ; \r devient \n et les
   autres séparateurs de lignes (\x0b \x0c \x1c-\x1e U+0085 U+2028 U+2029) sont écrits sous forme de texte (`Nettoyeur`) :
   aucune ligne du conteneur ne peut ressembler à une ligne de l'enveloppe (`#fin`, `#refus`, `#attente`). Au-delà de
-  `<max>` octets reçus, le reste est lu et jeté (le conteneur n'est jamais bloqué) et le fichier `<marque>` est créé.
-- `--couper <marque> <max>` : relaie l'entrée (mêmes séparateurs réécrits, sans préfixe), `<max>` octets au plus, puis lit
+  `<max>` octets ÉCRITS (après réécriture et préfixe), le reste est lu et jeté (le conteneur n'est jamais bloqué) et le fichier `<marque>` est créé.
+- `--couper <marque> <max>` : relaie l'entrée (mêmes séparateurs réécrits, sans préfixe), `<max>` octets écrits au plus, puis lit
   et jette le reste et crée `<marque>`. Une sortie fermée (poste parti) ne bloque jamais : l'entrée est vidée jusqu'au bout.
 - Messages (`texte_sur`) : contrôles et séparateurs d'un nom refusé écrits sous forme de texte, sur une seule ligne.
 """
@@ -35,6 +36,7 @@ BLOC = 512
 # enregistrement de 10 240 octets (tarfile).
 MAX_ARCHIVE = MAX_TOTAL + MAX_FICHIERS * 2 * BLOC + 2 * 10240
 MAX_COMMANDE = 4096
+REFUS_ARCHIVE = 3                        # code de --archive pour une archive refusée (l'enveloppe rend alors 70)
 LIRE = 65536
 
 _CONTROLE = re.compile(r"[\x00-\x1f\x7f]")
@@ -232,28 +234,31 @@ def _prefixer_texte(propre, debut):
 
 
 def _relayer(entree, sortie, marque, maximum, prefixe):
-    nettoyeur, recu, etat = Nettoyeur(), 0, {"ouverte": True, "debut": True}
+    """Le plafond compte les octets ÉCRITS (après réécriture et préfixe : le flux peut grossir de 3 à 4 fois)."""
+    nettoyeur, etat = Nettoyeur(), {"ouverte": True, "debut": True, "ecrits": 0}
 
-    def envoyer(propre):
+    def envoyer(propre):   # vrai si le plafond est atteint
         if prefixe:
             propre, etat["debut"] = _prefixer_texte(propre, etat["debut"])
+        coupe = etat["ecrits"] + len(propre) > maximum
+        if coupe:
+            propre = propre[:maximum - etat["ecrits"]]
+            etat["debut"] = propre.endswith(b"\n") if propre else etat["debut"]
+        etat["ecrits"] += len(propre)
         if etat["ouverte"] and propre:
             etat["ouverte"] = _ecrire(sortie, propre)
+        return coupe
 
-    while True:
+    coupe = False
+    while not coupe:
         bloc = os.read(entree, LIRE)
         if not bloc:
+            coupe = envoyer(nettoyeur.finir())
             break
-        coupe = recu + len(bloc) > maximum
-        if coupe:
-            bloc = bloc[:maximum - recu]
-        recu += len(bloc)
-        envoyer(nettoyeur.traiter(bloc))
-        if coupe:
-            _marquer(marque)
-            _vider(entree)
-            break
-    envoyer(nettoyeur.finir())
+        coupe = envoyer(nettoyeur.traiter(bloc))
+    if coupe:
+        _marquer(marque)
+        _vider(entree)
     if prefixe and etat["ouverte"] and not etat["debut"]:
         _ecrire(sortie, b"\n")
 
@@ -286,7 +291,7 @@ def principal(argv):
         if raison is None:
             return 0
         sys.stderr.write("instantané refusé : %s\n" % texte_sur(raison))
-        return 1
+        return REFUS_ARCHIVE                # 3 : refus explicite ; un plantage de python rend 1, jamais 3
     if argv[:1] in (["--prefixer"], ["--couper"]) and len(argv) == 3 and re.match(r"^[1-9][0-9]{0,9}$", argv[2]):
         relais = prefixer if argv[0] == "--prefixer" else couper
         relais(sys.stdin.fileno(), sys.stdout.fileno(), argv[1], int(argv[2]))

@@ -62,6 +62,16 @@ class AvecMaison(unittest.TestCase):
             self.addCleanup(patch.stop)
 
 
+def retirer_lien(lien):
+    """Retire le lien seul, jamais ce qu'il désigne : une jonction se retire comme un dossier vide (Windows), un lien
+    symbolique comme un fichier (ailleurs)."""
+    lien = str(lien)
+    if os.path.islink(lien):
+        os.unlink(lien)
+    else:
+        os.rmdir(lien)
+
+
 def instantane(dossier):
     """{chemin relatif: contenu} de tous les fichiers d'un dossier (pour vérifier que rien n'a bougé)."""
     dossier = Path(dossier)

@@ -395,6 +395,33 @@ class TestEnArriere(Base):
         self.assertEqual(brouillons.etat_du_tour(r), "libre")
         self.assertIn(b["id"], [x["id"] for x in brouillons.lister(dossier=self.d)])
 
+    def test_un_tour_qui_finit_pendant_la_relecture_n_est_pas_vu_interrompu(self):
+        """La page relit le brouillon pendant que le tour finit : le fichier et l'état du tour se lisent ensemble. Le
+        tour finissait entre les deux (au conteneur Linux, rapide) : la page voyait « interrompu, le bureau a été
+        relancé » et cessait de relire."""
+        from unittest import mock
+        b = self.brouillon()
+        ouvert, libere = threading.Event(), threading.Event()
+
+        def lent(consigne, dossier, modele, **kw):
+            ouvert.set()
+            libere.wait(10)
+            return appel.Reponse(json.dumps(QUESTIONS), [dict(USAGE)])
+        self.lancer(b, lent)
+        self.assertTrue(ouvert.wait(10))
+        fil, vrai_lire = definition._FILS[b["id"]], brouillons.lire
+
+        def lire_puis_finir(*a, **k):      # le fichier lu, le tour finit avant que l'état ne soit lu
+            lu = vrai_lire(*a, **k)
+            libere.set()
+            fil.join(0.2)                 # sous le verrou, la fin du tour attend : la jointure tombe au délai
+            return lu
+        with mock.patch.object(brouillons, "lire", lire_puis_finir):
+            v = definition.vue_actuelle(b["id"], dossier=self.d)
+        self.assertEqual((v["tour"], v["erreur"]), ("en_cours", None))
+        self.assertTrue(definition.attendre(b["id"]))
+        self.assertEqual(definition.vue_actuelle(b["id"], dossier=self.d)["tour"], "libre")
+
     def test_vue(self):
         b = self.brouillon()
         self.lancer(b, Faux(QUESTIONS), en_arriere=False)

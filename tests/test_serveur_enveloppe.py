@@ -55,7 +55,6 @@ FAUX = {
     "getent": '[ -n "${FAUX_SANS_KVM:-}" ] && exit 2\necho "kvm:x:993:"',
 }
 
-
 class Banc:
     def __init__(self, **env):
         self.env = env

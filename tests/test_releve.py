@@ -19,6 +19,9 @@ BASE = {"version": 1, "projet": "P", "factory": {"etat": "en marche"},
         "titulaires": [{"cle": "d1", "service": "dev", "lieu": "local"}],
         "taches": [{"id": "t1", "titre": "T", "colonne": "a", "active": True, "titulaire": "d1"}]}
 
+from tests import plateforme_tests  # noqa: E402
+
+
 
 class TestValider(unittest.TestCase):
     def test_base_valide(self):
@@ -595,7 +598,6 @@ class TestObtenir(unittest.TestCase):
         crees = self._processus_lances()
         with self.assertRaises(subprocess.TimeoutExpired):
             releve._executer([sys.executable, "-c", "import time; time.sleep(30)"], str(self.tmp))
-        time.sleep(0.5)
         self.assertTrue(crees[0].stdout.closed and crees[0].stderr.closed)
 
     def test_obtenir_commande_trop_longue(self):
@@ -1150,11 +1152,16 @@ class TestTilde(unittest.TestCase):
 
     def test_developper(self):
         home = self._home()
-        for debut in ("~/", "~\\"):
-            self.assertEqual(releve.developper(debut + "s"), os.path.expanduser(debut + "s"))
-            self.assertTrue(releve.developper(debut + "s").startswith(str(home)))
+        self.assertEqual(releve.developper("~/s"), os.path.expanduser("~/s"))
+        self.assertTrue(releve.developper("~/s").startswith(str(home)))
         for texte in ("a~b", "~x", "x/~/y", "", "py"):
             self.assertEqual(releve.developper(texte), texte)
+
+    @plateforme_tests.windows_seulement("« ~\\ » : l'antislash n'est un séparateur de chemin que sous Windows")
+    def test_developper_antislash(self):
+        home = self._home()
+        self.assertEqual(releve.developper("~\\s"), os.path.expanduser("~\\s"))
+        self.assertTrue(releve.developper("~\\s").startswith(str(home)))
 
     def test_commande_releve_tilde(self):
         home = self._home()

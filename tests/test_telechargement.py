@@ -19,6 +19,8 @@ from tests.test_serveur import AvecServeur, TestServeur
 VUS = []
 
 
+
+
 class Site(BaseHTTPRequestHandler):
     """Le site en cours de développement : une page, des redirections, un cookie, l'écho de ce qu'il reçoit."""
 

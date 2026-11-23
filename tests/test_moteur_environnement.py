@@ -19,6 +19,9 @@ JDK = {"outil": "JDK 21", "pour": "dev", "executables": ["java", "javac"],
        "etapes": ["Ouvrir la page.", "Télécharger le .zip du JDK 21.", "L'extraire dans le profil.", "Lancer java -version."]}
 GRADLE = {"outil": "Gradle", "pour": "dev", "executables": ["gradle"], "installation": "gradle.org (environ 130 Mo)"}
 
+from tests import plateforme_tests  # noqa: E402
+
+
 
 class Enregistreur:
     """Un faux `which` et un faux lanceur de version qui gardent ce qu'on leur a demandé."""
@@ -184,16 +187,18 @@ class Verifier(unittest.TestCase):
         self.assertEqual((faux["telechargement"], faux["etapes"], faux["autonome"]), (None, [], False))
 
     def test_android_home_trouve(self):
+        """Les programmes du SDK et du JDK (`adb.exe` sous Windows, `adb` ailleurs) sous ANDROID_HOME et JAVA_HOME."""
+        ext = ".exe" if plateforme_tests.WINDOWS else ""
         with tempfile.TemporaryDirectory() as t:
             racine = Path(t)
-            for sous, nom in (("platform-tools", "adb.exe"), ("cmdline-tools/latest/bin", "sdkmanager.exe"),
-                              ("build-tools/34.0.0", "apksigner.exe")):
+            for sous, nom in (("platform-tools", "adb"), ("cmdline-tools/latest/bin", "sdkmanager"),
+                              ("build-tools/34.0.0", "apksigner")):
                 (racine / sous).mkdir(parents=True)
-                f = racine / sous / nom
+                f = racine / sous / (nom + ext)
                 f.write_bytes(b"x")
                 f.chmod(0o755)
             (racine / "jdk" / "bin").mkdir(parents=True)
-            java = racine / "jdk" / "bin" / "java.exe"
+            java = racine / "jdk" / "bin" / ("java" + ext)
             java.write_bytes(b"x")
             java.chmod(0o755)
             seulement_les_emplacements = lambda nom, path=None: shutil.which(nom, path=path) if path else None
@@ -213,6 +218,42 @@ class Verifier(unittest.TestCase):
             r = environnement.verifier(outils[:1], which=seulement_les_emplacements, executer=lambda a, d: (0, "v"), env={})
             self.assertEqual(r[0]["etat"], "a_installer")
 
+    @plateforme_tests.linux_seulement("droit d'exécution POSIX des fichiers")
+    def test_android_home_sous_linux_un_fichier_non_executable_n_est_pas_pris(self):
+        with tempfile.TemporaryDirectory() as t:
+            racine = Path(t)
+            (racine / "platform-tools").mkdir()
+            adb = racine / "platform-tools" / "adb"
+            adb.write_bytes(b"x")
+            adb.chmod(0o644)
+            seulement_les_emplacements = lambda nom, path=None: shutil.which(nom, path=path) if path else None
+            outils = [{"outil": "SDK Android", "pour": "dev", "executables": ["adb"], "installation": "x"}]
+            verifier = lambda: environnement.verifier(outils, which=seulement_les_emplacements,
+                                                      executer=lambda a, d: (0, "v"), env={"ANDROID_HOME": str(racine)})
+            self.assertEqual(verifier()[0]["etat"], "a_installer")
+            adb.chmod(0o755)
+            self.assertEqual(verifier()[0]["etat"], "en_place")
+
+    @plateforme_tests.linux_seulement("pas de registre hors Windows : le PATH du processus, séparé par « : »")
+    def test_sous_linux_le_path_du_processus_suffit_sans_registre(self):
+        """Sous Linux, aucun registre n'est lu (lire_registre rend None) : un programme du PATH POSIX est trouvé, un
+        programme absent ne l'est nulle part."""
+        self.assertIsNone(environnement.lire_registre("HKEY_CURRENT_USER", "Environment", "Path"))
+        with tempfile.TemporaryDirectory() as t:
+            a, b = Path(t) / "a", Path(t) / "b"
+            for d in (a, b):
+                d.mkdir()
+            gradle = b / "gradle"
+            gradle.write_bytes(b"x")
+            gradle.chmod(0o755)
+            chemin = f"{a}:{b}"
+            which = lambda n, path=None: shutil.which(n, path=path or chemin)
+            env = {"PATH": chemin, "HOME": t}
+            self.assertEqual(environnement.trouver("gradle", which=which, env=env, lire=environnement.lire_registre),
+                             str(gradle))
+            self.assertIsNone(environnement.trouver("java", which=which, env=env, lire=environnement.lire_registre))
+
+    @plateforme_tests.windows_seulement("registre Windows")
     def test_path_relu_dans_le_registre_apres_le_demarrage(self):
         """Un logiciel installé après le démarrage du moteur n'est pas dans le PATH du processus : le PATH à jour est relu
         dans le registre (système puis utilisateur, variables développées). Registre et fichiers simulés."""
@@ -248,6 +289,7 @@ class Verifier(unittest.TestCase):
             self.assertTrue(any(c[0] == "HKEY_LOCAL_MACHINE" and c[1].endswith("Session Manager\\Environment") for c in lus))
             self.assertTrue(any(c[:2] == ("HKEY_CURRENT_USER", "Environment") for c in lus))
 
+    @plateforme_tests.windows_seulement("registre Windows")
     def test_variables_du_registre_priment_sur_celles_du_processus(self):
         with tempfile.TemporaryDirectory() as t:
             neuf, vieux = Path(t) / "neuf", Path(t) / "vieux"
@@ -260,6 +302,7 @@ class Verifier(unittest.TestCase):
                                            env={"JAVA_HOME": str(vieux)}, lire=registre)
             self.assertEqual(trouve.lower(), str(neuf / "bin" / "java.exe").lower())
 
+    @plateforme_tests.windows_seulement("variables ProgramFiles et LOCALAPPDATA de Windows")
     def test_dossiers_d_installation_de_winget_et_des_jdk(self):
         with tempfile.TemporaryDirectory() as t:
             racine = Path(t)

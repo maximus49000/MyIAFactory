@@ -12,6 +12,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "outils"))
 import serveur_capacites as sc  # noqa: E402
 from serveur_capacites import Capacite  # noqa: E402
 
+from tests import plateforme_tests  # noqa: E402
+
+
 
 def _cap(id_, depend=()):
     return Capacite(id=id_, libelle=id_, depend=tuple(depend), etape="docker", sonde="true", taille_go=0, duree_min=1)
@@ -26,7 +29,7 @@ class CatalogueTests(unittest.TestCase):
 
     def test_contenu_du_catalogue(self):
         self.assertEqual(set(sc.CATALOGUE), {"base", "durcissement", "android-build", "android-emulateur", "emulateur-image",
-                                             "unity-cli", "unity-editeur", "session-graphique", "agent", "agent-abonnement"})
+                                             "unity-cli", "unity-editeur", "session-graphique", "agent", "agent-abonnement", "tests-image"})
         self.assertEqual(sc.CATALOGUE["durcissement"].depend, ("base",))
         self.assertEqual(sc.CATALOGUE["android-emulateur"].depend, ("android-build",))
         self.assertEqual(sc.CATALOGUE["base"].etape, "docker")

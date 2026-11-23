@@ -28,7 +28,7 @@ DOSSIERS = ("pieces", "captures", "livrables", "methodes", "documents")
 BLOC_GITIGNORE = ("# MyIAFactory : fichiers propres à la machine", ".factory/equipe.json", ".factory/*-historique.jsonl",
                   ".env", ".factory/presence.json", ".factory/*.precedent", ".factory/attente-*.json",
                   ".factory/moteur-reveil", ".factory/agents-en-cours/", ".factory/anomalies-logiciel.jsonl",
-                  ".factory/scratch/")
+                  ".factory/scratch/", ".factory/tests-mesures.jsonl")
 PORT = 8770
 SERVICE_FACTURATION = {"id": "facturation", "nom": "Facturation"}
 

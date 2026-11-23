@@ -15,7 +15,11 @@ from tests.test_acces import AvecBureauOuvert
 from tests.test_serveur import AvecServeur
 
 SECRET = "SECRET-SERVEUR-XYZ-123456"
-IDS = ["base", "durcissement", "android-build", "android-emulateur", "emulateur-image", "unity-cli", "unity-editeur", "session-graphique", "agent", "agent-abonnement"]
+# Toutes les capacités du catalogue (`outils/serveur_capacites.CATALOGUE`), jamais une liste recopiée : une capacité
+# ajoutée (« tests-image ») rendait la liste figée fausse.
+IDS = list(bserveurs._modules()[1].CATALOGUE)
+for _ancienne in ("base", "durcissement", "android-build", "android-emulateur", "agent"):   # celles que les tests nomment
+    assert _ancienne in IDS, _ancienne
 
 
 class FauxSsh:

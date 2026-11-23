@@ -1,17 +1,17 @@
 """Réglages d'un projet : lecture et écriture."""
-import contextlib
 import json
 import os
 import re
 import tempfile
-import threading
-import time
 import unicodedata
 from pathlib import Path
 
 from .deport import LIEUX_PAR_DEFAUT, valider_lieux
 from .deport_types import catalogue_union
 from .releve import MOTIF_GENRE  # un id de projet suit le même motif qu'un genre
+# Le verrou d'écriture d'un fichier partagé vit dans `verrou_fichier` (compatible Python 3.9 : le lanceur des agents
+# l'importe aussi pour le sceau des tests) ; ses réglages d'attente s'y trouvent (`VERROU_ATTENTE_S`, `VERROU_PERIME_S`).
+from .verrou_fichier import verrou_fichier as _verrou_fichier
 
 DEFAUTS = {"port": 8770, "charge_max": 75, "fraicheur_min": 30, "releve": {}, "prix_automatiques": True,
            "moteur": {"couche": "claude"}, "agents_cloud_max": 3,
@@ -225,40 +225,6 @@ def fixer_deport(chemin, deport, catalogue=None):
     return _ecrire_cle(chemin, "deport", {**complet, "lieux": explicites})
 
 
-_VERROU_ECRITURE = threading.Lock()     # lecture-modification-écriture d'un fichier de réglages : une à la fois ici
-VERROU_ATTENTE_S = 10                   # attente au plus d'un autre processus qui écrit le même fichier
-VERROU_PERIME_S = 60                    # un verrou plus vieux (processus mort) est repris
-
-
-@contextlib.contextmanager
-def _verrou_fichier(chemin):
-    """Une écriture à la fois sur `chemin` : verrou du processus, plus un fichier `<nom>.verrou` créé en exclusif pour
-    les autres processus (le bureau et l'installation écrivent le même fichier du bureau). Attente bornée ; un verrou
-    périmé est repris. `TimeoutError` si l'autre écriture ne finit pas."""
-    marque = Path(str(chemin) + ".verrou")
-    with _VERROU_ECRITURE:
-        fin = time.monotonic() + VERROU_ATTENTE_S
-        while True:
-            try:
-                os.close(os.open(str(marque), os.O_CREAT | os.O_EXCL | os.O_WRONLY))
-                break
-            except FileExistsError:
-                try:
-                    if time.time() - marque.stat().st_mtime > VERROU_PERIME_S:
-                        marque.unlink()
-                        continue
-                except OSError:
-                    continue
-                if time.monotonic() >= fin:
-                    raise TimeoutError(f"Fichier en cours d'écriture par un autre programme : {chemin}")
-                time.sleep(0.05)
-        try:
-            yield
-        finally:
-            try:
-                marque.unlink()
-            except OSError:
-                pass
 
 
 def fixer_agents_abonnement_max(chemin, valeur):

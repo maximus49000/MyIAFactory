@@ -71,11 +71,13 @@ FAUX = {
     "setsid": 'echo "setsid $*" >> "$FAUX_JOURNAL"\nexec "$@"',
     "timeout": 'echo "timeout $*" >> "$FAUX_JOURNAL"\nshift\nexec "$@"',
     "git": 'echo "git $*" >> "$FAUX_JOURNAL"\nexit 0',
+    # disque du serveur : 100 Go libres, jamais celui du poste ni du conteneur de tests (un /tmp de 4 Go y est « plein »)
+    "df": 'printf "Filesystem 1024-blocks Used Available Capacity Mounted on\\n"\n'
+          'printf "/dev/faux 209715200 104857600 %s 50%% /\\n" "${FAUX_DF_LIBRE_KO:-104857600}"',
     # le pont hôte (tâche 7) : un processus qui vit jusqu'à son arrêt et le dit
     "python3": 'echo "python3 $*" >> "$FAUX_JOURNAL"\ntrap \'echo "pont-arrete $*" >> "$FAUX_JOURNAL"; exit 0\' TERM\n'
                'while :; do sleep 0.2; done',
 }
-
 
 def demande(reprend=None, **limites):
     lim = {"duree_s": 2400, "tours": 200, "memoire_mo": 4096, "cpus": 2, "paquet_octets": 524288000, "flux_octets": 20971520}

@@ -158,10 +158,13 @@ def _lister_proc(racine="/proc"):
 
 
 def lire_stat(pid, brut, tic=100, demarrage=None):
-    """Une ligne de `/proc/<pid>/stat` lue : le nom (entre parenthèses), le parent, `utime + stime`, la création."""
+    """Une ligne de `/proc/<pid>/stat` lue : le nom (entre parenthèses), le parent, `utime + stime`, la création.
+    `None` pour un processus fini que son parent n'a pas encore relevé (zombie, état Z ou X) : il n'est plus là."""
     try:
         nom = brut[brut.index("(") + 1:brut.rindex(")")]
         champs = brut.rsplit(")", 1)[1].split()
+        if champs[0] in ("Z", "X"):
+            return None
         debut = int(champs[19])
         return {"pid": pid, "parent": int(champs[1]), "nom": nom_court(nom), "cpu": int(champs[11]) + int(champs[12]),
                 "debut": debut, "cree": demarrage + debut / tic if demarrage is not None else None}

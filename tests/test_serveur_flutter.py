@@ -381,7 +381,7 @@ class TestEnveloppeFlutter(unittest.TestCase):
             h, d, vol = b.h(), f"{b.h()}/taches/{ID}", f"flutter-{ID}"
             creation = b.appels("docker volume create")
             self.assertEqual(len(creation), 1, b.journal)
-            self.assertIn(f"--driver local --opt type=overlay --opt device=overlay --opt o=lowerdir={h}/flutter-sdk/bin/cache,"
+            self.assertIn(f"--driver local --opt type=overlay --opt device=overlay --opt o=lowerdir={h}/flutter-sdk,"
                           f"upperdir={d}/flutter-up,workdir={d}/flutter-work {vol}", creation[0])
             for sous in ("flutter-up", "flutter-work"):
                 self.assertTrue((b.dossier / sous).is_dir())
@@ -389,7 +389,9 @@ class TestEnveloppeFlutter(unittest.TestCase):
             v = b.run_args("verif.txt")
             self.assertIn("--rm", v)
             suite_dans(self, v, "--network", "none")
-            suite_dans(self, v, "--mount", f"type=volume,src={vol},dst=/opt/flutter-sdk/bin/cache")
+            suite_dans(self, v, "--mount", f"type=volume,src={vol},dst=/opt/flutter-sdk")
+            self.assertIn("test -x /opt/flutter-sdk/bin/flutter", " ".join(v))
+            self.assertIn("/opt/flutter-sdk/bin/cache/lockfile", " ".join(v))
             for x in ("--read-only",):
                 self.assertIn(x, v)
             suite_dans(self, v, "--cap-drop", "ALL")
@@ -397,8 +399,8 @@ class TestEnveloppeFlutter(unittest.TestCase):
             self.assertLess(j.index("docker volume create"), j.index("verif-flutter-"))
             self.assertLess(j.index("verif-flutter-"), j.index("docker run --pull never -d"))
             a = b.run_args()
-            suite_dans(self, a, "--mount", f"type=bind,src={h}/flutter-sdk,dst=/opt/flutter-sdk,readonly")
-            suite_dans(self, a, "--mount", f"type=volume,src={vol},dst=/opt/flutter-sdk/bin/cache")
+            suite_dans(self, a, "--mount", f"type=volume,src={vol},dst=/opt/flutter-sdk")       # le SDK entier, en overlay
+            self.assertFalse([x for x in a if "src=" + h + "/flutter-sdk" in x])                # jamais le SDK de l'hôte en bind
             suite_dans(self, a, "--mount", f"type=bind,src={h}/android-sdk,dst=/opt/android-sdk,readonly")
             self.assertNotIn("flutter-verrou", " ".join(a))
             self.assertEqual([a[i + 1] for i in range(len(a) - 1) if a[i] == "-e"],
@@ -411,7 +413,7 @@ class TestEnveloppeFlutter(unittest.TestCase):
             suite_dans(self, a, "--network", "myiafactory-agents")
             self.assertNotIn("--privileged", a)
             self.assertEqual(a[-2:], ["myiafactory/agent", "entree-agent"])
-            self.assertEqual(len([a[i + 1] for i in range(len(a) - 1) if a[i] == "--mount"]), 3)
+            self.assertEqual(len([a[i + 1] for i in range(len(a) - 1) if a[i] == "--mount"]), 2)
             self.assertEqual(b.appels("docker volume rm"), [])
             b.arreter()
             b.attendre_final()

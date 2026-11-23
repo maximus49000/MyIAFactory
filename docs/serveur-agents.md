@@ -355,10 +355,11 @@ conteneur des agents des projets Flutter.
   `flutter-sdk` compte comme indisponible **pour ce projet** : le choix retombe sur le lieu suivant de l'ordre (le poste),
   avec la raison « serveur : flutter-sdk absent du serveur » ; un projet non Flutter n'est pas concerné.
 - **Dans le conteneur** (mêmes durcissements : utilisateur de l'hôte, `--read-only`, `--cap-drop ALL`,
-  `no-new-privileges`…) : **le SDK est lu en lecture seule ; `bin/cache` en copie sur écriture par tâche.** `~/flutter-sdk`
-  est monté sur `/opt/flutter-sdk` en lecture seule ; `bin/cache`, où flutter écrit à chaque lancement (`engine.stamp`,
-  `engine.realm`, `lockfile` : constaté sur le serveur réel, `flutter --version` échouait en lecture seule seule), reçoit
-  un **volume overlay propre à la tâche** `flutter-<id>` : couche basse `~/flutter-sdk/bin/cache` (jamais modifiée),
+  `no-new-privileges`…) : **SDK en copie sur écriture par tâche : lecture sur `~/flutter-sdk`, jamais modifié ;
+  écritures dans la couche de la tâche.** Flutter écrit dans son propre SDK (`bin/cache` à chaque lancement,
+  `packages/flutter_tools/.dart_tool` pour `flutter analyze`… : constaté sur le serveur réel, en lecture seule
+  `flutter analyze` échouait). `/opt/flutter-sdk` est donc un **volume overlay propre à la tâche** `flutter-<id>` (aucun
+  montage du SDK de l'hôte en bind) : couche basse `~/flutter-sdk` entier (jamais modifiée),
   couche haute et dossier de travail `~/taches/<id>/flutter-up` et `flutter-work` (0700, même disque). Le volume est créé
   par `sudo -n docker volume create --driver local --opt type=overlay …`, puis **prouvé** avant l'agent par un
   `docker run --rm --network none` bref qui le monte (un overlay n'est monté qu'au lancement d'un conteneur) ; refusé : la
@@ -459,7 +460,7 @@ Tout ce qui précède est vérifié par des tests simulés. À prouver sur le se
 - Le parcours de dossiers sans suivre de lien (**`O_NOFOLLOW`**) et les droits **0700 / 0600** sur le serveur réel.
 - La fenêtre de **60 s** de `docker stop` : l'entrée conclut-elle (restes, paquet, `fin.json`) dans ce délai sur un vrai projet ?
 - La **neutralisation des filtres** (`info/attributes`, `.gitattributes`) avec la version de Git du conteneur.
-- **Flutter** : `flutter --version` passe avec l'overlay de `bin/cache` (essai à la main du 2026-11-23) ; restent
-  `flutter pub get` et `flutter test` dans le conteneur de l'agent (par l'enveloppe), la suppression du volume en fin de
-  tâche, les bibliothèques système dont `flutter_tester` a besoin dans l'image (Ubuntu
+- **Flutter** : avec l'overlay du SDK entier, `flutter analyze` et `flutter test` passent à la main (2026-11-23, couche
+  haute d'environ 76 Ko) ; restent `flutter pub get`, `analyze` et `test` dans le conteneur de l'agent lancé par
+  l'enveloppe, la suppression du volume en fin de tâche, les bibliothèques système dont `flutter_tester` a besoin dans l'image (Ubuntu
   minimal) ; le nom exact de l'archive et la présence de la 3.47.1 dans `releases_linux.json`.

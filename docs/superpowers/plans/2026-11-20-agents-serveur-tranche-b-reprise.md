@@ -36,3 +36,11 @@ Pas encore fait :
 3. **Suite complète trop lente** (747 s au lieu d'environ 4 min) : cinq modules `serveur_*` pèsent environ 2 300 s cumulées (vrais bash/Git sous Windows). Profiler, puis réduire ou marquer « lents » (ou déporter : voir ci-dessous). Le Directeur est mécontent de cette durée.
 4. Évaluation « tests sur le serveur » (carte de session préparée, document de conception `docs/superpowers/specs/2026-11-20-tests-sur-le-serveur-design.md` non commité dans une autre session) : le Directeur veut mesurer **à la fin de la tranche B, pas avant**, avec son accord.
 5. Pousser, PR, fusion, `main` à jour, redémarrage du bureau, sur demande.
+
+## Mise à jour du 2026-11-23 : paliers 2 et arrêt réussis
+- **Défaut de jonction trouvé à l'essai réel, corrigé** (commit `7eeef15`) : le moteur donnait l'APK du mode pilote sous forme de chemin, le serveur attend les octets ; tout agent pilote lancé par le moteur aurait échoué (« APK absent ou vide »). Les tests à faux serveurs ne pouvaient pas le voir.
+- **Palier 2 (agent pilote) réussi** : l'agent a démarré l'émulateur, installé et lancé l'APK de MyFridgeCleaner, capturé, lu la capture, décrit l'écran d'accueil dans `docs/ECRAN.md`, commité, arrêté l'émulateur : 108 s de bout en bout (branche `agent/essai-pilote-083657` dans `EssaisMyIAFactory\essai-agent-seul`).
+- **Arrêter pendant le pilotage (Review Focus 5) vérifié** : arrêt pris en 8,2 s, « arrêtée par l'utilisateur » sans relance, émulation liée arrêtée toute seule, aucun conteneur/pont/émulateur restant, créneaux libres.
+- **Bascule** : décision pure vérifiée avec l'état réel du serveur (en ligne) et la raison de file qui nomme chaque lieu.
+- Serveur nettoyé (`~/taches` vide, aucun conteneur). Reste local : dépôt jetable `EssaisMyIAFactory\essai-agent-seul` (3 branches d'essai) et scripts d'essai du scratchpad.
+- **Non couvert par un essai réel** : (1) le contrôle de secret déclenché pour de vrai (les modèles refusent d'écrire le jeton ; couvert par les tests avec vrai bash) ; (2) le moteur complet (`_partir`, reprise au redémarrage) et le bouton Arrêter du bureau par HTTP, qui demandent de lancer le bureau/moteur depuis le worktree sur un projet ; (3) la file d'attente quand tous les lieux sont pleins avec de vrais agents.

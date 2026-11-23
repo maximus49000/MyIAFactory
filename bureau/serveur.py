@@ -320,7 +320,8 @@ class Projet:
         valeurs = {n: v for n, v in lus.items() if n in niveaux and v is not None}
         return {"id": "deport." + action, "section": "actions", "libelle": entree["libelle"],
                 "aide": entree["bientot"] or "", "forme": "lieu", "choix": list(entree["lieux"]), "niveaux": niveaux,
-                "valeur": lieu, "origine": origine, "valeurs": valeurs, "applicable": applicable}
+                "valeur": lieu, "origine": origine, "valeurs": valeurs, "applicable": applicable,
+                "defaut": None if deport_types.sans_poste(entree) else "poste"}
 
     def _ligne_reglage(self, r, ctx):
         """La ligne d'un réglage déclaré au registre (booléen) : valeur, origine et valeur posée à chaque niveau."""
@@ -338,7 +339,7 @@ class Projet:
             valeurs["projet"] = brut[r.cle]
         return {"id": r.id, "section": r.section, "libelle": r.libelle, "aide": r.aide, "forme": r.forme,
                 "niveaux": list(r.niveaux), "valeur": valeur, "origine": origine, "valeurs": valeurs,
-                "applicable": True}
+                "applicable": True, "defaut": r.defaut}
 
     def reglages_page(self):
         """L'état de la page Réglages : une ligne `deport.<action>` par action du catalogue du projet, puis les

@@ -198,6 +198,27 @@ test("une ligne booléenne est une case à cocher", async () => {
   assert.deepEqual(vus[0], {niveau: "projet", id: "lecons_auto", valeur: false});
 });
 
+test("valeur affichée quand rien n'est posé : défaut du serveur, global au niveau type", () => {
+  definirNiveauEdite("type");
+  const sansGlobal = rendre(page([ligne("deport.apk", {origine: "projet", valeur: "github", valeurs: {projet: "github"}, defaut: "poste"})])).bloc;
+  assert.equal(radios(sansGlobal, "deport.apk").find((r) => r.value === "poste").checked, true);
+  const avecGlobal = rendre(page([ligne("deport.apk", {origine: "global", valeur: "github", valeurs: {global: "github"}, defaut: "poste"})])).bloc;
+  assert.equal(radios(avecGlobal, "deport.apk").find((r) => r.value === "github").checked, true);
+  const sansDefaut = rendre(page([ligne("deport.recette-emulateur", {niveaux: ["global", "type", "projet"], choix: ["serveur"], valeur: null, defaut: null})])).bloc;
+  assert.equal(radios(sansDefaut).some((r) => r.checked), false);
+  definirNiveauEdite("projet");
+});
+
+test("booléen de défaut vrai : coché au global quand le projet le met à faux", () => {
+  const l = {id: "lecons_auto", section: "automatisations", libelle: "Leçons", aide: "", forme: "booleen", niveaux: ["global", "type", "projet"],
+    valeur: false, origine: "projet", valeurs: {projet: false}, applicable: true, defaut: true};
+  definirNiveauEdite("global");
+  const c = rendre(page([l])).bloc.tous((n) => n.type === "checkbox")[0];
+  assert.equal(c.checked, true);
+  definirNiveauEdite("projet");
+  assert.equal(rendre(page([l])).bloc.tous((n) => n.type === "checkbox")[0].checked, false);
+});
+
 test("texte_du_serveur_via_textContent", () => {
   definirNiveauEdite("projet");
   const {bloc} = rendre(page([ligne("deport.apk", {libelle: "<b>APK</b>", aide: "<i>vite</i>"})], {genre: "<u>x</u>"}));

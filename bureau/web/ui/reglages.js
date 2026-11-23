@@ -45,8 +45,7 @@ function valeurAffichee(l, niveau) {
   if (niveau === "projet") return {valeur: l.valeur, propre: aNiveau(l, "projet")};
   if (aNiveau(l, niveau)) return {valeur: l.valeurs[niveau], propre: true};
   if (niveau === "type" && aNiveau(l, "global")) return {valeur: l.valeurs.global, propre: false};
-  const defaut = l.origine === "defaut" ? l.valeur : (l.forme === "lieu" && (l.choix || []).includes("poste") ? "poste" : null);
-  return {valeur: defaut, propre: false};
+  return {valeur: l.defaut ?? null, propre: false};   // le défaut est publié par le serveur : le client ne devine rien
 }
 
 function pastille(l, niveau) {

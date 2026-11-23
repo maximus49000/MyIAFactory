@@ -68,6 +68,7 @@ class TestReglagesPage(AvecFichierDuBureau):
         self.assertEqual(lignes["deport.emulateur"]["choix"], ["poste", "serveur"])
         recette = lignes["deport.recette-emulateur"]
         self.assertEqual((recette["niveaux"], recette["valeur"], recette["origine"]), (["projet"], None, "defaut"))
+        self.assertEqual((apk["defaut"], recette["defaut"]), ("poste", None))
 
     def test_poser_global_puis_projet_l_emporte(self):
         r, ligne = self.poster("global", "deport.tests", "github")
@@ -206,6 +207,10 @@ class TestReglageBooleenParLaTable(AvecFichierDuBureau):
         r, rep = self.poster("global", "lecons_auto", "oui")
         self.assertEqual(r.status, 400)
         self.assertIn("lecons_auto", {l["id"] for l in self.etat()["reglages_page"]["lignes"]})
+
+    def test_la_ligne_booleenne_porte_son_defaut(self):
+        ligne = {l["id"]: l for l in self.etat()["reglages_page"]["lignes"]}["lecons_auto"]
+        self.assertIs(ligne["defaut"], False)
 
 
 if __name__ == "__main__":

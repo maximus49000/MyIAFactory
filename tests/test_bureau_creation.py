@@ -17,9 +17,6 @@ from tests.test_inst_definition import GENRES, QUESTIONS, USAGE, Faux, a_install
 DECISION = {"id": "g1", "genre": "genre_fonctionnalite", "texte": "Ce n'est pas un jeu web.", "propose": "jeu-mobile",
             "genres_connus": ["jeu-web", "jeu-mobile"], "incertain": False}
 
-from tests import plateforme_tests  # noqa: E402
-
-
 
 class AvecCreation(AvecBureau):
     def setUp(self):
@@ -288,7 +285,6 @@ class TestRoutesCreations(AvecCreations):
         self.assertEqual(statut, 400)
         self.assertIn(str(reglages.MAX_PROJETS), corps["erreur"])
 
-    @plateforme_tests.pas_encore_linux("route de création appuyée sur l'Executeur de test_inst_creation : échoue au conteneur Linux, cause à préciser")
     def test_tour_rend_les_questions_et_le_cout(self):
         b = self.nouveau()
         v = self.tour(b["id"])
@@ -326,7 +322,6 @@ class TestRoutesCreations(AvecCreations):
         self.assertEqual(statut, 400)
         self.assertEqual(self.srv.appeler_jugement.dossiers, [])
 
-    @plateforme_tests.pas_encore_linux("route de création appuyée sur l'Executeur de test_inst_creation : échoue au conteneur Linux, cause à préciser")
     def test_tour_deja_en_cours_refuse(self):
         bloque = self.srv.appeler_jugement = Bloque(QUESTIONS)
         b = self.nouveau()
@@ -350,7 +345,6 @@ class TestRoutesCreations(AvecCreations):
         self.assertEqual((bloque.appels, v["tours"]), (1, 1))
         self.assertEqual(len(v["echange"]), 1)
 
-    @plateforme_tests.pas_encore_linux("route de création appuyée sur l'Executeur de test_inst_creation : échoue au conteneur Linux, cause à préciser")
     def test_tour_rate_se_refait_sans_rien_retaper(self):
         b = self.nouveau()
         self.srv.appeler_jugement = Faux("pas du json", "toujours pas")
@@ -363,7 +357,6 @@ class TestRoutesCreations(AvecCreations):
         v = self.attendre(b["id"])
         self.assertEqual((v["tours"], v["erreur"]), (1, None))
 
-    @plateforme_tests.pas_encore_linux("route de création appuyée sur l'Executeur de test_inst_creation : échoue au conteneur Linux, cause à préciser")
     def test_valider_cree_et_liste_le_projet(self):
         v = self.pret()
         self.assertFalse((self.rangement / "Casse-briques").exists())
@@ -412,7 +405,6 @@ class TestRoutesCreations(AvecCreations):
         self.assertEqual(statut, 400, r)
         self.assertFalse((self.rangement / "Casse-briques").exists())
 
-    @plateforme_tests.pas_encore_linux("route de création appuyée sur l'Executeur de test_inst_creation : échoue au conteneur Linux, cause à préciser")
     def test_supprimer_garde_le_cout(self):
         v = self.pret()
         avant = self.json("/api/creations")

@@ -91,7 +91,7 @@ def liste(srv, id_=None):
     prix_de = _prix(srv)
     if id_ is not None:
         try:
-            return 200, {"brouillon": definition.vue(brouillons.lire(id_, dossier=srv.dossier_creations), prix_de)}
+            return 200, {"brouillon": definition.vue_actuelle(id_, prix_de, dossier=srv.dossier_creations)}
         except Echec as e:
             return 404, {"erreur": str(e)}
     try:
@@ -207,17 +207,19 @@ def tour(srv, corps):
         id_, erreur = _texte(corps, "id", True)
         if erreur:
             return 400, {"erreur": erreur}
-        b = definition.lancer_tour(
+        definition.lancer_tour(
             id_, reponses=reponses, correction=correction, proposer_maintenant=bool(corps.get("proposer_maintenant")),
             genres_connus=srv._genres_pour_le_chef(), couche=_couche(srv),
             appeler=srv.appeler_jugement or appel.appeler,
             verifier_environnement=srv.verifier_environnement or environnement.verifier, prix_de=_prix(srv),
             dossier=srv.dossier_creations)
+        # relu, pas le brouillon marqué au départ : un tour rapide a pu finir avant la réponse (il serait vu interrompu)
+        vu = definition.vue_actuelle(id_, _prix(srv), dossier=srv.dossier_creations)
     except Echec as e:
         return _erreur(e)
     except Exception as e:   # jamais une connexion coupée sans réponse lisible
         return 500, {"erreur": f"Erreur du bureau : {e}"[:200]}
-    return 200, {"brouillon": _vue(srv, b)}
+    return 200, {"brouillon": vu}
 
 
 def valider(srv, corps):

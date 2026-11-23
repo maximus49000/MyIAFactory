@@ -2673,14 +2673,18 @@ def _attente(court, fid, etat):
 # --- Les places d'agents et les validations-barrières (conception 2026-11-12-parallelisme-design.md).
 
 def _places(projet, court, fac=None):
-    """Les places du projet : `{locaux, cloud}` libres (le maximum moins les tâches actives tenues par un agent de ce
-    lieu) et `total` (les deux maximums). Les places cloud effectives : voir `depart.places_cloud`."""
+    """Les places du projet : `{locaux, cloud, serveur}` libres (le maximum moins les tâches actives tenues par un agent
+    de ce lieu) et `total` (les maximums local et cloud, comme avant). Les places cloud effectives : voir
+    `depart.places_cloud` ; les places serveur (`agents_serveur_max`, 0 par défaut) sont comptées à part, jamais prises
+    sur les places locales."""
     fac = fac or _factory(projet)
     lieux = {a["cle"]: a["lieu"] for a in court["agents"]}
     actifs = [lieux[t["agent"]] for t in court["taches"] if t["active"] and t.get("agent") in lieux]
     cloud_max = dep.places_cloud(fac.get("agents_cloud_max"), projet.cloud_max, "cloud" in lieux.values())
     return {"locaux": max(0, fac["agents_locaux_max"] - actifs.count("local")),
-            "cloud": max(0, cloud_max - actifs.count("cloud")), "total": fac["agents_locaux_max"] + cloud_max}
+            "cloud": max(0, cloud_max - actifs.count("cloud")),
+            "serveur": max(0, (fac.get("agents_serveur_max") or 0) - actifs.count("serveur")),
+            "total": fac["agents_locaux_max"] + cloud_max}
 
 
 def _concerne(element, etape_id):
@@ -3095,7 +3099,7 @@ def _raison_agent(ctx, t, lieu):
         return "aucun agent cloud libre", "aucun agent cloud libre", detail, "quand un agent cloud se libérera"
     occupants = ctx.occupants()
     s = "s" if ctx.places["total"] > 1 else ""
-    if occupants and ctx.places["locaux"] == 0 and ctx.places["cloud"] == 0:
+    if occupants and ctx.places["locaux"] == 0 and ctx.places["cloud"] == 0 and ctx.places["serveur"] == 0:
         detail = [f"{ctx.places['total']} place{s} au total, toutes prises"]
     else:
         detail = [f"aucun agent libre ne peut la prendre ({t.get('role') or 'sans rôle'})"]
@@ -3225,8 +3229,8 @@ def _demarrer_en_attente(projet, etat, fid):
         etat["charge_rouge"] = mesure       # la raison des tâches retenues (voir `noter_les_attentes`)
         etat["attente_charge"] = {"texte": texte_d_attente_de_charge(mesure), "charge": mesure["charge"],
                                   "plafond": mesure["plafond"], "taches": [t["id"] for t in attente]}
-        places["locaux"] = 0        # un agent cloud ne compte pas dans la charge du poste
-        if not places["cloud"]:
+        places["locaux"] = 0        # un agent cloud (ou serveur) ne compte pas dans la charge du poste
+        if not places["cloud"] and not places["serveur"]:
             return []
     actions, solos, en_flux = [], [], []
     for t in attente:
@@ -3247,25 +3251,28 @@ def _demarrer_en_attente(projet, etat, fid):
                                         else [lot])]
     polyvalents = any(_polyvalent(a) for a in court["agents"])
     if polyvalents:      # n'importe quel agent libre peut prendre une tâche : on occupe d'abord toutes les places
-        lots = _repartir_sur_les_places(lots, places["locaux"] + places["cloud"])
+        lots = _repartir_sur_les_places(lots, places["locaux"] + places["cloud"] + places["serveur"])
     # les tâches qui mènent à une validation du Directeur d'abord (l'ordre d'avant, sinon)
     lots.sort(key=lambda lot: min(0 if _avant_une_validation(par_id[i], barrieres) else 1 for i in lot["ids"]))
     parties = set()
     for lot in lots:
-        if not places["locaux"] and not places["cloud"]:
+        if not places["locaux"] and not places["cloud"] and not places["serveur"]:
             break
         premiere = par_id[lot["ids"][0]]
         # le lieu que les étapes du lot imposent (`lieu` écrit), sinon leurs métiers (projet polyvalent : `Lieu :` d'un brief)
         reserves = {_lieu_reserve(projet, court, par_id[i], fac) for i in lot["ids"]}
         local_ok = places["locaux"] > 0 and "cloud" not in reserves
         cloud_ok = places["cloud"] > 0 and "local" not in reserves
+        # le serveur : ses propres places (`agents_serveur_max`), jamais une tâche qui exige le poste ou le cloud
+        serveur_ok = places["serveur"] > 0 and not reserves & {"local", "cloud"}
         if polyvalents and mn.rang(_modele_voulu(projet, court, premiere, lot["modele"])) >= mn.rang(mn.FABLE):
             accord = premiere.get("fable_accordee")
             if accord is None:       # la décision au bureau de direction, avant tout départ ; la tâche attend
                 _demander_fable(projet, court, premiere)
                 continue
-            if accord is True:       # le cloud ne fait jamais tourner Fable : une place locale
-                cloud_ok = False
+            if accord is True:       # le cloud ne fait jamais tourner Fable (ni le serveur, par prudence) : le poste
+                cloud_ok = serveur_ok = False
+        ok = {"local": local_ok, "cloud": cloud_ok, "serveur": serveur_ok}
         voulu = premiere.get("agent") if premiere.get("etape") == "cadrage" or premiere["id"] in etat["a_lancer"] \
             else None
         ancien = next((a for a in court["agents"] if a["cle"] == premiere.get("agent")), None)
@@ -3274,17 +3281,18 @@ def _demarrer_en_attente(projet, etat, fid):
         agent = None
         if voulu is not None:
             libre = next((a for a in court["agents"] if a["cle"] == voulu), {})
-            if libre.get("libre", False) and (cloud_ok if libre.get("lieu") == "cloud" else local_ok):
+            if libre.get("libre", False) and ok.get(libre.get("lieu"), local_ok):
                 agent = voulu
             elif not (libre and (_polyvalent(libre) or _hors_du_lieu(libre, reserves))
                       and premiere.get("etape") != "cadrage"):
                 continue       # un spécialiste à l'ancienne, ou l'agent attitré du cadrage : la tâche l'attend
         if agent is None:      # (un agent polyvalent occupé : n'importe quel autre agent libre la reprend)
-            agent = _choisir_agent(projet, etat, court, premiere, lot["modele"], local_ok=local_ok, cloud_ok=cloud_ok)
+            agent = _choisir_agent(projet, etat, court, premiere, lot["modele"], local_ok=local_ok, cloud_ok=cloud_ok,
+                                   serveur_ok=serveur_ok)
             if agent is None:
                 continue
         lieu = next((a["lieu"] for a in court["agents"] if a["cle"] == agent), "local")
-        places["cloud" if lieu == "cloud" else "locaux"] -= 1
+        places[{"cloud": "cloud", "serveur": "serveur"}.get(lieu, "locaux")] -= 1
         actions.append(_partir(projet, etat, court, agent, lot["ids"], lot["lot"], par_id, modele_voulu=lot["modele"]))
         parties.update(lot["ids"])
         court = _etat(projet)    # l'agent est pris : le prochain lot voit l'état à jour
@@ -3339,9 +3347,10 @@ def ramener_sur_le_poste(projet, etat):
 def _hors_du_lieu(agent, reserves):
     """Vrai si l'agent est là où la tâche ne peut pas tourner (cloud quand elle exige le poste, ou l'inverse) : la
     tâche ne l'attend pas, un autre agent du bon lieu la prend (une correction de livraison reprise par l'agent cloud
-    qui l'avait ratée faute de SDK, MyFridgeCleaner t52)."""
-    lieu = "cloud" if agent.get("lieu") == "cloud" else "local"
-    return ("local" in reserves and lieu == "cloud") or ("cloud" in reserves and lieu == "local")
+    qui l'avait ratée faute de SDK, MyFridgeCleaner t52). Un agent du serveur est hors du lieu d'une tâche qui exige le
+    poste ou le cloud."""
+    lieu = agent.get("lieu") if agent.get("lieu") in ("cloud", "serveur") else "local"
+    return ("local" in reserves and lieu != "local") or ("cloud" in reserves and lieu != "cloud")
 
 
 def _repartir_sur_les_places(lots, libres):
@@ -3420,19 +3429,58 @@ def demarrer_installation(projet, etat, tid):
     return [_partir(projet, etat, court, agent, [tid], None, {tid: t})]
 
 
-def _choisir_agent(projet, etat, court, tache, modele, local_ok=True, cloud_ok=None):
+def _ordre_des_lieux(fac, role):
+    """L'ordre des lieux où chercher l'agent d'une tâche du rôle `role` (`depart.ordre_du_metier`), ou `None` pour un
+    projet à l'ancienne (aucune place serveur, ni ordre ni ordre par métier réglés) : le choix d'avant, à l'identique.
+    Même règle que `outil._bascule_des_lieux`."""
+    serveur = fac.get("agents_serveur_max") or 0
+    regle = fac.get("ordre_lieux") not in (None, dep.ORDRE_PAR_DEFAUT) or bool(fac.get("ordre_lieux_par_metier"))
+    return dep.ordre_du_metier(fac, role) if serveur or regle else None
+
+
+def _choisir_agent(projet, etat, court, tache, modele, local_ok=True, cloud_ok=None, serveur_ok=None):
     """L'agent qui prend la tâche de modèle nécessaire `modele` : un agent local libre dont le plafond (le modèle de sa
     fiche) suffit, le plus petit d'abord (s'il reste une place locale) ; sinon, en renfort, un agent cloud libre au
     plafond suffisant (s'il reste une place cloud, voir `agents_cloud_max`, et si le projet est sur GitHub) ; sinon, si
     le cloud est impossible, l'agent local équivalent (un autre du même rôle, la tâche ramenée à son plafond), en le
-    disant au bureau. `cloud_ok` absent : les places cloud du projet sont recomptées."""
+    disant au bureau. `cloud_ok` absent : les places cloud du projet sont recomptées.
+
+    Un projet qui règle ses lieux (places serveur, `ordre_lieux`, `ordre_lieux_par_metier`, voir `_ordre_des_lieux`) et
+    un départ qui dit s'il reste une place serveur (`serveur_ok` booléen) : les lieux sont essayés dans l'ordre du projet
+    (ou du métier), chacun seulement s'il lui reste une place ; un lieu absent de l'ordre n'est jamais utilisé. Le lieu
+    imposé par l'étape ou le métier reste lu par `agent-libre` (une étape `lieu: local` refuse le serveur). `serveur_ok`
+    absent (une installation, qui s'installe sur le poste) : le choix d'avant."""
+    role = tache.get("role")
+    ordre = _ordre_des_lieux(_factory(projet), role) if serveur_ok is not None else None
+    if ordre is None:
+        return _agent_local(projet, tache, modele, local_ok) \
+            or _agent_cloud(projet, etat, court, tache, modele, local_ok, cloud_ok)
+    for lieu in ordre:
+        if lieu == "local":
+            cle = _agent_local(projet, tache, modele, local_ok)
+        elif lieu == "serveur":
+            cle = _agent_local(projet, tache, modele, serveur_ok, lieu="serveur")
+        else:      # le repli sur l'agent local équivalent, seulement si le local fait partie de l'ordre
+            cle = _agent_cloud(projet, etat, court, tache, modele, local_ok and "local" in ordre, cloud_ok)
+        if cle:
+            return cle
+    return None
+
+
+def _agent_local(projet, tache, modele, ok, lieu="local"):
+    """L'agent libre du poste (ou du serveur, `lieu`) pour la tâche, par `agent-libre` (le `lieu` de son étape et le
+    métier y sont lus), ou `None` (`ok` faux : plus de place à ce lieu)."""
+    if not ok:
+        return None
+    de_la_tache = {"tache": tache["id"]} if tache.get("id") else {}    # le `lieu` de son étape
+    return lancer(projet, "agent-libre", {"role": tache.get("role"), "lieu": lieu,
+                                          **({"modele": modele} if modele else {}), **de_la_tache})["agent"]
+
+
+def _agent_cloud(projet, etat, court, tache, modele, local_ok, cloud_ok):
+    """Le renfort cloud de `_choisir_agent` (et son repli sur l'agent local équivalent si le cloud est impossible)."""
     role = tache.get("role")
     de_la_tache = {"tache": tache["id"]} if tache.get("id") else {}    # le `lieu` de son étape
-    if local_ok:
-        local = lancer(projet, "agent-libre", {"role": role, "lieu": "local", **({"modele": modele} if modele else {}),
-                                               **de_la_tache})
-        if local["agent"]:
-            return local["agent"]
     clouds = {a["cle"] for a in court["agents"] if a["lieu"] == "cloud"}
     # Le modèle de la fiche est un plafond (local comme cloud) : l'agent prend une tâche de ce modèle ou d'un modèle
     # moindre, et la fait tourner sur le modèle de la tâche (voir `_partir`) ; jamais une tâche d'un modèle au-dessus.

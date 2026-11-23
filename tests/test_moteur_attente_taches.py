@@ -13,6 +13,10 @@ class Attentes(Base):
 
     def setUp(self):
         super().setUp()
+        from orchestrateur import outil
+        avant = outil.BUREAU_DEPORT      # aucun plafond d'abonnement : jamais le bureau réel
+        outil.BUREAU_DEPORT = str(self.dossier / "absent" / "bureau.json")
+        self.addCleanup(setattr, outil, "BUREAU_DEPORT", avant)
         self.agent("local-1", prenom="Léa")
         self.agent("cloud-1", prenom="Max", lieu="cloud", session=SESSION)
 
@@ -95,6 +99,19 @@ class Agent(Attentes):
         with mock.patch.object(outil, "serveur_hors_ligne", return_value=True):
             r = self.raison(self.raisons(), t)
         self.assertIn("le serveur est hors ligne", " ".join(r["detail"]))
+
+    def test_place_serveur_libre_mais_hors_ligne_pas_toutes_prises(self):
+        """Une place serveur libre n'est pas « toutes prises » : la raison dit que le serveur est hors ligne."""
+        from unittest import mock
+        from orchestrateur import outil
+        t = self.serveur()
+        self.ok("tache", entree={"id": next(x["id"] for x in self.ok("etat")["taches"] if x.get("agent") == "serveur-1"),
+                                 "active": False, "colonne": "fait"})
+        with mock.patch.object(outil, "serveur_hors_ligne", return_value=True):
+            r = self.raison(self.raisons(), t)
+        tout = " ".join(r["detail"])
+        self.assertNotIn("toutes prises", tout)
+        self.assertIn("le serveur est hors ligne", tout)
 
 
 class Prerequis(Attentes):

@@ -127,6 +127,105 @@ class Lieux(Base):
         self.assertEqual(self.parties(self.demarrer()), {t: "cloud-1"})
 
 
+class OrdreDesLieux(Base):
+    """Le choix de l'agent suit l'ordre des lieux du projet (`ordre_lieux`) et ses places serveur (`agents_serveur_max`),
+    comptées à part des places locales ; un lieu imposé (étape, métier) l'emporte. Essai réel FM_Stats : ordre [serveur,
+    local], deux fiches serveur libres, serveur en ligne, et le prototype partait quand même sur une fiche locale."""
+    locaux, cloud = 2, 0
+
+    def setUp(self):
+        super().setUp()
+        from orchestrateur import outil
+        avant = outil.BUREAU_DEPORT      # aucun plafond d'abonnement : jamais le bureau réel
+        outil.BUREAU_DEPORT = str(self.dossier / "absent" / "bureau.json")
+        self.addCleanup(setattr, outil, "BUREAU_DEPORT", avant)
+        self.en_ligne = mock.patch.object(outil, "serveur_hors_ligne", return_value=False)
+        self.en_ligne.start()
+        self.addCleanup(self.en_ligne.stop)
+        self.regler(serveur=2, ordre=["serveur", "local"])
+        self.agent("agent-1", prenom="Hugo")
+        self.agent("agent-2", prenom="Léa")
+        self.agent("agent-3", prenom="Lucas", lieu="serveur")
+        self.agent("agent-4", prenom="Emma", lieu="serveur")
+
+    def regler(self, serveur=None, ordre=None, locaux=None):
+        f = json.loads(self.factory.read_text(encoding="utf-8"))
+        if serveur is not None:
+            f["agents_serveur_max"] = serveur
+        if ordre is not None:
+            f["ordre_lieux"] = ordre
+        if locaux is not None:
+            f["agents_locaux_max"] = locaux
+        self.factory.write_text(json.dumps(f), encoding="utf-8")
+
+    def lieu(self, etape, lieu):
+        f = json.loads(self.factory.read_text(encoding="utf-8"))
+        f["flux"] = [dict(e, lieu=lieu) if e["id"] == etape else e for e in f["flux"]]
+        self.factory.write_text(json.dumps(f), encoding="utf-8")
+
+    def lieu_de(self, cle):
+        return {"agent-1": "local", "agent-2": "local", "agent-3": "serveur", "agent-4": "serveur"}[cle]
+
+    def test_tache_libre_part_au_serveur(self):
+        t = self.tache("flux:dev")
+        self.assertEqual(self.lieu_de(self.parties(self.demarrer())[t]), "serveur")
+
+    def test_prototype_part_au_serveur(self):
+        t = self.tache("prototype", colonne="dev")
+        self.assertEqual(self.lieu_de(self.parties(self.demarrer())[t]), "serveur")
+
+    def test_places_serveur_a_part_des_places_locales(self):
+        """Une place serveur prise ne retire aucune place locale : 1 serveur + 1 local, deux tâches, deux départs."""
+        self.regler(serveur=1, locaux=1)
+        a = self.tache("flux:dev", element="e1")
+        b = self.tache("flux:dev", element="e2", titre="Autre")
+        parties = self.parties(self.demarrer())
+        self.assertEqual(sorted(self.lieu_de(parties[x]) for x in (a, b)), ["local", "serveur"])
+
+    def test_places_serveur_pleines_repli_sur_le_local(self):
+        self.regler(serveur=1)
+        occupee = self.tache("flux:dev", element="e9", titre="Occupée")
+        self.ok("tache", entree={"id": occupee, "agent": "agent-3", "active": True})
+        t = self.tache("flux:dev")
+        self.assertEqual(self.lieu_de(self.parties(self.demarrer())[t]), "local")
+
+    def test_serveur_hors_ligne_repli_sur_le_local(self):
+        from orchestrateur import outil
+        t = self.tache("flux:dev")
+        with mock.patch.object(outil, "serveur_hors_ligne", return_value=True):
+            self.assertEqual(self.lieu_de(self.parties(self.demarrer())[t]), "local")
+
+    def test_etape_au_lieu_local_reste_locale(self):
+        self.lieu("livraison", "local")
+        t = self.tache("flux:livraison")
+        self.assertEqual(self.lieu_de(self.parties(self.demarrer())[t]), "local")
+
+    def test_metier_local_reste_local(self):
+        self.brief("qa", "Lieu : local\n\nBrief des testeurs, avec l'émulateur du poste.\n")
+        t = self.tache("flux:qa")
+        self.assertEqual(self.lieu_de(self.parties(self.demarrer())[t]), "local")
+
+    def test_reprise_d_un_agent_serveur_jamais_sur_une_etape_locale(self):
+        """Une tâche reprise revient de préférence à son agent : pas s'il est au serveur et que l'étape exige le poste."""
+        self.lieu("livraison", "local")
+        t = self.tache("flux:livraison")
+        self.commencee(t, "agent-3")
+        self.assertEqual(self.lieu_de(self.parties(self.demarrer())[t]), "local")
+
+    def test_ordre_local_d_abord(self):
+        self.regler(ordre=["local", "serveur"])
+        t = self.tache("flux:dev")
+        self.assertEqual(self.lieu_de(self.parties(self.demarrer())[t]), "local")
+
+    def test_lieu_retire_jamais_utilise(self):
+        """`ordre_lieux` sans `local` : la place locale libre n'est jamais prise ; serveur plein, la tâche attend."""
+        self.regler(serveur=1, ordre=["serveur"])
+        occupee = self.tache("flux:dev", element="e9", titre="Occupée")
+        self.ok("tache", entree={"id": occupee, "agent": "agent-3", "active": True})
+        t = self.tache("flux:dev")
+        self.assertNotIn(t, self.parties(self.demarrer()))
+
+
 class Amont(Base):
     """L'élément e1 attend la validation du Directeur (étape « val ») : sa recette (« qa », après la validation) ne part
     par aucun chemin, même avec des places libres ; la barre le dit."""

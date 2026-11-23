@@ -427,6 +427,50 @@ les laisser « instables » (relance seule de `tests_paralleles`) et le dire dan
 - [ ] **Step 4: Run to verify they pass** : `py -3.12 outils/tests_paralleles.py test_tests_consigne_serveur test_tests_consigne test_orch_depart test_orch_depart_deport` → ok.
 - [ ] **Step 5: Commit** : chemins ci-dessus ; « Tests au serveur : consigne des agents et lieu Serveur ».
 
+### Task 15b: Adoption par projet (la route n'est activée que pour un projet qui passe) — ajoutée sur demande du Directeur le 2026-11-23
+
+Le mécanisme est universel (tous les projets de la skill), mais un projet n'est pas forcément compatible : tests propres à
+Windows, pile hors Python/Node (Android/Gradle, Unity), fichiers exclus de l'instantané. Sans évaluation, la route échouerait
+pour de mauvaises raisons. Cette tâche évalue chaque projet **une fois** et ne propose l'activation que s'il passe.
+
+**Files:**
+- Create: `outils/tests_adoption.py` (stdlib seule ; Python 3.9 si importé par le lanceur : suivre le brief de T6),
+  `tests/test_tests_adoption.py` (≈ 0,5 s, route simulée, aucun accès serveur)
+- Modify: `orchestrateur/outil.py` (commande `evaluer-tests-serveur`), `orchestrateur/consignes.md` (décision
+  `tests_serveur_adoption`), `bureau/demandes.py` / `bureau/releve.py` (validation de la décision), `skills/installer/SKILL.md`
+  (l'étape d'installation), `bureau/web/ui/` (la carte de la décision, texte via `textContent` seulement), docs.
+
+**Interfaces:**
+- Consumes : `tests_serveur.executer(...)` (T6) en mode évaluation ; `deport_types.refus_route` (T7) ; `tests_mesures`
+  (T1 économes : durée et nombre de tests de la campagne d'évaluation).
+- Produces :
+  - `detecter_pile(racine) -> str` : `"python"` (tests/, pyproject, requirements), `"node"` (package.json avec script de
+    test), `"non_supporte"` (build.gradle*, ProjectSettings/, pile inconnue), sans lire de secret ni suivre de lien.
+  - `evaluer(racine, commande, route, delai_s=1200) -> dict` : lance UNE campagne par la route **sans repli sur le poste**
+    ni nouvelle tentative ; rend `{"statut": "passe"|"echoue"|"non_supporte"|"injoignable"|"trop_long", "duree_s", "nb_tests",
+    "echecs": [≤ 20 noms], "raison": str}` ; `non_supporte` sans rien envoyer ; `injoignable` si R1–R4 (T6) ; `trop_long`
+    au-delà de `delai_s` (conteneur arrêté).
+  - Réglages du projet : `reglages.json` > `tests.adoption = {"date", "statut", "duree_s", "nb_tests"}` (écrit par le
+    bureau/l'outil, jamais par l'agent : même garde que le budget, copie d'affichage ; l'accord reste `deport.lieux["tests"]`).
+  - Décision de Direction `tests_serveur_adoption` : statut `passe` → proposer « Activer les tests sur le serveur » (réponse
+    `activer` / `plus_tard`) ; `echoue` → montrer les 20 premiers échecs et proposer `marquer` (la tâche « marquer les tests
+    propres à Windows » est PROPOSÉE, jamais créée seule : règle des tests économes), `garder_poste`, `plus_tard` ;
+    `non_supporte` / `injoignable` → information seule + `garder_poste`. **Jamais d'activation automatique** : l'accord du
+    Directeur reste obligatoire (R10).
+  - `outil.py evaluer-tests-serveur [--dossier D]` : lance `evaluer`, pose la décision, écrit `tests.adoption`.
+  - L'étape `installer` de la skill appelle `evaluer-tests-serveur` après la mesure de départ des tests économes ; un projet
+    déjà installé est évalué à sa première campagne de plus de 60 s (migration, comme la mesure) ou à la demande du bureau
+    (bouton « Évaluer les tests sur le serveur » sur la carte du projet).
+- [ ] **Step 1: Write the failing tests** : `test_pile_python_node_gradle_unity` ; `test_non_supporte_n_envoie_rien` ;
+  `test_passe_rend_les_mesures` ; `test_echoue_rend_20_noms_au_plus` ; `test_injoignable_ne_replie_pas_et_ne_reessaie_pas` ;
+  `test_trop_long_arrete_le_conteneur` ; `test_decision_passe_propose_activer` ; `test_decision_ne_s_active_jamais_seule` ;
+  `test_adoption_ecrite_par_le_bureau_pas_par_l_agent` ; `test_reevaluation_apres_marquage`.
+- [ ] **Step 2: Run to verify they fail** : `py -3.12 outils/tests_paralleles.py test_tests_adoption` → ÉCHEC.
+- [ ] **Step 3: Implement**.
+- [ ] **Step 4: Run to verify they pass** : `py -3.12 outils/tests_paralleles.py test_tests_adoption test_demandes test_releve` → ok.
+- [ ] **Step 5: Commit** : chemins ci-dessus ; « Tests au serveur : adoption par projet ». Code sensible : relecture (elle décide quels
+  projets envoient leur code au serveur).
+
 ### Task 16: Documentation, CLAUDE.md et suite complète (contrôleur)
 
 **Files:**

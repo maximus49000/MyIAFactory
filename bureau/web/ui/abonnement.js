@@ -1,18 +1,17 @@
-// L'abonnement Claude : les deux jauges de la barre du haut (fenêtre de 5 h, semaine) et la part estimée d'un coût.
-// Les jauges sont le détail « utilisé » de chaque fenêtre avec sa remise à zéro ; le rond (conso.js) est la synthèse.
-// Les deux lisent LA MÊME lecture (mesure.js, servie par /api/conso : compte, sinon dernier appel du moteur) et les mêmes
+// L'abonnement Claude : la vue d'une fenêtre (5 h, semaine : `vueJauge`), la connexion Claude Code et la part estimée
+// d'un coût. La barre ne montre que le rond (conso.js) ; ses fenêtres 5 h / semaine sont dans le panneau du rond.
+// Tout lit LA MÊME lecture (mesure.js, servie par /api/conso : compte, sinon dernier appel du moteur) et les mêmes
 // seuils. Les % sont ceux du COMPTE, donc ils comptent aussi les autres sessions Claude de l'utilisateur. Une valeur
 // absente n'est jamais remplacée par un chiffre inventé. Tout texte passe par textContent.
 // La part estimée d'un coût vient de l'état `abonnement` de /api/etat (points par euro).
 
 import {INFOBULLE_CO2, lienMethode} from "./empreinte.js";
-import {tonReste, ageMesure, agePhrase, formaterPart, consoCourante} from "./mesure.js";
+import {tonReste, ageMesure, agePhrase, formaterPart} from "./mesure.js";
 
 export {ageMesure, formaterPart};
 
 export const INFOBULLE_PART = "estimation : les % du compte comptent aussi vos autres sessions Claude";
 export const TEXTE_ETALONNAGE = "part estimée : en cours d'étalonnage";
-const FENETRES = [["five_hour", "5 h"], ["seven_day", "Semaine"]];
 
 let courant;   // l'état `abonnement` le plus récent (undefined : jamais reçu ; null : couche API)
 
@@ -91,7 +90,7 @@ export function marquerPart(element) {
   return element;
 }
 
-// --- Les jauges de la barre.
+// --- Petites aides.
 
 function el(tag, classe, texte) {
   const e = document.createElement(tag);
@@ -157,55 +156,4 @@ export function creerBoutonConnexion(fetchFn = fetch) {
   });
   bloc.append(bouton, retour);
   return bloc;
-}
-
-export function creerJauges() {
-  const racine = el("div", "jauges");
-  racine.setAttribute("aria-label", "Abonnement Claude");
-  racine.hidden = true;
-  const vide = el("span", "jauges-vide");
-  const texteVide = el("span", "jauges-vide-texte", "abonnement : pas de mesure");
-  const connexion = creerBoutonConnexion();
-  connexion.hidden = true;
-  vide.append(texteVide, connexion);
-  const lignes = FENETRES.map(([cle, nom]) => {
-    const jauge = el("div", "jauge");
-    const tete = el("span", "jauge-tete");
-    const etiquette = el("span", "jauge-nom", nom);
-    const piste = el("span", "jauge-piste");
-    const plein = el("span", "jauge-plein");
-    piste.append(plein);
-    const valeur = el("span", "jauge-valeur", "—");
-    tete.append(etiquette, piste, valeur);
-    const detail = el("span", "jauge-detail", "");
-    jauge.append(tete, detail);
-    return {cle, nom, jauge, plein, valeur, detail};
-  });
-  racine.append(vide, ...lignes.map((l) => l.jauge));
-
-  // Les jauges et le rond lisent la même lecture (`consoCourante`) ; cachées quand la couche est l'API (`ab` null).
-  function maj(ab = courant, maintenant = Date.now() / 1000, c = consoCourante()) {
-    racine.hidden = !ab || !c;   // rien d'affiché quand la couche est l'API, ni avant la première lecture du rond
-    if (racine.hidden) return;
-    const mesure = lignes.some((l) => vueJauge(l.cle, c, maintenant));
-    const autre = c?.compte_different === true;
-    vide.hidden = !!mesure && !autre;
-    texteVide.textContent = mesure ? "claude du poste : autre compte que l'application" : texteSansMesure(c);
-    texteVide.title = autre ? TEXTE_AUTRE_COMPTE : "";
-    connexion.hidden = !connexionAProposer(c) || (!!mesure && !autre);
-    racine.title = mesure ? "Part de l'abonnement Claude utilisée (tout le compte, vos autres sessions comprises)"
-      : "Aucune mesure de l'abonnement pour l'instant";
-    for (const l of lignes) {
-      const v = vueJauge(l.cle, c, maintenant);
-      l.jauge.hidden = !mesure || !v;
-      if (!v) continue;
-      l.jauge.dataset.ton = v.ton;
-      l.plein.style.width = (v.ton === "inconnu" ? 0 : Math.max(0, Math.min(100, v.pourcent))) + "%";
-      l.valeur.textContent = v.texte;
-      l.detail.textContent = v.age ? `${v.remise} · ${v.age}` : v.remise;
-      l.jauge.title = `${l.nom} : ${v.texte} · ${v.remise} (heure locale)` + (v.age ? ` · ${v.age}` : "");
-    }
-  }
-  racine.maj = maj;
-  return racine;
 }

@@ -213,6 +213,77 @@ test("les_actions_repliees_sont_dans_le_groupe_Actions_du_menu", () => {
   assert.match(barre, /creerHorloge\(/);   // l'horloge de barre-parametres.js (formaterHeure, toutes les 15 s)
 });
 
+test("la_retenue_repliee_ouvre_le_menu_en_lecture_seule", () => {
+  let lignes = ["Pause : installation de Godot Engine"];
+  const m = menuSimple({retenue: () => lignes});
+  roueDe(m).click();
+  const bloc = m.racine.tous((n) => n.getAttribute("role") === "group" && n.getAttribute("aria-label") === "Retenu")[0];
+  assert.ok(bloc, "le bloc « Retenu »");
+  assert.equal(listeDe(m).enfants[0], bloc, "en tête du menu");
+  const ligne = bloc.enfants[0];
+  assert.equal(ligne.textContent, "Retenu : Pause : installation de Godot Engine");
+  assert.equal(ligne.getAttribute("aria-disabled"), "true");
+  assert.notEqual(document.activeElement, ligne, "une information, pas une entrée où va le focus");
+  m.fermer();
+  lignes = [];   // la barre a de nouveau la place : plus rien dans le menu
+  roueDe(m).click();
+  assert.equal(m.racine.tous((n) => n.getAttribute("aria-label") === "Retenu").length, 0);
+  // la barre la passe au menu quand elle est cachée (téléphone ou barre étroite)
+  assert.match(barre, /retenue: \(\) => \(!retenue\.hidden && \(telephone\(\) \|\| entete\.classList\.contains\(CLASSE_ETROITE\)\)/);
+});
+
+test("le_rond_de_consommation_suit_l_heure_et_n_est_jamais_cache", () => {
+  // Le bloc de consommation est le frère juste après le séparateur, et ne porte que le rond (creerConso).
+  assert.match(barre, /entete\.append\(horloge\.racine, separateur, blocAbonnement, titre,/);
+  assert.match(barre, /blocAbonnement\.append\(creerConso\(\)\);/);
+  assert.doesNotMatch(barre, /jauges/);
+  // Aucune règle ne cache le bloc, le rond ou son bouton, à aucune largeur (téléphone et barre étroite compris).
+  const regles = [...css.matchAll(/([^{}]+)\{([^}]*)\}/g)].map(([, sel, corps]) => ({sel: sel.trim(), corps}));
+  for (const r of regles) {
+    if (!/display:\s*none|visibility:\s*hidden/.test(r.corps)) continue;
+    for (const s of r.sel.split(",")) {
+      const dernier = s.trim().split(/\s+/).pop();
+      assert.ok(![".bloc-abonnement", ".conso", ".conso-rond", ".conso-chiffre"].includes(dernier), `« ${s.trim()} » cache le rond`);
+    }
+  }
+  assert.doesNotMatch(css, /\.mobile[^{]*\.bloc-abonnement[^{]*\{/);
+  assert.doesNotMatch(css, /barre-etroite[^{]*\.bloc-abonnement[^{]*\{/);
+});
+
+test("en_mode_telephone_la_barre_garde_le_rond_et_replie_les_actions", async () => {
+  // La vraie barre, montée dans le faux DOM : le rond reste un enfant de la barre, les actions passent dans le menu.
+  globalThis.window = {addEventListener() {}, matchMedia: () => ({matches: false}), confirm: () => true, dispatchEvent() {}};
+  globalThis.fetch = () => new Promise(() => {});        // aucune réponse : la barre garde son état de départ
+  globalThis.setInterval = () => 0;
+  globalThis.ResizeObserver = class { constructor(f) { this.f = f; } observe() {} };
+  globalThis.location = {reload() {}};
+  document.documentElement = new Noeud("html");
+  document.documentElement.classList.add("mobile");
+  document.documentElement.style.setProperty = () => {};
+  document.body = new Noeud("body");
+  document.hidden = false;
+  Noeud.prototype.after = function (...e) { this.apres = e; };
+  Noeud.prototype.querySelector = function (s) { return this.querySelectorAll(s)[0] || null; };
+  Noeud.prototype.querySelectorAll = function (s) {
+    const tags = s.split(",").map((x) => x.trim().toUpperCase());
+    return this.tous((n) => n !== this && tags.includes(n.tagName));
+  };
+  Noeud.prototype.closest = function () { return null; };
+  const {creerBarre} = await import("../ui/barre.js");
+  const entete = new Noeud("header");
+  Object.defineProperty(entete, "scrollWidth", {get: () => 300});
+  entete.clientWidth = 375;
+  const b = creerBarre(entete, new Noeud("div"));
+  const enfants = entete.enfants;
+  const separateur = enfants.findIndex((n) => n.classList.contains("barre-separateur"));
+  assert.ok(enfants[separateur + 1].classList.contains("bloc-abonnement"), "le rond juste après l'heure");
+  assert.ok(enfants[separateur + 1].tous((n) => n.classList.contains("conso-rond")).length === 1);
+  assert.equal(entete.tous((n) => n.classList.contains("jauges")).length, 0, "pas de jauges dans la barre");
+  b.majEtat({projet: "Essai", version: 4, agir: true, factory: {etat: "en marche"}});
+  assert.ok(!enfants[separateur + 1].classList.contains("replie"));
+  assert.ok(b.boutonNouvelle.classList.contains("replie"), "les actions passent dans le menu sur téléphone");
+});
+
 test("panneaux_branche_le_menu_de_la_roue", () => {
   assert.match(panneaux, /barre\.brancherMenu\(\{/);
   assert.match(panneaux, /ouvrirReglages: \(\) => ouvrirPanneau\("reglages", null\)/);

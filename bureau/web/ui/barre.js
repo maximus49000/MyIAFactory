@@ -9,11 +9,10 @@ import {urlProjet, livrables, projetCourant, memoriser, optionsProjets, ENTREE_N
 import {brancherAssociation} from "./associer.js";
 import {creerBandeauOrchestrateur} from "./orchestrateur.js";
 import {creerConso} from "./conso.js";
-import {creerJauges, definirAbonnement} from "./abonnement.js";
-import {surConso} from "./mesure.js";
+import {definirAbonnement} from "./abonnement.js";
 import {accuseDe, creerAccuses, majEtatAccuses, noterAccuse} from "./accuse.js";
 import {brancherOptimiser} from "./optimiser.js";
-import {creerHorloge, creerMenuParametres, raccourcir, resserrer} from "./barre-parametres.js";
+import {creerHorloge, creerMenuParametres, raccourcir, resserrer, CLASSE_ETROITE} from "./barre-parametres.js";
 
 const INTERVALLE_CHARGE = 5000;
 const DUREE_MESSAGE = 4000;
@@ -89,12 +88,10 @@ export function creerBarre(entete, bandeau) {
   const boutonTelephone = el("button", "bouton-barre", "Associer un téléphone");
   boutonTelephone.type = "button";
   boutonTelephone.hidden = true;   // montré seulement sur l'ordinateur, quand le bureau est ouvert au téléphone
-  // Le rond (synthèse) et les deux jauges (détail 5 h / semaine) forment un seul bloc, qui lit une seule lecture ; sur
-  // un écran étroit les jauges se replient dans le panneau du rond (style.css).
-  const jauges = creerJauges();   // cachées si la couche est l'API
+  // La consommation Claude : le rond seul (ce qui reste, en %), à toutes les largeurs ; les fenêtres 5 h / semaine sont
+  // dans le panneau qu'il ouvre (conso.js), qui se relit avec lui.
   const blocAbonnement = el("div", "bloc-abonnement");
-  blocAbonnement.append(creerConso(), jauges);
-  surConso(() => jauges.maj());
+  blocAbonnement.append(creerConso());
   // Libellés courts quand la place manque (le libellé entier reste l'infobulle et le nom accessible).
   raccourcir(boutonNouvelle, "+ Nouv.");
   raccourcir(boutonCorrection, "+ Corr.");
@@ -103,25 +100,29 @@ export function creerBarre(entete, bandeau) {
   raccourcir(boutonListe, "Tâches");
   raccourcir(boutonOptimiser, "Optim.");
 
-  // Maquette validée (2026-11-23) : l'heure à gauche, puis le titre et le projet, le voyant, la charge, les boutons ; la
-  // roue crantée seule à droite. « Associer un téléphone » est une entrée de son menu (le bouton reste hors de la barre).
+  // Maquette validée (2026-11-23) : l'heure à gauche, la consommation Claude (le rond seul, jamais caché), puis
+  // le titre et le projet, le voyant, la retenue, la charge, les boutons ; la roue crantée seule à droite. « Associer un
+  // téléphone » est une entrée de son menu (le bouton reste hors de la barre).
   const horloge = creerHorloge();
   const separateur = el("span", "barre-separateur");
   separateur.setAttribute("aria-hidden", "true");
   const liens = {ouvrirReglages: null, ouvrirServeurs: null};   // donnés par les panneaux (`brancherMenu`), créés après
   let replies = [];
+  const telephone = () => document.documentElement.classList.contains("mobile");
   const menu = creerMenuParametres({
     get ouvrirReglages() { return liens.ouvrirReglages; },
     get ouvrirServeurs() { return liens.ouvrirServeurs; },
     get associerTelephone() { return boutonTelephone.hidden ? null : () => boutonTelephone.click(); },
     actions: () => replies.flatMap(entreesDe),
+    // La retenue n'a plus sa place dans la barre (téléphone, barre étroite) : elle ouvre le menu, en lecture seule.
+    retenue: () => (!retenue.hidden && (telephone() || entete.classList.contains(CLASSE_ETROITE))
+      ? [...retenue.children].map((s) => s.textContent) : []),
   });
-  entete.append(horloge.racine, separateur, titre, leVoyant, retenue, charge, blocAbonnement, zoneActions, boutonNouvelle, boutonCorrection,
+  entete.append(horloge.racine, separateur, blocAbonnement, titre, leVoyant, retenue, charge, zoneActions, boutonNouvelle, boutonCorrection,
                 boutonQuestion, boutonFonctions, zoneLivrable, boutonListe, menu.racine);
 
-  // Une seule ligne à toutes les largeurs : ce qui ne tient pas passe dans le groupe « Actions » du menu, de droite à
-  // gauche (barre-parametres.js). Sur téléphone : l'heure, le projet, le voyant et la roue seulement.
-  const telephone = () => document.documentElement.classList.contains("mobile");
+  // Une seule ligne à toutes les largeurs : ce qui ne tient pas passe dans le menu de la roue, de droite à gauche
+  // (barre-parametres.js). Sur téléphone : l'heure, le rond de consommation, le projet, le voyant et la roue.
   const pliables = () => [...zoneActions.children, boutonNouvelle, boutonCorrection, boutonQuestion, boutonFonctions, zoneLivrable,
                           boutonListe, ...(telephone() ? [boutonOptimiser] : [])];
   // Les entrées du menu pour un élément replié : lui-même, ou les liens et boutons du « Dernier livrable ».
@@ -339,15 +340,13 @@ export function creerBarre(entete, bandeau) {
   // Le voyant dit « sans activité depuis… » : on le remet à jour même sans nouvel état.
   setInterval(afficherVoyant, 30000);
   setInterval(() => majEtatAccuses(null), 15000);   // « le moteur n'a pas encore traité » arrive avec l'heure
-  setInterval(() => jauges.maj(), 30000);   // l'âge de la mesure avance même sans nouvel état
   afficherVoyant();
 
   return {
     // Un état utilisable : voyant et nom du projet.
     majEtat(etat) {
       majEtatAccuses(etat);
-      definirAbonnement(etat.abonnement);
-      jauges.maj();
+      definirAbonnement(etat.abonnement);   // la part estimée des coûts (panneaux)
       orchestrateur.maj(etat);
       factory = etat.factory || null;
       locauxMax = etat.agents_locaux_max ?? null;

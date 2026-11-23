@@ -173,10 +173,15 @@ body.panneau-ouvert #scene { right: var(--largeur-panneau); }
 #barre.barre-icones .libelle-court { display: inline; }
 #barre.barre-compacte .charge-etiquette, #barre.barre-compacte .charge-piste, #barre.barre-compacte .charge-max { display: none; }
 #barre.barre-compacte .charge-valeur { min-width: 0; }
-/* (4) tout est replié et la place manque encore : le nom du bureau (si le projet est connu), la retenue et les jauges. */
+/* (4) tout est replié et la place manque encore : le nom du bureau (si le projet est connu) et la retenue (elle passe en
+   tête du menu de la roue) ; (5) le projet. Le rond de consommation n'est jamais caché. */
 #barre.barre-etroite .barre-titre:has(.barre-projet:not(:empty)) .barre-logo, #barre.barre-etroite .barre-retenue,
-#barre.barre-etroite .bloc-abonnement .jauges { display: none; }
+#barre.barre-minimale .barre-titre { display: none; }
 #barre.barre-etroite .barre-projet::before { content: none; }
+.menu-parametres-retenue { margin-bottom: 4px; padding-bottom: 4px; border-bottom: 1px solid #efe8da; }
+.menu-parametres-retenu { padding: 6px 10px; border-radius: 6px; background: #fbf0d4; color: #7a5a0c; font-size: 13px; font-weight: 600;
+  overflow-wrap: anywhere; cursor: default; }
+.menu-parametres-retenu + .menu-parametres-retenu { margin-top: 4px; }
 /* Filet de sécurité : la roue n'est jamais coupée par le bord droit. */
 .barre-parametres { position: sticky; right: 0; padding-left: 6px; background: var(--papier); }
 .barre-titre { flex: none; display: flex; align-items: baseline; gap: 10px; }
@@ -248,26 +253,12 @@ body.panneau-ouvert #scene { right: var(--largeur-panneau); }
 .charge-valeur { min-width: 110px; white-space: nowrap; }
 .charge.depasse .charge-valeur { color: #b6401c; }
 
-/* --- Les jauges de l'abonnement Claude (5 h, semaine) : orange à 80 %, rouge à 95 %. --- */
-.jauges { flex: none; display: flex; align-items: center; gap: 12px; font-size: 12px; cursor: default; }
-.jauges[hidden], .jauges-vide[hidden], .jauge[hidden] { display: none; }
-.jauges-vide { font-weight: 700; color: #6d6980; white-space: nowrap; display: inline-flex; align-items: center; gap: 8px; }
+/* --- La connexion Claude Code (panneau du rond). --- */
 .connexion-claude { display: inline-flex; align-items: center; gap: 8px; }
 .connexion-claude[hidden], .connexion-claude-retour[hidden] { display: none; }
 .connexion-claude-retour { font-weight: 400; white-space: normal; max-width: 260px; }
 .connexion-claude-retour[data-ok="false"] { color: #b6401c; }
 .conso-panneau .connexion-claude { margin-top: 8px; flex-wrap: wrap; }
-.jauge { --ton: #3f9d5a; display: flex; flex-direction: column; gap: 1px; min-width: 0; }
-.jauge[data-ton="attention"] { --ton: #d9962b; }
-.jauge[data-ton="alerte"] { --ton: #d65a31; }
-.jauge[data-ton="inconnu"] { --ton: #8a8396; }
-.jauge-tete { display: flex; align-items: center; gap: 6px; font-weight: 700; }
-.jauge-nom { white-space: nowrap; }
-.jauge-piste { width: 54px; height: 8px; border-radius: 999px; background: #e6dfd2; overflow: hidden; flex: none; }
-.jauge-plein { display: block; height: 100%; background: var(--ton); transition: width 0.6s ease, background 0.3s; }
-.jauge-valeur { min-width: 34px; text-align: right; color: var(--ton); white-space: nowrap; }
-.jauge[data-ton="attention"] .jauge-valeur, .jauge[data-ton="alerte"] .jauge-valeur { filter: brightness(0.8); }
-.jauge-detail { font-size: 11px; color: #6d6980; white-space: nowrap; }
 /* La part estimée d'un coût : approximative, donc discrète. */
 .cout-part { font-size: 12px; color: #6d6980; cursor: help; }
 /* L'empreinte carbone estimée (EcoLogits) : le lien vers sa méthode reste discret. */
@@ -586,13 +577,8 @@ body.panneau-ouvert #scene { right: var(--largeur-panneau); }
 .conso-sous-titre { font-size: 12px; font-weight: 700; color: #6b6573; margin: 2px 0 6px; }
 /* Une mesure reprise du dernier appel du moteur (lecture directe indisponible) : l'arc est atténué. */
 .conso[data-source="moteur"] .conso-arc { opacity: .6; }
-/* Le rond et les jauges font un seul bloc ; les fenêtres 5 h / semaine ne sont dans le panneau que sans la place des jauges. */
-.bloc-abonnement { flex: none; display: flex; align-items: center; gap: 10px; min-width: 0; }
-.conso-principales { display: none; }
-@media (max-width: 700px) {
-  .bloc-abonnement .jauges { display: none; }
-  .conso-principales { display: block; }
-}
+/* Dans la barre, le rond seul (jamais caché) ; les fenêtres 5 h / semaine sont dans son panneau, à toutes les largeurs. */
+.bloc-abonnement { flex: none; display: flex; align-items: center; }
 
 /* --- Fonctionnalité et discussion. */
 .parcours { display: flex; flex-wrap: wrap; gap: 4px; margin: 0 0 10px; padding: 0; list-style: none; font-size: 12.5px; }
@@ -1055,10 +1041,10 @@ div.cout-etape > .cout-etape-ligne { width: 100%; }
 /* --- Téléphone et tablette (classe « mobile » posée par main.js : moins de 768 px, ou pointeur grossier) --- */
 #scene { touch-action: none; }   /* glisser et pincer sont gérés par la page (ui/gestes.js) */
 
-/* Téléphone : l'heure, le projet, le voyant et la roue seulement ; le reste est dans le menu de la roue. */
+/* Téléphone : l'heure, le rond de consommation, le projet, le voyant et la roue ; le reste est dans le menu de la roue. */
 .mobile #barre { --marge-barre: 10px; gap: 8px; }
-.mobile #barre .barre-date, .mobile #barre .barre-logo, .mobile #barre .charge, .mobile #barre .bloc-abonnement,
-.mobile #barre .barre-retenue, .mobile #barre .barre-actions, .mobile #barre .barre-livrable { display: none; }
+.mobile #barre .barre-date, .mobile #barre .barre-logo, .mobile #barre .charge, .mobile #barre .barre-retenue,
+.mobile #barre .barre-actions, .mobile #barre .barre-livrable { display: none; }
 .mobile .barre-projet:not(:empty)::before { content: none; }
 .mobile #barre > .barre-titre, .mobile #barre > .voyant { flex: 0 1 auto; min-width: 0; }
 .mobile .barre-projet:not([hidden]) { display: block; max-width: none; }

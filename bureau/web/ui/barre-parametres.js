@@ -12,6 +12,7 @@ export const CLASSE_ICONES = "barre-icones";      // (1) libellés courts
 export const CLASSE_COMPACTE = "barre-compacte";  // (2) la charge réduite à son pourcentage
 export const CLASSE_REPLIE = "replie";            // (3) un élément passé dans le menu
 export const CLASSE_ETROITE = "barre-etroite";    // (4) tout est replié et la barre déborde encore
+export const CLASSE_MINIMALE = "barre-minimale";  // (5) et encore : le nom du projet s'efface (jamais le rond de consommation)
 
 function el(tag, classe, texte) {
   const e = document.createElement(tag);
@@ -57,6 +58,8 @@ export function raccourcir(bouton, court) {
   c.setAttribute("aria-hidden", "true");
   bouton.replaceChildren(el("span", "libelle-long", long), c);
 }
+
+// (Le menu accepte aussi `retenue()` : les lignes de ce que le moteur retient, montrées en tête quand la barre les a cachées.)
 
 // L'icône de la roue : un SVG en ligne, décoratif (le bouton porte son nom).
 function icone() {
@@ -136,6 +139,20 @@ export function creerMenuParametres(options) {
   function remplir() {
     items = [];
     const enfants = [];
+    // Ce que le moteur retient (pause, attente de charge…), quand la barre n'a plus la place de le dire : en tête, lecture seule.
+    const retenues = (typeof options.retenue === "function" ? options.retenue() : null) || [];
+    if (retenues.length) {
+      const bloc = el("div", "menu-parametres-retenue");
+      bloc.setAttribute("role", "group");
+      bloc.setAttribute("aria-label", "Retenu");
+      for (const texte of retenues) {
+        const ligne = el("div", "menu-parametres-retenu", `Retenu : ${texte}`);
+        ligne.setAttribute("role", "menuitem");
+        ligne.setAttribute("aria-disabled", "true");   // une information, pas un geste
+        bloc.append(ligne);
+      }
+      enfants.push(bloc);
+    }
     for (const [cle, libelle, legende] of fixes) {
       const f = options[cle];
       const b = entree(libelle, legende, () => { const g = options[cle]; if (typeof g === "function") g(); });
@@ -211,27 +228,29 @@ export function creerMenuParametres(options) {
 }
 
 // Garde la barre sur une ligne. Dans cet ordre, tant qu'elle déborde : (1) libellés courts, (2) charge réduite à son
-// pourcentage, (3) les éléments `pliables` passent dans le menu, un à un, en partant de la droite, (4) le nom du bureau
-// (le projet reste), la retenue et les jauges d'abonnement s'effacent (la roue reste visible). Sur téléphone, tous les
-// pliables visibles passent dans le menu. Rend les éléments repliés, dans l'ordre de la barre.
+// pourcentage, (3) les éléments `pliables` passent dans le menu, un à un, en partant de la droite, (4) les jauges
+// d'abonnement et le nom du bureau s'effacent, la retenue passe en tête du menu, (5) le nom du projet s'efface. Le rond de
+// consommation et la roue restent toujours. Sur téléphone, tous les pliables visibles passent d'emblée dans le menu.
+// Rend les éléments repliés, dans l'ordre de la barre.
 export function resserrer(entete, pliables, {telephone = false} = {}) {
   const deborde = () => entete.scrollWidth > entete.clientWidth + 1;
-  entete.classList.remove(CLASSE_ICONES, CLASSE_COMPACTE, CLASSE_ETROITE);
+  entete.classList.remove(CLASSE_ICONES, CLASSE_COMPACTE, CLASSE_ETROITE, CLASSE_MINIMALE);
   for (const p of pliables) p.classList.remove(CLASSE_REPLIE);
   const visibles = pliables.filter((p) => !p.hidden);
-  if (telephone) {
-    for (const p of visibles) p.classList.add(CLASSE_REPLIE);
-    return visibles;
-  }
-  if (!deborde()) return [];
-  entete.classList.add(CLASSE_ICONES);
-  if (!deborde()) return [];
-  entete.classList.add(CLASSE_COMPACTE);
   const replies = [];
-  for (let i = visibles.length - 1; i >= 0 && deborde(); i--) {
-    visibles[i].classList.add(CLASSE_REPLIE);
-    replies.unshift(visibles[i]);
+  if (telephone) {
+    for (const p of visibles) { p.classList.add(CLASSE_REPLIE); replies.push(p); }
+  } else {
+    if (!deborde()) return [];
+    entete.classList.add(CLASSE_ICONES);
+    if (!deborde()) return [];
+    entete.classList.add(CLASSE_COMPACTE);
+    for (let i = visibles.length - 1; i >= 0 && deborde(); i--) {
+      visibles[i].classList.add(CLASSE_REPLIE);
+      replies.unshift(visibles[i]);
+    }
   }
-  if (deborde()) entete.classList.add(CLASSE_ETROITE);   // (4) toujours trop large : le nom du bureau et la retenue s'effacent
+  if (deborde()) entete.classList.add(CLASSE_ETROITE);
+  if (deborde()) entete.classList.add(CLASSE_MINIMALE);
   return replies;
 }

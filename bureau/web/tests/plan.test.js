@@ -142,3 +142,9 @@ test("colonnes ajoutées (une correction et son workflow) : le tableau se resser
   assert.ok(p.postit(3, 0).u < dernierAvant);                    // les colonnes se sont resserrées
   assert.ok(Math.abs(p.kanban.devantColonne(6).x - (p.kanban.x - largeur / 2 + p.postit(6, 0).u)) < 1e-9);
 });
+
+test("serviceParDefaut : « développement » s'il existe, sinon le premier service", () => {
+  const cols = [{id: "a", nom: "A"}];
+  assert.equal(creerPlan([{id: "qa", nom: "QA"}, {id: "dev", nom: "Développement"}], cols).serviceParDefaut(), "dev");
+  assert.equal(creerPlan([{id: "qa", nom: "QA"}, {id: "ops", nom: "Ops"}], cols).serviceParDefaut(), "qa");
+});

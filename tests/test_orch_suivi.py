@@ -655,6 +655,21 @@ class TestSuivi(AvecProjet):
                                                                "etapes": ["a"]}})
         self.ok("message", entree={"fonctionnalite": f, "auteur": "metier-1", "texte": "x", "images": ["pieces/m.jpg"]})
 
+    def test_maquette_html_acceptee_pour_le_cahier_seulement(self):
+        """`cahier.maquette` accepte une page .html autonome ; les autres champs d'images restent PNG/JPEG."""
+        f = self.nouvelle()
+        self.ok("fonctionnalite", entree={"id": f, "cahier": {"maquette": ["pieces/m.html", "pieces/n.HTML", "pieces/o.png"],
+                                                               "etapes": ["a"]}})
+        for commande, entree in (
+                ("message", {"fonctionnalite": f, "auteur": "metier-1", "texte": "x", "images": ["pieces/m.html"]}),
+                ("tache", {"titre": "T", "captures": ["captures/c.html"]}),
+                ("fonctionnalite", {"id": f, "cahier": {"maquette": ["pieces/m.svg", "pieces/n.webp"], "etapes": ["a"]}})):
+            code, sortie = self.outil(commande, entree=entree)
+            self.assertEqual(code, 1, (commande, sortie))
+            self.assertIn("PNG", sortie["erreur"])
+        code, sortie = self.outil("fonctionnalite", entree={"id": f, "cahier": {"maquette": ["pieces/m.svg"], "etapes": ["a"]}})
+        self.assertIn("HTML", sortie["erreur"])
+
     def test_verrou_en_cours_d_effacement(self):
         # Sous Windows, créer le verrou pendant qu'un autre processus l'efface lève PermissionError : c'est un
         # verrou occupé, on réessaie (et non une erreur).

@@ -1,7 +1,7 @@
 # Des tests rapides et peu coûteux — conception
 
-Date : 2026-11-23. Statut : **conception validée dans son principe par le Directeur (les trois approches sont décidées) ;
-rien n'est implémenté.** Branche `tests-economes-conception`, à partir de `main` (d0b6ab7).
+Date : 2026-11-23. Statut : **conception validée par le Directeur (les trois approches et les trois questions sont
+décidées, section 8) ; rien n'est implémenté.** Branche `tests-economes-conception`, à partir de `main` (d0b6ab7).
 
 ## 1. L'intention, et pourquoi
 
@@ -247,7 +247,7 @@ Nouvelle étape dans `skills/installer/SKILL.md`, section 6, après `outil.py ap
   code **5** si la suite est verte mais hors budget (1 reste l'échec, 3 le refus). La campagne ajoute une ligne à
   `.mesures-tests.jsonl` à la racine (même forme qu'en 5.2, à ignorer dans `.gitignore` comme `.durees-tests.json`).
 - Tant que `tests-rapides` n'a pas ramené la suite sous 300 s, `--strict` ferait échouer chaque passage : il n'est
-  branché nulle part avant (question 3).
+  branché nulle part avant (décision 3, section 8).
 
 ### 5.5 Ce qu'un agent ne peut pas contourner — et ce qu'il peut
 
@@ -315,14 +315,13 @@ pour chaque outil, la place du bloc « Tests » dans la vue, la façon dont `dep
 `docs/orchestrateur.md`). Ordre conseillé : 5.1 et 5.4 d'abord (sans dépendance), puis le journal et le sceau, puis
 l'alerte, la facturation, et l'installation en dernier.
 
-## 8. Les questions que seul le Directeur peut trancher
+## 8. Les décisions du Directeur (2026-11-23)
 
-1. **Créer la tâche « Accélérer les tests » d'office, ou toujours la proposer ?** Recommandation : la proposer
-   (décision `tests_lents`), avec la case « Désormais sans me demander » ; une tâche d'office consomme des tokens que
-   le Directeur n'a pas choisis.
-2. **Le sceau du budget hors du projet (`~/MyIAFactory/tests-sceau.json`), ou seulement `reglages.json` ?**
-   Recommandation : le sceau. Il ne protège pas d'un agent décidé, mais il rend visible toute modification faite hors
-   du bureau, pour le prix d'un petit fichier.
-3. **Le mode strict de `tests_paralleles.py` pour MyIAFactory : crochet avant de pousser, CI, ou à la main ?**
-   Recommandation : avertissement seul tant que `tests-rapides` n'est pas fusionnée ; ensuite un crochet `pre-push`
-   proposé (pas imposé) qui lance `--strict`, car la suite dépend de Windows et ne tourne pas telle quelle sur GitHub.
+Les trois questions sont tranchées, selon les recommandations :
+
+1. **La tâche « Accélérer les tests » est toujours proposée**, par la décision `tests_lents`, avec la case « Désormais
+   sans me demander » (`tests.tache_auto`) ; jamais créée d'office sans cet accord.
+2. **Le budget qui fait foi vit hors du projet**, dans `~/MyIAFactory/tests-sceau.json` ; `reglages.json` n'en est
+   qu'une copie d'affichage. Une modification faite hors du bureau donne une alerte (section 5.5).
+3. **Mode strict de `tests_paralleles.py`** (code 5 si vert mais hors budget) : avertissement seul tant que
+   `tests-rapides` n'est pas fusionnée ; ensuite un crochet `pre-push` facultatif qui lance `--strict`. Pas de CI.

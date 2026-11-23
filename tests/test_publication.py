@@ -1,5 +1,6 @@
 """La publication des livrables en releases GitHub privées (`installation.publication`, `lancer publier`). git et gh sont
 simulés : rien n'est envoyé."""
+import json
 import tempfile
 import unittest
 from datetime import datetime
@@ -192,5 +193,25 @@ class Declencheur(unittest.TestCase):
         from moteur import regles
         projet = mock.Mock(fichier_reglages=None, livraison_github=True)
         with mock.patch.object(regles, "lancer", side_effect=regles.Refus("publier : boom")) as lancer:
+            regles._publier_les_livrables(projet)
+        lancer.assert_called_once_with(projet, "publier", {})
+
+    def test_pose_au_global_ou_au_type_le_reglage_n_agit_pas(self):
+        """`livraison_github` est propre au projet : écrit à la main au global ou au type, rien n'est publié ; seule
+        la valeur du projet compte."""
+        from moteur import regles
+        from tests.test_reglages_effectif import ANDROID, bureau_avec
+        tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(__import__("shutil").rmtree, tmp, ignore_errors=True)
+        (tmp / "factory.json").write_text(json.dumps({"genre": ANDROID}), encoding="utf-8")
+        regl = tmp / "reglages.json"
+        b = bureau_avec(regl, reglages={"livraison_github": True},
+                        types={ANDROID: {"reglages": {"livraison_github": True}}})
+        projet = mock.Mock(fichier_reglages=regl, fichier_bureau=b, livraison_github=False)
+        with mock.patch.object(regles, "lancer") as lancer:
+            regles._publier_les_livrables(projet)
+        lancer.assert_not_called()
+        regl.write_text(json.dumps({"livraison_github": True}), encoding="utf-8")
+        with mock.patch.object(regles, "lancer") as lancer:
             regles._publier_les_livrables(projet)
         lancer.assert_called_once_with(projet, "publier", {})

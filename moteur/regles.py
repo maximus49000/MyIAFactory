@@ -216,6 +216,9 @@ class Projet:
         self.verifier_environnement = verifier_environnement or environnement.verifier
         self.bureau = bureau              # le fichier du bureau : les mesures d'usage par genre servent à l'estimation
         self.fichier_reglages = None      # les réglages du bureau pour ce projet (posé à l'ouverture), relus à chaque passage
+        # le fichier du bureau dont vient le projet (`boucle.projets_du_bureau`) : ses niveaux global et type entrent
+        # dans les valeurs effectives des réglages (`reglage_effectif`) ; None pour un projet ouvert seul
+        self.fichier_bureau = None
         self.lecons_auto = False          # réglage `lecons_auto` : les leçons proposées sont validées d'elles-mêmes
         self.analyse_blocages = False     # réglage `analyse_blocages` (vrai par défaut à l'ouverture) : le Chef analyse
         self.livraison_sur_demande = False   # réglage `livraison_sur_demande` : la livraison attend « Livrer maintenant »
@@ -6255,24 +6258,27 @@ JOURNAL_DE_L_ANALYSE = 12             # les dernières lignes du journal envoyé
 SUIVRE, PRECISER, LAISSER = "suivre", "preciser", "laisser"
 
 
-def _une_session_active(projet):
-    """Le réglage `une_session_moyenne` (faux si absent), relu à chaque validation de cahier."""
+def reglage_effectif(projet, cle):
+    """La valeur effective du réglage `cle` du projet, relue : projet, puis type, puis global (fichier du bureau du
+    projet, s'il en a un), puis défaut (`reglages.charger_effectif`). Des réglages du projet illisibles laissent le
+    dernier état connu (l'attribut du même nom) ; un fichier du bureau illisible, le projet seul."""
     if getattr(projet, "fichier_reglages", None) is not None:
         try:
-            return reglages_du_bureau.charger(projet.fichier_reglages)["une_session_moyenne"] is True
+            return reglages_du_bureau.charger_effectif(projet.fichier_reglages,
+                                                       getattr(projet, "fichier_bureau", None))[cle]
         except reglages_du_bureau.ReglagesInvalides:
             pass
-    return getattr(projet, "une_session_moyenne", False) is True
+    return getattr(projet, cle, False)
+
+
+def _une_session_active(projet):
+    """Le réglage `une_session_moyenne` (faux si absent), relu à chaque validation de cahier."""
+    return reglage_effectif(projet, "une_session_moyenne") is True
 
 
 def _livraison_github(projet):
-    """Le réglage `livraison_github` (faux si absent), relu à chaque passage."""
-    if getattr(projet, "fichier_reglages", None) is not None:
-        try:
-            return reglages_du_bureau.charger(projet.fichier_reglages)["livraison_github"] is True
-        except reglages_du_bureau.ReglagesInvalides:
-            pass
-    return getattr(projet, "livraison_github", False) is True
+    """Le réglage `livraison_github` (faux si absent ; propre au projet, jamais hérité), relu à chaque passage."""
+    return reglage_effectif(projet, "livraison_github") is True
 
 
 def _publier_les_livrables(projet):
@@ -6289,22 +6295,12 @@ def _publier_les_livrables(projet):
 
 def _livraison_sur_demande(projet):
     """Le réglage `livraison_sur_demande` (faux si absent), relu à chaque passage."""
-    if getattr(projet, "fichier_reglages", None) is not None:
-        try:
-            return reglages_du_bureau.charger(projet.fichier_reglages)["livraison_sur_demande"] is True
-        except reglages_du_bureau.ReglagesInvalides:
-            pass
-    return getattr(projet, "livraison_sur_demande", False) is True
+    return reglage_effectif(projet, "livraison_sur_demande") is True
 
 
 def _analyse_active(projet):
     """Le réglage « Analyse intelligente des blocages » (`analyse_blocages`, vrai si absent), relu à chaque blocage."""
-    if getattr(projet, "fichier_reglages", None) is not None:
-        try:
-            return reglages_du_bureau.charger(projet.fichier_reglages)["analyse_blocages"] is True
-        except reglages_du_bureau.ReglagesInvalides:
-            pass
-    return getattr(projet, "analyse_blocages", False) is True
+    return reglage_effectif(projet, "analyse_blocages") is True
 
 
 def _journal(projet, tid, texte):
@@ -6469,7 +6465,7 @@ def _lecon_du_chef(projet, t, lecon):
     except Refus as ex:
         _journal(projet, t["id"], f"Leçon du Chef non notée : {ex}")
         return
-    if getattr(projet, "lecons_auto", False):
+    if reglage_effectif(projet, "lecons_auto"):      # relu : une valeur posée au global ou au type agit aussi
         try:
             r = lancer(projet, "lecon", {"action": "appliquer", "lot": [{"id": i, "verdict": "valider", "etage": etage}]})
             x = (r.get("resultats") or [{}])[0]

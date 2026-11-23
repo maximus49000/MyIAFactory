@@ -109,10 +109,11 @@ def apk_pour_le_pilote(dossier):
     return str(max(surs, key=lambda p: p.stat().st_mtime)) if surs else None
 
 
-def ouvrir_projet(fichier_reglages, environ=None):
+def ouvrir_projet(fichier_reglages, environ=None, fichier_bureau=None):
     """Un `Projet` à partir du fichier de réglages du bureau : la factory est à côté (`factory.json`), la couche
     d'appel vient de `moteur.couche` (et de la clé dans l'environnement). La ligne à dire une fois au bureau (API
-    demandée sans clé) est gardée dans `projet.ligne_a_dire`."""
+    demandée sans clé) est gardée dans `projet.ligne_a_dire`. `fichier_bureau` (le bureau dont vient le projet) : ses
+    niveaux global et type entrent dans les valeurs effectives des réglages ; None, le projet seul."""
     fichier = Path(fichier_reglages)
     try:
         r = json.loads(fichier.read_text(encoding="utf-8-sig"))
@@ -123,8 +124,9 @@ def ouvrir_projet(fichier_reglages, environ=None):
     projet = regles.Projet(fichier.parent / "factory.json", couche)
     projet.ligne_a_dire = ligne
     projet.fichier_reglages = fichier
+    projet.fichier_bureau = fichier_bureau
     try:
-        lus = reglages_bureau.charger(fichier)
+        lus = reglages_bureau.charger_effectif(fichier, fichier_bureau)
         projet.cloud_max = lus["agents_cloud_max"]
         projet.cloud_dossier_approuve = lus["cloud_dossier_approuve"]
         projet.lecons_auto = lus["lecons_auto"]
@@ -139,7 +141,8 @@ def ouvrir_projet(fichier_reglages, environ=None):
 
 def projets_du_bureau(bureau, environ=None):
     """Les projets du fichier du bureau (lu à chaque appel : un projet ajouté est pris sans redémarrer)."""
-    return [ouvrir_projet(p["chemin"], environ) for p in reglages_bureau.lire_bureau(bureau)["projets"]]
+    return [ouvrir_projet(p["chemin"], environ, fichier_bureau=bureau)
+            for p in reglages_bureau.lire_bureau(bureau)["projets"]]
 
 
 def commit_et_push(dossier, message):
@@ -552,11 +555,8 @@ class Moteur:
         """Réglage `lecons_auto` (relu à chaque passage) : les leçons « à valider » sont validées d'elles-mêmes à l'étage
         qu'elles proposent, comme un « Valider » du Directeur (même appel `lecon appliquer`, en un seul lot). Une leçon
         que l'outil refuse reste « à valider » et n'est pas réessayée avant un redémarrage : rien n'est bloqué."""
-        if projet.fichier_reglages is not None:
-            try:
-                projet.lecons_auto = reglages_bureau.charger(projet.fichier_reglages)["lecons_auto"]
-            except reglages_bureau.ReglagesInvalides:
-                pass        # des réglages illisibles ne changent pas le dernier état connu
+        # valeur effective (projet, type, global) ; des réglages illisibles ne changent pas le dernier état connu
+        projet.lecons_auto = regles.reglage_effectif(projet, "lecons_auto")
         if not projet.lecons_auto:
             return
         essayees = etat.setdefault("lecons_auto_essayees", set())
@@ -1461,10 +1461,8 @@ class Moteur:
         agent (la démarche manuelle), le départ est envoyé à cette session. Lève `ErreurCloud` si rien ne marche. Le
         réglage `cloud_dossier_approuve` est relu ici : la case cochée au bureau vaut sans redémarrer le moteur."""
         if getattr(projet, "fichier_reglages", None) is not None:
-            try:
-                projet.cloud_dossier_approuve = reglages_bureau.charger(projet.fichier_reglages)["cloud_dossier_approuve"]
-            except reglages_bureau.ReglagesInvalides:
-                pass        # des réglages illisibles ne changent pas le dernier état connu
+            # propre au projet (jamais hérité du global ou du type) ; des réglages illisibles gardent le dernier état
+            projet.cloud_dossier_approuve = regles.reglage_effectif(projet, "cloud_dossier_approuve")
         try:
             return self.cloud.lancer_session(depart, dossier_projet=str(projet.dossier), modele=modele,
                                              approuver_dossier=getattr(projet, "cloud_dossier_approuve", False))

@@ -15,6 +15,14 @@ Valeur effective : **projet, puis type, puis global, puis le défaut** (le poste
 (genre absent ou inconnu) n'a pas de niveau type. `deporter`, `lancer.py tests` et la consigne de départ des agents lisent les
 mêmes niveaux que la page (`bureau/registre.py`, `lieux_du_type`) : un lieu posé au type compte partout.
 
+Le moteur et l'état du bureau lisent aussi les **valeurs effectives** des réglages à cases (`reglages.charger_effectif`,
+`regles.reglage_effectif` côté moteur) : « Valider les leçons automatiquement », « Analyse intelligente des blocages »,
+« Livrer seulement sur demande » et « Évolution moyenne : une seule session » posés au global ou au type agissent vraiment, et
+les cases de la Direction (`/api/etat`) montrent la valeur appliquée. Le moteur lancé sur le fichier du bureau en lit les
+niveaux ; lancé sur un seul projet (`--reglages`), ou si le fichier du bureau est illisible, il lit le projet seul, comme
+avant. « Dossier approuvé pour les sessions cloud » et « Livrer automatiquement sur GitHub » restent propres au projet :
+posés à la main au global ou au type, ils n'agissent pas.
+
 ## Ce que montre la page
 
 - En haut, le niveau édité : **Global**, **Type : <genre>**, **Projet : <nom>**. « Type » est grisé sans genre connu ;
@@ -31,7 +39,8 @@ mêmes niveaux que la page (`bureau/registre.py`, `lieux_du_type`) : un lieu pos
 
 ## Lecture tolérante du fichier du bureau
 
-Un réglage inconnu sous `reglages` (écrit à la main, ou par une version plus récente) et une entrée abîmée sous `types`
+Un réglage inconnu sous `reglages`, une valeur qui n'a pas sa forme (« oui » ou `null` pour une case : lue comme non
+réglée), et une entrée abîmée sous `types`
 (genre mal formé, objet attendu, lieu refusé) sont **écartés** : le bureau, le moteur et le lanceur démarrent avec le reste.
 Ce qui est écarté est listé (`ignores`) et dit en haut de la page. `deport.lieux` du fichier du bureau reste vérifié comme
 avant (un lieu inconnu rend le fichier illisible). Les écritures, elles, refusent toute valeur inconnue.

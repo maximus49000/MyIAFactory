@@ -266,6 +266,32 @@ class TestRouteEtDisponibilites(AvecFichierDuBureau):
         self.assertEqual(len(ignores), 1)
         self.assertIn("inconnu", ignores[0])
 
+    def test_l_etat_publie_les_valeurs_effectives(self):
+        """Les cases de la Direction et le compteur des leçons suivent la valeur effective (projet > type > global)."""
+        self.en_android()
+        tout = {"lecons_auto": True, "analyse_blocages": False, "livraison_sur_demande": True,
+                "une_session_moyenne": False, "cloud_dossier_approuve": True, "livraison_github": True}
+        self.bureau.write_text(json.dumps({"projets": ["demo/reglages.json"], "reglages": tout,
+                                           "types": {ANDROID: {"reglages": {"une_session_moyenne": True}}}}),
+                               encoding="utf-8")
+        e = self.etat()
+        self.assertEqual({k: e[k] for k in tout}, {"lecons_auto": True, "analyse_blocages": False,
+                                                   "livraison_sur_demande": True, "une_session_moyenne": True,
+                                                   "cloud_dossier_approuve": False, "livraison_github": False})
+        b = self.projet_brut()
+        b["lecons_auto"] = False
+        self.regl.write_text(json.dumps(b), encoding="utf-8")
+        self.assertIs(self.etat()["lecons_auto"], False)
+
+    def test_une_valeur_globale_qui_n_est_pas_un_booleen_est_ignoree_et_dite(self):
+        self.bureau.write_text(json.dumps({"projets": ["demo/reglages.json"], "reglages": {"lecons_auto": "oui"}}),
+                               encoding="utf-8")
+        e = self.etat()
+        self.assertIs(e["lecons_auto"], False)
+        self.assertEqual(len(e["reglages_page"]["ignores"]), 1)
+        self.assertIn("lecons_auto", e["reglages_page"]["ignores"][0])
+        self.assertEqual(next(l for l in e["reglages_page"]["lignes"] if l["id"] == "lecons_auto")["origine"], "defaut")
+
 
 class TestBureauDUnSeulProjet(AvecServeur):
     """`creer(chemin_reglages)` sans fichier du bureau : seul le niveau projet existe."""

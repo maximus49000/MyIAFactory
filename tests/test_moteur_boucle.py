@@ -7,6 +7,7 @@ from unittest import mock
 
 from moteur import agents, appel, boucle, detache, jugement, regles
 from tests.orch_aide import AvecProjet, factory_minimale
+from tests.test_reglages_effectif import bureau_avec
 
 FICHE_REMI = ("Clé : rel-1\nPrénom : Rémi\nRôle : relecteur\nService : dev\nModèle : Sonnet\nLieu : local\n\n"
               "Relit.\n\n## Leçons\n")
@@ -666,6 +667,51 @@ class Lecons(Base):
         self.moteur.tour()
         self.assertEqual(self.etats(), {i: "validée"})
         self.assertTrue(boucle.ouvrir_projet(reglages).lecons_auto)
+
+    def test_le_reglage_global_du_bureau_suffit_a_valider_les_lecons(self):
+        """Page Réglages : « Valider les leçons automatiquement » posé au global agit sur un projet sans valeur propre."""
+        reglages = self.dossier / "reglages.json"
+        self.projet.fichier_reglages = reglages
+        self.projet.fichier_bureau = bureau_avec(reglages, reglages={"lecons_auto": True})
+        i = self.noter("Une leçon.")
+        self.moteur.tour()
+        self.assertEqual(self.etats(), {i: "validée"})
+
+    def test_le_projet_decoche_l_emporte_sur_le_global(self):
+        reglages = self.dossier / "reglages.json"
+        reglages.write_text(json.dumps({"lecons_auto": False}), encoding="utf-8")
+        self.projet.fichier_reglages = reglages
+        self.projet.fichier_bureau = bureau_avec(reglages, reglages={"lecons_auto": True})
+        i = self.noter("Une leçon.")
+        self.moteur.tour()
+        self.assertEqual(self.etats(), {i: "à valider"})
+
+    def test_un_fichier_du_bureau_illisible_laisse_le_projet_seul(self):
+        reglages = self.dossier / "reglages.json"
+        reglages.write_text(json.dumps({"lecons_auto": True}), encoding="utf-8")
+        abime = self.dossier / "bureau-abime.json"
+        abime.write_text("{abime", encoding="utf-8")
+        self.projet.fichier_reglages, self.projet.fichier_bureau = reglages, abime
+        i = self.noter("Une leçon.")
+        self.moteur.tour()
+        self.assertEqual(self.etats(), {i: "validée"})
+        self.assertFalse([x for x in self.moteur.journal if "bureau" in x or "illisible" in x])
+
+    def test_les_projets_du_bureau_portent_le_fichier_du_bureau_et_les_valeurs_effectives(self):
+        reglages = self.dossier / "reglages.json"
+        tout = {"lecons_auto": True, "analyse_blocages": False, "livraison_sur_demande": True,
+                "une_session_moyenne": True, "cloud_dossier_approuve": True, "livraison_github": True}
+        b = bureau_avec(reglages, reglages=tout)
+        p, = boucle.projets_du_bureau(b, environ={})
+        self.assertEqual(Path(p.fichier_bureau), b)
+        self.assertEqual((p.lecons_auto, p.analyse_blocages, p.livraison_sur_demande, p.une_session_moyenne),
+                         (True, False, True, True))
+        # les accords propres au projet ne s'héritent jamais du global
+        self.assertEqual((p.cloud_dossier_approuve, p.livraison_github), (False, False))
+        self.assertIs(regles.reglage_effectif(p, "cloud_dossier_approuve"), False)
+        seul = boucle.ouvrir_projet(reglages, environ={})
+        self.assertIsNone(seul.fichier_bureau)
+        self.assertEqual((seul.lecons_auto, seul.analyse_blocages), (False, True))
 
 
 class FauxExecuteurServeur:

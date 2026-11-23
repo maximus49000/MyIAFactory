@@ -7,8 +7,8 @@ import unicodedata
 from pathlib import Path
 
 from .deport import LIEUX_PAR_DEFAUT, valider_lieux
-from .deport_types import catalogue_union
-from .registre import REGISTRE, verifier_valeur
+from .deport_types import catalogue_du_projet, catalogue_union
+from .registre import REGISTRE, valeur_effective, verifier_valeur
 from .releve import MOTIF_GENRE  # un id de projet suit le même motif qu'un genre
 # Le verrou d'écriture d'un fichier partagé vit dans `verrou_fichier` (compatible Python 3.9 : le lanceur des agents
 # l'importe aussi pour le sceau des tests) ; ses réglages d'attente s'y trouvent (`VERROU_ATTENTE_S`, `VERROU_PERIME_S`).
@@ -48,8 +48,14 @@ class ReglagesInvalides(Exception):
 
 
 def charger(chemin):
+    return _charger(chemin)[0]
+
+
+def _charger(chemin):
+    """`(réglages complétés des défauts, réglages tels qu'écrits dans le fichier du projet)`."""
     chemin = Path(chemin)
     r = json.loads(json.dumps(DEFAUTS))
+    donnees = {}
     if chemin.exists():
         try:
             donnees = json.loads(chemin.read_text(encoding="utf-8-sig"))
@@ -60,6 +66,29 @@ def charger(chemin):
         r.update(donnees)
     _verifier_moteur(r)
     r["dossier"] = str(chemin.parent)
+    return r, donnees
+
+
+def charger_effectif(chemin_projet, fichier_bureau=None):
+    """`charger(chemin_projet)` où chaque réglage du registre prend sa valeur effective : projet, puis type (le genre
+    du projet), puis global, puis défaut (`registre.valeur_effective`). Ce que lisent le moteur et l'état du bureau,
+    pour qu'une valeur posée au global ou au type agisse vraiment. Sans fichier du bureau, ou s'il est illisible ou
+    abîmé : exactement `charger` (le projet seul) ; un problème du fichier du bureau ne lève jamais. Des réglages du
+    projet illisibles lèvent `ReglagesInvalides`, comme `charger`."""
+    r, brut = _charger(chemin_projet)
+    if fichier_bureau is None:
+        return r
+    try:
+        lu = lire_bureau(fichier_bureau)
+        niveaux = {"reglages": lu["reglages"], "types": lu["types"]}
+        genre = catalogue_du_projet(r["dossier"])[0]
+    except Exception:          # fichier du bureau absent, illisible, abîmé, chemin invalide : le projet seul
+        return r
+    genre = None if genre == "generique" else genre      # comme la page Réglages : pas de niveau type sans genre
+    for reglage in REGISTRE:
+        valeur, _ = valeur_effective(reglage, brut, niveaux, genre)
+        if type(valeur) is bool:     # les niveaux du bureau sont filtrés par `lire_bureau` ; garde de plus
+            r[reglage.cle] = valeur
     return r
 
 
@@ -200,18 +229,29 @@ def lire_bureau(chemin):
 
 
 def _lire_reglages_du_niveau(v, nom, ignores):
-    """Les réglages posés à un niveau (global ou type) : `{id: valeur}` ; un id absent du registre est écarté, et
-    dit dans `ignores` (les écrivains, eux, le refusent)."""
+    """Les réglages posés à un niveau (global ou type) : `{id: valeur}` ; un id absent du registre, ou une valeur qui
+    n'a pas sa forme (« oui » pour une case, null), est écarté et dit dans `ignores` (les écrivains, eux, le
+    refusent) : la résolution le lit comme non réglé."""
     if v is None:
         return {}
     if not isinstance(v, dict):
         ignores.append(f"Fichier du bureau : « {nom} » ignoré : un objet {{réglage: valeur}} est attendu.")
         return {}
-    connus = {r.id for r in REGISTRE}
-    for id_ in v:
+    connus = {r.id: r for r in REGISTRE}
+    gardes = {}
+    for id_, valeur in v.items():
         if id_ not in connus:
             ignores.append(f"Fichier du bureau : « {nom} » : le réglage inconnu « {id_} » est ignoré.")
-    return {k: x for k, x in v.items() if k in connus}
+            continue
+        try:
+            if valeur is None:
+                raise ValueError("« %s » doit avoir une valeur (null n'en est pas une)." % connus[id_].libelle)
+            verifier_valeur(connus[id_], valeur)
+        except ValueError as e:
+            ignores.append(f"Fichier du bureau : « {nom} » : la valeur de « {id_} » est ignorée : {e}")
+            continue
+        gardes[id_] = valeur
+    return gardes
 
 
 def _lire_types_du_bureau(v, ignores):

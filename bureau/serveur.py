@@ -506,7 +506,15 @@ class Projet:
                 e["dossier"]["facturation"] = True
                 e["dossier"]["kpi"] = True  # le coût moyen par tâche se calcule dès qu'il y a des usages
             e["agir"] = demandes.commande_declaree(regl)
-            e["lecons_auto"] = regl.get("lecons_auto") is True      # la case « Valider les leçons automatiquement »
+            # les cases de la Direction et le compteur des leçons suivent la valeur effective (projet, type, global),
+            # celle qu'applique le moteur ; un fichier du bureau illisible : le projet seul
+            eff = regl
+            if err is None:
+                try:
+                    eff = reglages.charger_effectif(self.chemin_reglages, self.fichier_bureau)
+                except reglages.ReglagesInvalides:
+                    pass
+            e["lecons_auto"] = eff.get("lecons_auto") is True      # la case « Valider les leçons automatiquement »
             try:      # le bloc du déport ne coupe jamais l'état du projet (réglages abîmés, catalogue illisible…)
                 e["deport"] = self.etat_deport()
             except Exception as x:
@@ -516,12 +524,12 @@ class Projet:
             except Exception as x:
                 e["reglages_page_erreur"] = "Page Réglages indisponible : %s" % x
             sans_lecons_au_compteur(e)
-            e["analyse_blocages"] = regl.get("analyse_blocages") is not False   # « Analyse intelligente des blocages »
-            e["livraison_sur_demande"] = regl.get("livraison_sur_demande") is True   # « Livrer seulement sur demande »
-            e["livraison_github"] = regl.get("livraison_github") is True   # « Livrer automatiquement sur GitHub »
-            e["une_session_moyenne"] = regl.get("une_session_moyenne") is True   # « Évolution moyenne : une session »
+            e["analyse_blocages"] = eff.get("analyse_blocages") is not False   # « Analyse intelligente des blocages »
+            e["livraison_sur_demande"] = eff.get("livraison_sur_demande") is True   # « Livrer seulement sur demande »
+            e["livraison_github"] = eff.get("livraison_github") is True   # « Livrer automatiquement sur GitHub »
+            e["une_session_moyenne"] = eff.get("une_session_moyenne") is True   # « Évolution moyenne : une session »
             # « Dossier approuvé pour les sessions cloud »
-            e["cloud_dossier_approuve"] = regl.get("cloud_dossier_approuve") is True
+            e["cloud_dossier_approuve"] = eff.get("cloud_dossier_approuve") is True
             if e.get("orchestrateur_present") is False:   # aucun orchestrateur en cours : les gestes attendent
                 e["orchestrateur_absent"], e["agir"] = True, False
             # Ce que le moteur dit retenir ce projet (la charge) : sur la carte de chaque tâche retenue et dans la barre.

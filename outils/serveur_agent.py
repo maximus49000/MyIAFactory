@@ -34,7 +34,7 @@ LIMITES_AGENT = {"duree_s": 2400, "tours": 200, "memoire_mo": 4096, "cpus": 2, "
 MODES_AGENT = ("seul", "pilote")
 PLACES_DEFAUT = 2
 CLES_DEMANDE_AGENT = frozenset({"id", "projet", "tache", "mode", "modele", "branche", "base", "limites", "reprend", "places",
-                                "genre"})
+                                "genre", "flutter"})
 # `tache` : l'agent de la tâche ; `reponse` : sa réponse aux questions de l'utilisateur (même tâche, jamais confondues)
 GENRES_AGENT = ("tache", "reponse")
 # Mêmes motifs que serveur_ovh/images/agent/entree-agent.py (qui les revérifie sur le serveur).
@@ -60,6 +60,8 @@ class DemandeAgent:
     reprend: object
     places: int
     genre: str = "tache"
+    # projet Flutter (vu sur le poste, `projet_flutter`) : le serveur doit avoir flutter-sdk, monté en lecture seule
+    flutter: bool = False
 
 
 class RefusRecuperation(ValueError):
@@ -244,6 +246,9 @@ def valider_demande_agent(brut, git=_git):
     genre = brut.get("genre", "tache")
     if genre not in GENRES_AGENT:
         raise ValueError("Genre d'agent inconnu : « tache » ou « reponse ».")
+    flutter = brut.get("flutter", False)
+    if flutter is not True and flutter is not False:
+        raise ValueError("« flutter » vaut true ou false.")
     limites_brutes = brut.get("limites")
     if limites_brutes is not None and not isinstance(limites_brutes, dict):
         raise ValueError("Les limites doivent être un dictionnaire.")
@@ -253,14 +258,25 @@ def valider_demande_agent(brut, git=_git):
             raise ValueError("Limite inconnue : " + repr(str(cle)[:40]) + ".")
         limites[cle] = _entier_limite(cle, v)
     return DemandeAgent(id=ident, projet=projet, tache=tache, mode=mode, modele=modele, branche=branche, base=base,
-                        limites=MappingProxyType(limites), reprend=reprend, places=places, genre=genre)
+                        limites=MappingProxyType(limites), reprend=reprend, places=places, genre=genre,
+                        flutter=flutter)
+
+
+def capacites_requises(d):
+    """Les capacités du serveur pour cette demande : celles du mode (`agent-serveur` ou `agent-pilote`), plus
+    `agent-flutter` (le SDK Flutter de l'hôte) pour un projet Flutter ; sans doublon, dans l'ordre."""
+    requises = list(serveur_capacites.BESOINS["agent-pilote" if d.mode == "pilote" else "agent-serveur"])
+    if d.flutter:
+        requises += serveur_capacites.BESOINS["agent-flutter"]
+    return tuple(dict.fromkeys(requises))
 
 
 def _demande_dict(d):
     """Contenu de entree/demande.json. `projet` et `reprend` n'y figurent qu'une fois (l'enveloppe les relit par motif) ;
-    `limites.duree_s` est la valeur même passée à l'enveloppe (une seule source)."""
+    `limites.duree_s` est la valeur même passée à l'enveloppe (une seule source) ; `flutter` (true ou false, une seule
+    fois) est relu par l'enveloppe par motif strict."""
     return {"id": d.id, "type": "agent", "projet": d.projet, "tache": d.tache, "mode": d.mode, "modele": d.modele,
-            "branche": d.branche, "base": d.base, "limites": dict(d.limites), "reprend": d.reprend}
+            "branche": d.branche, "base": d.base, "limites": dict(d.limites), "reprend": d.reprend, "flutter": d.flutter}
 
 
 def _demande_sure(demande):
@@ -268,7 +284,7 @@ def _demande_sure(demande):
         brut = {"id": demande.id, "projet": demande.projet, "tache": demande.tache, "mode": demande.mode,
                 "modele": demande.modele, "branche": demande.branche, "base": demande.base,
                 "limites": dict(demande.limites), "reprend": demande.reprend, "places": demande.places,
-                "genre": demande.genre}
+                "genre": demande.genre, "flutter": demande.flutter}
     elif isinstance(demande, dict):
         brut = demande
     else:
@@ -676,7 +692,7 @@ def _lancer_agent(demande, paquet, argv, consigne, message, apk, dossier, ssh, a
         apk = None
     if isinstance(attente_max_s, bool) or not isinstance(attente_max_s, int) or attente_max_s < 0:
         raise st.RefusLancement("attente_max_s doit être un nombre entier de secondes, positif ou nul.")
-    requises = serveur_capacites.BESOINS["agent-pilote" if d.mode == "pilote" else "agent-serveur"]
+    requises = capacites_requises(d)
     serveur = st.choisir_serveur(dossier, requises)
 
     def sortie(etat_, **plus):

@@ -31,7 +31,8 @@ ETAT = "serveurs-etat.json"
 VERROU = "serveurs-installation.lock"
 VERROU_JEUNE_S = 30
 DELAI_DEFAUT_S = 600
-DELAIS_ETAPE_S = {"docker": 1200, "durcissement": 900, "android_build": 1800, "android_emulateur": 1800, "emulateur_image": 900, "agent_image": 900, "tests_image": 900, "unity_cli": 300}
+DELAIS_ETAPE_S = {"docker": 1200, "durcissement": 900, "android_build": 1800, "android_emulateur": 1800, "emulateur_image": 900, "agent_image": 900, "tests_image": 900, "unity_cli": 300,
+                  "flutter_sdk": 2400}
 LONGUEUR_MAX = 200
 STATUTS_ETAPE = ("fait", "a_faire", "bloque")
 
@@ -336,6 +337,8 @@ def empreinte_etape(etape):
     """Empreinte de l'image de l'étape, identique à celle que l'étape écrit dans son marqueur sur le serveur : versions
     épinglées + 16 premiers hexa du SHA-256 des fichiers déposés, concaténés dans l'ordre de FICHIERS_ETAPE, mêmes octets."""
     versions = json.loads((RACINE_SERVEUR / "versions.json").read_text(encoding="utf-8"))
+    if etape == "flutter_sdk":                       # aucune image : la version épinglée (EMPREINTE_FLUTTER du script)
+        return f"flutter={versions['flutter']['version']};canal={versions['flutter']['canal']}"
     h = hashlib.sha256()
     for rel in EMPREINTE_FICHIERS[etape]:
         h.update((RACINE_SERVEUR / rel).read_bytes())
@@ -354,7 +357,9 @@ def empreinte_etape(etape):
 # péremption est une lecture de plus, faite par le moteur seulement pour les capacités demandées.
 MARQUEURS = {"emulateur-image": ("emulateur_image", '$HOME/.myiafactory/emulateur-image.version'),
              "agent": ("agent_image", '$HOME/.myiafactory/agent-image.version'),
-             "tests-image": ("tests_image", '$HOME/.myiafactory/tests-image.version')}
+             "tests-image": ("tests_image", '$HOME/.myiafactory/tests-image.version'),
+             # le SDK Flutter de l'hôte : le marqueur porte la version épinglée ; une autre version le rend périmé (refait)
+             "flutter-sdk": ("flutter_sdk", '$HOME/.myiafactory/flutter-sdk.version')}
 
 
 def _perimees(serveur, ssh, presentes, requises):

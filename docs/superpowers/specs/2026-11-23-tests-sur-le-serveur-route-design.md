@@ -11,6 +11,13 @@ route ne se limite plus à Python et Node : chaque projet est **analysé** (§ 5
 profil** (§ 5.14) ; l'adoption (§ 5.15) remplace le statut `non_supporte` par `image_a_construire` ou `non_deportable`
 (raison précise, jamais silencieuse). Q1 et Q2 sont décidées (oui, oui).
 
+**Amendement Unity du 2026-11-23** : le projet du Directeur `sur-la-route` est un projet Unity (6000.6.7f1, Test
+Framework 1.8.0, tests EditMode, plus des tests Python). La licence est une licence **Personal activée par Unity Hub sur
+l'hôte du serveur**, pas un `.ulf` dans le volume `unity-cache` (vide). Décision du Directeur (Q3 revue) : **option B
+d'abord** (tests dans le conteneur isolé, licence de Hub montée en lecture seule), **et si elle ne fonctionne pas, option
+A** (éditeur de l'hôte, dans un bac à sable obligatoire). Le choix suit le verdict d'une expérience réelle (§ 5.16).
+Q1 à Q5 sont toutes décidées (§ 9).
+
 ## 1. Intention
 
 Décision du Directeur (2026-11-23) : **toutes les campagnes de tests tournent sur le serveur OVH, aucune sur ce poste**
@@ -37,7 +44,7 @@ et 5,5 fois moins gourmand en processeur cumulé.
 - O5. La suite de MyIAFactory **verte sous Linux** : marqueurs `Windows seulement` / `Linux seulement` là où il le faut,
   et les 15 modules rendus hermétiques, module par module.
 - O6. **Tout projet** (amendement) : Python, Node, Gradle/Android (tests unitaires), JVM (Gradle, Maven), .NET (SDK
-  multiplateforme), Go, Rust, Godot, Unity (sous réserve de la licence, Q3), et toute pile dont la chaîne d'outils existe
+  multiplateforme), Go, Rust, Godot, Unity (tests EditMode, licence de Hub, B puis A, § 5.16), et toute pile dont la chaîne d'outils existe
   sous Linux x86_64 ; chacun par son profil d'exécution (§ 5.11–5.14). Seuls restent au poste les projets **non
   déportables** de la liste fermée du § 5.14, avec la raison montrée au Directeur.
 
@@ -122,6 +129,13 @@ ligne par campagne). Le **verrou du poste** ne s'applique qu'au repli.
 - **Amendement** : `local.properties` (chemin `sdk.dir` du poste, parfois des secrets de signature) rejoint les exclus ;
   la limite totale dépend de la famille (§ 5.14 : 1 Go pour Godot et Unity, dont les ressources sont lourdes ; `Library/`
   ne part jamais, elle est un cache du serveur, § 5.13).
+- **Amendement Unity** : la licence Unity est un secret et ne part **jamais**, même suivie par erreur : `*.ulf`,
+  `Unity_lic*`, `UnityEntitlementLicense*`, `Unity.Licensing.Client*` (journaux du client de licence), `unityhub/`
+  (session du compte Unity de Hub, plus sensible encore que la licence), et les suites de segments `.config/unity3d/` et
+  `.local/share/unity3d/` (motifs à deux segments consécutifs : un dossier `Unity3D/` du projet reste admis). Constat :
+  `EXCLUS` et `EXCLUS_EN_PLUS` de `outils/tests_instantane.py` n'en contiennent aucun aujourd'hui. Exclusions **de la
+  famille `unity`** (racine du projet Unity seulement) : `Library/`, `Temp/`, `Logs/`, `UserSettings/`, `obj/`, `Build/`,
+  `Builds/`. Mesure : `sur-la-route` fait 647 Mo hors `Library/` (4 040 fichiers suivis), sous la limite de 1 Go.
 - **Ajout** : `.durees-tests.json` s'il existe (ordre des morceaux ; ignoré par git ; jamais rapatrié).
 - **Limites** : 50 Mo par fichier, 200 Mo au total, 50 000 fichiers ; au-delà, repli au poste avec la raison.
 - **Format** : tar USTAR écrit **dans un fichier temporaire** du poste par flux (jamais tout en mémoire), noms relatifs
@@ -292,7 +306,7 @@ n'ouvre jamais `.env*`, `local.properties`, `*.keystore`, `*.jks`, ni rien d'`EX
 | `go.mod` | `go` | `go test ./...` | directive `go`/`toolchain` |
 | `Cargo.toml` | `rust` | `cargo test` | `rust-toolchain(.toml)`, `rust-version` |
 | `project.godot` | `godot` | celle du projet (ex. ZooRunner : `python tools/lancer_tests.py` → `godot --headless --script res://tests/lanceur.gd`) | `config/features` (ex. `"4.7"`) |
-| `ProjectSettings/ProjectVersion.txt` | `unity` | `unity-editor -batchmode -nographics -runTests -testPlatform EditMode` | `m_EditorVersion` (lu déjà par `examen.py`) |
+| `ProjectSettings/ProjectVersion.txt` | `unity` | `unity-editor -batchmode -nographics -projectPath /work -runTests -testPlatform EditMode -testResults /tmp/resultats.xml -logFile /tmp/unity.log` (jamais `-quit` avec `-runTests`) | `m_EditorVersion` et `m_EditorVersionWithRevision` (empreinte de version, ex. `b22767f04f04`), `Packages/manifest.json` (`com.unity.test-framework`, dépendances git) |
 | `Gemfile`, `composer.json`, `Makefile` | `ruby`, `php`, `make` | `bundle exec rake test`, `composer test`, `make test` si la cible existe | `.ruby-version`, `require.php` |
 
 - **Indices de la CI** : `.github/workflows/*.yml` (lus comme texte, 64 Ko au plus) servent à **confirmer** la commande et les
@@ -311,7 +325,13 @@ n'ouvre jamais `.env*`, `local.properties`, `*.keystore`, `*.jks`, ni rien d'`EX
   **9.3.1**, AGP **9.1.1**, `compileSdk 36`, JDK **17** (`JavaVersion.VERSION_17`, et `java-version: '17'` de sa CI),
   `org.gradle.jvmargs=-Xmx2048m`, tests JUnit 4 + `kotlinx-coroutines-test` (pas de Robolectric), aucun
   `distributionSha256Sum` dans le wrapper. Godot : ZooRunner et CasseBrickReborn (Godot **4.7**, tests en `--headless`) ;
-  aucun projet Unity dans les essais (`ProjectVersion.txt` absent partout).
+  aucun projet Unity dans les essais (`ProjectVersion.txt` absent partout). **Amendement** : `sur-la-route`
+  (`C:\Users\maxim\UnityProjects\sur-la-route-bureau`) : `unity` 6000.6.7f1 (révision `b22767f04f04`), Test Framework
+  1.8.0, tests EditMode dans `Assets/Editor/Tests` **sans `.asmdef`** (vérifié : aucun `.asmdef` sous `Assets`, les tests
+  vivent dans l'assemblage prédéfini de l'éditeur), dépendances UPM **git** (UniVRM sur `github.com`), et des tests Python
+  dans `Tools/factory/tests` → deux familles, deux commandes : `python` (profil normal, **sans licence, tout de suite**) et
+  `unity`. Tests sans `.asmdef` : confiance `moyenne` (la découverte n'est prouvée que par un résultat d'au moins un test,
+  § 5.16) ; un `.asmdef` qui référence `nunit.framework.dll` ou `UNITY_INCLUDE_TESTS` : `haute`.
 - **Ce que l'agent peut changer** : les fichiers de son projet (`.nvmrc`, verrou, commande du script `test`, version du
   JDK) ; l'analyse suit, l'empreinte change, l'adoption est refaite (§ 5.15). Il peut **proposer** un profil forcé (commande,
   versions, ressources) par une décision de Direction `tests_profil` ; le profil forcé est écrit par le bureau seul dans
@@ -328,8 +348,8 @@ n'ouvre jamais `.env*`, `local.properties`, `*.keystore`, `*.jks`, ni rien d'`EX
 | SDK de l'hôte `~/android-sdk` (`android-build`) | platform `android-36`, build-tools `36.0.0`, JDK 17 de l'hôte | **monté en lecture seule** dans l'image `tests-android` (même patron que `myiafactory/emulateur`, qui monte ce SDK) |
 | `myiafactory/android` (étape `images`, aucune capacité) | Ubuntu, JDK 17, Gradle 8.7, platform **34**, build-tools 34, tourne en root, garde `curl` | **ne convient pas** : MyFridgeCleaner exige `compileSdk 36` et Gradle 9.3.1 ; pas réutilisée |
 | `myiafactory/emulateur` (`emulateur-image`), `android-emulateur` | émulateur KVM | hors champ (tests instrumentés, actions `emulateur`/`recette-emulateur`) |
-| `unityci/editor:ubuntu-6000.6.7f1-android-4.0.0` (étape `images`, tirée) + volume `unity-cache` ; étape `licence` | éditeur Unity 6000.6.7f1 GameCI ; licence `.ulf` reçue sur l'entrée standard et prouvée dans un conteneur | profil `unity` **si** la version du projet est 6000.6.7f1 **et** la licence est active (Q3) ; aucune capacité ne suit ni l'image ni la licence aujourd'hui |
-| `unity-cli`, `unity-editeur` (non installable : Unity Hub de la session graphique) | outils de l'**hôte** | jamais pour les tests (pas d'isolement) |
+| `unityci/editor:ubuntu-6000.6.7f1-android-4.0.0` (étape `images`, tirée, 27 Go, présente) + volume `unity-cache` (présent, **vide** : aucun `.ulf`) ; étape `licence` | éditeur Unity 6000.6.7f1 GameCI ; l'étape `licence` attend un `.ulf` sur l'entrée standard, chemin que la licence Personal de Hub ne prend pas | base de l'image `myiafactory/tests-unity-6000.6.7f1` (option B, § 5.16) ; aucune capacité ne suivait ni l'image ni la licence |
+| `unity-cli`, `unity-editeur` (non installable : Unity Hub de la session graphique) ; Hub (`/usr/bin/unityhub`) et son éditeur `~/Unity/Hub/Editor/6000.6.10f1` | outils de l'**hôte** ; la licence Personal vit avec Hub | jamais directement ; seulement par l'option A, dans le bac à sable du § 5.16, à la version exacte du projet de préférence |
 | `myiafactory/agent` (`agent`) | Claude Code, pont | jamais (porte un client d'agent) |
 
 **Nouvelle image de catalogue `myiafactory/tests-android`** (capacité `tests-android`, dépend de `tests-image` et
@@ -393,7 +413,9 @@ Règle unique pour tous les gestionnaires (le cas Node du § 5.8 en est une inst
 - **Réseau d'un échauffement qui exécute du code** (`execute_du_code` vrai : Gradle, Maven, pip sans roue, Unity) :
   accordé par projet par le Directeur (Q4), **recommandé avec une sortie limitée** à une liste fermée de registres par
   famille (Maven Central, `dl.google.com`, `plugins.gradle.org`, `services.gradle.org`, PyPI, npm, NuGet, crates.io,
-  `proxy.golang.org`, `packages.unity.com`) par un mandataire éphémère lancé pour la durée de l'échauffement, sur un réseau
+  `proxy.golang.org`, `packages.unity.com`, `download.packages.unity.com` ; `github.com` et `codeload.github.com`
+  seulement pour un projet dont le manifeste UPM déclare des dépendances git, nommées dans la décision, comme UniVRM pour
+  `sur-la-route`) par un mandataire éphémère lancé pour la durée de l'échauffement, sur un réseau
   Docker `--internal` (rien ne sort ailleurs ; aucun démon permanent). Refusé : le projet reste au poste avec la raison
   « échauffement réseau non accordé ».
 - **Pendant les tests** : le cache figé est monté en **copie sur écriture** (volume local `overlay` : couche basse = le
@@ -436,7 +458,8 @@ Règle unique pour tous les gestionnaires (le cas Node du § 5.8 en est une inst
   N1 chaîne d'outils propre à Windows : .NET Framework (`TargetFramework net4xx`, `TargetFrameworkVersion v4.x`), WPF/WinForms
   (`UseWPF`, `UseWindowsForms`), C++ MSBuild (`*.vcxproj`), tests qui pilotent le registre ou PowerShell Windows ;
   N2 macOS/iOS/Xcode (`*.xcodeproj`, `*.xcworkspace`, `Podfile`, cibles iOS) ; N3 GPU obligatoire (CUDA, rendu Vulkan/Metal
-  réel : déclaré par le profil forcé ou constaté à l'évaluation) ; N4 matériel (USB, série, Bluetooth, caméra, dongle) ;
+  réel : déclaré par le profil forcé ou constaté à l'évaluation ; **Unity PlayMode et tests graphiques**, toujours : seul
+  EditMode part, en `-nographics`) ; N4 matériel (USB, série, Bluetooth, caméra, dongle) ;
   N5 tests qui exigent le réseau ou un secret à l'exécution (constatés à l'évaluation : le conteneur n'aura jamais ni l'un ni
   l'autre) ; N6 architecture autre que x86_64 imposée. Un projet mixte n'est non déportable que pour la commande concernée ;
   ses autres commandes partent.
@@ -457,6 +480,128 @@ Chaîne, une fois par projet puis à chaque changement d'empreinte de profil : *
 Jamais d'activation automatique (R10). `tests.adoption` (dans `reglages.json`, écrit par le bureau seul) garde `statut`,
 `empreinte_profil`, `image`, `duree_s`, `nb_tests` ; une empreinte différente à la campagne suivante (verrou, versions
 d'outils, commande) remet le projet en évaluation et le dit.
+
+### 5.16 Unity : licence de Hub, option B puis option A (amendement Unity)
+
+**Ce qui constitue la licence sous Linux** (connaissance de la documentation de licence d'Unity 6, à confirmer par
+l'inventaire **des noms** au jalon J13 ; jamais un contenu lu ni affiché) :
+- *Licence par droits (« entitlement »)*, celle de Hub, Personal comprise : `~/.config/unity3d/Unity/licenses/`
+  (`UnityEntitlementLicense.xml` et ce que le client y range). Fichier signé, **lié à la machine** (identifiant calculé
+  par le client de licence ; sous Linux probablement d'après `/etc/machine-id`, le nom d'hôte et/ou les interfaces
+  réseau : la formule n'est pas publiée), **rafraîchi en ligne** périodiquement par le client (la durée hors ligne admise
+  pour une Personal n'est pas publiée).
+- *Licence manuelle* : `~/.local/share/unity3d/Unity/Unity_lic.ulf` (le chemin qu'écrit l'étape `licence` de
+  `mise_en_place.sh` dans le volume) ; peut ne pas exister avec Hub.
+- *Client de licence* `Unity.Licensing.Client`, livré avec chaque éditeur (`Editor/Data/Resources/Licensing/Client/`),
+  lancé par l'éditeur ou par Hub, parlé par un canal local (socket Unix propre à l'utilisateur ; chemin exact relevé par
+  nom à J13) ; journal `~/.config/unity3d/Unity/Unity.Licensing.Client.log`.
+- *Session du compte* dans `~/.config/unityhub/` (jetons d'accès au compte Unity) : **jamais** montée, copiée ni lue.
+  `~/.config/unity3d/` en entier (préférences, `Editor.log`) : jamais monté non plus ; seuls les fichiers de licence le sont.
+
+**Ce que la conception ne peut pas savoir sans expérience** : (1) si le client de licence d'un **conteneur** accepte des
+droits émis pour l'hôte (autre `machine-id`, autre nom d'hôte, aucune interface réseau sous `--network none`) ; (2) s'il
+exige une validation en ligne à chaque démarrage ou seulement au-delà d'un délai ; (3) si le client de 6000.6.7f1 lit un
+fichier écrit par le client plus récent de Hub ; (4) si les tests sans `.asmdef` de `sur-la-route` sont découverts en
+`-runTests`. D'où l'expérience J13 avant toute route Unity.
+
+#### Option B (d'abord) : conteneur isolé, licence montée en lecture seule
+
+- **Image** `myiafactory/tests-unity-6000.6.7f1` : image dérivée mince (gabarit du § 5.12, bloc `unity`) `FROM` l'image
+  GameCI **déjà présente** (`unityci/editor:ubuntu-6000.6.7f1-android-4.0.0`, épinglée par son digest local : aucun
+  nouveau tirage de 27 Go), plus `entree-tests.sh`, l'utilisateur 1000 et `git` (dépendances UPM git). Version exacte du
+  projet. Les images GameCI ne comptent pas dans `budget_images_go` et ne sont jamais ramassées ; la couche dérivée y compte
+  par sa **taille propre** (`docker system df -v`, pas la taille apparente qui inclut les 27 Go partagés).
+- **Montages de licence** (table fermée de l'enveloppe, famille `unity` seulement, jamais une valeur du poste) :
+  `~/.config/unity3d/Unity/licenses` → `/licence/droits:ro` et, s'il existe, `Unity_lic.ulf` → `/licence/ulf:ro`.
+  L'entrée du conteneur les **copie** sur le tmpfs (`HOME=/tmp`, mêmes chemins relatifs) parce que le client veut écrire ;
+  la copie meurt avec le conteneur. Jamais la socket du client de l'hôte (ce serait un canal du code non fiable vers un
+  processus de l'hôte qui tient la session Hub), jamais `unityhub/`.
+- **Variantes essayées dans l'ordre, arrêt à la première qui marche** : **B1** fichiers seuls, `--network none` ; **B2**
+  B1 + `/etc/machine-id:ro` et `--hostname` de l'hôte (identifiants de machine, aucun secret) ; **B3** B2 + sortie vers
+  les seuls hôtes de licence d'Unity (noms relevés dans le journal du client à J13, jamais devinés) par le mandataire
+  éphémère de Q4 sur un réseau Docker `--internal`. **B3 contredit `--network none` pendant les tests** (l'éditeur valide
+  sa licence au démarrage du processus même qui lance les tests : on ne peut pas séparer les deux) : B3 n'est essayée et
+  retenue qu'après une décision du Directeur (question QU1, § 9).
+- **Exécution** : la commande du tableau du § 5.11 ; durée 3 600 s ; `/tmp` 6 Go (préférences, caches de l'éditeur,
+  copie de licence ; mesuré à J13) ; `Library/` du cache du § 5.13 (`unity-<16 hexa>` : `Packages/manifest.json`,
+  `Packages/packages-lock.json`, `ProjectVersion.txt`, empreinte d'image), plafond 10 Go dans le budget de 40 Go (Q5),
+  monté en copie sur écriture (les ressources changées sont réimportées dans la couche haute à chaque campagne : coût mesuré
+  à J13). L'échauffement (import `-batchmode -nographics -quit`) a besoin de la licence **et** du réseau des registres UPM
+  (Q4, accordé projet par projet).
+- **Sortie** : le journal de l'éditeur reste dans le conteneur (`-logFile /tmp/unity.log`) ; l'entrée relaie un **résumé**
+  : lignes du journal filtrées (aucune ligne qui contient `licen`, `entitlement`, `serial`, `token`, `ulf`, sans tenir
+  compte de la casse) et le bilan du XML de résultats (total, réussis, échoués, noms des échecs). Codes : 0 tous passent,
+  2 des tests échouent (Test Framework), 3 erreur d'exécution ; licence refusée (motifs de l'étape `licence` : `no valid
+  unity editor license`, `not licensed`…, testés par `grep -q`) → code 81 « licence Unity refusée » ; **0 test exécuté →
+  code 82 « aucun test découvert »**, jamais une réussite.
+
+#### Option A (repli, seulement si B ne marche pas) : éditeur de l'hôte dans un bac à sable obligatoire
+
+Le problème : le code C# des tests (et les greffons natifs du projet) tournerait sur l'hôte qui garde `~/agent-identifiants`,
+`~/.ssh`, `~/taches`, les autres campagnes. **A n'est permise que si tout ce qui suit est en place et vérifié (J14)** :
+- **Utilisateur dédié** `unity-tests` : système, sans shell de connexion, sans mot de passe, hors des groupes `docker`,
+  `kvm`, `sudo` ; dossier `/var/lib/unity-tests` (0700). Il ne peut lire ni `~/agent-identifiants`, ni `~/.ssh`, ni
+  `~/taches`, ni `~/tests` (vérifié par l'audit J14, pas supposé).
+- **Lancement** : `lancer_tests.sh` (utilisateur principal) appelle par `sudo -n` **un seul** script racine
+  `/usr/local/lib/myiafactory/unity-bac-a-sable.sh` (propriété root, 0755, règle sudoers limitée à ce chemin, `visudo -c`
+  vérifié) qui valide ses arguments par motif et lance une **unité transitoire** `systemd-run --pipe --wait --collect
+  --unit unity-tests-<id>` avec des propriétés **figées** : `User=unity-tests`, `ProtectHome=tmpfs`,
+  `ProtectSystem=strict`, `PrivateTmp=yes`, `PrivateDevices=yes`, `NoNewPrivileges=yes`, `CapabilityBoundingSet=`
+  (vide), `ProtectProc=invisible`, `ProcSubset=pid`, `ProtectKernelTunables/Modules/Logs=yes`, `RestrictNamespaces=yes`,
+  `RestrictSUIDSGID=yes`, `LockPersonality=yes`, `SystemCallFilter=@system-service`, `InaccessiblePaths=/run/docker.sock
+  /var/run/docker.sock`, `ReadWritePaths=` le seul dossier de la campagne, `BindReadOnlyPaths=` l'éditeur et les fichiers
+  de licence, `PrivateNetwork=yes` (ou, seulement avec QU1, `IPAddressDeny=any` + `IPAddressAllow=` l'adresse du
+  mandataire des hôtes de licence), et le cgroup : `MemoryMax=10G`, `MemorySwapMax=0`, `CPUQuota=400%`, `TasksMax=2048`,
+  `LimitNOFILE=8192`, `RuntimeMaxSec=3600`. Ubuntu 24.04 (systemd 255) les connaît tous ; bubblewrap n'est pas nécessaire
+  (seulement si l'audit montre une propriété inopérante).
+- **Copie du projet** : l'instantané est extrait **dans l'unité** (comme dans le conteneur) dans
+  `/var/lib/unity-tests/campagnes/<id>/work`, jamais l'original ; `Library/` : même règle que le § 5.13 (couche basse
+  figée, couche haute par campagne ; montage `overlay` fait par le script racine dans un espace de montage privé, à défaut
+  copie `cp --reflink=auto` du cache figé, choix mesuré à J14) ; tout est effacé à la fin.
+- **La licence reste avec Hub** : jamais copiée dans le projet ni dans le dossier de campagne ; les fichiers de licence de
+  l'utilisateur principal sont seulement **liés en lecture** dans le `HOME` de l'unité, avec une ACL de lecture pour
+  `unity-tests` posée sur **ces seuls fichiers** (ACL par défaut sur `licenses/` pour qu'un rafraîchissement par Hub la
+  garde ; à vérifier à J14). Même machine : la liaison à la machine ne gêne pas (c'est l'avantage de A).
+- **Version de l'éditeur** : le projet exige 6000.6.7f1, l'hôte n'a que 6000.6.10f1. **Préféré** : installer 6000.6.7f1
+  (révision `b22767f04f04`) par Hub dans un emplacement lisible par `unity-tests` (`/opt/unity/editors`, réglé comme
+  dossier d'installation de Hub) — étape humaine guidée (session graphique) ou `unityhub --headless install --version
+  6000.6.7f1 --changeset b22767f04f04` depuis cette session (question QU2). **À défaut**, 6000.6.10f1 seulement par une
+  décision du Directeur pour ce projet, sur la **copie** (le `ProjectVersion.txt` du vrai projet n'est jamais touché ; la
+  mise à niveau éventuelle n'existe que dans la campagne), avec une ligne d'avertissement en tête des résultats « Éditeur
+  6000.6.10f1 au lieu de 6000.6.7f1 : résultats indicatifs » et un cache `Library/` à part par version.
+- **Même protocole que le conteneur** : places, jetons, file, `#attente`, laisse (fin de l'entrée → `sudo -n
+  unity-bac-a-sable.sh --arreter <id>` → arrêt de l'unité), `timeout`, coupe à 50 Mo, sortie d'erreur préfixée `| `,
+  `#fin` écrit par l'enveloppe, codes 81/82. L'enveloppe devient **à exécuteurs** : `conteneur` (défaut, tout ce qui
+  précède) et `hote_bac_a_sable` (ce paragraphe) partagent tout sauf le lancement et l'arrêt.
+- **Risque résiduel, dit honnêtement** : A est **moins isolé** que Docker. Même noyau dans les deux cas ; mais sans
+  système de fichiers racine à part, `/usr`, `/etc`, `/opt` de l'hôte restent **lisibles** (en lecture seule) par le code
+  des tests, donc tout fichier lisible par tous sur l'hôte l'est aussi ; une propriété oubliée ou inopérante ouvre plus
+  qu'un conteneur ; le code des tests peut lire la licence (comme en B) ; les greffons natifs du projet tournent sous
+  `unity-tests`. A reste acceptable seulement si l'audit J14 passe, et le bureau dit « sur l'hôte, bac à sable » à chaque
+  verdict.
+
+#### Choix automatique, capacités, bureau
+
+- **Capacité `unity-licence`** (non installable : licence de Hub), à états : `conteneur` (B marche, variante retenue
+  B1/B2/B3), `hote` (B ne marche pas, A seule possible), `absente` (aucun fichier de licence, Hub déconnecté, ou licence
+  refusée à la dernière campagne ; aussi l'état de départ, raison « expérience B non faite »). L'état est écrit par le seul
+  outil de l'expérience (J13) et par une campagne Unity qui rend 81 (→ `absente`) ; la sonde vérifie par `test -s` que
+  les fichiers de licence existent toujours (jamais leur contenu).
+- **Capacité `unity-bac-a-sable`** (installable : étape `unity_bac_a_sable` de `mise_en_place.sh`, accord du Directeur) :
+  utilisateur, script racine, règle sudoers, ACL, dossier ; présente seulement si le marqueur de l'audit J14 existe et que
+  la version d'éditeur exigée est lisible par `unity-tests`.
+- **Règle de choix (exacte)** pour un profil `unity` : `unity-licence = conteneur` → exécuteur `conteneur` ;
+  `unity-licence = hote` **et** `unity-bac-a-sable` présente → exécuteur `hote_bac_a_sable` ; sinon → **rien n'est lancé
+  au serveur** : repli au poste (R1 étendue) avec la raison (« licence Unity absente » / « bac à sable Unity absent : rien
+  ne tourne sur l'hôte sans lui »). Jamais A sans ses prérequis, jamais en silence. Un code 82 n'est jamais compté
+  comme une réussite (adoption : `echoue`, raison « aucun test découvert »).
+- **Bureau** : la carte du serveur montre « Licence Unity : dans le conteneur (B1) / sur l'hôte, bac à sable / absente —
+  raison » et « Bac à sable Unity : prêt / absent ». Licence `absente` → **étape humaine guidée** (décision
+  `environnement` existante, non autonome : `lien` + `mode_operatoire` de 2 à 10 étapes) : ouvrir la session graphique du
+  serveur (`lancer.py plateforme installer --bureau-distant` si absente), ouvrir Unity Hub, se connecter, Préférences >
+  Licences > ajouter une licence Personal, fermer Hub ; puis le bouton « Vérifier la licence » relance la sonde (autonome).
+  Pas d'automatisation possible de la connexion (identifiants du compte du Directeur : jamais saisis par un agent). Même
+  forme pour l'installation de 6000.6.7f1 par Hub (QU2).
 
 ## 6. Sécurité
 
@@ -485,9 +630,16 @@ d'erreur du conteneur par `| ` pour qu'aucune ligne ne puisse imiter `#fin`.
 - **Caches** : propres à un projet (jamais partagés entre projets : un projet ne peut pas empoisonner le cache d'un autre),
   figés après l'échauffement, montés en copie sur écriture pendant les tests ; un test ne peut donc pas modifier le cache
   de la campagne suivante.
-- **Licence Unity** (si Q3) : c'est un secret ; montée en lecture seule dans le seul conteneur d'un projet Unity accordé,
-  copiée sur le tmpfs ; un test du projet **peut la lire** et l'écrire sur sa sortie (relayée au poste) : risque assumé
-  seulement par la décision du Directeur.
+- **Licence Unity** (Q3 = B puis A, § 5.16) : c'est un secret ; jamais dans un instantané (motifs du § 5.2), jamais
+  affichée (`grep -q`, journal filtré) ; seuls les fichiers de licence sont montés en lecture seule (B) ou liés en lecture
+  (A), jamais `unityhub/` ni la socket du client de l'hôte. Un test du projet **peut lire** la licence et l'écrire sur sa
+  sortie : le filtre du journal ne couvre pas une sortie volontairement déguisée ; risque assumé par la décision du
+  Directeur (licence Personal de son propre compte ; la session du compte, elle, n'est jamais exposée).
+- **Option A** : code non fiable **sur l'hôte**, contenu par l'utilisateur `unity-tests` et une unité systemd figée ;
+  moins isolé que Docker (racine de l'hôte lisible en lecture seule), permis seulement après l'audit J14 ; risque résiduel
+  au § 5.16.
+- **Option B3** (si QU1 = oui) : le conteneur de tests Unity a une sortie, limitée aux hôtes de licence d'Unity par le
+  mandataire ; seule exception à « aucun réseau aux tests », propre à la famille `unity`.
 - **Profil** : l'analyse ne lit qu'une liste fermée de fichiers bornés, jamais un secret, n'exécute rien.
 
 ## 7. Laissé à l'implémenteur
@@ -507,14 +659,45 @@ Amendement : J5 couvre le profil Node par le mécanisme général ; J8 construir
 `./gradlew testDebugUnitTest` de MyFridgeCleaner (échauffement en ligne puis campagne hors ligne) ; J9 construire une image
 dérivée (Godot 4.7 pour ZooRunner, ou Node d'un autre majeur), vérifier sa reconstruction nulle à empreinte égale, puis le
 ramassage ; J10 échauffement et campagne hors ligne, copie sur écriture vérifiée (le cache est intact après la campagne) ;
-J11 parallélisme pondéré : 2 Gradle + 2 Python simultanées, pics mémoire relevés, budget de jetons confirmé ou corrigé ; J12
-(si Q3) un projet Unity de test en EditMode. Chacun après le feu vert du Directeur, rien de laissé ensuite hors caches et
-images voulus.
+J11 parallélisme pondéré : 2 Gradle + 2 Python simultanées, pics mémoire relevés, budget de jetons confirmé ou corrigé.
+Chacun après le feu vert du Directeur, rien de laissé ensuite hors caches et images voulus.
+
+Amendement Unity : **J12** les tests Python de `sur-la-route` (`Tools/factory/tests`) par le profil `python`, sans
+licence, dès J1–J2 ; **J13 expérience B** (lecture et conteneur seulement, aucun changement de l'hôte) : inventaire des
+**noms** et tailles des fichiers de licence et de la socket du client (jamais un contenu) ; image
+`myiafactory/tests-unity-6000.6.7f1` construite ; **un** test EditMode de `sur-la-route` (`-testFilter <nom>`) sur une
+copie de l'instantané, variantes B1 puis B2 (B3 seulement après QU1), durée mesurée à froid (import de `Library/`) et à
+chaud ; verdict écrit dans `unity-licence` (`conteneur`, ou `hote` si la licence est refusée dans toutes les variantes
+permises ; une erreur de compilation ou 0 test = « indéterminé », rien n'est écrit, jamais une conclusion pour A) ;
+**J14 seulement si J13 rend `hote`** : étape `unity_bac_a_sable` (accord), installation de 6000.6.7f1 par Hub (QU2),
+audit du bac à sable par un script de sonde du dépôt (pas le code du projet) : lecture de `~/agent-identifiants`,
+`~/.ssh`, `~/taches`, d'une autre campagne, de `~/.config/unityhub`, de `/run/docker.sock` refusée ; connexion sortante
+refusée ; mémoire, processus et durée bornés ; laisse qui arrête l'unité ; ACL posées sur les seuls fichiers de licence ;
+puis le même test EditMode par l'exécuteur `hote_bac_a_sable`, durée mesurée ; marqueur posé seulement si tout passe.
 
 ## 9. Questions au Directeur
 
-**Décidées** : Q1 (feu vert J1–J3) = **oui** ; Q2 (réseau pour `npm ci --ignore-scripts`) = **oui**.
+**Toutes décidées** (2026-11-23) :
+- **Q1** (jalons réels après les tâches 1 à 8, chacun avec son feu vert) = **oui**.
+- **Q2** (réseau pour `npm ci --ignore-scripts`) = **oui**.
+- **Q3** (licence Unity) = **« B puis A »** : B, conteneur isolé à la version exacte du projet avec la licence de Hub
+  montée en lecture seule, d'abord ; si l'expérience J13 montre que B ne marche pas, A, éditeur de l'hôte dans le bac à
+  sable obligatoire du § 5.16 ; choix automatique par l'état de `unity-licence`, jamais A sans `unity-bac-a-sable`.
+- **Q4** = **oui** : réseau seulement pour la construction des images dérivées et pour les échauffements, accordé projet
+  par projet, sortie limitée à une liste fermée de registres par un mandataire éphémère sur un réseau Docker interne.
+- **Q5** = **oui** : `budget_images_go` 30 Go, `budget_caches_go` 40 Go (dont les `Library/` Unity, 10 Go chacune au plus),
+  éviction du moins récemment utilisé, 5 Go libres minimum ; à revoir après J11 et J13.
 
+**Ouvertes (Unity seulement, posées au moment où elles se présentent)** :
+- **QU1. Si B1 et B2 échouent parce que le client de licence veut joindre Unity** : accorder au conteneur de tests Unity
+  une sortie limitée aux hôtes de licence d'Unity (mandataire de Q4), pendant les tests eux-mêmes (B3) — plutôt que de
+  passer à A ? *Recommandation : oui pour B3 (sortie vers quelques hôtes d'Unity, dans un conteneur) ; c'est moins risqué
+  que A (code non fiable sur l'hôte).*
+- **QU2. Si J13 rend `hote`** : installer 6000.6.7f1 (révision `b22767f04f04`, quelques Go) par Hub sur l'hôte, dans
+  `/opt/unity/editors` (étape humaine guidée) ? *Recommandation : oui ; 6000.6.10f1 sur une copie seulement à défaut,
+  résultats marqués indicatifs.*
+
+*Historique — texte de Q3 avant la décision :*
 - **Q3. Licence Unity pour les tests au serveur.** Ce qui existe : l'étape `licence` de `mise_en_place.sh` reçoit un `.ulf`
   sur l'entrée standard, l'écrit dans le volume `unity-cache` et prouve l'activation dans `unityci/editor:ubuntu-6000.6.7f1-android-4.0.0` ;
   aucune capacité ne suit cette licence ni l'image GameCI, donc le bureau ne sait pas si elle est active sur le serveur ; la
@@ -522,7 +705,9 @@ images voulus.
   vérifier pour votre licence) ; un test du projet peut lire la licence montée. Blocage : sans licence active, aucun test
   Unity ne tourne, au serveur comme sur GitHub. *Recommandation : reporter (aucun projet Unity dans les essais, les jeux
   actuels sont en Godot, déportables sans licence) ; le jour d'un projet Unity, fournir une licence dédiée au serveur et
-  ajouter une capacité `unity-licence`.*
+  ajouter une capacité `unity-licence`.* (Démenti le 2026-11-23 : `sur-la-route` est un projet Unity, et la licence est
+  une Personal de Hub, pas un `.ulf`.)
+- *Textes de Q4 et Q5 avant la décision :*
 - **Q4. Réseau à la construction des images dérivées et aux échauffements qui exécutent du code du projet** (Gradle,
   Maven, pip sans roue, Unity) ? *Recommandation : oui, avec la sortie limitée aux registres de la liste fermée (mandataire
   éphémère, réseau Docker interne), accordée projet par projet à l'adoption ; sans cela, Android/Gradle et JVM restent au

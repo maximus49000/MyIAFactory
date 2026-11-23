@@ -13,11 +13,13 @@ Bibliothèque standard seulement (Python 3.9 et plus) ; aucune donnée lue ici n
   ni périphérique, ni membre GNU (noms longs, éparpillés), ni en-tête pax : l'extraction de `tar -x` du conteneur ne peut
   donc créer que des fichiers ordinaires sous /work. Code 0 admise, 1 refusée (raison sur la sortie d'erreur).
 - `--prefixer <marque> <max>` : relaie l'entrée vers la sortie en mettant `| ` au début de CHAQUE ligne (bloc par bloc, sans
-  attendre la fin des lignes : la sortie reste en direct) et finit toujours par un retour à la ligne : aucune ligne du
-  conteneur ne peut ressembler à une ligne de l'enveloppe (`#fin`, `#attente`). Au-delà de `<max>` octets reçus, le reste est
-  lu et jeté (le conteneur n'est jamais bloqué) et le fichier `<marque>` est créé.
-- `--couper <marque> <max>` : relaie l'entrée telle quelle, `<max>` octets au plus, puis lit et jette le reste et crée
-  `<marque>`. Une sortie fermée (poste parti) ne bloque jamais : l'entrée est vidée jusqu'au bout.
+  attendre la fin des lignes : la sortie reste en direct) et finit toujours par un retour à la ligne ; \r devient \n et les
+  autres séparateurs de lignes (\x0b \x0c \x1c-\x1e U+0085 U+2028 U+2029) sont écrits sous forme de texte (`Nettoyeur`) :
+  aucune ligne du conteneur ne peut ressembler à une ligne de l'enveloppe (`#fin`, `#refus`, `#attente`). Au-delà de
+  `<max>` octets reçus, le reste est lu et jeté (le conteneur n'est jamais bloqué) et le fichier `<marque>` est créé.
+- `--couper <marque> <max>` : relaie l'entrée (mêmes séparateurs réécrits, sans préfixe), `<max>` octets au plus, puis lit
+  et jette le reste et crée `<marque>`. Une sortie fermée (poste parti) ne bloque jamais : l'entrée est vidée jusqu'au bout.
+- Messages (`texte_sur`) : contrôles et séparateurs d'un nom refusé écrits sous forme de texte, sur une seule ligne.
 """
 import json
 import os
@@ -48,8 +50,15 @@ def commande_valide(brut):
         c = json.loads(brut.decode("utf-8"))
     except (UnicodeDecodeError, ValueError):
         return False
-    return (isinstance(c, list) and 1 <= len(c) <= 64 and all(isinstance(x, str) and "\0" not in x for x in c)
-            and bool(c[0]))
+    if not (isinstance(c, list) and 1 <= len(c) <= 64 and all(isinstance(x, str) and "\0" not in x for x in c)
+            and c[0]):
+        return False
+    try:                                 # demi-substitut seul (« \ud800 ») : l'entrée du conteneur ne l'encoderait pas
+        for x in c:
+            x.encode("utf-8")
+    except UnicodeEncodeError:
+        return False
+    return True
 
 
 def nom_sur(nom):
@@ -166,48 +175,103 @@ def _ecrire(sortie, octets):
         return False
 
 
-def couper(entree, sortie, marque, maximum):
-    recu, ouverte = 0, True
+# Séparateurs de lignes autres que \n (str.splitlines, terminaux) : un « \r#fin 0 … » ou « \x0c#fin 0 … » du conteneur ne
+# doit jamais commencer une ligne, même pour un lecteur moins strict que le poste. \r et \r\n deviennent \n (la ligne qui
+# suit est donc préfixée) ; \x0b, \x0c, \x1c-\x1e et U+0085, U+2028, U+2029 (en UTF-8) sont écrits sous forme de texte
+# (« \x0c », «   »). Contrat du poste : la sortie d'erreur se coupe sur b"\n" SEULEMENT, et seule la DERNIÈRE ligne
+# (`#fin`) et celle qui la précède (`#refus`) sont crues.
+_SEPARATEURS = re.compile(rb"\r\n?|[\x0b\x0c\x1c-\x1e]|\xc2\x85|\xe2\x80[\xa8\xa9]")
+_DEBUTS = (b"\xe2\x80", b"\xe2", b"\xc2", b"\r")         # début possible d'un séparateur coupé entre deux blocs
+
+
+def _remplacer(m):
+    s = m.group()
+    if s[:1] == b"\r":
+        return b"\n"
+    if len(s) == 1:
+        return b"\\x%02x" % s[0]
+    return b"\\u%04x" % ord(s.decode("utf-8"))
+
+
+class Nettoyeur:
+    """Réécrit les séparateurs bloc par bloc ; un séparateur coupé entre deux blocs est gardé pour le bloc suivant."""
+
+    def __init__(self):
+        self.reste = b""
+
+    def traiter(self, bloc):
+        d, self.reste = self.reste + bloc, b""
+        for debut in _DEBUTS:
+            if d.endswith(debut):
+                d, self.reste = d[:-len(debut)], debut
+                break
+        return _SEPARATEURS.sub(_remplacer, d)
+
+    def finir(self):
+        d, self.reste = self.reste, b""
+        return _SEPARATEURS.sub(_remplacer, d)
+
+
+def _prefixer_texte(propre, debut):
+    """(texte avec `| ` au début de chaque ligne, vrai si le texte finit par \n) ; seul \n sépare les lignes ici."""
+    morceaux = []
+    parties = propre.split(b"\n")
+    for i, partie in enumerate(parties):
+        dernier = i == len(parties) - 1
+        if dernier and not partie:
+            break
+        if debut:
+            morceaux.append(b"| ")
+        morceaux.append(partie)
+        if dernier:
+            debut = False
+        else:
+            morceaux.append(b"\n")
+            debut = True
+    return b"".join(morceaux), debut
+
+
+def _relayer(entree, sortie, marque, maximum, prefixe):
+    nettoyeur, recu, etat = Nettoyeur(), 0, {"ouverte": True, "debut": True}
+
+    def envoyer(propre):
+        if prefixe:
+            propre, etat["debut"] = _prefixer_texte(propre, etat["debut"])
+        if etat["ouverte"] and propre:
+            etat["ouverte"] = _ecrire(sortie, propre)
+
     while True:
         bloc = os.read(entree, LIRE)
         if not bloc:
-            return
-        if recu + len(bloc) > maximum:
-            if ouverte:
-                _ecrire(sortie, bloc[:maximum - recu])
+            break
+        coupe = recu + len(bloc) > maximum
+        if coupe:
+            bloc = bloc[:maximum - recu]
+        recu += len(bloc)
+        envoyer(nettoyeur.traiter(bloc))
+        if coupe:
             _marquer(marque)
             _vider(entree)
-            return
-        recu += len(bloc)
-        if ouverte:
-            ouverte = _ecrire(sortie, bloc)
+            break
+    envoyer(nettoyeur.finir())
+    if prefixe and etat["ouverte"] and not etat["debut"]:
+        _ecrire(sortie, b"\n")
+
+
+def couper(entree, sortie, marque, maximum):
+    _relayer(entree, sortie, marque, maximum, False)
 
 
 def prefixer(entree, sortie, marque, maximum):
-    recu, ouverte, debut = 0, True, True
-    while True:
-        bloc = os.read(entree, LIRE)
-        if not bloc:
-            break
-        if recu + len(bloc) > maximum:
-            bloc = bloc[:maximum - recu]
-            _marquer(marque)
-            recu = maximum + 1
-        else:
-            recu += len(bloc)
-        morceaux = []
-        for ligne in bloc.splitlines(True):
-            if debut:
-                morceaux.append(b"| ")
-            morceaux.append(ligne)
-            debut = ligne.endswith(b"\n")
-        if ouverte and morceaux:
-            ouverte = _ecrire(sortie, b"".join(morceaux))
-        if recu > maximum:
-            _vider(entree)
-            break
-    if ouverte and not debut:
-        _ecrire(sortie, b"\n")
+    _relayer(entree, sortie, marque, maximum, True)
+
+
+_TEXTE_DOUTEUX = re.compile("[\x00-\x1f\x7f-\x9f  ]")
+
+
+def texte_sur(texte):
+    """Un message sur UNE ligne : contrôles et séparateurs écrits sous forme de texte (« \\u000a »)."""
+    return _TEXTE_DOUTEUX.sub(lambda m: "\\u%04x" % ord(m.group()), texte)
 
 
 def principal(argv):
@@ -221,7 +285,7 @@ def principal(argv):
         raison = verifier_archive(argv[1])
         if raison is None:
             return 0
-        sys.stderr.write("instantané refusé : %s\n" % raison)
+        sys.stderr.write("instantané refusé : %s\n" % texte_sur(raison))
         return 1
     if argv[:1] in (["--prefixer"], ["--couper"]) and len(argv) == 3 and re.match(r"^[1-9][0-9]{0,9}$", argv[2]):
         relais = prefixer if argv[0] == "--prefixer" else couper

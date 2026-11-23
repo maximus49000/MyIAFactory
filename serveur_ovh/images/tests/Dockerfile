@@ -2,7 +2,8 @@
 # construction, par-dessus Ubuntu épinglé (voir serveur_ovh/versions.json). Ni Claude Code, ni jeton, ni pont, ni client
 # réseau : l'image livrée n'a ni curl ni wget (curl ne sert qu'à récupérer le dépôt de Node et est purgé en fin de la même
 # couche). Le conteneur tourne sans réseau, racine en lecture seule, sous l'utilisateur 1000 (« ubuntu » de l'image de base),
-# HOME=/tmp ; /work et /tmp sont des tmpfs posés par l'enveloppe hôte (taches/lancer_tests.sh).
+# HOME=/tmp ; /work est un montage de l'hôte (~/tests/<id>/travail, sur disque) et /tmp un tmpfs, posés par l'enveloppe
+# hôte (taches/lancer_tests.sh).
 ARG UBUNTU_TAG=24.04
 FROM ubuntu:${UBUNTU_TAG}
 

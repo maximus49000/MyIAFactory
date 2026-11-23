@@ -1,5 +1,7 @@
 # Image des agents : Node et CLI Claude, par-dessus Ubuntu épinglé (voir serveur_ovh/versions.json).
 # L'image livrée n'a ni curl ni wget : curl ne sert qu'à récupérer le dépôt de Node et est purgé en fin de la même couche.
+# JDK 17 de la distribution (openjdk-17-jdk-headless, /usr/lib/jvm/java-17-openjdk-amd64) : construire l'APK d'un projet
+# Flutter au serveur (Gradle) ; JAVA_HOME n'est posé par l'entrée que pour les projets Flutter.
 ARG UBUNTU_TAG=24.04
 FROM ubuntu:${UBUNTU_TAG}
 
@@ -9,7 +11,7 @@ ARG CLAUDE_CODE=2.1.328
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl ca-certificates git python3 \
+    && apt-get install -y --no-install-recommends curl ca-certificates git python3 openjdk-17-jdk-headless \
     && curl -fsSL "https://deb.nodesource.com/setup_${NODE_MAJEUR}.x" | bash - \
     && apt-get install -y --no-install-recommends nodejs \
     && apt-get purge -y curl \

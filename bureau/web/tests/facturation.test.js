@@ -4,7 +4,7 @@ import {teteFacturation, lignesTaches, lignesModeles, serviceFacture, coutEnClai
         demandeParallelisme, resumeParallelisme, resumeRecrutement, demandeRecrutementManuel, apercuAuto,
         limiteAuto, propositionsDuLieu, demandeRecrutementAuto, demandeDepot, PLAFOND_PAR_DEFAUT, REGLE_PLAFOND,
         ligneApercu, partieRecrutement, partieReprise, reprisePossible, demandePasserPolyvalent,
-        CONFIRMATION_REPRISE, demandePublication, enregistrerLivraisonGithub} from "../ui/facturation.js";
+        CONFIRMATION_REPRISE, demandePublication} from "../ui/facturation.js";
 
 const REC = (extra = {}) => ({recrutement: {
   roles: [{role: "dev", nom: "Développement", modele: "Sonnet", agents: 1, cloud: 0, travail: 4}],
@@ -249,11 +249,6 @@ test("demandeDepot : l'accord à l'allègement n'est envoyé que s'il est donné
   assert.deepEqual(demandeDepot(false), {type: "depot_git", confirme: true});
 });
 
-test("publication GitHub : la demande « Publier maintenant » et le réglage « Livrer automatiquement »", async () => {
+test("publication GitHub : la demande « Publier maintenant » (le réglage « Livrer automatiquement » est dans la page Réglages)", () => {
   assert.deepEqual(demandePublication(), {type: "publier_livrable", confirme: true});
-  let vu;
-  const r = await enregistrerLivraisonGithub(true, async (url, o) => { vu = {url, o}; return {ok: true}; });
-  assert.equal(r.ok, true);
-  assert.deepEqual(JSON.parse(vu.o.body), {livraison_github: true});
-  assert.match(vu.url, /\/api\/reglages/);
 });

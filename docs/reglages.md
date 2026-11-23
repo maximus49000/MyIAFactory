@@ -18,10 +18,28 @@ mêmes niveaux que la page (`bureau/registre.py`, `lieux_du_type`) : un lieu pos
 Le moteur et l'état du bureau lisent aussi les **valeurs effectives** des réglages à cases (`reglages.charger_effectif`,
 `regles.reglage_effectif` côté moteur) : « Valider les leçons automatiquement », « Analyse intelligente des blocages »,
 « Livrer seulement sur demande » et « Évolution moyenne : une seule session » posés au global ou au type agissent vraiment, et
-les cases de la Direction (`/api/etat`) montrent la valeur appliquée. Le moteur lancé sur le fichier du bureau en lit les
+la page Réglages et `/api/etat` montrent la valeur appliquée. Le moteur lancé sur le fichier du bureau en lit les
 niveaux ; lancé sur un seul projet (`--reglages`), ou si le fichier du bureau est illisible, il lit le projet seul, comme
 avant. « Dossier approuvé pour les sessions cloud » et « Livrer automatiquement sur GitHub » restent propres au projet :
 posés à la main au global ou au type, ils n'agissent pas.
+
+## Un réglage, un seul endroit
+
+Les réglages à cases ne sont **que** dans la page Réglages (roue crantée, en haut à droite) : ni le panneau Direction ni la
+configuration git de Facturation n'en portent plus. Le serveur accepte toujours les anciennes clés de `POST /api/reglages`
+(moteur, autres appelants). Seule la carte de décision « dossier cloud » écrit encore `cloud_dossier_approuve` d'un clic.
+
+| Réglage | Niveaux | Défaut |
+|---|---|---|
+| Valider les leçons automatiquement (`lecons_auto`) | global, type, projet | non |
+| Analyse intelligente des blocages (`analyse_blocages`) | global, type, projet | oui |
+| Évolution moyenne : une seule session (`une_session_moyenne`) | global, type, projet | non |
+| Livrer seulement sur demande (`livraison_sur_demande`) | global, type, projet | non |
+| Dossier approuvé pour les sessions cloud (`cloud_dossier_approuve`) | projet seulement | non |
+| Livrer automatiquement sur GitHub (`livraison_github`) | projet seulement | non |
+
+« Partager les connaissances » est un réglage de tout le bureau : il apparaît au niveau Global de la page (voir
+[`partage-connaissances.md`](partage-connaissances.md)).
 
 ## Ce que montre la page
 

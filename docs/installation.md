@@ -218,8 +218,8 @@ Sur un bureau qui suit plusieurs projets (fichier de bureau commun), la dernièr
    un `.factory` est refusé, c'est le travail de la réparation ; un échec rend le dossier tel qu'il était). Au premier tour, le bureau en fait l'inventaire (`examiner`) et un agent Haiku en
    lecture seule en rédige un résumé de 300 mots (`installation/scan.py`) ; le chef les reçoit (`connaissance`) et le scan
    n'est refait que si le répertoire change. Un dossier trop lourd pour GitHub (fichier de plus de 50 Mo, ou plus de 1 Go) n'est jamais ajouté à l'aveugle : le bureau
-   propose les exclusions `.gitignore` (« Accepter l'allègement et créer le dépôt »). Une fois le projet sur GitHub, la case
-   **« Livrer automatiquement sur GitHub »** (configuration git) publie chaque livrable terminé (apk, zip…) en release privée
+   propose les exclusions `.gitignore` (« Accepter l'allègement et créer le dépôt »). Une fois le projet sur GitHub, le réglage
+   **« Livrer automatiquement sur GitHub »** (dans Réglages, roue crantée en haut à droite, niveau Projet) publie chaque livrable terminé (apk, zip…) en release privée
    `v<numéro>`, et « Publier maintenant » le fait sur un clic (voir `orchestrateur/interface.md`, commande `publier`). Si la connexion à Claude est perdue, l'erreur du tour offre un bouton
    « Se connecter » (`claude auth login`) à côté de « Renvoyer ». **Valider** contrôle le nom et le dossier tout de suite :
    rien n'est écrit dans un projet.

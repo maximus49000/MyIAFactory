@@ -2,7 +2,7 @@
 
 import {el} from "./dom.js";
 import {euros, tokens, tronquer, libellePeriode, dateFr} from "./texte.js";
-import {challengeDe, enregistrerReglage} from "./actions.js";
+import {challengeDe} from "./actions.js";
 import {urlProjet} from "./projets.js";
 import {enAttenteCible} from "./challenge.js";
 import {etiquettePart, marquerPart, avecPart} from "./abonnement.js";
@@ -636,39 +636,12 @@ export function demandePublication() {
   return {type: "publier_livrable", confirme: true};
 }
 
-// Le réglage « Livrer automatiquement sur GitHub » (décoché par défaut ; le projet doit être sur GitHub).
-export function enregistrerLivraisonGithub(valeur, fetchFn = fetch) {
-  return enregistrerReglage("livraison_github", valeur, [
-    "Chaque livrable terminé sera publié en release GitHub privée.",
-    "Les livrables ne sont plus publiés seuls : « Publier maintenant » reste possible."], fetchFn);
-}
-
-export const AIDE_LIVRAISON_GITHUB = "Cochée, chaque livrable téléchargeable terminé (apk, zip…) est publié en release " +
-  "GitHub privée du projet (v121, v122…), sans entrer dans l'historique git ; son lien est rangé dans le livrable. " +
-  "Décochée, rien n'est publié seul.";
-
-// Le bloc « Livrer sur GitHub » de la configuration git d'un projet déjà sur GitHub : la case et « Publier maintenant ».
+// Le bloc « Publier maintenant » de la configuration git d'un projet déjà sur GitHub. Le réglage « Livrer
+// automatiquement sur GitHub » est dans la page Réglages (roue crantée), pas ici.
 function blocLivraisonGithub(ctx) {
-  const e = ctx.etat;
   const bloc = el("div", "livraison-github");
-  const label = el("label", "lecons-auto-label");
-  const case_ = document.createElement("input");
-  case_.type = "checkbox";
-  case_.checked = e.livraison_github === true;
-  label.append(case_, el("span", "", " Livrer automatiquement sur GitHub"));
-  const message = el("p", "note", "");
-  message.setAttribute("aria-live", "polite");
-  case_.addEventListener("change", async () => {
-    const voulu = case_.checked;
-    case_.disabled = true;
-    const r = await enregistrerLivraisonGithub(voulu);
-    case_.disabled = false;
-    if (r.ok) { e.livraison_github = voulu; ctx.rouvrir?.(); } else case_.checked = !voulu;
-    message.textContent = r.message;
-  });
   const erreur = el("p", "saisie-erreur", "");
-  bloc.append(label, el("p", "note", AIDE_LIVRAISON_GITHUB), message,
-              boutonDemande(ctx, "Publier maintenant", demandePublication, erreur), erreur);
+  bloc.append(boutonDemande(ctx, "Publier maintenant", demandePublication, erreur), erreur);
   return bloc;
 }
 

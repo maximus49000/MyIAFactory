@@ -155,7 +155,7 @@ const ETATS_APERCU = {
 };
 
 // L'aperçu et la validation : le diff s'affiche, « Valider et pousser » envoie l'empreinte affichée (branche de travail).
-function blocApercu(fetchFn) {
+export function blocApercu(fetchFn) {
   const bloc = el("div", "deport-apercu");
   const zone = el("div", "deport-apercu-zone");
   const message = el("p", "note", "");

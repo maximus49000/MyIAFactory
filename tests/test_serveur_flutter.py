@@ -528,6 +528,8 @@ class TestEnveloppeFlutter(unittest.TestCase):
             r = b.lancer("seul", "30", "2048", "2", "2")
             self.assertEqual(r.returncode, 0, r.stderr + r.stdout)
             self.assertNotIn("debug.keystore", " ".join(b.run_args()))
+            # ANDROID_USER_HOME : /maison/.android existe AVANT l'agent (créé par l'enveloppe, uid de l'hôte), clé ou non
+            self.assertTrue((b.dossier / "maison" / ".android").is_dir())
             b.arreter()
             b.attendre_final()
 
@@ -621,7 +623,13 @@ class TestEntreeFlutter(unittest.TestCase):
         self.assertEqual(v, {"PATH": "/opt/flutter-sdk/bin:/usr/local/bin:/usr/bin:/bin", "FLUTTER_ROOT": "/opt/flutter-sdk",
                              "PUB_CACHE": os.path.join("/maison", ".pub-cache"), "FLUTTER_SUPPRESS_ANALYTICS": "true",
                              "CI": "true", "JAVA_HOME": "/usr/lib/jvm/java-17-openjdk-amd64",
-                             "GRADLE_USER_HOME": os.path.join("/maison", ".gradle")})
+                             "GRADLE_USER_HOME": os.path.join("/maison", ".gradle"),
+                             # la JVM prend user.home dans /etc/passwd (/home/<utilisateur>, en lecture seule) : tout
+                             # ce qu'AGP et Java écrivent sous ~/.android va sous /maison
+                             "ANDROID_USER_HOME": os.path.join("/maison", ".android"),
+                             "ANDROID_EMULATOR_HOME": os.path.join("/maison", ".android"),
+                             "ANDROID_AVD_HOME": os.path.join("/maison", ".android", "avd"),
+                             "JAVA_TOOL_OPTIONS": "-Duser.home=/maison"})
         (self.racine / "opt" / "android-sdk").mkdir(parents=True)
         v = self.env(AGENT_FLUTTER="1")
         self.assertEqual((v["ANDROID_HOME"], v["ANDROID_SDK_ROOT"]), ("/opt/android-sdk", "/opt/android-sdk"))

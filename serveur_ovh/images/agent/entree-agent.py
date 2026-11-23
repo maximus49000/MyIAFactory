@@ -594,7 +594,15 @@ def environnement_flutter(c, chemin):
     env = {"PATH": f"{FLUTTER_RACINE}/bin:{chemin}", "FLUTTER_ROOT": FLUTTER_RACINE,
            "PUB_CACHE": os.path.join(c["maison"], ".pub-cache"), "FLUTTER_SUPPRESS_ANALYTICS": "true", "CI": "true",
            # construire l'APK : le JDK de l'image et le cache de Gradle sous /maison (inscriptible, compté dans le plafond)
-           "JAVA_HOME": JAVA_RACINE, "GRADLE_USER_HOME": os.path.join(c["maison"], ".gradle")}
+           "JAVA_HOME": JAVA_RACINE, "GRADLE_USER_HOME": os.path.join(c["maison"], ".gradle"),
+           # la JVM prend user.home dans /etc/passwd (le /home de l'hôte, en lecture seule ici), pas dans HOME : AGP y
+           # écrirait ~/.android. ANDROID_USER_HOME (lu par AGP : clé de debug montée par lancer_agent.sh) et, pour toutes
+           # les JVM (client et démon Gradle, démon Kotlin, sdkmanager), JAVA_TOOL_OPTIONS -Duser.home : GRADLE_OPTS ne
+           # vaudrait que pour le client Gradle. Prix : une ligne « Picked up JAVA_TOOL_OPTIONS » par JVM sur stderr.
+           "ANDROID_USER_HOME": os.path.join(c["maison"], ".android"),
+           "ANDROID_EMULATOR_HOME": os.path.join(c["maison"], ".android"),
+           "ANDROID_AVD_HOME": os.path.join(c["maison"], ".android", "avd"),
+           "JAVA_TOOL_OPTIONS": f"-Duser.home={c['maison']}"}
     if os.path.isdir(os.path.join(os.environ.get("AGENT_RACINE") or "/", ANDROID_RACINE.lstrip("/"))):
         env.update(ANDROID_HOME=ANDROID_RACINE, ANDROID_SDK_ROOT=ANDROID_RACINE)
     return env

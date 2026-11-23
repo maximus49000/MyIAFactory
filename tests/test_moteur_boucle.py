@@ -797,6 +797,13 @@ class Serveur(Base):
                                        "lot": None, "suite": None}
         self.moteur._partir(self.projet, ("agent", "dev-1", [self.tache], matiere))
 
+    def test_partir_serveur_projet_flutter_consigne_des_commandes_simples(self):
+        (self.dossier / "android_app").mkdir()
+        (self.dossier / "android_app" / "pubspec.yaml").write_text("dependencies:\n  flutter:\n    sdk: flutter\n",
+                                                                  encoding="utf-8")
+        self.partir()
+        self.assertIn("personne n'approuve tes commandes", self.lances()[-1]["depart"])
+
     def test_partir_serveur_utilise_l_executeur_distant(self):
         self.partir()
         (lance,) = self.lances()
@@ -808,6 +815,7 @@ class Serveur(Base):
         self.assertIn(f"`agent/{self.tache}`", lance["depart"])
         self.assertIn("commite", lance["depart"])
         self.assertNotIn("lancer.py\" tests --", lance["depart"])     # pas le lanceur de tests du poste
+        self.assertNotIn("personne n'approuve", lance["depart"])      # projet non Flutter : pas de consigne Flutter
         self.assertNotIn("reprendre", lance)
         self.assertFalse(any(detache.dossier(self.dossier).glob("*.json")))   # aucun agent détaché sur le poste
         self.moteur.tour()

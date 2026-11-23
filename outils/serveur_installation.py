@@ -31,7 +31,7 @@ ETAT = "serveurs-etat.json"
 VERROU = "serveurs-installation.lock"
 VERROU_JEUNE_S = 30
 DELAI_DEFAUT_S = 600
-DELAIS_ETAPE_S = {"docker": 1200, "durcissement": 900, "android_build": 1800, "android_emulateur": 1800, "emulateur_image": 900, "agent_image": 900, "unity_cli": 300}
+DELAIS_ETAPE_S = {"docker": 1200, "durcissement": 900, "android_build": 1800, "android_emulateur": 1800, "emulateur_image": 900, "agent_image": 900, "tests_image": 900, "unity_cli": 300}
 LONGUEUR_MAX = 200
 STATUTS_ETAPE = ("fait", "a_faire", "bloque")
 
@@ -301,7 +301,8 @@ FICHIERS_ETAPE = {"emulateur_image": ("images/emulateur/Dockerfile", "images/emu
                   # enregistrer_jeton.sh est lancé à la main par le Directeur, pont_hote.py par lancer_agent.sh (mode pilote,
                   # sur l'hôte) : déposés avec l'étape, hors de l'empreinte de l'image (ils n'y entrent pas)
                   "agent_image": ("images/agent/Dockerfile", "images/agent/entree-agent.py", "images/agent/pont",
-                                  "taches/enregistrer_jeton.sh", "taches/pont_hote.py")}
+                                  "taches/enregistrer_jeton.sh", "taches/pont_hote.py"),
+                  "tests_image": ("images/tests/Dockerfile", "images/tests/entree-tests.sh")}
 # Fichiers du contexte de construction de l'image, dans l'ordre de l'empreinte (par défaut : tous ceux de l'étape).
 EMPREINTE_FICHIERS = {**FICHIERS_ETAPE,
                       "agent_image": ("images/agent/Dockerfile", "images/agent/entree-agent.py", "images/agent/pont")}
@@ -336,6 +337,8 @@ def empreinte_etape(etape):
         h.update((RACINE_SERVEUR / rel).read_bytes())
     if etape == "agent_image":                       # mêmes champs, même ordre que EMPREINTE_AGENT du script
         versions_image = f"ubuntu={versions['base_ubuntu']};node={versions['node']};claude_code={versions['claude_code']}"
+    elif etape == "tests_image":                     # mêmes champs, même ordre que EMPREINTE_TESTS du script
+        versions_image = f"ubuntu={versions['base_ubuntu']};python=3.12;node={versions['node']}"
     else:
         versions_image = f"ubuntu={versions['base_ubuntu']};jdk=17"
     return f"{versions_image};fichiers={h.hexdigest()[:16]}"
@@ -346,7 +349,8 @@ def empreinte_etape(etape):
 # sonde du catalogue reste une pure existence de fichier (le validateur interdit d'y passer une valeur du poste) ; la
 # péremption est une lecture de plus, faite par le moteur seulement pour les capacités demandées.
 MARQUEURS = {"emulateur-image": ("emulateur_image", '$HOME/.myiafactory/emulateur-image.version'),
-             "agent": ("agent_image", '$HOME/.myiafactory/agent-image.version')}
+             "agent": ("agent_image", '$HOME/.myiafactory/agent-image.version'),
+             "tests-image": ("tests_image", '$HOME/.myiafactory/tests-image.version')}
 
 
 def _perimees(serveur, ssh, presentes, requises):

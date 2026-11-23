@@ -4,8 +4,8 @@
 # Contrat d'entrée standard : SEULES les étapes licence (la licence) et bureau_distant (UNE ligne : le mot de passe de la
 # session graphique) lisent stdin. Pour toutes les autres, stdin est fermé (/dev/null) afin qu'aucune commande
 # (ssh, apt, docker...) ne puisse consommer ce que l'appelant envoie.
-# Les étapes android_build, android_emulateur, emulateur_image, agent_image et unity_cli (capacités du serveur) ne lisent pas non plus stdin : aucun secret.
-# Usage : mise_en_place.sh --etape <durcissement|docker|images|licence|bureau_distant|android_build|android_emulateur|emulateur_image|agent_image|unity_cli|etat> [--simuler]
+# Les étapes android_build, android_emulateur, emulateur_image, agent_image, tests_image et unity_cli (capacités du serveur) ne lisent pas non plus stdin : aucun secret.
+# Usage : mise_en_place.sh --etape <durcissement|docker|images|licence|bureau_distant|android_build|android_emulateur|emulateur_image|agent_image|tests_image|unity_cli|etat> [--simuler]
 # Réservées aux tests (valeurs par défaut en production) : JVM_RACINE, KVM_PERIPH, SDK_DELAI_S.
 # Sortie standard : UN SEUL objet JSON {"etape","statut","detail","versions","disque_libre_go"}.
 # Idempotent : chaque étape constate l'état avant d'agir. --simuler n'exécute aucune commande apt/docker/ufw/systemctl.
@@ -41,6 +41,8 @@ EMPREINTE_ANDROID="ubuntu=${V_UBUNTU};build_tools=${V_BUILD_TOOLS};plateforme=${
 EMPREINTE_AGENT="ubuntu=${V_UBUNTU};node=${V_NODE};claude_code=${V_CLAUDE_CODE}"
 # Image de l'émulateur : versions ET empreinte des fichiers de son contexte (Dockerfile, entree-tache.sh, pont.sh) : un pont modifié la reconstruit.
 EMPREINTE_EMULATEUR_BASE="ubuntu=${V_UBUNTU};jdk=17"
+# Image des campagnes de tests : Python 3.12 de la distribution Ubuntu 24.04, Node épinglé, puis l'empreinte de ses fichiers.
+EMPREINTE_TESTS="ubuntu=${V_UBUNTU};python=3.12;node=${V_NODE}"
 SEUIL_DISQUE_GO=20
 DOSSIER_IMAGES="${SERVEUR_OVH_DIR:-$HOME/myiafactory/serveur_ovh}/images"   # là où l'installation dépose serveur_ovh
 
@@ -49,14 +51,14 @@ SIMULER=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --etape)
-      [ $# -ge 2 ] || { echo "L'option --etape attend une valeur (durcissement, docker, images, licence, bureau_distant, android_build, android_emulateur, emulateur_image, agent_image, unity_cli ou etat)." >&2; exit 2; }
+      [ $# -ge 2 ] || { echo "L'option --etape attend une valeur (durcissement, docker, images, licence, bureau_distant, android_build, android_emulateur, emulateur_image, agent_image, tests_image, unity_cli ou etat)." >&2; exit 2; }
       ETAPE="$2"; shift 2 ;;
     --simuler) SIMULER=1; shift ;;
     *) echo "Argument inconnu : $1" >&2; exit 2 ;;
   esac
 done
 case "$ETAPE" in
-  durcissement|docker|images|licence|bureau_distant|android_build|android_emulateur|emulateur_image|agent_image|unity_cli|etat) ;;
+  durcissement|docker|images|licence|bureau_distant|android_build|android_emulateur|emulateur_image|agent_image|tests_image|unity_cli|etat) ;;
   *) echo "Étape inconnue ou absente : '$ETAPE'" >&2; exit 2 ;;
 esac
 
@@ -464,6 +466,7 @@ SEUIL_EMULATEUR_GO=10
 SEUIL_EMULATEUR_IMAGE_GO=3
 SEUIL_UNITY_CLI_GO=2
 SEUIL_AGENT_IMAGE_GO=3
+SEUIL_TESTS_IMAGE_GO=3
 RESEAU_AGENTS="myiafactory-agents"
 
 # Les étapes de capacités s'installent pour l'utilisateur SSH ordinaire, jamais pour root (comme bureau_distant).
@@ -851,6 +854,58 @@ etape_agent_image() {
   repondre fait "Image myiafactory/agent déjà à jour (${empreinte}), réseau ${RESEAU_AGENTS} prêt."
 }
 
+# --- Image des campagnes de tests --------------------------------------------
+
+# Étape tests_image : construit myiafactory/tests depuis images/tests/ (Dockerfile, entree-tests.sh ; dossier $SERVEUR_OVH_DIR,
+# par défaut ~/myiafactory/serveur_ovh) assemblés dans un contexte temporaire, puis écrit le marqueur
+# ~/.myiafactory/tests-image.version (contenu = l'étiquette « versions » de l'image : versions épinglées + 16 hexa du SHA-256
+# des deux fichiers, testé par la sonde du catalogue). Idempotente : l'image n'est reconstruite que si l'étiquette diffère ;
+# le marqueur est retiré avant toute reconstruction puis réécrit en dernier. Aucun réseau Docker n'est créé : les conteneurs
+# de tests tournent sans réseau (--network none, posé par taches/lancer_tests.sh). Aucun identifiant n'entre dans l'image ;
+# la construction, elle, a besoin du réseau (dépôts Ubuntu et Node).
+etape_tests_image() {
+  local racine="${SERVEUR_OVH_DIR:-$HOME/myiafactory/serveur_ovh}" ctx empreinte actuelle marqueur="$HOME/.myiafactory/tests-image.version" f journal fin code fichiers_h
+  if [ "$SIMULER" = 1 ]; then
+    repondre a_faire "Simulation : construirait l'image myiafactory/tests (Ubuntu ${V_UBUNTU#ubuntu:}, Python 3.12, Node ${V_NODE}, outils de construction, sans curl ni wget, utilisateur 1000) depuis ${racine} puis écrirait ${marqueur}."
+  fi
+  refuser_root
+  exiger_disque "$SEUIL_TESTS_IMAGE_GO"
+  command -v docker >/dev/null 2>&1 || repondre a_faire "Docker absent : installez d'abord la capacité base (étape docker), puis refaites celle-ci."
+  for f in images/tests/Dockerfile images/tests/entree-tests.sh; do
+    [ -f "$racine/$f" ] || repondre bloque "Fichier de l'image introuvable : $racine/$f. Relancez l'installation (elle redépose les fichiers)."
+  done
+  fichiers_h=$(cat "$racine/images/tests/Dockerfile" "$racine/images/tests/entree-tests.sh" | sha256sum | cut -c1-16)
+  [[ $fichiers_h =~ ^[0-9a-f]{16}$ ]] || repondre bloque "Empreinte des fichiers de l'image incalculable (sha256sum) : rien n'a été construit ni écrit."
+  empreinte="${EMPREINTE_TESTS};fichiers=${fichiers_h}"
+  actuelle=$(sudo -n docker image inspect -f '{{ index .Config.Labels "versions" }}' myiafactory/tests 2>/dev/null)
+  if [ "$actuelle" != "$empreinte" ]; then
+    rm -f "$marqueur"
+    ctx=$(mktemp -d) || repondre bloque "Dossier temporaire non créable pour construire l'image."
+    if ! cp "$racine/images/tests/Dockerfile" "$racine/images/tests/entree-tests.sh" "$ctx/"; then
+      rm -rf "$ctx"
+      repondre bloque "Contexte de construction de l'image non préparable."
+    fi
+    journal=$(sudo -n docker build --label "versions=$empreinte" --build-arg "UBUNTU_TAG=${V_UBUNTU#ubuntu:}" --build-arg "NODE_MAJEUR=$V_NODE" -t myiafactory/tests "$ctx" 2>&1)
+    code=$?
+    rm -rf "$ctx"
+    if [ "$code" != 0 ]; then
+      fin=$(printf '%s\n' "$journal" | tail -n 20 | tr -d '\000-\010\013-\037' | cut -c1-200)
+      fin="${fin//$HOME/\~}"
+      repondre bloque "Construction de l'image myiafactory/tests impossible (contexte ${racine}). Fin du journal de construction : ${fin}"
+    fi
+    actuelle=""
+  fi
+  mkdir -p "$HOME/.myiafactory" || repondre bloque "Dossier $HOME/.myiafactory non créable."
+  if [ "$(cat "$marqueur" 2>/dev/null)" != "$empreinte" ]; then
+    if ! { printf '%s\n' "$empreinte" > "$marqueur.tmp.$$" && mv -f "$marqueur.tmp.$$" "$marqueur"; }; then
+      rm -f "$marqueur.tmp.$$"
+      repondre bloque "Marqueur $marqueur non écrit."
+    fi
+  fi
+  if [ -z "$actuelle" ]; then repondre fait "Image myiafactory/tests construite (${empreinte}) ; marqueur écrit."; fi
+  repondre fait "Image myiafactory/tests déjà à jour (${empreinte})."
+}
+
 # --- Unity CLI -------------------------------------------------------------
 
 # Étape unity_cli : l'outil officiel Unity CLI seulement, installé pour l'utilisateur dans ~/.local/bin/unity. Le script
@@ -917,6 +972,7 @@ case "$ETAPE" in
   android_emulateur) etape_android_emulateur ;;
   emulateur_image) etape_emulateur_image ;;
   agent_image) etape_agent_image ;;
+  tests_image) etape_tests_image ;;
   unity_cli) etape_unity_cli ;;
   etat) etape_etat ;;
 esac

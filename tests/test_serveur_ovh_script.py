@@ -1641,7 +1641,7 @@ class TestTexteDuScript(unittest.TestCase):
     def test_images_reconstruites_si_les_versions_changent(self):
         self.assertIn('--label "versions=$empreinte"', self.texte)
         self.assertIn('"$actuelle" != "$empreinte"', self.texte)
-        self.assertEqual(self.texte.count("--build-arg"), 13)          # + CMDLINE_TOOLS de l'émulateur, + 3 de l'étape agent_image
+        self.assertEqual(self.texte.count("--build-arg"), 15)          # + CMDLINE_TOOLS de l'émulateur, + 3 d'agent_image, + 2 de tests_image
 
     def test_dockerfile_script_et_versions_json_concordent(self):
         versions = json.loads((RACINE / "versions.json").read_text(encoding="utf-8"))

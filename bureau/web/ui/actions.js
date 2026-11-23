@@ -330,6 +330,12 @@ export function demandeTestsServeur(decision, verdict) {
   return {type: "tests_serveur", decision: decision.id, verdict};
 }
 
+// « Évaluer les tests sur le serveur » : le code du projet part au serveur pour UNE campagne d'évaluation, sur ce clic seulement
+// (`confirme`) ; rien n'est activé sans la réponse du Directeur au verdict.
+export function demandeEvaluerTestsServeur() {
+  return {type: "evaluer_tests_serveur", confirme: true};
+}
+
 export function demandeOutilAgent(decision, verdict) {
   return {type: "outil_agent", decision: decision.id, verdict};
 }

@@ -3,10 +3,12 @@
 `outil.py evaluer-tests-serveur` lance l'évaluation (`outils/tests_adoption.py`), écrit `tests.adoption` dans les réglages du
 projet et pose UNE décision de projet selon le verdict. La réponse du Directeur (demande `tests_serveur`) revient à la même
 commande (`decision`, `verdict`). Jamais d'activation automatique : seule la réponse `activer` règle l'action « tests » du
-projet sur le serveur. Aucune construction d'image ici : `construire` est une information pour le contrôleur ou le bureau.
+projet sur le serveur. Aucune construction d'image ici : la réponse `construire` note la somme du Dockerfile approuvé
+(`tests.adoption.image_approuvee`) ; le moteur lance ensuite la construction de CETTE somme et l'évaluation (jamais un agent).
 """
 import json
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -78,6 +80,59 @@ def decision_pour(resultat) -> dict:
     return {"genre": "tests_serveur_adoption", "texte": texte, "charge": charge}
 
 
+def decision_profil_change(empreinte, precedente) -> dict:
+    """La décision `tests_profil` posée quand la route a vu que le profil des tests n'est plus celui qui a été évalué : les
+    campagnes restent au poste jusqu'à une nouvelle évaluation (`reevaluer`, sur le clic du Directeur)."""
+    return {"genre": "tests_profil",
+            "texte": "Le profil des tests du projet a changé depuis la dernière évaluation au serveur (verrou des "
+                     "dépendances, versions d'outils ou commande) : les tests restent sur le poste jusqu'à une nouvelle "
+                     "évaluation, qui enverra le code du projet au serveur.",
+            "charge": {"statut": "profil_change", "empreinte_profil": empreinte, "precedente": precedente}}
+
+
+MOTIF_SHA = re.compile(r"[0-9a-f]{64}", re.ASCII)
+MOTIF_ETIQUETTE = re.compile(r"myiafactory/tests-[0-9a-f]{12}", re.ASCII)
+
+
+def _ecrire_reglages(fichier, donnees, suffixe):
+    tmp = Path(str(fichier) + suffixe)
+    tmp.write_text(json.dumps(donnees, ensure_ascii=False, indent=2), encoding="utf-8")
+    os.replace(tmp, fichier)
+
+
+def _adoption_de(donnees):
+    tests = donnees.get("tests") if isinstance(donnees.get("tests"), dict) else {}
+    adoption = tests.get("adoption") if isinstance(tests.get("adoption"), dict) else {}
+    return tests, adoption
+
+
+def noter_image_approuvee(fichier_reglages, charge):
+    """`tests.adoption.image_approuvee = {sha256, etiquette}` : le Dockerfile que le Directeur a approuvé (réponse
+    `construire`). La construction (`tests_adoption.construire_image`) n'a lieu que pour cette somme."""
+    sha, etiquette = (charge or {}).get("sha256"), (charge or {}).get("etiquette")
+    if not (isinstance(sha, str) and MOTIF_SHA.fullmatch(sha) and isinstance(etiquette, str)
+            and MOTIF_ETIQUETTE.fullmatch(etiquette)):
+        raise ValueError("décision sans Dockerfile approuvable (somme ou étiquette invalide)")
+    donnees = _lire_reglages(fichier_reglages)
+    tests, adoption = _adoption_de(donnees)
+    adoption["image_approuvee"] = {"sha256": sha, "etiquette": etiquette}
+    tests["adoption"] = adoption
+    donnees["tests"] = tests
+    _ecrire_reglages(fichier_reglages, donnees, ".image.tmp")
+
+
+def image_approuvee(fichier_reglages):
+    """`{sha256, etiquette}` approuvés par le Directeur, ou None (absent, illisible, hors motif)."""
+    try:
+        x = _adoption_de(_lire_reglages(fichier_reglages))[1].get("image_approuvee")
+    except (ValueError, OSError):
+        return None
+    if isinstance(x, dict) and isinstance(x.get("sha256"), str) and MOTIF_SHA.fullmatch(x["sha256"]) \
+            and isinstance(x.get("etiquette"), str) and MOTIF_ETIQUETTE.fullmatch(x["etiquette"]):
+        return {"sha256": x["sha256"], "etiquette": x["etiquette"]}
+    return None
+
+
 def _lire_reglages(fichier):
     chemin = Path(fichier)
     donnees = json.loads(chemin.read_text(encoding="utf-8-sig")) if chemin.exists() else {}
@@ -130,8 +185,9 @@ def reponse(genre, verdict, charge, fichier_reglages, racine) -> dict:
         if verdict == "reessayer":
             return {"fait": "Nouvelle évaluation demandée.", "suite": "evaluer"}
     if genre == "tests_image_derivee" and verdict == "construire":
-        return {"fait": "Construction de l'image demandée : le contrôleur ou le bureau la lance (construire_image_tests.sh), "
-                        "jamais un agent. L'évaluation reprendra ensuite.", "suite": "construire"}
+        noter_image_approuvee(fichier_reglages, charge)
+        return {"fait": "Construction de l'image approuvée : le moteur la lance au serveur (construire_image_tests.sh), "
+                        "jamais un agent, puis l'évaluation reprend.", "suite": "construire"}
     if genre == "tests_reseau_echauffement":
         noter_reseau(fichier_reglages, verdict == "accorder")
         if verdict == "accorder":

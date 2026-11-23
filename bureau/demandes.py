@@ -24,7 +24,7 @@ CHAMPS = {"bouton": ("id",), "deplacer": ("tache", "colonne"),
           "retour_element": ("fonctionnalite", "element", "texte"),
           "organisation": ("decision", "verdict"), "genre_fonctionnalite": ("decision", "fonctionnalite", "choix"),
           "environnement": ("decision", "verdict"), "elargir_genre": ("decision", "verdict"),
-          "tests_serveur": ("decision", "verdict"), "valider_etape": ("decision", "verdict"), "outil_agent": ("decision", "verdict"), "accord_agent": ("decision", "verdict"),
+          "tests_serveur": ("decision", "verdict"), "evaluer_tests_serveur": ("confirme",), "valider_etape": ("decision", "verdict"), "outil_agent": ("decision", "verdict"), "accord_agent": ("decision", "verdict"),
           "partenaire_regle": ("partenaire", "operation"), "partenaire_inscrit": ("partenaire", "inscrit"),
           "faire_chez_partenaire": ("decision", "verdict"), "partenaires_actualiser": (),
           "partenaires_maj": ("confirme",), "installer_outil": ("decision", "outil"),
@@ -54,7 +54,7 @@ DEMANDES_V4 = ("fonctionnalite", "message", "cahier", "methode", "genre", "sessi
                "parallelisme", "recruter", "depot_git", "passer_polyvalent", "outil_agent", "accord_agent", "regle_projet",
                "serie_arretee", "fin_vue", "faire_chez_partenaire", "fable_tache", "proposer_decoupage", "decoupage_lieux",
                "lieu_etape", "regroupement_etape", "blocage_analyse", "anomalie", "livrer_maintenant", "publier_livrable",
-               "question", "question_approfondir", "tests_serveur")
+               "question", "question_approfondir", "tests_serveur", "evaluer_tests_serveur")
 NATURES = ("fonctionnalite", "correction")
 VERDICTS_BLOCAGE = ("suivre", "preciser", "laisser")   # suivre la recommandation du Chef, répondre autrement, laisser
 GENRES_TESTS_SERVEUR = ("tests_serveur_adoption", "tests_image_derivee", "tests_reseau_echauffement", "tests_profil")
@@ -175,6 +175,8 @@ def verifier(demande, r, cibles_calculees=frozenset(), elements=None):
         return _verifier_passer_polyvalent(demande, r)
     if genre == "publier_livrable":      # « Publier maintenant » : les livrables terminés partent en releases GitHub
         return None if demande.get("confirme") is True else "« confirme » doit être vrai : la publication part sur votre clic."
+    if genre == "evaluer_tests_serveur":  # « Évaluer les tests sur le serveur » : le code du projet part sur ce clic seulement
+        return None if demande.get("confirme") is True else "« confirme » doit être vrai : le code part au serveur sur votre clic."
     if genre == "livrer_maintenant":     # « Livrer maintenant » : le moteur dit lui-même si rien n'attend
         return None if demande.get("confirme") is True else "« confirme » doit être vrai : la livraison part sur votre clic."
     if genre in ("lieu_etape", "regroupement_etape", "proposer_decoupage"):

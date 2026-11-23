@@ -355,15 +355,33 @@ def _adoption_par_defaut(racine):
     return tests_adoption.adoption_lue(racine)
 
 
-def _controler_adoption(profil, racine, adoption=None):
+def _signaler_profil_par_defaut(racine):
+    """Pose la décision `tests_profil` par l'outil du projet (`evaluer-tests-serveur {"profil_change": true}`, qui recompare
+    lui-même les empreintes ; rien n'est envoyé au serveur). Au mieux : jamais d'échec de la campagne pour cela."""
+    try:
+        depot = str(Path(__file__).resolve().parent.parent)
+        if depot not in sys.path:
+            sys.path.insert(0, depot)
+        from bureau import deport_types
+        from orchestrateur import outil
+        factory = Path(deport_types.racine_du_projet(racine)) / ".factory" / "factory.json"
+        if factory.is_file() and not factory.is_symlink():
+            outil.executer(str(factory), ["lancer", "evaluer-tests-serveur"], {"profil_change": True})
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _controler_adoption(profil, racine, adoption=None, signaler=None):
     """Réévaluation (§ 5.15) : si le projet a une adoption notée (`tests.adoption`, écrite par le bureau) dont l'empreinte de
     profil n'est plus celle du profil courant (verrou, versions d'outils, commande), la campagne passe au poste une fois, en
-    le disant : jamais de campagne au serveur sur un profil non évalué. Sans adoption notée : comportement d'avant."""
+    le disant, et la décision `tests_profil` est posée (`signaler`) : jamais de campagne au serveur sur un profil non
+    évalué. Sans adoption notée : comportement d'avant."""
     try:
         notee = (adoption or _adoption_par_defaut)(racine)
     except Exception:  # noqa: BLE001 — réglages illisibles : comme sans adoption
         return
     if isinstance(notee, dict) and notee.get("empreinte_profil") and notee["empreinte_profil"] != profil.empreinte:
+        (signaler or _signaler_profil_par_defaut)(racine)
         raise Repli("refusé (profil changé : nouvelle évaluation proposée)")
 
 

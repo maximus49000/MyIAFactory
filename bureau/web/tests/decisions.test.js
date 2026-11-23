@@ -624,3 +624,14 @@ test("tests au serveur : le verdict, les échecs classés, puis un bouton par r�
     {type: "tests_serveur", decision: "d8", verdict: "garder_poste"}]);
   assert.equal(boutons(rendre({...ETAT, agir: false, fonctionnalites: [], decisions_projet: [TESTS_ADOPTION]}).contenu).length, 0);
 });
+
+test("tests au serveur : le bouton d'évaluation dit que le code part au serveur et envoie confirme", async () => {
+  const {contenu, demandes} = rendre({...ETAT, fonctionnalites: [], decisions_projet: []});
+  assert.match(contenu.textContent, /Tests au serveur/);
+  const b = bouton(contenu, "Évaluer les tests sur le serveur (envoie le code du projet au serveur)");
+  await b.auteurs.click[0]();
+  assert.deepEqual(demandes, [{type: "evaluer_tests_serveur", confirme: true}]);
+  // en lecture seule : ni bouton ni partie vide
+  const lecture = rendre({...ETAT, agir: false, fonctionnalites: [], decisions_projet: []}).contenu;
+  assert.doesNotMatch(lecture.textContent, /Tests au serveur/);
+});

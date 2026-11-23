@@ -27,6 +27,12 @@ Lance l'action `<type>` (tests, apk, charge…) là où le Directeur l'a réglé
   `<projet>/.factory/serveur/<id>/`, imprime le manifeste ; 0 seulement si le statut est `ok`, 1 sinon (plantage,
   limite, erreur, serveur injoignable). Pilote : imprime l'identifiant et le mode d'emploi de `serveur-outil`.
 
+`lancer.py tests` (`lancer_tests`) : `--local` le poste ; GitHub par `deporter` ; avec l'accord du Directeur
+(`deport_types.refus_route` : projet enregistré, `tests` sur serveur dans ses réglages enregistrés ou par défaut au
+bureau) la route du serveur (`outils/tests_serveur.py`, repli au poste par règle) ; `--serveur` la force (2 sans accord) ;
+sinon le poste. `deporter tests` réglé sur serveur est refusé (code 2, comme avant ; `--poste` le lance au poste). `lancer.py serveur-tests` (`serveur_tests`)
+vérifie le même accord avant tout.
+
 Codes : 0 réussi, 1 action échouée, 2 usage ou lieu refusé, 3 `--sans-attendre` refusé, 4 `gh` indisponible ou réseau
 absent (ou Python 3.12 introuvable pour la recette sur émulateur), 5 amont échoué, 6 travail non poussé
 (origin/<branche> n'est pas au commit courant, ou modifications suivies non commitées), 7 workflow absent de la branche, 8 quota GitHub probablement épuisé (cache de consommation au niveau
@@ -59,7 +65,7 @@ import github_actions  # noqa: E402
 from bureau import deport_conso  # noqa: E402
 from bureau.deport import a_attendre, lieu_effectif  # noqa: E402
 from bureau.deport_types import (MSG_REGLEZ_SERVEUR, SERVIES_AU_SERVEUR, catalogue_du_projet,  # noqa: E402
-                                 racine_du_projet, refus_accord, servie_au_serveur)
+                                 racine_du_projet, refus_accord, refus_route, routee_au_serveur, servie_au_serveur)
 
 BUREAU = Path("~/MyIAFactory/bureau.json").expanduser()
 EN_COURS = Path("~/MyIAFactory/deport-en-cours").expanduser()
@@ -172,6 +178,8 @@ def lieux_refuses(lieux, action, catalogue):
     lieu : tout autre réglage (ou aucun) est refusé."""
     refus = []
     for a in [action] + [d for d in catalogue[action]["consomme"] if d in lieux]:
+        if lieux.get(a) == "serveur" and routee_au_serveur(a, catalogue):
+            continue      # routée par `lancer.py tests` (accord lu à part, `refus_route`), repli au poste possible
         if servie_au_serveur(a, catalogue):
             if lieux.get(a) != "serveur":
                 refus.append("« %s » ne tourne que sur le serveur et n'y est pas réglée pour ce projet. %s Jamais de "
@@ -193,6 +201,10 @@ def doit_passer_par_deporter(action, lieux, catalogue):
         # au seul serveur : réglée, seul `deporter` la lance ; non réglée, elle n'est pas déportée (et `deporter`,
         # appelé quand même, la refuse)
         return lieux.get(action) is not None
+    if lieux.get(action) == "serveur" and routee_au_serveur(action, catalogue):
+        # routée au serveur : `deporter` n'a à intervenir que pour une production attendue de GitHub
+        return (any(lieux.get(d) == "github" for d in a_attendre(lieux, action, catalogue))
+                or bool(lieux_refuses(lieux, action, catalogue)))
     return (lieux[action] == "github" or bool(a_attendre(lieux, action, catalogue))
             or bool(lieux_refuses(lieux, action, catalogue)))
 
@@ -601,6 +613,13 @@ def main(argv=None, executer_poste=campagne.executer, gh=github_actions, git=_gi
         return executer_poste(commande, dossier=dossier, attendre=opt["attendre"])
 
     if lieux[action] != "github" and not amont:
+        if lieux[action] == "serveur" and not au_serveur:
+            # routée (`tests`) : seul `lancer.py tests` prend la route du serveur, après l'accord ; `deporter` refuse
+            # comme avant (jamais de bascule silencieuse vers le poste)
+            print("Le lieu « serveur » de l'action « %s » n'est pas disponible par « deporter » : lancez « lancer.py "
+                  "tests [--dossier <dossier>] -- <commande> » (le serveur avec l'accord du Directeur, sinon le poste), "
+                  "ou relancez avec --poste." % action, file=sys.stderr)
+            return 2
         return lancer_au_poste()
 
     contexte = {"action": action, "lieux": lieux, "catalogue": catalogue, "amont": amont, "opt": opt,
@@ -620,13 +639,160 @@ def main(argv=None, executer_poste=campagne.executer, gh=github_actions, git=_gi
         retirer_attente(id_, repertoire_attente)
 
 
-def lancer_tests(argv, bureau=BUREAU, deporter_main=None, campagne_main=None):
-    """`lancer.py tests …` : par `deporter` si les tests tournent sur GitHub ou attendent une production d'ailleurs ;
-    sinon par la campagne du poste, comme toujours."""
+USAGE_TESTS = ("Usage : lancer.py tests [--dossier <dossier>] [--sans-attendre] [--local | --serveur] -- <commande de "
+               "test>")
+MSG_SANS_312_TESTS = ("Python 3.12 introuvable : la route des tests au serveur l'exige (python.org, ou « winget install "
+                      "Python.Python.3.12 »).")
+
+
+def _retirer_route(argv):
+    """`(argv sans --local/--serveur, local, serveur)` : seulement AVANT `--` (la commande garde les siens), et jamais
+    la valeur de `--dossier` ou `--reglages`."""
     argv = list(argv)
-    if faut_deporter("tests", argv, bureau):
+    fin = argv.index("--") if "--" in argv else len(argv)
+    garde, local, serveur, i = [], False, False, 0
+    while i < fin:
+        o = argv[i]
+        if o in ("--dossier", "--reglages") and i + 1 < fin:
+            garde += [o, argv[i + 1]]
+            i += 2
+            continue
+        if o == "--local":
+            local = True
+        elif o == "--serveur":
+            serveur = True
+        else:
+            garde.append(o)
+        i += 1
+    return garde + argv[fin:], local, serveur
+
+
+def _options_campagne(argv):
+    """`(dossier, attendre, commande)` de l'usage de la campagne (`[--dossier D] [--sans-attendre] -- <commande>`), ou
+    None (la campagne dira l'usage elle-même, comme aujourd'hui)."""
+    if "--" not in argv or argv.index("--") == len(argv) - 1:
+        return None
+    i = argv.index("--")
+    options, commande = list(argv[:i]), list(argv[i + 1:])
+    dossier, attendre = None, True
+    while options:
+        o = options.pop(0)
+        if o == "--dossier" and options:
+            dossier = options.pop(0)
+        elif o == "--sans-attendre":
+            attendre = False
+        else:
+            return None
+    return dossier, attendre, commande
+
+
+def _importer_tests_serveur():
+    """La route du serveur (Python 3.12) : importée ici seulement, jamais au chargement de `deporter`."""
+    import tests_serveur
+    return tests_serveur
+
+
+def _executer_route(commande):
+    """Lance `lancer.py serveur-tests …` sous un Python 3.12 à part (liste, jamais de shell ; sorties héritées) ; rend
+    son code, 130 sur Ctrl-C, None si le lancement est impossible."""
+    sys.stdout.flush()
+    sys.stderr.flush()
+    try:
+        return subprocess.run(list(commande), stdin=subprocess.DEVNULL).returncode
+    except KeyboardInterrupt:
+        return 130
+    except OSError:
+        return None
+
+
+def _route_par_defaut(commande, dossier, attendre, forcer, version=None, importer=_importer_tests_serveur,
+                      trouver_python=_python_312, executer=_executer_route):
+    """La campagne par `tests_serveur.executer` (dans ce processus sous Python 3.12 et plus, sinon `lancer.py
+    serveur-tests` par un Python 3.12 à part, `-E -s`) ; rend son code, ou None sans Python 3.12."""
+    version = tuple(sys.version_info[:2]) if version is None else tuple(version)
+    if version >= (3, 12):
+        try:
+            return importer().executer(list(commande), dossier=dossier, attendre=attendre, forcer=forcer)
+        except KeyboardInterrupt:
+            return 130
+    python = trouver_python()
+    if not python:
+        return None
+    argv = list(python) + OPTIONS_PYTHON + [str(LANCEUR), "serveur-tests", "--dossier", str(dossier)]
+    argv += ([] if attendre else ["--sans-attendre"]) + (["--serveur"] if forcer else []) + ["--"] + list(commande)
+    return executer(argv)
+
+
+def lancer_tests(argv, bureau=BUREAU, deporter_main=None, campagne_main=None, route=None):
+    """`lancer.py tests [--local | --serveur] …` (conception § 5.1) :
+    1. `--local` : la campagne du poste (verrou), sans rien lire d'autre ;
+    2. tests réglés sur GitHub, ou en attente d'une production de GitHub : par `deporter` (sauf `--serveur`) ;
+    3. accord du serveur (`refus_route` : projet enregistré au bureau, `tests` sur serveur dans SES réglages
+       enregistrés ou par défaut au bureau) : la route (`route(commande, dossier, attendre, forcer)`, défaut
+       `_route_par_defaut`), qui se replie au poste par ses règles ; `--serveur` la force (jamais de repli) ;
+    4. sinon la campagne du poste, comme toujours (sans un mot si rien ne demande le serveur).
+    `--serveur` sans accord : code 2 et la raison, jamais de route. Sans Python 3.12 : le poste avec une ligne (4 avec
+    `--serveur`)."""
+    argv, local, serveur = _retirer_route(argv)
+    poste = campagne_main or campagne.main
+    if local and serveur:
+        print("--local et --serveur s'excluent.\n" + USAGE_TESTS, file=sys.stderr)
+        return 2
+    if local:
+        return poste(argv)
+    if not serveur and faut_deporter("tests", argv, bureau):
         return (deporter_main or main)(["tests"] + argv)
-    return (campagne_main or campagne.main)(argv)
+    lues = _options_campagne(argv)
+    if lues is None:
+        if serveur:
+            print(USAGE_TESTS, file=sys.stderr)
+            return 2
+        return poste(argv)
+    dossier, attendre, commande = lues
+    try:
+        dossier = str(Path(dossier or os.getcwd()).resolve())
+        refus = refus_route(dossier, "tests", bureau=str(bureau))
+    except (OSError, ValueError, RuntimeError) as e:
+        refus = "dossier illisible (%s)" % type(e).__name__
+    if refus:
+        if serveur:
+            print("Tests au serveur refusés : %s" % refus, file=sys.stderr)
+            return 2
+        if lieu_de("tests", argv, bureau) == "serveur":      # le serveur est demandé, sans accord : dit, une ligne
+            print("Tests au poste (une campagne à la fois) : %s" % refus.split("\n")[0], file=sys.stderr, flush=True)
+        return poste(argv)
+    code = (route or _route_par_defaut)(commande, dossier, attendre, serveur)
+    if code is None:
+        if serveur:
+            print("%s Rien n'est lancé au poste (--serveur)." % MSG_SANS_312_TESTS, file=sys.stderr)
+            return 4
+        print("%s Tests au poste (une campagne à la fois)." % MSG_SANS_312_TESTS, file=sys.stderr, flush=True)
+        return poste(argv)
+    return code
+
+
+def serveur_tests(argv, bureau=BUREAU, importer=_importer_tests_serveur):
+    """`lancer.py serveur-tests [--dossier D] [--sans-attendre] [--serveur] -- <commande>` : l'autre porte de la route
+    (lancée par `lancer_tests` sous un Python plus ancien, ou à la main). Le même accord (`refus_route`) est vérifié
+    AVANT d'importer la route : sans lui, code 2 et rien ne part."""
+    argv = list(argv)
+    options = _retirer_route(argv)
+    lues = _options_campagne(options[0]) if not options[1] else None
+    if lues is None:
+        print("Usage : lancer.py serveur-tests [--dossier <dossier>] [--sans-attendre] [--serveur] -- <commande de "
+              "test>", file=sys.stderr)
+        return 2
+    try:
+        dossier = str(Path(lues[0] or os.getcwd()).resolve())
+        refus = refus_route(dossier, "tests", bureau=str(bureau))
+    except (OSError, ValueError, RuntimeError) as e:
+        refus = "dossier illisible (%s)" % type(e).__name__
+    if refus:
+        print("Tests au serveur refusés : %s" % refus, file=sys.stderr)
+        return 2
+    # le dossier jugé, déjà résolu : la route ne le résout pas une seconde fois (un lien changé entre-temps)
+    return importer().main(["--dossier", dossier] + ([] if lues[1] else ["--sans-attendre"])
+                           + (["--serveur"] if options[2] else []) + ["--"] + lues[2])
 
 
 def _jobs_necessaires(cibles, lieux, catalogue):

@@ -16,6 +16,7 @@ RACINE = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(RACINE / "outils"))
 import deporter  # noqa: E402
 import github_actions  # noqa: E402
+from tests.test_campagne import garder_le_poste  # noqa: E402 — jamais la vraie file ni le vrai verrou du poste
 
 
 def git(cwd, *argv):
@@ -72,6 +73,7 @@ class FauxGh:
 
 class Base(unittest.TestCase):
     def setUp(self):
+        garder_le_poste(self)
         self._t = tempfile.TemporaryDirectory()
         self.addCleanup(self._t.cleanup)
         self.tmp = Path(self._t.name).resolve()
@@ -363,7 +365,13 @@ class TestRoutageDeTests(Base):
         self.assertTrue(self.faut(None))
 
     def test_lieu_non_servi_passe_par_deporter_qui_le_refuse(self):
-        self.assertTrue(self.faut({"tests": "serveur"}))
+        # `tests` sur serveur est routée par `lancer_tests` (accord à part, test_tests_aiguillage) ; un lieu que
+        # personne ne sert (l'APK au serveur) passe toujours par deporter, qui le refuse
+        d = self.projet({"tests": "serveur"})
+        self.assertFalse(deporter.faut_deporter("tests", ["--dossier", str(d)], bureau=self.bureau))
+        (d / ".factory" / "reglages.json").write_text(json.dumps({"deport": {"lieux": {"apk": "serveur"}}}),
+                                                      encoding="utf-8")
+        self.assertTrue(deporter.faut_deporter("tests", ["--dossier", str(d)], bureau=self.bureau))
 
     def test_la_fonction_pure(self):
         from bureau.deport_types import ANDROID, GENERIQUE
@@ -712,10 +720,13 @@ class TestRelectureFinale(Base):
 class TestCampagneEnv(unittest.TestCase):
     def test_executer_reste_compatible_et_passe_env(self):
         import campagne
+        garder_le_poste(self)
         vus = []
         dossier = tempfile.mkdtemp()
         self.addCleanup(lambda: __import__("shutil").rmtree(dossier, ignore_errors=True))
-        kw = dict(verrou=Path(dossier) / "v.json", lister=lambda: [], dormir=lambda s: None, dire=lambda *a, **k: None)
+        # sa propre file aussi : sans `attentes=`, la campagne attendait derrière les vraies (blocage du 2026-11-23)
+        kw = dict(verrou=Path(dossier) / "v.json", lister=lambda: [], dormir=lambda s: None, dire=lambda *a, **k: None,
+                  attentes=Path(dossier) / "attentes")
         self.assertEqual(campagne.executer(["x"], dossier=dossier, lancer=lambda c, d: vus.append((c, d)) or 0, **kw), 0)
         self.assertEqual(campagne.executer(["x"], dossier=dossier, env={"A": "1"},
                                            lancer=lambda c, d, env=None: vus.append((c, d, env)) or 0, **kw), 0)
@@ -885,8 +896,10 @@ class TestRecetteEmulateur(Base):
             lieux = {a: "poste" for a in catalogue}
             self.assertEqual(deporter.lieux_refuses(dict(lieux, **{self.RECETTE: "serveur"}), self.RECETTE,
                                                     catalogue), [])
-            self.assertTrue(deporter.lieux_refuses(dict(lieux, tests="serveur"), "tests", catalogue))
-        # « tests » réglé sur serveur à la main reste refusé, comme avant
+            # `tests` au serveur : admis là où le catalogue l'offre (routée par `lancer.py tests`), refusé ailleurs
+            self.assertEqual(bool(deporter.lieux_refuses(dict(lieux, tests="serveur"), "tests", catalogue)),
+                             "serveur" not in catalogue["tests"]["lieux"])
+        # « tests » réglé sur serveur à la main, dans un catalogue qui ne l'offre pas, reste refusé, comme avant
         (d / ".factory" / "reglages.json").write_text(json.dumps({"deport": {"lieux": {"tests": "serveur"}}}),
                                                       encoding="utf-8")
         self.assertEqual(self.lancer(["tests", "--dossier", str(d), "--", "x"]), 2)

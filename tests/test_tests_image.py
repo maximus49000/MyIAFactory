@@ -78,7 +78,7 @@ class TestDockerfileTests(unittest.TestCase):
         self.assertIn(f"ARG UBUNTU_TAG={VERSIONS['base_ubuntu'].split(':')[1]}\n", self.code)
         self.assertIn("FROM ubuntu:${UBUNTU_TAG}\n", self.code)
         self.assertIn(f"ARG NODE_MAJEUR={VERSIONS['node']}\n", self.code)
-        self.assertIn("setup_${NODE_MAJEUR}.x", self.code)
+        self.assertIn("latest-v${NODE_MAJEUR}.x/SHASUMS256.txt", self.code)      # archive officielle, plus de script d'installation
         self.assertNotRegex(self.texte.lower(), r"[:=\"' ]latest\b")
 
     def test_paquets_utilisateur_et_entree(self):

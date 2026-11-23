@@ -43,23 +43,45 @@ class TestNiveauxBureau(unittest.TestCase):
         b = reglages.lire_bureau(self.bureau)
         self.assertEqual(b["types"]["android"]["deport"]["lieux"], {"tests": "github"})
 
-    def test_lire_bureau_refuse_id_inconnu(self):
+    def test_lire_bureau_ignore_un_id_inconnu(self):
+        """Lecture tolérante (risques de la conception : valeur inconnue = défaut) : un réglage inconnu (écrit à la
+        main, ou par une version plus récente) est ignoré et dit, jamais un bureau ou un moteur qui ne démarre plus."""
         self._ecrire({"reglages": {"inconnu_xyz": True}})
-        with self.assertRaises(reglages.ReglagesInvalides) as c:
-            reglages.lire_bureau(self.bureau)
-        self.assertIn("Fichier du bureau", str(c.exception))
+        b = reglages.lire_bureau(self.bureau)
+        self.assertEqual(b["reglages"], {})
+        self.assertEqual(len(b["ignores"]), 1)
+        self.assertIn("inconnu_xyz", b["ignores"][0])
+        self.assertEqual((b["port"], b["agents_abonnement_max"]), (8800, 4))
+        self._ecrire()
+        self.assertEqual(reglages.lire_bureau(self.bureau)["ignores"], [])
 
-    def test_lire_bureau_refuse_formes_invalides(self):
+    def test_lire_bureau_garde_les_parties_valides_et_ignore_le_reste(self):
         for extra in ({"reglages": []}, {"types": []}, {"types": {"android": []}},
                       {"types": {"Mauvais Genre": {}}},
                       {"types": {"android": {"reglages": []}}},
                       {"types": {"android": {"deport": {"lieux": {"action_inconnue": "poste"}}}}},
+                      {"types": {"android": {"deport": {"lieux": []}}}},
                       {"types": {"android": {"deport": []}}}):
             with self.subTest(extra=extra):
                 self._ecrire(extra)
-                with self.assertRaises(reglages.ReglagesInvalides) as c:
-                    reglages.lire_bureau(self.bureau)
-                self.assertIn("Fichier du bureau", str(c.exception))
+                b = reglages.lire_bureau(self.bureau)
+                self.assertTrue(b["ignores"], extra)
+                self.assertTrue(all(i.startswith("Fichier du bureau") for i in b["ignores"]), b["ignores"])
+        # un mélange : le valide est gardé, le reste est écarté
+        self._ecrire({"reglages": {"inconnu": 1},
+                      "types": {"android": {"deport": {"lieux": {"tests": "github", "zzz": "poste", "apk": "lune"}}},
+                                "Mauvais": {}, "web": 3}})
+        b = reglages.lire_bureau(self.bureau)
+        self.assertEqual(b["reglages"], {})
+        self.assertEqual(list(b["types"]), ["android"])
+        self.assertEqual(b["types"]["android"]["deport"]["lieux"], {"tests": "github"})
+        self.assertEqual(len(b["ignores"]), 5, b["ignores"])
+
+    def test_deport_du_bureau_reste_strict(self):
+        """`deport.lieux` du fichier du bureau était déjà validé avant la page Réglages : inchangé."""
+        self._ecrire({"deport": {"lieux": {"action_inconnue": "poste"}}})
+        with self.assertRaises(reglages.ReglagesInvalides):
+            reglages.lire_bureau(self.bureau)
 
     def test_fixer_niveau_pose_et_efface_en_elaguant(self):
         avant = self._ecrire()

@@ -185,52 +185,74 @@ def lire_bureau(chemin):
                                                 AGENTS_ABONNEMENT_MAX[0] <= plafond <= AGENTS_ABONNEMENT_MAX[1]):
         raise ReglagesInvalides("Fichier du bureau : « agents_abonnement_max » doit être un entier de 1 à 32 (ou absent).")
     deport = normaliser_deport(donnees.get("deport", {}), "Fichier du bureau")
+    # les niveaux de la page Réglages se lisent avec tolérance (conception, risques : valeur inconnue = défaut) : une
+    # clé écrite à la main ou par une version plus récente est écartée et dite, jamais un bureau ou un moteur arrêté
+    ignores = []
     return {"port": port, "projets": sortie, "acces": lire_acces(donnees.get("acces", {})),
             "agents_abonnement_max": plafond,
             "moteur": lire_moteur_du_bureau(donnees.get("moteur", {})),
             "deport": deport,
             # les lieux tels qu'écrits dans le fichier, sans les défauts : ce que la résolution à trois niveaux lit
             "deport_lieux_explicites": dict(donnees.get("deport", {}).get("lieux", {})),
-            "reglages": _lire_reglages_du_niveau(donnees.get("reglages"), "reglages"),
-            "types": _lire_types_du_bureau(donnees.get("types"))}
+            "reglages": _lire_reglages_du_niveau(donnees.get("reglages"), "reglages", ignores),
+            "types": _lire_types_du_bureau(donnees.get("types"), ignores),
+            "ignores": ignores}
 
 
-def _lire_reglages_du_niveau(v, nom):
-    """Les réglages posés à un niveau (global ou type) : `{id: valeur}` ; un id absent du registre est refusé."""
+def _lire_reglages_du_niveau(v, nom, ignores):
+    """Les réglages posés à un niveau (global ou type) : `{id: valeur}` ; un id absent du registre est écarté, et
+    dit dans `ignores` (les écrivains, eux, le refusent)."""
     if v is None:
         return {}
     if not isinstance(v, dict):
-        raise ReglagesInvalides(f"Fichier du bureau : « {nom} » doit être un objet {{réglage: valeur}}.")
+        ignores.append(f"Fichier du bureau : « {nom} » ignoré : un objet {{réglage: valeur}} est attendu.")
+        return {}
     connus = {r.id for r in REGISTRE}
     for id_ in v:
         if id_ not in connus:
-            raise ReglagesInvalides(f"Fichier du bureau : « {nom} » : le réglage « {id_} » n'existe pas.")
-    return dict(v)
+            ignores.append(f"Fichier du bureau : « {nom} » : le réglage inconnu « {id_} » est ignoré.")
+    return {k: x for k, x in v.items() if k in connus}
 
 
-def _lire_types_du_bureau(v):
-    """`types` : `{genre: {"reglages": {...}, "deport": {"lieux": {...}}}}` ; lieux validés comme ceux du bureau."""
+def _lire_types_du_bureau(v, ignores):
+    """`types` : `{genre: {"reglages": {...}, "deport": {"lieux": {...}}}}`. Un genre, un niveau ou un lieu abîmé est
+    écarté (dit dans `ignores`) ; le reste est gardé. Les lieux gardés sont ceux que le bureau accepte."""
     if v is None:
         return {}
     if not isinstance(v, dict):
-        raise ReglagesInvalides("Fichier du bureau : « types » doit être un objet {genre: réglages}.")
+        ignores.append("Fichier du bureau : « types » ignoré : un objet {genre: réglages} est attendu.")
+        return {}
     sortie = {}
     for genre, niveau in v.items():
         if not MOTIF_GENRE.match(genre):
-            raise ReglagesInvalides(f"Fichier du bureau : « types » : genre « {genre} » invalide (lettres "
-                                    "minuscules, chiffres et tirets).")
+            ignores.append(f"Fichier du bureau : « types » : genre « {genre} » invalide (lettres minuscules, "
+                           "chiffres et tirets), ignoré.")
+            continue
         if not isinstance(niveau, dict):
-            raise ReglagesInvalides(f"Fichier du bureau : « types.{genre} » doit être un objet.")
+            ignores.append(f"Fichier du bureau : « types.{genre} » ignoré : un objet est attendu.")
+            continue
         entree = dict(niveau)
-        entree["reglages"] = _lire_reglages_du_niveau(niveau.get("reglages"), f"types.{genre}.reglages")
+        entree["reglages"] = _lire_reglages_du_niveau(niveau.get("reglages"), f"types.{genre}.reglages", ignores)
         if "deport" in niveau:
             d = niveau["deport"]
             if not isinstance(d, dict):
-                raise ReglagesInvalides(f"Fichier du bureau : « types.{genre}.deport » doit être un objet.")
-            try:
-                valider_lieux(d.get("lieux", {}), catalogue=catalogue_union())
-            except ValueError as e:
-                raise ReglagesInvalides(f"Fichier du bureau : « types.{genre}.deport.lieux » : {e}")
+                ignores.append(f"Fichier du bureau : « types.{genre}.deport » ignoré : un objet est attendu.")
+                del entree["deport"]
+            else:
+                lieux = d.get("lieux", {})
+                if not isinstance(lieux, dict):
+                    ignores.append(f"Fichier du bureau : « types.{genre}.deport.lieux » ignoré : un objet "
+                                   "{action: lieu} est attendu.")
+                    lieux = {}
+                gardes = {}
+                for action, lieu in lieux.items():
+                    try:
+                        valider_lieux({action: lieu}, catalogue=catalogue_union())
+                    except ValueError as e:
+                        ignores.append(f"Fichier du bureau : « types.{genre}.deport.lieux » : {e} Ignoré.")
+                        continue
+                    gardes[action] = lieu
+                entree["deport"] = {**d, "lieux": gardes}
         sortie[genre] = entree
     return sortie
 

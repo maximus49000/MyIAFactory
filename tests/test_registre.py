@@ -2,7 +2,7 @@ import unittest
 
 from bureau import registre
 from bureau.deport_types import CATALOGUES
-from bureau.registre import Reglage, lieux_effectifs, valeur_effective
+from bureau.registre import Reglage, lieux_du_type, lieux_effectifs, valeur_effective
 
 ANDROID = CATALOGUES["application-mobile-android"]
 RECETTE = "recette-emulateur"
@@ -47,8 +47,14 @@ class TestValeurEffective(unittest.TestCase):
 
 class TestLieuxEffectifs(unittest.TestCase):
     def test_lieux_cascade(self):
-        b = bureau(lieux_global={"tests": "github"}, lieux_type={"tests": "serveur"})
-        self.assertEqual(lieux_effectifs(ANDROID, {}, b, "android")["tests"], ("serveur", "type:android"))
+        b = bureau(lieux_global={"tests": "github"}, lieux_type={"tests": "poste"})
+        self.assertEqual(lieux_effectifs(ANDROID, {}, b, "android")["tests"], ("poste", "type:android"))
+        # un lieu que le fichier du bureau n'accepte pas au niveau type (`reglages.lire_bureau`) est écarté
+        b_serveur = bureau(lieux_global={"tests": "github"}, lieux_type={"tests": "serveur"})
+        self.assertEqual(lieux_effectifs(ANDROID, {}, b_serveur, "android")["tests"], ("github", "global"))
+        self.assertEqual(lieux_du_type(b_serveur, "android"), {})
+        self.assertEqual(lieux_du_type(b, "android"), {"tests": "poste"})
+        self.assertEqual((lieux_du_type(b, None), lieux_du_type(b, "generique")), ({}, {}))
         projet = {"deport": {"lieux": {"tests": "poste"}}}
         self.assertEqual(lieux_effectifs(ANDROID, projet, b, "android")["tests"], ("poste", "projet"))
         self.assertEqual(lieux_effectifs(ANDROID, {}, b, None)["tests"], ("github", "global"))

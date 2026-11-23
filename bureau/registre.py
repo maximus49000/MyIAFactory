@@ -65,7 +65,14 @@ def lieux_du_type(bureau, genre):
     consigne de départ) : la même lecture que la page Réglages."""
     if not genre or genre == "generique":
         return {}
-    return _lieux_valides(_dict(_dict(_niveau_type(bureau, genre).get("deport"))).get("lieux"))
+    gardes = {}
+    for action, lieu in _lieux_valides(_dict(_dict(_niveau_type(bureau, genre).get("deport"))).get("lieux")).items():
+        try:      # comme `reglages.lire_bureau` : un lieu que le bureau n'accepte pas est écarté
+            deport.valider_lieux({action: lieu}, catalogue=deport.catalogue_union())
+        except ValueError:
+            continue
+        gardes[action] = lieu
+    return gardes
 
 
 def lieux_effectifs(catalogue, projet, bureau, genre):

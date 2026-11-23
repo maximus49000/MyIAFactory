@@ -149,6 +149,20 @@ class TestReglagesPage(AvecFichierDuBureau):
                 origines = {l["origine"] for l in e["reglages_page"]["lignes"]}
                 self.assertEqual(origines, {"defaut"}, contenu)
 
+    def test_le_bureau_demarre_sur_un_fichier_aux_cles_inconnues(self):
+        """Un `reglages` inconnu (écrit à la main, ou par la phase suivante après un retour arrière) et un `types`
+        abîmé : le bureau démarre, l'état répond, le niveau global valide reste lu."""
+        android = ANDROID
+        self.bureau.write_text(json.dumps({"projets": ["demo/reglages.json"], "reglages": {"lecons_auto": True},
+                                           "deport": {"lieux": {"apk": "github"}},
+                                           "types": {"Mauvais": {}, android: {"deport": {"lieux": {"zzz": "poste"}}}}}),
+                               encoding="utf-8")
+        self.demarrer()
+        r, data = self.req("GET", "/api/etat")
+        self.assertEqual(r.status, 200)
+        lignes = self.lignes()
+        self.assertEqual((lignes["deport.apk"]["valeur"], lignes["deport.apk"]["origine"]), ("github", "global"))
+
     def test_une_panne_de_la_page_ne_coupe_pas_l_etat(self):
         with mock.patch.object(serveur.Projet, "reglages_page", side_effect=RuntimeError("boum")):
             e = self.etat()

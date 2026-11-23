@@ -180,6 +180,88 @@ class ProfilTest(Temporaire):
         from dataclasses import replace
         self.assertEqual(tp.empreinte_profil(avant), tp.empreinte_profil(replace(avant, confiance="basse")))
 
+    def test_ci_compare_majeure_mineure_pour_python(self):
+        p = self.copie("python-stdlib")
+        (p / ".python-version").write_text("3.9\n", encoding="utf-8")
+        wf = p / ".github" / "workflows"
+        wf.mkdir(parents=True)
+        (wf / "x.yml").write_text("with:\n  python-version: '3.12'\n", encoding="utf-8")
+        profil = tp.analyser(str(p), catalogue={})
+        self.assertNotEqual(profil.confiance, "haute")
+        self.assertTrue(any("CI" in r for r in profil.raisons))
+        (wf / "x.yml").write_text("with:\n  python-version: '3.9'\n", encoding="utf-8")
+        self.assertEqual(tp.analyser(str(p), catalogue={}).confiance, "haute")
+
+    def test_outils_divergents_entre_familles(self):
+        p = self.copie("gradle-android")
+        (p / "pom.xml").write_text("<project><maven.compiler.release>11</maven.compiler.release></project>",
+                                   encoding="utf-8")
+        profil = tp.analyser(str(p), catalogue={})
+        self.assertEqual(profil.confiance, "basse")
+        self.assertTrue(any("jdk" in r for r in profil.raisons))
+
+    def test_bornes_de_version_jamais_une_version(self):
+        p = self.copie("python-stdlib")
+        (p / ".python-version").unlink()
+        (p / "pyproject.toml").write_text('[project]\nrequires-python = "<3.12"\n', encoding="utf-8")
+        profil = tp.analyser(str(p), catalogue={})
+        self.assertNotIn("python", profil.outils)
+        self.assertEqual(profil.confiance, "moyenne")
+        self.assertTrue(profil.raisons)
+        (p / "pyproject.toml").write_text('[project]\nrequires-python = "~=3.11"\n', encoding="utf-8")
+        self.assertEqual(tp.analyser(str(p), catalogue={}).outils, {"python": "3.11"})
+        n = self.copie("node-npm")
+        (n / ".nvmrc").unlink()
+        (n / "package.json").write_text('{"scripts": {"test": "jest"}, "engines": {"node": ">=18 <22"}}',
+                                        encoding="utf-8")
+        self.assertNotIn("node", tp.analyser(str(n), catalogue={}).outils)
+        (n / "package.json").write_text('{"scripts": {"test": "jest"}, "engines": {"node": "20.1.0"}}',
+                                        encoding="utf-8")
+        self.assertEqual(tp.analyser(str(n), catalogue={}).outils, {"node": "20.1.0"})
+
+    def test_factory_json_borne_et_sans_lien(self):
+        p = self.copie("node-npm")
+        (p / ".factory").mkdir()
+        fj = p / ".factory" / "factory.json"
+        fj.write_text('{"genre": "application-mobile-android"}', encoding="utf-8")
+        self.assertEqual(tp.analyser(str(p)).commandes, [["./gradlew", "testDebugUnitTest"]])
+        fj.write_text('{"genre": "application-mobile-android", "x": "' + "a" * 70000 + '"}', encoding="utf-8")
+        self.assertEqual(tp.analyser(str(p)).commandes, [["npm", "test"]])
+        fj.unlink()
+        dehors = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, dehors, True)
+        (dehors / "f.json").write_text('{"genre": "application-mobile-android"}', encoding="utf-8")
+        try:
+            os.symlink(dehors / "f.json", fj)
+        except (OSError, NotImplementedError):
+            self.skipTest("le poste ne crée pas de lien symbolique")
+        self.assertEqual(tp.analyser(str(p)).commandes, [["npm", "test"]])
+
+    def test_parcours_en_largeur_et_plafond_dit(self):
+        p = self.copie("gradle-android")
+        (p / "docs").mkdir()
+        for i in range(60):
+            (p / "docs" / ("f%03d.txt" % i)).write_text("x", encoding="utf-8")
+        with mock.patch.object(tp, "MAX_ENTREES", 50), mock.patch.object(tp, "MAX_PAR_DOSSIER", 20, create=True):
+            profil = tp.analyser(str(p), catalogue={})
+        self.assertEqual(profil.familles, ("gradle-android",))
+        self.assertEqual(profil.confiance, "basse")
+        self.assertTrue(any("tronqué" in r for r in profil.raisons))
+
+    def test_plafond_xmx_dit(self):
+        g = self.copie("gradle-android")
+        (g / "gradle.properties").write_text("org.gradle.jvmargs=-Xmx99999g\n", encoding="utf-8")
+        profil = tp.analyser(str(g), catalogue={})
+        self.assertEqual(profil.confiance, "moyenne")
+        self.assertTrue(any("Gradle" in r for r in profil.raisons))
+
+    def test_commande_posee_sur_la_famille_de_son_executable(self):
+        p = self.copie("node-npm")
+        (p / "go.mod").write_text("module x\n\ngo 1.23\n", encoding="utf-8")
+        profil = tp.analyser(str(p), catalogue={}, commande=["go", "test", "./..."])
+        self.assertEqual(profil.familles, ("node", "go"))
+        self.assertEqual(profil.commandes, [["npm", "test"], ["go", "test", "./..."]])
+
     def test_json_aller_retour(self):
         for cas in ("gradle-android", "unity", "inconnu"):
             p = analyser(cas)

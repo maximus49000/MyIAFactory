@@ -26,6 +26,7 @@ import sys
 import tomllib
 from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
+from collections import deque
 from typing import Callable, Dict, List, Optional, Tuple
 
 ICI = Path(__file__).resolve().parent
@@ -34,7 +35,7 @@ for _dossier in (str(ICI), str(ICI.parent)):
         sys.path.insert(0, _dossier)
 
 import tests_instantane  # noqa: E402
-from bureau.deport_types import catalogue_du_projet  # noqa: E402
+from bureau.deport_types import CATALOGUES, GENERIQUE  # noqa: E402
 from installation import examen  # noqa: E402
 
 FAMILLES = ("python", "node", "gradle-android", "gradle-jvm", "maven", "dotnet", "go", "rust", "godot", "unity", "ruby",
@@ -45,6 +46,7 @@ MAX_CI = 64 * 1024
 MAX_LECTURES = 80
 MAX_VERROU = 64 * 1024 * 1024
 MAX_ENTREES = 5000
+MAX_PAR_DOSSIER = 1000
 PROFONDEUR = 4
 MAX_XMX_MO = 8192
 
@@ -195,17 +197,24 @@ def _lecteur_defaut(racine: str) -> Callable[[str], Optional[str]]:
     return lire
 
 
-def _scanner(racine: str) -> Tuple[List[str], List[str]]:
-    """(fichiers, dossiers) relatifs (jamais un lien, jamais un nom exclu ni un dossier sauté), parcours borné."""
-    fichiers, dossiers = [], []
-    pile = [("", 0)]
-    while pile and len(fichiers) + len(dossiers) < MAX_ENTREES:
-        sous, profondeur = pile.pop()
+def _scanner(racine: str) -> Tuple[List[str], List[str], bool]:
+    """(fichiers, dossiers, tronqué) relatifs (jamais un lien, jamais un nom exclu ni un dossier sauté). Parcours en
+    largeur (les dossiers de premier niveau d'abord), `MAX_PAR_DOSSIER` entrées par dossier, `MAX_ENTREES` en tout ; le
+    plafond est vérifié dans la boucle d'un dossier ; `tronqué` si l'un des deux est atteint."""
+    fichiers, dossiers, tronque = [], [], False
+    file = deque([("", 0)])
+    while file:
+        sous, profondeur = file.popleft()
         try:
-            entrees = sorted(os.scandir(os.path.join(racine, sous) if sous else racine), key=lambda e: e.name)
+            entrees = sorted(os.scandir(os.path.join(racine, sous) if sous else racine),
+                             key=lambda e: (not e.is_dir(follow_symlinks=False), e.name))
         except OSError:
             continue
+        if len(entrees) > MAX_PAR_DOSSIER:
+            entrees, tronque = entrees[:MAX_PAR_DOSSIER], True
         for e in entrees:
+            if len(fichiers) + len(dossiers) >= MAX_ENTREES:
+                return fichiers, dossiers, True
             rel = sous + "/" + e.name if sous else e.name
             try:
                 if e.is_symlink() or examen._est_lien(Path(e.path)):
@@ -221,10 +230,32 @@ def _scanner(racine: str) -> Tuple[List[str], List[str]]:
                     continue
                 dossiers.append(rel)
                 if profondeur < PROFONDEUR:
-                    pile.append((rel, profondeur + 1))
+                    file.append((rel, profondeur + 1))
             elif est_fichier:
                 fichiers.append(rel)
-    return fichiers, dossiers
+    return fichiers, dossiers, tronque
+
+
+def _catalogue_borne(racine: str) -> dict:
+    """Le catalogue du genre lu dans `.factory/factory.json` ou `factory.json` : 64 Ko au plus, jamais un lien (ni le
+    fichier ni un dossier du chemin) ; sinon le catalogue générique."""
+    for rel in (".factory/factory.json", "factory.json"):
+        chemin = Path(racine)
+        suspect = False
+        for segment in rel.split("/"):
+            chemin = chemin / segment
+            if examen._est_lien(chemin):
+                suspect = True
+        try:
+            if suspect or not chemin.is_file() or chemin.stat().st_size > MAX_CI:
+                continue
+            donnees = _json(chemin.read_text(encoding="utf-8-sig", errors="replace"))
+        except OSError:
+            continue
+        genre = donnees.get("genre")
+        if isinstance(genre, str) and genre in CATALOGUES:
+            return CATALOGUES[genre]
+    return GENERIQUE
 
 
 def _hacher_verrou(racine: str, rel: str) -> Optional[str]:
@@ -263,11 +294,12 @@ def _premiere_ligne(texte: str) -> str:
 
 
 class _Contexte:
-    def __init__(self, textes: Dict[str, str], fichiers: List[str], dossiers: List[str]):
+    def __init__(self, textes: Dict[str, str], fichiers: List[str], dossiers: List[str], tronque: bool = False):
         self.T, self.F, self.D = textes, set(fichiers), set(dossiers)
         self.fichiers = fichiers
-        self.raisons: List[str] = []
-        self.rejete = False
+        self.raisons: List[str] = ["parcours des fichiers tronqué (trop d'entrées)"] if tronque else []
+        self.rejete = tronque
+        self.plafond = False        # une valeur lue n'est pas exacte : confiance moyenne au plus
         self.versions_fichier: Dict[str, str] = {}      # outil de la CI -> version lue dans un fichier du projet
 
     def refuser(self, outil: str, source: str) -> None:
@@ -284,8 +316,21 @@ class _Contexte:
             self.versions_fichier.setdefault(ci, m.group(1))
         return m.group(1)
 
+    def approximer(self, raison: str) -> None:
+        self.raisons.append(raison)
+        self.plafond = True
+
     def tout(self, motif: str) -> List[str]:
         return sorted(n for n in self.T if fnmatch.fnmatchcase(n, motif))
+
+
+def _exacte(texte, operateurs=("==", "~=")) -> Optional[str]:
+    """La version d'une contrainte exacte (`==3.11`, `~=3.11`, `==3.11.*`, ou `18.20.4` / `=18.20.4` pour Node) ; une
+    borne (`>=`, `<`, `^`, `||`) ne désigne aucune version : None."""
+    if not isinstance(texte, str):
+        return None
+    m = re.fullmatch(r"\s*(==|~=|=)?\s*(\d{1,4}(?:\.\d{1,4}){1,3})(?:\.\*)?\s*", texte)
+    return m.group(2) if m and (m.group(1) or "") in operateurs else None
 
 
 def _numero(texte: str) -> Optional[str]:
@@ -308,8 +353,11 @@ def _python(c: _Contexte):
         v = c.version("python", ".python-version", _premiere_ligne(c.T[".python-version"]), "python")
     elif "pyproject.toml" in c.T:
         requis = _toml(c.T["pyproject.toml"]).get("project", {}).get("requires-python")
-        if isinstance(requis, str) and _numero(requis):
-            v = c.version("python", "pyproject.toml", _numero(requis), "python")
+        exacte = _exacte(requis)
+        if exacte:
+            v = c.version("python", "pyproject.toml", exacte, "python")
+        elif isinstance(requis, str):
+            c.approximer("version python non exacte dans pyproject.toml")
     elif ".tool-versions" in c.T:
         m = re.search(r"^python\s+(\S+)", c.T[".tool-versions"], re.M)
         if m:
@@ -331,8 +379,12 @@ def _node(c: _Contexte):
         v = c.version("node", ".nvmrc", _premiere_ligne(c.T[".nvmrc"]), "node")
     elif ".node-version" in c.T:
         v = c.version("node", ".node-version", _premiere_ligne(c.T[".node-version"]), "node")
-    elif isinstance(pj.get("engines"), dict) and isinstance(pj["engines"].get("node"), str) and _numero(pj["engines"]["node"]):
-        v = c.version("node", "package.json", _numero(pj["engines"]["node"]), "node")
+    elif isinstance(pj.get("engines"), dict) and isinstance(pj["engines"].get("node"), str):
+        exacte = _exacte(pj["engines"]["node"], ("=", ""))
+        if exacte:
+            v = c.version("node", "package.json", exacte, "node")
+        else:
+            c.approximer("version node non exacte dans package.json")
     elif ".tool-versions" in c.T:
         m = re.search(r"^node(?:js)?\s+(\S+)", c.T[".tool-versions"], re.M)
         if m:
@@ -563,18 +615,18 @@ _DETECTEURS = (("python", _python), ("node", _node), ("gradle", _gradle), ("mave
 # ---------------------------------------------------------------- non déportable (§ 5.14)
 
 def _contexte_leger(racine: str, lire: Optional[Callable[[str], Optional[str]]]) -> _Contexte:
-    fichiers, dossiers = _scanner(str(racine))
-    return _contexte_lu(str(racine), fichiers, dossiers, lire or _lecteur_defaut(str(racine)))
+    fichiers, dossiers, tronque = _scanner(str(racine))
+    return _contexte_lu(str(racine), fichiers, dossiers, lire or _lecteur_defaut(str(racine)), tronque)
 
 
-def _contexte_lu(racine: str, fichiers: List[str], dossiers: List[str], lire) -> _Contexte:
+def _contexte_lu(racine: str, fichiers: List[str], dossiers: List[str], lire, tronque: bool = False) -> _Contexte:
     cibles = sorted((n for n in fichiers if _est_lu(n)), key=lambda n: (n.count("/"), n))[:MAX_LECTURES]
     textes = {}
     for rel in cibles:
         t = lire(rel)
         if isinstance(t, str):
             textes[rel] = t[:_limite(rel)]
-    return _Contexte(textes, fichiers, dossiers)
+    return _Contexte(textes, fichiers, dossiers, tronque)
 
 
 def _non_deportable(c: _Contexte) -> Optional[str]:
@@ -614,12 +666,15 @@ def _ci(c: _Contexte, commande: Optional[List[str]]) -> Tuple[bool, bool]:
     for nom in c.tout(".github/workflows/*"):
         texte = c.T[nom]
         for m in _EXPORT_CI.finditer(texte):
-            versions.setdefault(m.group(1), set()).add(m.group(2).split(".")[0])
+            versions.setdefault(m.group(1), set()).add(m.group(2))
         lignes += re.findall(r"^\s*-?\s*run:\s*(.{1,300})$", texte, re.M)
     confirme = contredit = False
     for outil, lues in c.versions_fichier.items():
         if outil in versions:
-            if lues.split(".")[0] in versions[outil]:
+            # majeure.mineure pour python, go et dotnet ; la majeure pour node et java (et ce que le fichier précise)
+            n = 2 if outil in ("python", "go", "dotnet") else 1
+            lue = lues.split(".")[:n]
+            if any(v.split(".")[:len(lue)] == lue for v in versions[outil]):
                 confirme = True
             else:
                 contredit = True
@@ -642,30 +697,53 @@ def _commande_donnee(commande, catalogue) -> Optional[List[str]]:
     return None
 
 
+_FAMILLE_DE_COMMANDE = {
+    "npm": "node", "npx": "node", "node": "node", "pnpm": "node", "yarn": "node", "jest": "node", "vitest": "node",
+    "python": "python", "python3": "python", "py": "python", "pytest": "python", "gradlew": "gradle", "gradle": "gradle",
+    "mvn": "maven", "mvnw": "maven", "dotnet": "dotnet", "go": "go", "cargo": "rust", "godot": "godot",
+    "unity-editor": "unity", "unity": "unity", "bundle": "ruby", "rake": "ruby", "composer": "php", "php": "php",
+    "make": "make"}
+
+
+def _famille_cible(donnee: Optional[List[str]], familles: List[str]) -> Optional[str]:
+    """La famille qui reçoit la commande enregistrée ou celle du catalogue : celle de son exécutable (npm → node,
+    ./gradlew → gradle-android ou gradle-jvm…), à défaut la première détectée."""
+    if not familles or not donnee:
+        return familles[0] if familles else None
+    nom = re.sub(r"\.(exe|cmd|bat)$", "", os.path.basename(donnee[0].replace("\\", "/")).lower())
+    voulue = _FAMILLE_DE_COMMANDE.get(nom)
+    for f in familles:
+        if f == voulue or (voulue == "gradle" and f.startswith("gradle")):
+            return f
+    return familles[0]
+
+
 def analyser(racine: str, commande: Optional[List[str]] = None, catalogue=None, lire=None) -> Profil:
     """Le profil d'exécution du projet `racine`. Pur : ne lit que `LUS` (par `lire`, `(chemin relatif) -> Optional[str]`,
     par défaut une lecture bornée qui refuse liens et exclus), hache les `VERROUS`, n'exécute rien. `commande` (la commande
     enregistrée de l'action `tests`) puis la commande du catalogue (celui du genre du projet à défaut de `catalogue`)
-    priment sur la CI, qui prime sur la déduction ; elles s'appliquent à la première famille détectée."""
+    priment sur la CI, qui prime sur la déduction ; elles s'appliquent à la famille de leur exécutable."""
     racine = str(racine)
     if catalogue is None:
-        catalogue = catalogue_du_projet(racine)[1]
-    fichiers, dossiers = _scanner(racine)
-    c = _contexte_lu(racine, fichiers, dossiers, lire or _lecteur_defaut(racine))
+        catalogue = _catalogue_borne(racine)
+    fichiers, dossiers, tronque = _scanner(racine)
+    c = _contexte_lu(racine, fichiers, dossiers, lire or _lecteur_defaut(racine), tronque)
     donnee = _commande_donnee(commande, catalogue)
 
     familles, outils, commandes, deps, caches = [], {}, [], {}, []
     xmx, git_upm, explicites = None, False, 0
     ci_confirme = ci_contredit = False
-    for nom, detecteur in _DETECTEURS:
-        r = detecteur(c)
-        if r is None:
-            continue
-        famille = r.get("famille", nom)
-        premiere = not familles
+    trouves = [(r.get("famille", nom), r) for nom, detecteur in _DETECTEURS for r in [detecteur(c)] if r is not None]
+    cible = _famille_cible(donnee, [f for f, _ in trouves])
+    for famille, r in trouves:
+        premiere = famille == cible
         familles.append(famille)
         for k, v in r["outils"].items():
-            outils.setdefault(k, v)
+            if k in outils and outils[k] != v:
+                c.raisons.append("outil %s : deux versions différentes dans le projet" % k)
+                c.rejete = True
+            else:
+                outils.setdefault(k, v)
         cmd = (donnee if (premiere and donnee) else None) or r["commande"]
         if premiere and donnee:
             explicites += 1
@@ -691,6 +769,8 @@ def analyser(racine: str, commande: Optional[List[str]] = None, catalogue=None, 
         deps["unity"]["reseau"] = True
         deps["unity"]["git"] = git_upm
 
+    if xmx and xmx > MAX_XMX_MO:
+        c.approximer("mémoire Gradle plafonnée (-Xmx du projet trop grand)")
     raisons = list(c.raisons)
     if ci_contredit:
         raisons.append("la CI et les fichiers du projet ne disent pas la même version")
@@ -698,6 +778,8 @@ def analyser(racine: str, commande: Optional[List[str]] = None, catalogue=None, 
         raisons.append("pile inconnue")
     if c.rejete or ci_contredit or not familles:
         confiance = "basse"
+    elif c.plafond:
+        confiance = "moyenne"
     elif explicites or ci_confirme:
         confiance = "haute"
     else:

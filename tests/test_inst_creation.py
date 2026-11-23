@@ -13,10 +13,6 @@ RACINE = Path(__file__).resolve().parent.parent
 from tests import plateforme_tests  # noqa: E402
 
 
-def setUpModule():
-    plateforme_tests.module_pas_encore_linux(
-        "création d'installation en échec au conteneur Linux (chemins du poste), cause à préciser")
-
 
 class Executeur:
     """Un git ou un gh simulé : note les appels, répond comme demandé."""
@@ -178,6 +174,7 @@ class TestCreation(Base):
         r = json.loads((self.parent / "Casse-briques" / ".factory" / "reglages.json").read_text(encoding="utf-8"))
         self.assertTrue(r["prix_automatiques"])
 
+    @plateforme_tests.windows_seulement("règles de noms de Windows (noms réservés CON/nul, casse insensible, « fin. »)")
     def test_nom_refuse(self):
         (self.parent / "Existe").mkdir()
         for nom in ("", "   ", "Existe", "existe", "..", ".", "a/b", "a\\b", "a:b", "CON", "nul", "Com1", "lpt3.txt",

@@ -18,12 +18,7 @@ from tests.test_serveur import AvecServeur, TestServeur
 
 VUS = []
 
-from tests import plateforme_tests  # noqa: E402
 
-
-def setUpModule():
-    plateforme_tests.module_pas_encore_linux(
-        "téléchargement du bureau en échec au conteneur Linux (réutilise AvecServeur de test_serveur), cause à préciser")
 
 
 class Site(BaseHTTPRequestHandler):

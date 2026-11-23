@@ -17,10 +17,6 @@ from moteur import figes
 from tests import plateforme_tests  # noqa: E402
 
 
-def setUpModule():
-    plateforme_tests.module_pas_encore_linux(
-        "processus figés : vrais sous-processus lancés par les tests, en échec au conteneur Linux, à trier par classe")
-
 
 def iso(t):
     return datetime.fromtimestamp(t, timezone.utc).isoformat().replace("+00:00", "Z")
@@ -400,6 +396,7 @@ class VraisProcessus(unittest.TestCase):
             time.sleep(0.3)
         return arrets
 
+    @plateforme_tests.pas_encore_linux("vrais processus à arrêter par la surveillance : échoue au conteneur Linux, cause à préciser")
     def test_le_programme_qui_dort_est_arrete_l_etranger_et_l_agent_restent(self):
         etranger = self.lancer([sys.executable, "-c", DORT])
         agent, enfant = self.faux_agent(DORT)

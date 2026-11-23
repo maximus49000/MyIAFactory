@@ -15,10 +15,6 @@ RACINE = Path(__file__).resolve().parent.parent
 from tests import plateforme_tests  # noqa: E402
 
 
-def setUpModule():
-    plateforme_tests.module_pas_encore_linux(
-        "outil d'installation en échec au conteneur Linux (sous-processus et chemins du poste), cause à préciser")
-
 
 class TestOutil(AvecMaison):
     def lancer(self, *args, entree=None):
@@ -51,6 +47,7 @@ class TestOutil(AvecMaison):
             dossier.creer_lien(RACINE / nom, lien)
             self.addCleanup(os.rmdir, lien)   # retire la jonction seule
 
+    @plateforme_tests.pas_encore_linux("parcours réel sur une skill clonée (jonction de dossier) : échoue au conteneur Linux, cause à préciser")
     def test_parcours_vide_bout_en_bout(self):
         self.skill_clonee()
         code, r = self.lancer("preparer")

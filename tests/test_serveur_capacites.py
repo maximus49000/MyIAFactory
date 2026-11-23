@@ -15,10 +15,6 @@ from serveur_capacites import Capacite  # noqa: E402
 from tests import plateforme_tests  # noqa: E402
 
 
-def setUpModule():
-    plateforme_tests.module_pas_encore_linux(
-        "sondes du catalogue lancées sous bash avec un faux HOME, en échec au conteneur Linux, à trier par test")
-
 
 def _cap(id_, depend=()):
     return Capacite(id=id_, libelle=id_, depend=tuple(depend), etape="docker", sonde="true", taille_go=0, duree_min=1)
@@ -146,6 +142,7 @@ class CatalogueTests(unittest.TestCase):
         self.assertEqual([b["id"] for b in sc.bloquees(sc.manquantes_pour(["agent-serveur"], {"base", "agent"}))], ["agent-abonnement"])
 
     @unittest.skipUnless(shutil.which("bash"), "bash absent")
+    @plateforme_tests.pas_encore_linux("sonde lancée sous bash avec faux HOME ou faux stat : échoue au conteneur Linux, cause à préciser")
     def test_sondes_agent_et_abonnement_en_lecture_seule(self):
         agent = sc.CATALOGUE["agent"].sonde
         abo = sc.CATALOGUE["agent-abonnement"].sonde
@@ -303,10 +300,12 @@ class CatalogueTests(unittest.TestCase):
                                   env=env, capture_output=True, timeout=30).returncode
 
     @unittest.skipUnless(shutil.which("bash"), "bash absent")
+    @plateforme_tests.pas_encore_linux("sonde lancée sous bash avec faux HOME ou faux stat : échoue au conteneur Linux, cause à préciser")
     def test_sonde_android_build_accepte_le_jdk_d_unity_seul(self):
         self.assertEqual(self._android_build(java="unity"), 0)
 
     @unittest.skipUnless(shutil.which("bash"), "bash absent")
+    @plateforme_tests.pas_encore_linux("sonde lancée sous bash avec faux HOME ou faux stat : échoue au conteneur Linux, cause à préciser")
     def test_sonde_android_build_accepte_java_du_path(self):
         self.assertEqual(self._android_build(java="path"), 0)
 
@@ -331,6 +330,7 @@ class CatalogueTests(unittest.TestCase):
         self.assertIn(f"test -d ~/android-sdk/{chemin} ", sonde)
 
     @unittest.skipUnless(shutil.which("bash"), "bash absent")
+    @plateforme_tests.pas_encore_linux("sonde lancée sous bash avec faux HOME ou faux stat : échoue au conteneur Linux, cause à préciser")
     def test_sonde_android_emulateur_absente_sans_l_image_epinglee(self):
         import os
         import tempfile

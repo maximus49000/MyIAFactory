@@ -22,10 +22,6 @@ GRADLE = {"outil": "Gradle", "pour": "dev", "executables": ["gradle"], "installa
 from tests import plateforme_tests  # noqa: E402
 
 
-def setUpModule():
-    plateforme_tests.module_pas_encore_linux(
-        "environnement du moteur en échec au conteneur Linux (chemins et outils du poste), à trier par classe")
-
 
 class Enregistreur:
     """Un faux `which` et un faux lanceur de version qui gardent ce qu'on leur a demandé."""
@@ -190,6 +186,7 @@ class Verifier(unittest.TestCase):
         faux = environnement.avec_aide({"outil": "X", "telechargement": "http://x", "etapes": "a", "autonome": "oui"})
         self.assertEqual((faux["telechargement"], faux["etapes"], faux["autonome"]), (None, [], False))
 
+    @plateforme_tests.windows_seulement("outils .exe du SDK Android de Windows")
     def test_android_home_trouve(self):
         with tempfile.TemporaryDirectory() as t:
             racine = Path(t)
@@ -220,6 +217,7 @@ class Verifier(unittest.TestCase):
             r = environnement.verifier(outils[:1], which=seulement_les_emplacements, executer=lambda a, d: (0, "v"), env={})
             self.assertEqual(r[0]["etat"], "a_installer")
 
+    @plateforme_tests.windows_seulement("registre Windows")
     def test_path_relu_dans_le_registre_apres_le_demarrage(self):
         """Un logiciel installé après le démarrage du moteur n'est pas dans le PATH du processus : le PATH à jour est relu
         dans le registre (système puis utilisateur, variables développées). Registre et fichiers simulés."""
@@ -255,6 +253,7 @@ class Verifier(unittest.TestCase):
             self.assertTrue(any(c[0] == "HKEY_LOCAL_MACHINE" and c[1].endswith("Session Manager\\Environment") for c in lus))
             self.assertTrue(any(c[:2] == ("HKEY_CURRENT_USER", "Environment") for c in lus))
 
+    @plateforme_tests.windows_seulement("registre Windows")
     def test_variables_du_registre_priment_sur_celles_du_processus(self):
         with tempfile.TemporaryDirectory() as t:
             neuf, vieux = Path(t) / "neuf", Path(t) / "vieux"
@@ -267,6 +266,7 @@ class Verifier(unittest.TestCase):
                                            env={"JAVA_HOME": str(vieux)}, lire=registre)
             self.assertEqual(trouve.lower(), str(neuf / "bin" / "java.exe").lower())
 
+    @plateforme_tests.windows_seulement("variables ProgramFiles et LOCALAPPDATA de Windows")
     def test_dossiers_d_installation_de_winget_et_des_jdk(self):
         with tempfile.TemporaryDirectory() as t:
             racine = Path(t)

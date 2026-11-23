@@ -22,10 +22,6 @@ BASE = {"version": 1, "projet": "P", "factory": {"etat": "en marche"},
 from tests import plateforme_tests  # noqa: E402
 
 
-def setUpModule():
-    plateforme_tests.module_pas_encore_linux(
-        "relevé du bureau en échec au conteneur Linux (sous-processus et chemins du poste), à trier par classe")
-
 
 class TestValider(unittest.TestCase):
     def test_base_valide(self):
@@ -597,6 +593,7 @@ class TestObtenir(unittest.TestCase):
         for p in crees:
             self.assertTrue(p.stdout.closed and p.stderr.closed)
 
+    @plateforme_tests.pas_encore_linux("sous-processus python et tubes fermés : échoue au conteneur Linux, cause à préciser")
     def test_executer_trop_long_ferme_les_tubes(self):
         self._avec_delai_court()
         crees = self._processus_lances()
@@ -1155,6 +1152,7 @@ class TestTilde(unittest.TestCase):
             self.assertEqual(os.path.normcase(sortie.decode().strip()), os.path.normcase(sys.executable))
         self.assertEqual(releve.commande_python(["git", "python"]), ["git", "python"])
 
+    @plateforme_tests.windows_seulement("développe aussi « ~\\ » (séparateur Windows)")
     def test_developper(self):
         home = self._home()
         for debut in ("~/", "~\\"):

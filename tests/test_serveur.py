@@ -25,10 +25,6 @@ TAUX_INVENTE = ("<Envelope><Cube><Cube time='2026-11-09'><Cube currency='USD' ra
 from tests import plateforme_tests  # noqa: E402
 
 
-def setUpModule():
-    plateforme_tests.module_pas_encore_linux(
-        "bureau.serveur en échec au conteneur Linux (module entier relevé, cause à préciser), à trier par classe")
-
 
 class SourceSimulee:
     """Remplace Internet : jamais de requête sortante dans les tests."""
@@ -305,6 +301,7 @@ class TestServeur(AvecServeur):
         r, _ = self.req("GET", "/nexiste/pas.js")
         self.assertEqual(r.status, 404)
 
+    @plateforme_tests.pas_encore_linux("serveur.main « charge » : échoue au conteneur Linux, cause à préciser")
     def test_commande_charge(self):
         sortie = io.StringIO()
         with redirect_stdout(sortie):

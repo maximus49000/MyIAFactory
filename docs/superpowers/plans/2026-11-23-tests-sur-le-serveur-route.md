@@ -23,7 +23,14 @@ premier plan et relaie sa sortie ; l'entrée standard de la session sert de lais
   avant ce plan (sa tâche 7 crée `depart.tests_rapides(lieu, budget_s)`, que la tâche 15 prolonge).
 - **Règle R4** : pendant le travail, seulement le module de la tâche ; la suite complète une fois, à la fin (tâche 16,
   contrôleur) ; un seul passage RED par test nouveau. Code sensible (relecture séparée) : tâches 2, 4, 6, 7 (ce qui choisit
-  quoi envoyer, ce qui lance du code non fiable, ce qui juge l'accord).
+  quoi envoyer, ce qui lance du code non fiable, ce qui juge l'accord), et depuis l'amendement 14a (ce qui est lu du
+  projet), 14c (construction d'image = code exécuté au serveur avec réseau), 14d (échauffement avec réseau, caches), 15b
+  (ce qui décide quels projets envoient leur code).
+- **Amendement du 2026-11-23 (tout type de projet)** : la conception § 5.11–5.15 remplace l'ancienne tâche 14 (Node seul)
+  par les tâches 14a–14e et réécrit 15b ; la numérotation des autres tâches est inchangée. Les arguments ajoutés à
+  `lancer_tests.sh` (T4) sont **facultatifs et en fin de ligne** (absents = comportement de T4) : les tests de T4 restent
+  valides. Fixtures de profils : petits dossiers sous `tests/fixtures/profils/<cas>/` (quelques fichiers texte, aucun
+  binaire, aucun `gradlew` réel).
 - **Tests uniquement par le lanceur** : `py -3.12 outils/tests_paralleles.py <module>` ; jamais `unittest` ni `pytest`
   directement ; une campagne à la fois sur le poste.
 - **Des tests économes** : aucun appel au vrai serveur, aucun `ssh` réel, aucun `docker` réel, aucun `sleep` ; `ssh`,
@@ -62,6 +69,13 @@ premier plan et relaie sa sortie ; l'entrée standard de la session sert de lais
    `test_non_enregistre_jamais_route`).
 5. **Serveur injoignable à chaque campagne** : une seule attente de connexion par 5 minutes, puis le poste directement
    (T6 : `test_injoignable_memorise_300_s`).
+6. **Une version piégée dans le projet** (`.nvmrc` = `18; curl x | sh`) : jamais dans le profil, jamais dans un
+   Dockerfile (14a : `test_valeurs_hostiles_refusees` ; 14c : `test_rendu_sans_texte_du_projet`).
+7. **Une image ou un réseau non approuvés** : aucune construction sans le SHA-256 approuvé, aucun échauffement qui exécute
+   du code sans accord, jamais de réseau aux tests (14c : `test_construction_refuse_sha_different` ; 14d :
+   `test_code_du_projet_jamais_en_bridge`, `test_seul_l_echauffement_a_le_reseau`).
+8. **Un projet qui ne peut pas partir** : il reste au poste avec sa raison, jamais en silence (15b :
+   `test_non_deportable_n_envoie_rien_et_dit_la_raison`).
 
 ---
 
@@ -74,13 +88,19 @@ premier plan et relaie sa sortie ; l'entrée standard de la session sert de lais
 | `outils/tests_instantane.py` (nouveau, 3.9) | liste des fichiers, exclusions, limites, tar en flux | 2 |
 | `serveur_ovh/images/tests/{Dockerfile,entree-tests.sh}` (nouveaux) | image de tests | 3 |
 | `serveur_ovh/mise_en_place.sh`, `outils/serveur_installation.py`, `outils/serveur_capacites.py` | étape `tests_image`, empreinte, capacité | 3 |
-| `serveur_ovh/taches/lancer_tests.sh` (nouveau) | enveloppe hôte : places, file, laisse, conteneur, nettoyage | 4, 14 |
+| `serveur_ovh/taches/lancer_tests.sh` (nouveau) | enveloppe hôte : places, file, laisse, conteneur, nettoyage | 4, 14b, 14d, 14e |
 | `outils/plateforme_ssh.py` | `executer_en_flux` | 5 |
-| `outils/tests_serveur.py` (nouveau, 3.12) | route : serveur, envoi, exécution, repli, mesure | 6, 13, 14 |
+| `outils/tests_serveur.py` (nouveau, 3.12) | route : serveur, envoi, exécution, repli, mesure | 6, 13, 14b, 14d, 14e |
+| `outils/tests_profil.py` (nouveau, 3.12) | analyse du projet → profil d'exécution | 14a, 15b |
+| `outils/tests_images.py` (nouveau, 3.12) | catalogue d'images, gabarit des images dérivées, registre local | 14b, 14c |
+| `serveur_ovh/images/tests-android/Dockerfile` (nouveau) | image de catalogue Gradle/Android (SDK de l'hôte monté) | 14b |
+| `serveur_ovh/taches/construire_image_tests.sh` (nouveau) | construction et ramassage des images dérivées | 14c |
+| `tests/fixtures/profils/` (nouveau) | dossiers de projets factices (Python, Node, Gradle/Android, Maven, .NET, Go, Rust, Godot, Unity, Windows, Xcode) | 14a |
 | `bureau/deport_types.py`, `outils/deporter.py`, `lancer.py` | accord des actions routées, aiguillage | 7 |
 | tests des 15 modules | compatibilité Linux | 9–12 |
 | `outils/tests_mesure_places.py` (nouveau) | protocole de mesure des places | 13 |
-| `orchestrateur/depart.py`, `bureau/deport_types.py` (affichage), installation | consigne, lieu « Serveur » pour les tests | 15 |
+| `orchestrateur/depart.py`, `bureau/deport_types.py` (affichage), installation | consigne, lieu « Serveur » pour les tests | 15, 15b |
+| `outils/tests_adoption.py` (nouveau) | adoption par projet : analyse → image → échauffement → évaluation → verdict | 15b |
 | `docs/serveur-tests.md` (nouveau), `docs/deport.md`, `docs/serveur-taches.md`, `CLAUDE.md` | documentation | 16 |
 
 ---
@@ -380,26 +400,136 @@ les laisser « instables » (relance seule de `tests_paralleles`) et le dire dan
 - [ ] **Step 4: Run to verify they pass** : `py -3.12 outils/tests_paralleles.py test_tests_places test_serveur_modele` → ok.
 - [ ] **Step 5: Commit** : chemins ci-dessus ; « Tests au serveur : places réglables et protocole de mesure ».
 
-### Task 14: Projets Node : cache des dépendances (seulement si Q2 = oui)
+### Task 14 (amendée) : profils d'exécution, images et caches de dépendances — tâches 14a à 14e
+
+L'ancienne tâche 14 (cache Node seul) est remplacée par cinq tâches (conception § 5.11–5.14) ; son cas Node devient le cas
+`npm` de 14d (mêmes valeurs ; Q2 = oui). Ordre : 14a → 14b → 14c → 14d → 14e ; chacune n'exige que les précédentes.
+
+### Task 14a: L'analyse du projet et le profil d'exécution (code sensible : ce qui est lu du projet)
 
 **Files:**
-- Modify: `serveur_ovh/taches/lancer_tests.sh` (préparation du cache), `outils/tests_serveur.py` (`deps`)
-- Test: `tests/test_serveur_tests_deps.py` (≈ 4 s ; faux `docker`)
+- Create: `outils/tests_profil.py` (Python 3.12, bibliothèque standard), `tests/fixtures/profils/<cas>/` (fichiers texte
+  minuscules : `python-stdlib`, `python-pytest`, `node-npm`, `node-sans-verrou`, `gradle-android` (copie réduite des en-têtes
+  de MyFridgeCleaner : `settings.gradle.kts`, `build.gradle.kts` racine et `app/`, `gradle-wrapper.properties`,
+  `gradle.properties`, `AndroidManifest.xml`, un `.github/workflows/x.yml`), `maven`, `dotnet`, `dotnet-framework`, `go`,
+  `rust`, `godot`, `unity`, `xcode`, `contradictoire`, `inconnu`)
+- Modify: `outils/tests_instantane.py` (`EXCLUS` += `local.properties` ; `limites_pour(famille)`), `outils/tests_serveur.py`
+  (`commande_conteneur` : `gradlew.bat` → `./gradlew`, `mvnw.cmd` → `./mvnw`, `dotnet.exe` → `dotnet`, `godot*.exe` → `godot`)
+- Test: `tests/test_tests_profil.py` (≈ 0,5 s ; fixtures seulement, aucun sous-processus)
 
 **Interfaces:**
-- Produces : avec `deps` ≠ `-` et `~/tests/.deps/<projet>/<deps>/.pret` absent, l'enveloppe lance **avant la place de tests**
-  un conteneur `deps-<id>` : `--network bridge` (seul conteneur avec réseau), mêmes autres drapeaux de T4, `--memory 4096m`,
-  `--cpus 2`, `timeout 900`, archive montée en lecture seule, seuls `package.json` et `package-lock.json` extraits,
-  `npm ci --ignore-scripts --no-audit --no-fund` dans `/deps` (dossier `~/tests/.deps/<projet>/<deps>.tmp`, renommé et
-  `.pret` écrit seulement après succès) ; plus de 2 Go → abandon ; deux caches au plus par projet (le plus ancien effacé) ;
-  échec → `#deps-echec` sur la sortie d'erreur, code 79 → **repli au poste** côté route (R3 étendue).
-  - `tests_serveur` : `deps = empreinte_verrou_node(racine)` ; projet avec `package.json` sans verrou → R5 (« pas de
-    `package-lock.json` : tests au poste »).
-- [ ] **Step 1: Write the failing tests** : `test_cache_prepare_une_fois` (2ᵉ campagne : aucun `deps-*`) ; `test_seul_le_conteneur_deps_a_le_reseau` (le `run` des tests a `--network none`) ; `test_echec_deps_code_79_et_rien_de_pret` ; `test_deux_caches_au_plus` ; `test_route_sans_verrou_node_replie`.
+- Consumes : `installation.examen` (`FICHIERS_CLES`, `DOSSIERS_SAUTES`, `_lire_borne`) ; `deport_types.catalogue_du_projet`.
+- Produces :
+  - `FAMILLES = ("python", "node", "gradle-android", "gradle-jvm", "maven", "dotnet", "go", "rust", "godot", "unity", "ruby", "php", "make")`.
+  - `LUS = (...)` : la liste fermée des motifs de fichiers lus (tableau du § 5.11 + `.github/workflows/*.yml`) ; `MAX_LU = 256 * 1024` (CI : 64 Ko).
+  - `@dataclass(frozen=True) class Profil` : `familles`, `outils: dict`, `commandes: List[List[str]]`, `deps: dict`, `caches: List[str]`, `ressources: dict`, `isolement`, `non_deportable: Optional[str]`, `confiance`, `empreinte` ; `vers_json()` / `depuis_json()`.
+  - `analyser(racine: str, commande: Optional[List[str]] = None, catalogue=None, lire=None) -> Profil` : pur ; `lire` injectable `(chemin) -> Optional[str]` (défaut : `_lire_borne`, refuse liens et exclus).
+  - `empreinte_profil(profil) -> str` (64 hexa, forme canonique triée, hors `confiance`) et `empreinte_image(profil) -> str` (seulement `outils`).
+  - `non_deportable(racine, lire) -> Optional[str]` : raisons N1, N2, N6 du § 5.14 détectées statiquement (N3–N5 viennent de `tests.profil_force` ou de l'évaluation).
+  - `ressources_par_defaut(famille) -> dict` (tableau du § 5.14 ; Gradle : `-Xmx` de `org.gradle.jvmargs` + 4 096 Mo, 6 144 au moins).
+- [ ] **Step 1: Write the failing tests** :
+  - `test_familles_detectees` : chaque fixture → sa famille ; `contradictoire` → confiance `basse` ; `inconnu` → famille vide, confiance `basse`, aucune exception.
+  - `test_gradle_android_comme_myfridgecleaner` : `outils == {"jdk": "17", "gradle": "9.3.1", "android": {"compileSdk": 36, ...}}`, AGP `9.1.1`, commande `["./gradlew", "testDebugUnitTest"]` (catalogue `ANDROID` prime), mémoire 6 144 Mo (`-Xmx2048m` + 4 096), confiance `haute` (CI `java-version: '17'` concordante).
+  - `test_versions_lues` : `.nvmrc` `18.20.4`, `.python-version` `3.11`, `global.json`, `rust-toolchain.toml`, `go 1.23`, Godot `"4.7"`, Unity `6000.6.7f1`.
+  - `test_ne_lit_que_la_liste_fermee` : `lire` espion → jamais `.env`, `local.properties`, `*.keystore`, ni un fichier hors `LUS` ; un lien symbolique n'est pas suivi (sauté si le poste ne sait pas en créer).
+  - `test_rien_n_est_execute` : `subprocess.Popen`, `os.system` remplacés par des pièges → jamais appelés.
+  - `test_valeurs_hostiles_refusees` : `.nvmrc` = `18; curl x | sh` → version rejetée (confiance `basse`, raison dite), jamais recopiée dans le profil.
+  - `test_non_deportables` : `dotnet-framework` → N1 ; `xcode` → N2 ; `dotnet` (net8.0) → `None`.
+  - `test_empreintes` : changer `package-lock.json` change `empreinte_profil` mais pas `empreinte_image` ; changer `.nvmrc` change les deux.
+  - `test_local_properties_exclu` et `test_limites_par_famille` (`tests_instantane`) ; `test_commande_conteneur_windows` (`gradlew.bat` → `./gradlew`).
+- [ ] **Step 2: Run to verify they fail** : `py -3.12 outils/tests_paralleles.py test_tests_profil` → ÉCHEC.
+- [ ] **Step 3: Implement**.
+- [ ] **Step 4: Run to verify they pass** : `py -3.12 outils/tests_paralleles.py test_tests_profil test_tests_instantane test_tests_serveur` → ok.
+- [ ] **Step 5: Commit** : chemins ci-dessus ; « Tests au serveur : analyse du projet et profil d'exécution ».
+
+### Task 14b: Les images existantes au catalogue et l'image `tests-android`
+
+**Files:**
+- Create: `outils/tests_images.py` (catalogue et choix), `serveur_ovh/images/tests-android/Dockerfile`
+- Modify: `outils/serveur_capacites.py` (`tests-android`), `outils/serveur_installation.py` et `serveur_ovh/mise_en_place.sh`
+  (étape `tests_android_image`), `serveur_ovh/taches/lancer_tests.sh` (8ᵉ et 9ᵉ arguments facultatifs `<image>`
+  `<famille>`), `outils/tests_serveur.py` (choix de l'image et des capacités requises d'après le profil)
+- Test: `tests/test_tests_images.py` (≈ 1 s ; faux `docker` pour l'enveloppe, aucune construction)
+
+**Interfaces:**
+- Produces :
+  - Capacité `Capacite("tests-android", "Image des tests Gradle/Android (SDK de l'hôte en lecture seule)", ("tests-image", "android-build"), "tests_android_image", "test -s ~/.myiafactory/tests-android-image.version", 0.5, 4)` ; `BESOINS["tests-serveur-android"] = ("tests-android",)`.
+  - Image `myiafactory/tests-android` : `FROM myiafactory/tests`, `openjdk-17-jdk-headless` et `openjdk-21-jdk-headless` (distribution), `ANDROID_HOME=/opt/android-sdk`, `GRADLE_USER_HOME=/deps/gradle`, utilisateur 1000 ; vérifié à la construction : `java -version` 17, ni `curl` ni `wget`.
+  - `CATALOGUE_IMAGES` : `{"myiafactory/tests": {"capacite": "tests-image", "familles": ("python", "node", "make"), "outils": {"python": "3.12", "node": "22"}}, "myiafactory/tests-android": {"capacite": "tests-android", "familles": ("gradle-android", "gradle-jvm"), "outils": {"jdk": ("17", "21")}}}` ; `myiafactory/android` (Gradle 8.7, plateforme 34) et `unityci/editor` ne sont **pas** au catalogue des tests (conception § 5.12) ; l'image GameCI n'y entre que par 14c, à Q3 = oui.
+  - `choisir_image(profil, sdk_android=None) -> dict` : `{"image", "capacites", "derivee": bool, "manque": [..]}` ; une image de catalogue convient si chaque outil du profil y est à la même version majeure (Python majeur.mineur) ; pour `gradle-android`, `sdk_android` (relevé de la sonde `android-build` : plateformes et build-tools présents) doit contenir `compileSdk` et `build_tools`, sinon `manque = ["platforms;android-N"]`.
+  - `lancer_tests.sh … <deps> [<image> [<famille>]]` : `image` motif `^myiafactory/tests(-[a-z0-9]{1,24})?$` (défaut `myiafactory/tests`) ; `famille` dans `FAMILLES` (défaut `python`) ; table fermée par famille dans l'enveloppe : montages (`gradle-android` : `-v ~/android-sdk:/opt/android-sdk:ro`) et variables (`GRADLE_OPTS`, `ANDROID_HOME`) ; jamais une valeur venue du poste hors motif.
+- [ ] **Step 1: Write the failing tests** : `test_capacite_tests_android` (`verifier_catalogue`, `manquantes_pour(["tests-serveur-android"], {"base", "tests-image"}) == ["android-build", "tests-android"]`) ; `test_choix_catalogue` (Python 3.12 → `myiafactory/tests` ; Node 18 → dérivée ; MyFridgeCleaner + SDK android-36/36.0.0 → `tests-android` ; même projet + SDK sans android-36 → `manque`) ; `test_enveloppe_image_et_famille` (motifs refusés → 2 ; `gradle-android` monte le SDK en `:ro` ; sans les deux arguments : identique à T4) ; `test_etape_simulee` (`--etape tests_android_image --simuler`, aucun `docker`).
+- [ ] **Step 2: Run to verify they fail** : `py -3.12 outils/tests_paralleles.py test_tests_images` → ÉCHEC.
+- [ ] **Step 3: Implement**.
+- [ ] **Step 4: Run to verify they pass** : `py -3.12 outils/tests_paralleles.py test_tests_images test_serveur_capacites test_serveur_tests_enveloppe` → ok.
+- [ ] **Step 5: Commit** : chemins ci-dessus ; « Tests au serveur : images du catalogue et image tests-android ».
+
+### Task 14c: Les images dérivées : gabarit, décision, construction, ramassage (code sensible : code exécuté au serveur avec réseau)
+
+**Files:**
+- Modify: `outils/tests_images.py` (gabarit, registre), `serveur_ovh/images/tests/Dockerfile` (Node par archive officielle
+  et `SHASUMS256.txt` au lieu de `curl … | bash -`, empreinte `tests_image` changée)
+- Create: `serveur_ovh/taches/construire_image_tests.sh`
+- Test: `tests/test_tests_images_derivees.py` (≈ 2 s ; rendu pur ; bash sur l'enveloppe avec faux `docker`, `df`)
+
+**Interfaces:**
+- Produces :
+  - `OUTILS` (table fermée : `jdk`, `node`, `python`, `maven`, `dotnet`, `go`, `rust`, `godot`, `unity`) ; `MOTIFS_VERSION` par outil.
+  - `rendre_dockerfile(profil) -> Tuple[str, str]` : `(texte, sha256)` ; reproductible (mêmes octets à profil égal) ; blocs dans un ordre fixe ; chaque téléchargement dans un fichier puis vérification de la somme officielle (conception § 5.12), échec de construction sinon ; `ValueError` pour tout outil ou version hors table.
+  - `etiquette_derivee(profil) -> str` : `myiafactory/tests-<12 hexa de empreinte_image>`.
+  - Registre `REGISTRE = ~/MyIAFactory/tests-images.json` : `noter_image(serveur_id, etiquette, empreinte, taille_mo, maintenant)`, `image_connue(serveur_id, empreinte) -> Optional[str]`, `noter_usage(...)`.
+  - `construire_image_tests.sh <etiquette> <sha256>` : contexte `~/tests/.construction/<etiquette>/` avec le seul `Dockerfile` déposé (et `entree-tests.sh` copié du dépôt du serveur) ; refus (code 2) si le SHA-256 diffère, si l'étiquette sort du motif, si le contexte contient autre chose ; disque < 10 Go → 76 ; `timeout 1800 sudo -n docker build --pull --label myiafactory.genre=tests-derivee --label myiafactory.empreinte=… -t <etiquette>` (ni `--privileged`, ni `--build-arg` hors table, ni montage) ; sortie : `#image <etiquette> <taille_mo>` ; journal de construction gardé 64 Ko.
+  - `construire_image_tests.sh --ramasser <budget_go>` : ne touche que les images `myiafactory.genre=tests-derivee` ; jamais une image d'un conteneur vivant ; > 30 jours sans usage puis la moins récemment utilisée tant que le total dépasse le budget ; une ligne `#ramassee <etiquette>` chacune.
+  - Décision de Direction `tests_image_derivee` (posée par 15b) : `{"dockerfile", "sha256", "etiquette", "taille_estimee_mo", "duree_estimee_s"}` ; réponses `construire` / `plus_tard` / `garder_poste`.
+- [ ] **Step 1: Write the failing tests** :
+  - `test_rendu_reproductible` ; `test_rendu_sans_texte_du_projet` (profil avec une version `1; rm -rf /` ou un retour à la ligne → `ValueError` ; aucun caractère hors `[0-9A-Za-z.+_-]` dans les valeurs d'une ligne `RUN`) ; `test_aucun_curl_pipe_shell` (aucune ligne ne contient `| sh`, `| bash`, `nvm`, `sdkman`, `pyenv`, `ADD http`) ; `test_chaque_telechargement_verifie` (chaque `curl -o` suivi d'un `sha256sum -c`/`sha512sum -c`) ; `test_etiquette_stable` (même `empreinte_image` → même étiquette, changer seulement le verrou ne la change pas).
+  - `test_construction_refuse_sha_different` (code 2, `docker build` jamais lancé) ; `test_contexte_sans_fichier_du_projet` ; `test_construction_ligne_image` (faux `docker` : `#image … 812`) ; `test_ramassage` (3 images fausses, une utilisée par un conteneur vivant, budget dépassé → les deux autres seulement, la plus ancienne d'abord).
+  - `test_image_tests_sans_curl_pipe` : le `Dockerfile` de `images/tests` ne contient plus `| bash`.
+- [ ] **Step 2: Run to verify they fail** : `py -3.12 outils/tests_paralleles.py test_tests_images_derivees` → ÉCHEC.
+- [ ] **Step 3: Implement**.
+- [ ] **Step 4: Run to verify they pass** : `py -3.12 outils/tests_paralleles.py test_tests_images_derivees test_tests_images test_tests_image` → ok.
+- [ ] **Step 5: Commit** : chemins ci-dessus ; « Tests au serveur : images dérivées, construction et ramassage ». Relecture séparée.
+
+### Task 14d: Caches de dépendances et échauffement (code sensible : réseau, caches ; reprend l'ancienne tâche 14)
+
+**Files:**
+- Modify: `serveur_ovh/taches/lancer_tests.sh` (échauffement, copie sur écriture, drapeaux hors ligne), `outils/tests_serveur.py`
+  (`deps` = empreinte du cache du profil), `outils/tests_profil.py` (`empreinte_deps`)
+- Test: `tests/test_serveur_tests_deps.py` (≈ 4 s ; faux `docker`, `flock`, `df`)
+
+**Interfaces:**
+- Produces :
+  - `empreinte_deps(profil, racine, lire) -> Optional[str]` (16 hexa : verrou ou verrou implicite Gradle/Maven, plus `empreinte_image`, conception § 5.13) ; `None` si aucune dépendance.
+  - `ECHAUFFEMENTS` (table fermée, côté enveloppe et côté Python pour l'affichage) : famille → commande en tableau, durée (900 / 1 800 / 3 600 s), plafond (2 / 6 / 10 Go), `execute_du_code` (`npm`, `pnpm`, `yarn`, `pip` à roues seulement, `cargo fetch`, `go mod download`, `dotnet restore` : faux ; Gradle, Maven, pip sans roue, Unity : vrai).
+  - Enveloppe : `deps` ≠ `-` et `~/tests/.deps/<projet>/<famille>-<deps>/.pret` absent → conteneur `deps-<id>` **avant la place de tests** : réseau `bridge` (Q2, familles sans code) ou réseau `--internal` + mandataire éphémère à liste fermée (familles `execute_du_code`, seulement si l'argument `<reseau_code>` vaut `accorde`, posé par la route d'après `tests.adoption`) ; mêmes autres drapeaux que T4 ; cache écrit dans `<…>.tmp`, renommé et `.pret` posé après succès ; `gradle-wrapper.jar` vérifié avant tout lancement Gradle (sommes publiées, copie de la liste dans l'image) ; échec ou plafond → `#deps-echec <raison>`, code 79.
+  - Sans verrou : le verrou produit reste dans le cache (`.verrou-produit`), cache « non verrouillé », refait si `.pret` a plus de 7 jours.
+  - Pendant les tests : volume `overlay` par campagne (basse : le cache en lecture seule ; haute : `~/tests/<id>/deps-haut`), monté sur `/deps`, effacé à la fin ; `flock -s` sur `<cache>/.verrou` pendant la campagne ; drapeaux hors ligne par famille (table fermée du § 5.13) ajoutés par l'entrée du conteneur, jamais par le poste.
+  - Éviction : deux caches au plus par projet et par famille ; `budget_caches_go` (argument, défaut 40) : le moins récemment utilisé (`.utilise` touché à chaque campagne), jamais un cache tenu (`flock -x -n`).
+  - Route : code 79 → repli au poste (R3 étendue) ; projet `execute_du_code` sans accord réseau → repli R5 avec « échauffement réseau non accordé ».
+- [ ] **Step 1: Write the failing tests** : `test_cache_prepare_une_fois` (2ᵉ campagne : aucun `deps-*`) ; `test_seul_l_echauffement_a_le_reseau` (le `run` des tests a `--network none`) ; `test_code_du_projet_jamais_en_bridge` (famille Gradle → réseau interne + mandataire, ou refus sans `accorde`) ; `test_wrapper_modifie_refuse` ; `test_echec_deps_code_79_et_rien_de_pret` ; `test_copie_sur_ecriture` (le faux `docker` reçoit un volume `overlay` dont la basse est le cache, effacé ensuite) ; `test_drapeaux_hors_ligne` (Gradle : `--offline --no-daemon` ; Cargo : `--offline`) ; `test_sans_verrou_garde_le_verrou_produit` ; `test_deux_caches_et_budget` ; `test_cache_tenu_jamais_efface` ; `test_route_code_79_replie`.
 - [ ] **Step 2: Run to verify they fail** : `py -3.12 outils/tests_paralleles.py test_serveur_tests_deps` → ÉCHEC.
 - [ ] **Step 3: Implement**.
 - [ ] **Step 4: Run to verify they pass** : `py -3.12 outils/tests_paralleles.py test_serveur_tests_deps test_serveur_tests_enveloppe test_tests_serveur` → ok.
-- [ ] **Step 5: Commit** : chemins ci-dessus ; « Tests au serveur : dépendances Node en cache ».
+- [ ] **Step 5: Commit** : chemins ci-dessus ; « Tests au serveur : caches de dépendances et échauffement ». Relecture séparée.
+
+### Task 14e: Places pondérées par la mémoire et limites par profil
+
+**Files:**
+- Modify: `serveur_ovh/taches/lancer_tests.sh` (jetons), `outils/tests_serveur.py` (limites du profil), `outils/serveur_modele.py`
+  (`budget_tests_mo`), `outils/tests_mesure_places.py` (paliers mixtes)
+- Test: `tests/test_tests_jetons.py` (≈ 3 s ; `flock` de Git bash ou faux, faux `docker`)
+
+**Interfaces:**
+- Produces :
+  - `serveur_modele` : champ facultatif `budget_tests_mo` (8 192 à 40 960, défaut 32 768 ; hors bornes → défaut et une raison au bureau).
+  - `tests_serveur.limites_de(profil) -> dict` : `ressources_par_defaut` (14a) relevées par `tests.profil_force` dans les bornes (`cpus` ≤ 8, `memoire_mo` ≤ 16 384, `duree_s` ≤ 3 600) ; au-delà, refus avec « décision du Directeur requise ».
+  - `lancer_tests.sh … [<image> [<famille> [<budget_unites>]]]` : `budget_unites` `^([4-9]|1[0-9]|20)$` (défaut 16) ; jetons `~/taches/.jeton-tests-1..20` de 2 Go ; poids = `ceil(memoire_mo / 2048)` ; seul le premier ticket de la file prend des jetons, un par un, et les garde jusqu'à en avoir assez (puis prend sa place, § 5.5) ; `#attente <rang> <total> <jetons_libres>` ; jetons rendus avec la place.
+  - `tests_mesure_places.py --mixte gradle:2,python:2` : paliers mixtes (jalon J11).
+- [ ] **Step 1: Write the failing tests** : `test_poids` (8 192 → 4 ; 10 240 → 5 ; 4 096 → 2) ; `test_seul_le_premier_prend_des_jetons` (deux tickets, le second n'en tient aucun tant que le premier attend) ; `test_budget_respecte` (16 jetons, 2 × 4 + 2 × 4 tenus → la cinquième attend avec `#attente 1 1 0`) ; `test_jetons_rendus_a_la_fin_et_a_la_laisse` ; `test_sans_argument_comme_t4` ; `test_limites_bornees` (`memoire_mo` 20 000 forcé → refus dit).
+- [ ] **Step 2: Run to verify they fail** : `py -3.12 outils/tests_paralleles.py test_tests_jetons` → ÉCHEC.
+- [ ] **Step 3: Implement**.
+- [ ] **Step 4: Run to verify they pass** : `py -3.12 outils/tests_paralleles.py test_tests_jetons test_serveur_tests_enveloppe test_tests_places` → ok.
+- [ ] **Step 5: Commit** : chemins ci-dessus ; « Tests au serveur : places pondérées et limites par profil ».
 
 ### Task 15: La consigne des agents et le lieu « Serveur » des tests
 
@@ -427,55 +557,77 @@ les laisser « instables » (relance seule de `tests_paralleles`) et le dire dan
 - [ ] **Step 4: Run to verify they pass** : `py -3.12 outils/tests_paralleles.py test_tests_consigne_serveur test_tests_consigne test_orch_depart test_orch_depart_deport` → ok.
 - [ ] **Step 5: Commit** : chemins ci-dessus ; « Tests au serveur : consigne des agents et lieu Serveur ».
 
-### Task 15b: Adoption par projet (la route n'est activée que pour un projet qui passe) — ajoutée sur demande du Directeur le 2026-11-23
+### Task 15b (réécrite) : Adoption par projet : analyse, profil, image, échauffement, évaluation — demande du Directeur du 2026-11-23, amendée le même jour (« qu'importe le projet »)
 
-Le mécanisme est universel (tous les projets de la skill), mais un projet n'est pas forcément compatible : tests propres à
-Windows, pile hors Python/Node (Android/Gradle, Unity), fichiers exclus de l'instantané. Sans évaluation, la route échouerait
-pour de mauvaises raisons. Cette tâche évalue chaque projet **une fois** et ne propose l'activation que s'il passe.
+Le mécanisme sert **tout** projet (conception § 5.15). Plus aucun statut `non_supporte` : un projet hors Python/Node passe
+par son profil (14a), son image (14b, 14c) et ses dépendances (14d) ; il ne reste au poste que `non_deportable` (raison
+N1–N6) ou par choix du Directeur, toujours dit.
 
 **Files:**
-- Create: `outils/tests_adoption.py` (stdlib seule ; Python 3.9 si importé par le lanceur : suivre le brief de T6),
-  `tests/test_tests_adoption.py` (≈ 0,5 s, route simulée, aucun accès serveur)
-- Modify: `orchestrateur/outil.py` (commande `evaluer-tests-serveur`), `orchestrateur/consignes.md` (décision
-  `tests_serveur_adoption`), `bureau/demandes.py` / `bureau/releve.py` (validation de la décision), `skills/installer/SKILL.md`
-  (l'étape d'installation), `bureau/web/ui/` (la carte de la décision, texte via `textContent` seulement), docs.
+- Create: `outils/tests_adoption.py` (Python 3.12, stdlib), `tests/test_tests_adoption.py` (≈ 0,8 s ; route, construction et
+  échauffement simulés par des faux ; fixtures de 14a ; aucun accès serveur)
+- Modify: `outils/tests_serveur.py` (`evaluation`, contrôle de l'empreinte du profil adopté),
+  `bureau/deport_types.py` (`ANDROID["tests"]` : `lieux=("poste", "github", "serveur")`), `orchestrateur/outil.py`
+  (commande `evaluer-tests-serveur`), `orchestrateur/consignes.md` (décisions `tests_serveur_adoption`,
+  `tests_image_derivee`, `tests_reseau_echauffement`, `tests_profil`), `bureau/demandes.py` / `bureau/releve.py`
+  (validation des réponses), `skills/installer/SKILL.md` (l'étape d'installation), `bureau/web/ui/` (cartes : Dockerfile
+  et listes par `textContent` seulement), docs.
 
 **Interfaces:**
-- Consumes : `tests_serveur.executer(...)` (T6) en mode évaluation ; `deport_types.refus_route` (T7) ; `tests_mesures`
-  (T1 économes : durée et nombre de tests de la campagne d'évaluation).
+- Consumes : `tests_profil.analyser`, `empreinte_profil` (14a) ; `tests_images.choisir_image`, `rendre_dockerfile`,
+  `image_connue` (14b, 14c) ; `tests_serveur.executer(…, forcer=True)` (T6 ; 15b y ajoute `evaluation=True` : profil
+  non encore adopté admis pour cette seule campagne, durée de la famille, aucune ligne de mesure ordinaire) ; `deport_types.refus_route`
+  (T7) ; `tests_mesures` (durée, nombre de tests).
 - Produces :
-  - `detecter_pile(racine) -> str` : `"python"` (tests/, pyproject, requirements), `"node"` (package.json avec script de
-    test), `"non_supporte"` (build.gradle*, ProjectSettings/, pile inconnue), sans lire de secret ni suivre de lien.
-  - `evaluer(racine, commande, route, delai_s=1200) -> dict` : lance UNE campagne par la route **sans repli sur le poste**
-    ni nouvelle tentative ; rend `{"statut": "passe"|"echoue"|"non_supporte"|"injoignable"|"trop_long", "duree_s", "nb_tests",
-    "echecs": [≤ 20 noms], "raison": str}` ; `non_supporte` sans rien envoyer ; `injoignable` si R1–R4 (T6) ; `trop_long`
-    au-delà de `delai_s` (conteneur arrêté).
-  - Réglages du projet : `reglages.json` > `tests.adoption = {"date", "statut", "duree_s", "nb_tests"}` (écrit par le
-    bureau/l'outil, jamais par l'agent : même garde que le budget, copie d'affichage ; l'accord reste `deport.lieux["tests"]`).
-  - Décision de Direction `tests_serveur_adoption` : statut `passe` → proposer « Activer les tests sur le serveur » (réponse
-    `activer` / `plus_tard`) ; `echoue` → montrer les 20 premiers échecs et proposer `marquer` (la tâche « marquer les tests
-    propres à Windows » est PROPOSÉE, jamais créée seule : règle des tests économes), `garder_poste`, `plus_tard` ;
-    `non_supporte` / `injoignable` → information seule + `garder_poste`. **Jamais d'activation automatique** : l'accord du
-    Directeur reste obligatoire (R10).
-  - `outil.py evaluer-tests-serveur [--dossier D]` : lance `evaluer`, pose la décision, écrit `tests.adoption`.
+  - `etapes(racine, profil, etat) -> List[str]` : ce qui reste à faire, dans l'ordre (`image`, `sdk_android`, `reseau`,
+    `echauffement`, `evaluation`) ; pur.
+  - `evaluer(racine, commande=None, route=…, construire=…, delai_s=None, lire=None) -> dict` : analyse → profil ; `non_deportable`
+    → rien n'est envoyé ; image absente → `image_a_construire` (rien de construit sans la réponse `construire`) ; réseau
+    d'échauffement requis et non accordé → `image_a_construire` avec `attend: "reseau"` ; sinon UNE campagne par la route
+    **sans repli ni nouvelle tentative**, échauffement compris ; rend `{"statut": "passe"|"echoue"|"image_a_construire"|"non_deportable"|"injoignable"|"trop_long", "profil", "empreinte_profil", "image", "duree_s", "nb_tests", "echecs": [≤ 20 {"nom", "classe"}], "raison", "attend"}`.
+  - `classer_echec(nom, extrait) -> str` : `windows` (chemins `C:\`, `\\`, registre, `.exe`, `cmd`), `reseau`, `secret`,
+    `autre` ; pur, sur 4 Ko d'extrait au plus.
+  - `marqueur_pour(famille) -> str` : le marqueur conseillé par pile (`plateforme_tests.windows_seulement` en Python ;
+    `Assume.assumeTrue` JUnit 4 ; `@EnabledOnOs(OS.WINDOWS)` JUnit 5 ; `it.skipIf` Vitest ; `[SkippableFact]`/`Skip` .NET ;
+    `#[cfg(windows)]` Rust ; `t.Skip` Go).
+  - Réglages : `reglages.json` > `tests.adoption = {"date", "statut", "empreinte_profil", "image", "reseau_echauffement": "accorde"|"refuse"|null, "duree_s", "nb_tests"}` — écrit par le bureau/l'outil, jamais par l'agent (même garde que le budget) ; l'accord reste `deport.lieux["tests"]` (R10).
+  - Décisions de Direction : `tests_image_derivee` (14c : `construire` / `plus_tard` / `garder_poste`) ;
+    `tests_reseau_echauffement` (Q4 : registres autorisés, durée, « le code de construction du projet tourne avec ce
+    réseau » ; `accorder` / `refuser`) ; `tests_serveur_adoption` : `passe` → « Activer les tests sur le serveur »
+    (`activer` / `plus_tard`) ; `echoue` → les 20 premiers échecs classés et le marqueur conseillé, `marquer` (tâche
+    **proposée**, jamais créée seule), `garder_poste`, `plus_tard` ; `non_deportable` → la raison N1–N6 et `garder_poste` ;
+    `injoignable` / `trop_long` → information et `reessayer` / `garder_poste`. **Jamais d'activation automatique.**
+  - `outil.py evaluer-tests-serveur [--dossier D]` : lance `evaluer`, pose la décision qui convient, écrit `tests.adoption` ;
+    rappelée après chaque réponse `construire` / `accorder` (étape suivante) ; la construction elle-même passe par
+    `construire_image_tests.sh` (14c), contrôleur ou bureau, jamais par l'agent.
+  - Réévaluation : à chaque campagne routée, `empreinte_profil` différente de `tests.adoption.empreinte_profil` → la route
+    passe au poste **une fois en le disant** (« profil changé : nouvelle évaluation proposée ») et pose la décision ; jamais
+    de campagne au serveur sur un profil non évalué.
   - L'étape `installer` de la skill appelle `evaluer-tests-serveur` après la mesure de départ des tests économes ; un projet
-    déjà installé est évalué à sa première campagne de plus de 60 s (migration, comme la mesure) ou à la demande du bureau
-    (bouton « Évaluer les tests sur le serveur » sur la carte du projet).
-- [ ] **Step 1: Write the failing tests** : `test_pile_python_node_gradle_unity` ; `test_non_supporte_n_envoie_rien` ;
-  `test_passe_rend_les_mesures` ; `test_echoue_rend_20_noms_au_plus` ; `test_injoignable_ne_replie_pas_et_ne_reessaie_pas` ;
-  `test_trop_long_arrete_le_conteneur` ; `test_decision_passe_propose_activer` ; `test_decision_ne_s_active_jamais_seule` ;
-  `test_adoption_ecrite_par_le_bureau_pas_par_l_agent` ; `test_reevaluation_apres_marquage`.
+    déjà installé est évalué à sa première campagne de plus de 60 s (migration) ou par le bouton « Évaluer les tests sur le
+    serveur » de la carte du projet.
+- [ ] **Step 1: Write the failing tests** : `test_toutes_les_familles_ont_un_chemin` (chaque fixture de 14a sauf N1/N2 →
+  un statut autre que `non_deportable`) ; `test_non_deportable_n_envoie_rien_et_dit_la_raison` (`dotnet-framework`,
+  `xcode`) ; `test_image_a_construire_ne_construit_rien_sans_reponse` ; `test_reseau_code_attend_l_accord` (Gradle sans
+  `reseau_echauffement`) ; `test_myfridgecleaner_chemin_complet` (fixture `gradle-android`, faux : image `tests-android`
+  présente, échauffement réussi, campagne 0 → `passe`) ; `test_echoue_classe_et_propose_le_marqueur` (20 noms au plus,
+  `windows` pour un `C:\Users` dans l'extrait, marqueur JUnit pour Gradle) ; `test_injoignable_ne_replie_pas_et_ne_reessaie_pas` ;
+  `test_trop_long_selon_la_famille` (Gradle : 2 700 s) ; `test_decision_ne_s_active_jamais_seule` ;
+  `test_adoption_ecrite_par_le_bureau_pas_par_l_agent` ; `test_reevaluation_quand_l_empreinte_change` (verrou modifié →
+  poste une fois, décision posée) ; `test_android_tests_lieu_serveur` (`ANDROID["tests"]` admet `serveur`, `emulateur`
+  non).
 - [ ] **Step 2: Run to verify they fail** : `py -3.12 outils/tests_paralleles.py test_tests_adoption` → ÉCHEC.
 - [ ] **Step 3: Implement**.
-- [ ] **Step 4: Run to verify they pass** : `py -3.12 outils/tests_paralleles.py test_tests_adoption test_demandes test_releve` → ok.
-- [ ] **Step 5: Commit** : chemins ci-dessus ; « Tests au serveur : adoption par projet ». Code sensible : relecture (elle décide quels
-  projets envoient leur code au serveur).
+- [ ] **Step 4: Run to verify they pass** : `py -3.12 outils/tests_paralleles.py test_tests_adoption test_deport_types test_demandes test_releve` → ok.
+- [ ] **Step 5: Commit** : chemins ci-dessus ; « Tests au serveur : adoption par projet, tout type de projet ». Code
+  sensible : relecture (elle décide quels projets envoient leur code au serveur et quand le réseau est demandé).
 
 ### Task 16: Documentation, CLAUDE.md et suite complète (contrôleur)
 
 **Files:**
 - Create: `docs/serveur-tests.md` (route, repli R1–R5, places, limites, sécurité, protocole et N mesuré, dépannage :
-  `--local`, `--serveur`, fichier d'injoignable)
+  `--local`, `--serveur`, fichier d'injoignable ; amendement : profils par famille, catalogue d'images et images dérivées,
+  caches et échauffement, jetons de mémoire, liste N1–N6 des non déportables, adoption et ses décisions)
 - Modify: `docs/deport.md` (le lieu serveur des tests), `docs/serveur-taches.md` (places `.creneau-tests-*`, `~/tests/`),
   `CLAUDE.md` (« Une seule campagne de tests à la fois **sur le poste** » ; « avec l'accord, le lanceur les envoie au
   serveur, plusieurs en parallèle ; `--local` pour forcer le poste » ; commandes inchangées), `lancer.py` (docstring)
@@ -492,18 +644,31 @@ sur le serveur ensuite.
 - [ ] **J2** : `py -3.12 outils/tests_paralleles.py --serveur` → durée, liste exacte des modules en échec (attendu : 0 hors « à rendre hermétique »), sortie gardée pour les tâches 9–12.
 - [ ] **J3** : `py -3.12 outils/tests_mesure_places.py --serveur-id <id> --paliers 1,2,3` puis `--paliers 2 --avec-emulation` → N recommandé, réglé dans le bureau, écrit dans `docs/serveur-tests.md`.
 - [ ] **J4** : vérification Linux de chaque lot (tâches 9–12, étape 4).
-- [ ] **J5** (si Q2) : un projet Node enregistré : `python lancer.py tests --dossier <p> -- npx vitest run` deux fois (installation puis cache).
+- [ ] **J5** (Q2 = oui) : profil Python et profil Node par le mécanisme général (14a, 14d) : un projet Node enregistré, `python lancer.py tests --dossier <p> -- npx vitest run` deux fois (échauffement puis cache, aucun `deps-*` la seconde fois) ; un projet Python à dépendances `pip` (roues seulement), même double passage.
 - [ ] **J6** : enregistrer le dépôt MyIAFactory au bureau et poser `deport.lieux.tests = "serveur"` au défaut du bureau (geste du Directeur au bureau) ; `py -3.12 outils/tests_paralleles.py --touches` part au serveur.
 - [ ] **J7** : repli : `serveurs-etat.json` d'une copie de `dossier_etat` marqué injoignable → une campagne passe au poste avec la ligne de repli, sans connexion.
+- [ ] **J8** (après 14b, 14d ; Q4 pour le réseau de l'échauffement Gradle) : `plateforme serveurs installer <id> tests-serveur-android --accord` → `tests-android` « fait » ; MyFridgeCleaner enregistré : `evaluer-tests-serveur --dossier <MyFridgeCleaner>` → échauffement en ligne (wrapper Gradle 9.3.1 vérifié, dépendances), puis `./gradlew testDebugUnitTest --offline` au serveur ; relever durée, pic mémoire, taille du cache ; verdict `passe` attendu (à défaut : liste des échecs classés).
+- [ ] **J9** (après 14c, décision `tests_image_derivee` du Directeur) : une image dérivée (Godot 4.7 pour ZooRunner, ou Node d'un autre majeur) : construction (durée, taille), seconde demande à empreinte égale → aucune construction ; `--ramasser` avec un budget abaissé → l'image inutilisée part, celle d'un conteneur vivant reste.
+- [ ] **J10** (après 14d) : échauffement puis campagne hors ligne sur un projet du J5 ou J8 : le volume `overlay` fonctionne (sinon : bascule sur la lecture seule et `GRADLE_RO_DEP_CACHE`, notée) ; somme du cache identique avant et après la campagne.
+- [ ] **J11** (après 14e) : `tests_mesure_places.py --mixte gradle:2,python:2` puis la même pendant une émulation de recette → pics mémoire, durées ; `budget_tests_mo` confirmé ou corrigé au bureau, écrit dans `docs/serveur-tests.md`.
+- [ ] **J12** (seulement si Q3 = oui et un projet Unity existe) : projet Unity de test à la version de l'image GameCI, EditMode, licence montée ; sinon jalon reporté, dit dans la note de reprise.
 
 ## Auto-relecture
 
 1. **Couverture de la conception** : § 5.1 → T7, T8 ; § 5.2 → T2, T4 (extraction, nettoyage) ; § 5.3 → T3 ; § 5.4 → T4,
    T5, T6 ; § 5.5 → T4 (places, file, limites), T13 (N, protocole) ; § 5.6 → T6 (note d'attente, mesure) ; § 5.7 → T7 ;
-   § 5.8 → T14 ; § 5.9 → T1, T9–T12 ; § 5.10 → T15, T16 ; § 6 → T3, T4, T14 ; § 8 → T17.
+   § 5.8 → T14d ; § 5.9 → T1, T9–T12 ; § 5.10 → T15, T16 ; § 5.11 → T14a ; § 5.12 → T14b, T14c ; § 5.13 → T14d ;
+   § 5.14 → T14a (ressources, N1/N2/N6), T14e (jetons, limites) ; § 5.15 → T15b ; § 6 → T3, T4, T14c, T14d ;
+   § 8 → T17 (J1–J12).
 2. **Pas** : chaque étape nomme le fichier, la signature et les valeurs ; aucun corps de fonction ; T9–T12 partagent une
    forme et nomment leurs modules et le correctif attendu.
 3. **Noms** : `refus_route`, `routee_au_serveur`, `executer_en_flux`, `fin_serveur`, `tests_serveur.executer(…, forcer)`,
-   `LIMITES`, `module_pas_encore_linux`, `places_tests` sont les mêmes partout.
-4. **Review Focus** : chaque ligne a son test dans la tâche qui possède le code (T2, T4, T5, T6, T7).
+   `LIMITES`, `module_pas_encore_linux`, `places_tests` sont les mêmes partout ; amendement : `Profil`, `analyser`,
+   `empreinte_profil`, `empreinte_image`, `empreinte_deps`, `choisir_image`, `rendre_dockerfile`, `etiquette_derivee`,
+   `budget_tests_mo`, `budget_images_go`, `budget_caches_go`, `tests.adoption.empreinte_profil` idem.
+4. **Review Focus** : chaque ligne a son test dans la tâche qui possède le code (T2, T4, T5, T6, T7 ; 14a, 14c, 14d, 15b).
 5. **Proportion** : plan plus long que la conception, sans code ; les tests sont des noms et des assertions.
+6. **Amendement « qu'importe le projet »** : plus de `non_supporte` ; chaque famille a un chemin (catalogue ou image
+   dérivée) ; seuls N1–N6 restent au poste, raison dite ; les tests instrumentés restent aux actions de l'émulateur ; les
+   arguments ajoutés à l'enveloppe de T4 sont facultatifs, ses tests restent valides ; Q1, Q2 décidées, Q3–Q5 ouvertes
+   (J8 attend Q4, J12 attend Q3, les budgets de 14c/14d prennent les défauts de Q5 tant qu'elle n'est pas tranchée).

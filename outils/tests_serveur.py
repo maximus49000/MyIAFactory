@@ -425,16 +425,17 @@ def _premiere_ligne(commande):
     return ligne
 
 
-def _instantane(instantane, racine, fichier, dire):
-    """Écrit l'archive dans `fichier` (fermé en sortant, même sur Ctrl-C) ; `Repli` (R5) si elle ne peut pas partir."""
+def _instantane(instantane, racine, fichier, dire, famille=None):
+    """Écrit l'archive dans `fichier` (fermé en sortant, même sur Ctrl-C) ; `famille` (« unity ») ajoute les exclusions de la famille ; `Repli` (R5) si elle ne peut pas partir."""
+    plus = {"famille": famille} if famille else {}
     try:
-        fichiers, ecartes = instantane.lister(racine)
+        fichiers, ecartes = instantane.lister(racine, **plus)
         if ecartes:
             dire(f"Instantané : {len(ecartes)} fichier(s) écarté(s) : " + ", ".join(str(e) for e in ecartes[:10])
                  + (" …" if len(ecartes) > 10 else ""))
         executables = instantane.executables(racine)
         with open(fichier, "wb") as f:
-            instantane.ecrire_tar(racine, fichiers, f, executables=executables)
+            instantane.ecrire_tar(racine, fichiers, f, executables=executables, **plus)
     except instantane.HorsLimites as e:
         raise Repli(f"refusé (instantané : {e.raison})") from None
     except OSError as e:
@@ -660,7 +661,7 @@ def _au_serveur(commande, racine, attendre, places, dossier_etat, ssh, noter, ho
     prive = tempfile.mkdtemp(prefix="myiafactory-tests-")      # 0700 ; jamais dans le projet
     try:
         archive = os.path.join(prive, "entree.tar")
-        _instantane(instantane, racine, archive, dire)
+        _instantane(instantane, racine, archive, dire, "unity" if "unity" in profil.familles else None)
         ident = None
         for _ in range(ESSAIS_ID):
             essai = nouvel_id()

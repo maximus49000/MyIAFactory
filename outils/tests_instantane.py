@@ -6,8 +6,11 @@ Ce module décide de CE QUI QUITTE LE POSTE : il est volontairement strict, et c
   plus `AJOUTS` s'ils existent (même ignorés). Hors dépôt git : `HorsLimites` (la route se replie au poste). Git est lancé
   durci (`_git_local`) : le dépôt est écrit par des agents, sa configuration ne doit rien pouvoir exécuter.
 - Jamais (même suivis par erreur) : les motifs `EXCLUS` (conception) et `EXCLUS_EN_PLUS` (autres fichiers de secrets
-  courants), comparés sans tenir compte de la casse à CHAQUE segment du chemin (un dossier `.git`, `node_modules`,
-  `.factory` à n'importe quel niveau ; un `.env` ou un `id_ed25519` dans n'importe quel dossier). Ils sont écartés en
+  courants, dont la licence et la session Unity : `*.ulf`, `Unity_lic*`, `UnityEntitlementLicense*`,
+  `Unity.Licensing.Client*`, `unityhub/`), comparés sans tenir compte de la casse à CHAQUE segment du chemin (un dossier
+  `.git`, `node_modules`, `.factory` à n'importe quel niveau ; un `.env` ou un `id_ed25519` dans n'importe quel dossier),
+  et les suites de segments `EXCLUS_SEGMENTS` (`.config/unity3d/`, `.local/share/unity3d/`, à n'importe quel niveau).
+  `exclus_de_famille` y ajoute, à la racine seulement, les dossiers générés de la famille (`Library/`, `Temp/`… pour Unity). Ils sont écartés en
   silence : c'est attendu. Règle de contenu en plus des noms : les 64 premiers Ko de chaque fichier texte sont lus, et une
   clé privée PEM avec son corps base64 (au moins 2 lignes de 40 caractères après l'en-tête ; un en-tête seul cité dans du
   code n'en est pas une) ou un compte de service Google (`"client_email"` et un `"private_key"` qui contient une telle
@@ -52,10 +55,22 @@ EXCLUS_EN_PLUS = (".ssh/", ".aws/", ".azure/", ".gnupg/", ".docker/", ".kube/", 
                   ".git-credentials", ".gitconfig", ".dev.vars", ".mcp.json", "credentials.json",
                   "client_secret*.json", "service-account*.json", "*-firebase-adminsdk-*.json", "token.json",
                   "keystore.properties", "signing.properties", "secrets.properties",
-                  "secrets.toml", "*.tfstate", "*.tfstate.*", "*.tfvars", ".htpasswd")
+                  "secrets.toml", "*.tfstate", "*.tfstate.*", "*.tfvars", ".htpasswd",
+                  # Licence et session Unity (§ 5.16) : jamais au serveur, même suivies par erreur.
+                  "*.ulf", "Unity_lic*", "UnityEntitlementLicense*", "Unity.Licensing.Client*", "unityhub/")
+# Suites de segments consécutifs, à n'importe quel niveau, sans tenir compte de la casse (préférences et licences Unity de
+# l'utilisateur) : un `Assets/Unity3D/` du projet reste admis.
+EXCLUS_SEGMENTS = (".config/unity3d/", ".local/share/unity3d/")
 AJOUTS = (".durees-tests.json",)
 # Instantané maximal par famille (conception § 5.14) : 200 Mo, 1 Go pour les moteurs de jeu (ressources lourdes).
+EXCLUS_DE_FAMILLE = {"unity": ("Library/", "Temp/", "Logs/", "UserSettings/", "obj/", "Build/", "Builds/")}
 MAX_TOTAL_FAMILLE = {"godot": 1024 * 1024 * 1024, "unity": 1024 * 1024 * 1024}
+
+
+def exclus_de_famille(famille: Optional[str]) -> Tuple[str, ...]:
+    """Les dossiers d'une famille qui ne partent pas, à la RACINE du projet seulement (`Library/` de la racine Unity, pas
+    `Assets/Library/`) : générés par l'éditeur, lourds et sans valeur pour un test."""
+    return EXCLUS_DE_FAMILLE.get(famille or "", ())
 
 
 def limites_pour(famille: Optional[str]) -> Dict[str, int]:
@@ -88,6 +103,7 @@ _LECTEUR = re.compile(r"^[A-Za-z]:")
 _CONTROLE = re.compile(r"[\x00-\x1f\x7f]")
 _NOM_COURT = re.compile(r"~\d")
 _MOTIFS = tuple(m.rstrip("/").lower() for m in EXCLUS + EXCLUS_EN_PLUS)
+_SUITES = tuple(tuple(m.strip("/").lower().split("/")) for m in EXCLUS_SEGMENTS)
 _GIT_DURCI = ("-c", "core.fsmonitor=false", "-c", "core.untrackedCache=false", "-c", "core.hooksPath=" + os.devnull,
               "-c", "core.quotepath=off")
 _MODIFIE = "fichier modifié pendant la lecture : "
@@ -151,7 +167,16 @@ def nom_sur(nom: str) -> bool:
 
 
 def _exclu(nom: str) -> bool:
-    return any(fnmatch.fnmatchcase(segment.lower(), motif) for segment in nom.split("/") for motif in _MOTIFS)
+    segments = [s.lower() for s in nom.split("/")]
+    if any(fnmatch.fnmatchcase(segment, motif) for segment in segments for motif in _MOTIFS):
+        return True
+    return any(segments[i:i + len(suite)] == list(suite) for suite in _SUITES for i in range(len(segments)))
+
+
+def _exclu_famille(nom: str, famille: Optional[str]) -> bool:
+    """Vrai si `nom` est sous un dossier de `exclus_de_famille(famille)` à la racine (sans tenir compte de la casse)."""
+    bas = nom.lower()
+    return any(bas.startswith(d.lower()) for d in exclus_de_famille(famille))
 
 
 def _nom_windows_douteux(nom: str) -> Optional[str]:
@@ -353,8 +378,9 @@ def _contenu_secret(debut: bytes) -> bool:
 
 # ---------------------------------------------------------------- liste
 
-def lister(racine: str, git: Optional[Git] = None) -> Tuple[List[str], List[str]]:
-    """(fichiers retenus triés, écartés nommés « nom (raison) ») ; `HorsLimites` hors dépôt git, sans git, au-delà de
+def lister(racine: str, git: Optional[Git] = None, famille: Optional[str] = None) -> Tuple[List[str], List[str]]:
+    """(fichiers retenus triés, écartés nommés « nom (raison) ») ; `famille` ajoute les dossiers de `exclus_de_famille`,
+    écartés en silence comme les `EXCLUS` ; `HorsLimites` hors dépôt git, sans git, au-delà de
     MAX_FICHIERS candidats ou sur un disque sans identité de fichier."""
     git = git or _git_local
     code, sortie = git(["ls-files", "-co", "--exclude-standard", "-z"], racine)
@@ -374,7 +400,7 @@ def lister(racine: str, git: Optional[Git] = None) -> Tuple[List[str], List[str]
             if not _exclu(nom):
                 ecartes.append("%s (dossier : sous-module ou dépôt imbriqué)" % nom.rstrip("/"))
             continue
-        if nom_sur(nom) and _exclu(nom):
+        if nom_sur(nom) and (_exclu(nom) or _exclu_famille(nom, famille)):
             continue
         candidats.append(nom)
     if len(candidats) > MAX_FICHIERS:
@@ -450,7 +476,7 @@ class _Lecteur:
 
 
 def ecrire_tar(racine: str, fichiers: Iterable[str], destination: BinaryIO,
-               executables: Optional[Iterable[str]] = None) -> Tuple[int, int]:
+               executables: Optional[Iterable[str]] = None, famille: Optional[str] = None) -> Tuple[int, int]:
     """Écrit l'archive USTAR de `fichiers` (relatifs à `racine`) dans `destination` (flux en écriture, sans retour en
     arrière) ; (nombre de fichiers, octets de contenu). Droits 0755 si le fichier est exécutable sur le disque, commence
     par `#!` ou est dans `executables` (voir `executables()`), 0644 sinon. Chaque fichier est revérifié (nom, exclusions,
@@ -467,7 +493,7 @@ def ecrire_tar(racine: str, fichiers: Iterable[str], destination: BinaryIO,
     with tarfile.open(fileobj=destination, mode="w|", format=tarfile.USTAR_FORMAT, encoding="utf-8",
                       errors="strict") as tar:
         for nom in fichiers:
-            if nom_sur(nom) and _exclu(nom):
+            if nom_sur(nom) and (_exclu(nom) or _exclu_famille(nom, famille)):
                 raise HorsLimites("fichier exclu de l'instantané : " + nom)
             st, raison = _verifier(racine, nom, parents)
             if st is None:

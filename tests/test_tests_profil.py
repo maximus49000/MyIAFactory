@@ -18,7 +18,7 @@ from bureau.deport_types import ANDROID  # noqa: E402
 FIXTURES = RACINE / "tests" / "fixtures" / "profils"
 FAMILLE_DE = {"python-stdlib": "python", "python-pytest": "python", "node-npm": "node", "node-sans-verrou": "node",
               "gradle-android": "gradle-android", "maven": "maven", "dotnet": "dotnet",
-              "dotnet-framework": "dotnet", "go": "go", "rust": "rust", "godot": "godot", "unity": "unity"}
+              "dotnet-framework": "dotnet", "go": "go", "rust": "rust", "godot": "godot", "unity-asmdef": "unity"}
 
 
 def analyser(cas, **kw):
@@ -83,9 +83,9 @@ class ProfilTest(Temporaire):
         self.assertEqual(analyser("rust").outils, {"rust": "1.82.0"})
         self.assertEqual(analyser("go").outils, {"go": "1.23"})
         self.assertEqual(analyser("godot").outils, {"godot": "4.7"})
-        u = analyser("unity")
+        u = analyser("unity-asmdef")
         self.assertEqual(u.outils, {"unity": "6000.6.7f1", "unity_revision": "b22767f04f04"})
-        self.assertEqual((u.isolement, u.deps["unity"]["git"], u.ressources["memoire_mo"]), ("licence", True, 10240))
+        self.assertEqual((u.isolement, u.deps["unity"]["git"], u.ressources["memoire_mo"]), ("licence", ["github.com"], 10240))
         self.assertEqual(analyser("maven").outils, {"jdk": "17"})
         self.assertEqual(analyser("maven").commandes, [["mvn", "-B", "test"]])
 
@@ -263,7 +263,7 @@ class ProfilTest(Temporaire):
         self.assertEqual(profil.commandes, [["npm", "test"], ["go", "test", "./..."]])
 
     def test_json_aller_retour(self):
-        for cas in ("gradle-android", "unity", "inconnu"):
+        for cas in ("gradle-android", "unity-asmdef", "inconnu"):
             p = analyser(cas)
             self.assertEqual(tp.Profil.depuis_json(p.vers_json()), p)
 

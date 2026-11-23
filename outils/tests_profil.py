@@ -60,7 +60,7 @@ LUS = (
     "pom.xml", "*/pom.xml", ".mvn/wrapper/maven-wrapper.properties",
     "*.csproj", "*.sln", "global.json",
     "go.mod", "Cargo.toml", "rust-toolchain", "rust-toolchain.toml", ".cargo/config.toml", ".cargo/config",
-    "project.godot", "ProjectSettings/ProjectVersion.txt", "Packages/manifest.json",
+    "project.godot", "ProjectSettings/ProjectVersion.txt", "Packages/manifest.json", "*.asmdef",
     "Gemfile", ".ruby-version", "composer.json", "Makefile",
     ".github/workflows/*.yml", ".github/workflows/*.yaml",
 )
@@ -88,8 +88,13 @@ _GESTIONNAIRES = {"python": ("pip", True), "node": ("npm", True), "gradle-androi
                   "php": ("composer", True)}
 
 _VERSION = re.compile(r"v?(\d{1,4}(?:\.\d{1,4}){0,3})")
-_VERSION_UNITY = re.compile(r"\d{1,4}\.\d{1,2}\.\d{1,3}[abfp]\d{1,3}")
+_VERSION_UNITY = re.compile(r"[0-9]{4}\.[0-9]{1,2}\.[0-9]{1,3}[abfp][0-9]{1,2}")
 _REVISION_UNITY = re.compile(r"[0-9a-f]{12}")
+_NOM_HOTE = r"[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?){0,8}"
+_HOTE_GIT = re.compile(_NOM_HOTE)
+_URL_GIT = re.compile(r"(?:git\+)?(?:https?|ssh|git)://(?:[^/@\s]{1,100}@)?([^/:@\s]{1,253})(?::[0-9]{1,5})?(?:/\S*)?")
+_SCP_GIT = re.compile(r"[a-z0-9._-]{1,64}@([^:/\s]{1,253}):\S+")
+N3_PLAYMODE = "N3 : Unity PlayMode : rendu requis"
 _EXPORT_CI = re.compile(r"\b(java|node|python|go|dotnet)-version:\s*\[?\s*['\"]?(\d{1,4}(?:\.\d{1,4})*)")
 _N1_TFM = re.compile(r"\bnet4\d\d?\b")
 
@@ -241,7 +246,10 @@ def ressources_par_defaut(famille: str, xmx_mo: Optional[int] = None) -> dict:
     if famille in ("gradle-android", "gradle-jvm") and xmx_mo:
         memoire = max(6144, min(xmx_mo, MAX_XMX_MO) + 4096)
     disque = tests_instantane.limites_pour(famille)["max_total"] // (1024 * 1024)
-    return {"cpus": cpus, "memoire_mo": memoire, "disque_mo": disque, "kvm": False, "gpu": False, "duree_s": duree}
+    res = {"cpus": cpus, "memoire_mo": memoire, "disque_mo": disque, "kvm": False, "gpu": False, "duree_s": duree}
+    if famille == "unity":
+        res["tmp_mo"] = 6144        # /tmp du conteneur : préférences, caches de l'éditeur, copie de licence (§ 5.16)
+    return res
 
 
 # ---------------------------------------------------------------- lecture bornée
@@ -426,6 +434,11 @@ def _python(c: _Contexte):
     marques = [n for n in c.F if re.fullmatch(r"requirements[^/]*\.txt", n)] + \
               [n for n in ("pyproject.toml", "setup.cfg", "tox.ini", "pytest.ini") if n in c.F]
     if not marques:
+        # Projet Unity avec des tests Python d'outillage (Tools/factory/tests) : famille python, sans licence.
+        if "ProjectSettings/ProjectVersion.txt" in c.F and any(
+                fnmatch.fnmatchcase(n, "Tools/factory/tests/test_*.py") for n in c.F):
+            return {"outils": {}, "commande": ["python3", "-m", "unittest", "discover", "-s", "Tools/factory/tests"],
+                    "verrou": []}
         return None
     pytest = "pytest.ini" in c.F or any("pytest" in c.T.get(n, "").lower() for n in marques)
     outils = {}
@@ -636,28 +649,84 @@ def _godot(c: _Contexte):
     return {"outils": outils, "commande": commande, "verrou": []}
 
 
+def _hote_git(valeur: str) -> Optional[str]:
+    """L'hôte d'une dépendance git (`https://`, `git+https://`, `ssh://`, `git://` ou `git@hôte:chemin`), en minuscules, s'il a la
+    forme d'un nom de domaine ; None sinon (refusé : l'hôte ouvre une sortie réseau au serveur)."""
+    m = _URL_GIT.fullmatch(valeur) or _SCP_GIT.fullmatch(valeur.lower())
+    hote = m.group(1).lower() if m else ""
+    return hote if _HOTE_GIT.fullmatch(hote) else None
+
+
+def _asmdef_tests(c: _Contexte) -> Tuple[List[str], List[str]]:
+    """(dossiers des `.asmdef` de tests EditMode, dossiers des `.asmdef` de tests PlayMode). Un `.asmdef` de tests cite
+    `nunit.framework.dll` ou `UNITY_INCLUDE_TESTS` ; il est EditMode si `includePlatforms` contient `Editor`. Lus comme JSON
+    borné ; un fichier illisible ne compte pas."""
+    edit, play = [], []
+    for nom in c.tout("*.asmdef"):
+        x = _json(c.T[nom])
+        refs, contraintes, unity = x.get("precompiledReferences"), x.get("defineConstraints"), x.get("optionalUnityReferences")
+        if not ((isinstance(refs, list) and "nunit.framework.dll" in refs)
+                or (isinstance(contraintes, list) and "UNITY_INCLUDE_TESTS" in contraintes)
+                or (isinstance(unity, list) and "TestAssemblies" in unity)):
+            continue
+        plateformes = x.get("includePlatforms")
+        dossier = nom.rsplit("/", 1)[0] if "/" in nom else ""
+        (edit if isinstance(plateformes, list) and "Editor" in plateformes else play).append(dossier)
+    return sorted(set(edit)), sorted(set(play))
+
+
+def _tests_unity(c: _Contexte) -> dict:
+    edit, play = _asmdef_tests(c)
+    if edit or play:
+        return {"asmdef": True, "dossiers": sorted(set(edit + play)), "confiance": "haute"}
+    dossiers = sorted(d for d in c.D if d.rsplit("/", 1)[-1] == "Tests" and "Editor" in d.split("/")[:-1])
+    if dossiers:
+        return {"asmdef": False, "dossiers": dossiers, "confiance": "moyenne"}
+    return {"asmdef": False, "dossiers": [], "confiance": "basse"}
+
+
+def tests_unity(racine: str, lire: Optional[Callable[[str], Optional[str]]] = None) -> dict:
+    """Où sont les tests Unity du projet : `{"asmdef": bool, "dossiers": [..], "confiance": "haute"|"moyenne"|"basse"}`.
+    `.asmdef` de tests (cite `nunit.framework.dll` ou `UNITY_INCLUDE_TESTS`) : haute ; dossiers `Editor/**/Tests` sans
+    `.asmdef` : moyenne (la découverte n'est prouvée que par un résultat, § 5.16) ; rien : basse (aucun test EditMode repéré)."""
+    return _tests_unity(_contexte_leger(racine, lire))
+
+
 def _unity(c: _Contexte):
     if "ProjectSettings/ProjectVersion.txt" not in c.F:
         return None
     texte = c.T.get("ProjectSettings/ProjectVersion.txt", "")
-    outils = {}
-    m = re.search(r"^m_EditorVersion:\s*(\S+)\s*$", texte, re.M)
+    outils, refus = {}, []
+    m = re.search(r"^m_EditorVersion:[ \t]*([^\r\n]*?)[ \t\r]*$", texte, re.M)
     if m:
         if _VERSION_UNITY.fullmatch(m.group(1)):
             outils["unity"] = m.group(1)
         else:
-            c.refuser("unity", "ProjectVersion.txt")
-    m = re.search(r"^m_EditorVersionWithRevision:[^\n(]*\(([^)\n]*)\)", texte, re.M)
-    if m and _REVISION_UNITY.fullmatch(m.group(1)):
-        outils["unity_revision"] = m.group(1)
-    git = False
+            refus.append("version unity illisible (ProjectVersion.txt)")
+    m = re.search(r"^m_EditorVersionWithRevision:([^\r\n]*)$", texte, re.M)
+    if m:
+        r = re.fullmatch(r"[^(]*\(([^)]*)\)\s*", m.group(1))
+        if r and _REVISION_UNITY.fullmatch(r.group(1)):
+            outils["unity_revision"] = r.group(1)
+        else:
+            refus.append("version unity_revision illisible (ProjectVersion.txt)")
+    hotes = set()
     deps = _json(c.T.get("Packages/manifest.json")).get("dependencies")
     if isinstance(deps, dict):
-        git = any(isinstance(v, str) and (v.startswith("git") or ".git" in v) for v in deps.values())
+        for v in deps.values():
+            if isinstance(v, str) and (v.startswith("git") or ".git" in v):
+                hote = _hote_git(v)
+                if hote:
+                    hotes.add(hote)
+                else:
+                    refus.append("hôte git d'une dépendance illisible (manifest.json)")
+    edit, play = _asmdef_tests(c)
     commande = ["unity-editor", "-batchmode", "-nographics", "-projectPath", "/work", "-runTests", "-testPlatform",
                 "EditMode", "-testResults", "/tmp/resultats.xml", "-logFile", "/tmp/unity.log"]
+    if play and not edit:
+        commande = None         # PlayMode : jamais proposé ; N3 (voir `_non_deportable`)
     return {"outils": outils, "commande": commande, "verrou": [n for n in ("Packages/packages-lock.json",) if n in c.F],
-            "git": git}
+            "implicite": ["Packages/manifest.json", "ProjectSettings/ProjectVersion.txt"], "git": sorted(hotes)[:20], "refus": sorted(set(refus)), "tests": _tests_unity(c), "playmode": bool(play)}
 
 
 def _ruby(c: _Contexte):
@@ -736,6 +805,10 @@ def _non_deportable(c: _Contexte) -> Optional[str]:
         cible = _toml(c.T.get(nom)).get("build", {}).get("target")
         if isinstance(cible, str) and not cible.startswith("x86_64"):
             return "N6 : architecture autre que x86_64 imposée"
+    if "ProjectSettings/ProjectVersion.txt" in c.F:
+        edit, play = _asmdef_tests(c)
+        if play and not edit:
+            return N3_PLAYMODE
     return None
 
 
@@ -807,7 +880,7 @@ def _famille_cible(donnee: Optional[List[str]], familles: List[str]) -> Optional
 
 # Familles que chaque raison de non_deportable concerne : N1 (.NET Framework, WPF, C++ MSBuild), N2 (Xcode : aucune de nos
 # familles de tests ne l'utilise), N6 (cible Cargo ou RuntimeIdentifier hors x86_64).
-_CONCERNEES = {"N1": ("dotnet",), "N2": (), "N6": ("rust", "dotnet")}
+_CONCERNEES = {"N1": ("dotnet",), "N2": (), "N3": ("unity",), "N6": ("rust", "dotnet")}
 
 
 def _famille_lancee(lancee: List[str]) -> Optional[str]:
@@ -847,7 +920,8 @@ def analyser(racine: str, commande: Optional[List[str]] = None, catalogue=None, 
     donnee = _commande_donnee(commande, catalogue)
 
     familles, outils, commandes, deps, caches = [], {}, [], {}, []
-    xmx, git_upm, explicites = None, False, 0
+    xmx, hotes_git, explicites = None, [], 0
+    unity_haute = False
     ci_confirme = ci_contredit = False
     trouves = [(r.get("famille", nom), r) for nom, detecteur in _DETECTEURS for r in [detecteur(c)] if r is not None]
     # La commande LANCÉE décide de la famille (donc de l'image et des capacités) : Python ou Node est ajouté avec ses défauts
@@ -890,12 +964,27 @@ def analyser(racine: str, commande: Optional[List[str]] = None, catalogue=None, 
         if famille in _CACHES:
             caches.append(_CACHES[famille])
         xmx = r.get("xmx") or xmx
-        git_upm = git_upm or bool(r.get("git"))
+        if famille == "unity":
+            hotes_git = r.get("git") or []
+            for raison in r.get("refus", ()):
+                c.raisons.append(raison)
+                c.rejete = True
+            tests = r["tests"]
+            if tests["confiance"] == "basse":
+                c.raisons.append("aucun test EditMode repéré")
+                c.rejete = True
+            elif tests["confiance"] == "moyenne":
+                c.approximer("tests Unity sans .asmdef : découverte non prouvée avant un résultat")
+            else:
+                unity_haute = True
+            if r["playmode"]:
+                c.approximer("tests PlayMode non couverts (rendu requis)")
         confirme, contredit = _ci(c, cmd)
         ci_confirme, ci_contredit = ci_confirme or confirme, ci_contredit or contredit
     if "unity" in familles:
         deps["unity"]["reseau"] = True
-        deps["unity"]["git"] = git_upm
+        deps["unity"]["verrou"] = "Packages/packages-lock.json"
+        deps["unity"]["git"] = hotes_git
 
     if xmx and xmx > MAX_XMX_MO:
         c.approximer("mémoire Gradle plafonnée (-Xmx du projet trop grand)")
@@ -908,7 +997,7 @@ def analyser(racine: str, commande: Optional[List[str]] = None, catalogue=None, 
         confiance = "basse"
     elif c.plafond:
         confiance = "moyenne"
-    elif explicites or ci_confirme:
+    elif explicites or ci_confirme or unity_haute:
         confiance = "haute"
     else:
         confiance = "moyenne"
@@ -918,6 +1007,8 @@ def analyser(racine: str, commande: Optional[List[str]] = None, catalogue=None, 
         r = ressources_par_defaut(f, xmx)
         for k in ("cpus", "memoire_mo", "disque_mo", "duree_s"):
             res[k] = max(res[k], r[k])
+        if "tmp_mo" in r:
+            res["tmp_mo"] = max(res.get("tmp_mo", 0), r["tmp_mo"])
     if not familles:
         res = ressources_par_defaut("python")
     profil = Profil(familles=tuple(familles), outils=outils, commandes=commandes, deps=deps, caches=caches,

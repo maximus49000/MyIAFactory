@@ -293,7 +293,7 @@ def texte_sur(texte):
 # Dépendances (conception § 5.13, tâche 14d). Les clés d'échauffement sont celles de la table fermée ECH de lancer_tests.sh.
 # =====================================================================================================================
 
-CLES = ("npm", "pnpm", "yarn", "pip", "pip-sources", "gradle", "maven", "dotnet", "cargo", "go", "unity")
+CLES = ("npm", "pnpm", "yarn", "yarn-berry", "pip", "pip-sources", "gradle", "maven", "dotnet", "cargo", "go", "unity")
 _MOTIF_CLE = re.compile(r"[a-z][a-z-]{1,11}")
 
 
@@ -337,16 +337,27 @@ def hote_permis(ligne, hotes):
     return hote if hote in {h.lower() for h in hotes} else None
 
 
+def adresse_interne():
+    """L'adresse du conteneur sur le réseau INTERNE de l'échauffement : le conteneur y est créé seul (le réseau bridge n'est
+    branché qu'après), son nom d'hôte y résout donc. ValueError pour une adresse de bouclage (jamais d'écoute partout)."""
+    import socket
+    ip = socket.gethostbyname(socket.gethostname())
+    if not re.fullmatch(r"[0-9]{1,3}(\.[0-9]{1,3}){3}", ip) or ip.startswith("127.") or ip == "0.0.0.0":
+        raise ValueError("adresse interne introuvable")
+    return ip
+
+
 def mandataire(port, duree_s, hotes):
-    """Mandataire éphémère (dans son conteneur, réseau bridge + réseau interne de l'échauffement) : seulement `CONNECT` vers
-    les hôtes de la liste, port 443 ; 64 connexions au plus ; s'arrête seul après `duree_s` (l'enveloppe le supprime avant)."""
+    """Mandataire éphémère (dans son conteneur, créé sur le réseau interne de l'échauffement puis branché au bridge) :
+    n'écoute QUE l'adresse interne ; seulement `CONNECT` vers les hôtes de la liste, port 443 ; 64 connexions au plus ;
+    s'arrête seul après `duree_s` (l'enveloppe le supprime avant)."""
     import select
     import socket
     import threading
     import time
     fin = time.time() + duree_s
     places = threading.BoundedSemaphore(64)
-    serveur = socket.create_server(("0.0.0.0", port))
+    serveur = socket.create_server((adresse_interne(), port))
     serveur.settimeout(1.0)
 
     def servir(client):
@@ -443,6 +454,68 @@ def _garder_manifestes(travail, motif):
                 pass
 
 
+def _yarn_berry(travail):
+    """Yarn 2+ : `.yarnrc.yml` ou `.yarn/` présents, ou `packageManager` yarn@2+ dans package.json."""
+    if any(os.path.lexists(os.path.join(travail, n)) for n in (".yarnrc.yml", ".yarn")):
+        return True
+    try:
+        with open(os.path.join(travail, "package.json"), encoding="utf-8", errors="replace") as f:
+            pj = json.loads(f.read(MAX_COMMANDE * 64))
+    except (OSError, ValueError):
+        return False
+    m = re.fullmatch(r"yarn@(\d{1,3})\..*", str(pj.get("packageManager") or "") if isinstance(pj, dict) else "")
+    return bool(m and int(m.group(1)) >= 2)
+
+
+_EXIGENCE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,100}(\[[A-Za-z0-9,._ -]{0,100}\])?\s*"
+                       r"([<>=!~]=?[^;@]{0,200})?(;[^@]{0,300})?")
+
+
+def _verifier_exigences(travail, nom, vus):
+    """Les exigences nommées de `nom` (requirements*.txt) ; ValueError pour toute option (index, find-links, hôte de
+    confiance, -e…), URL, chemin ou référence directe (« @ ») : rien dans le projet ne choisit l'hôte. Seul `-r <fichier>`
+    vers un fichier du projet est suivi."""
+    base = os.path.realpath(travail)
+    chemin = os.path.realpath(os.path.join(travail, nom))
+    if not chemin.startswith(base + os.sep) or not os.path.isfile(chemin):
+        raise ValueError("requirements hors du projet")
+    if chemin in vus:
+        return []
+    vus.add(chemin)
+    with open(chemin, encoding="utf-8", errors="replace") as f:
+        texte = f.read(MAX_FICHIER).replace("\\\n", " ")
+    noms = []
+    for brute in texte.splitlines():
+        ligne = re.sub(r"(^|\s)#.*$", "", brute).strip()
+        if not ligne:
+            continue
+        m = re.fullmatch(r"(?:-r|--requirement)(?:\s+|=)(\S+)", ligne)
+        if m:
+            if not nom_sur(m.group(1)):
+                raise ValueError("-r hors du projet")
+            noms += _verifier_exigences(travail, os.path.join(os.path.dirname(nom), m.group(1)), vus)
+            continue
+        if ligne.startswith("-") or "://" in ligne or "@" in ligne or "/" in ligne or "\\" in ligne \
+                or not _EXIGENCE.fullmatch(ligne):
+            raise ValueError("ligne de requirements refusée (option, URL ou chemin)")
+        noms.append(ligne)
+    return noms
+
+
+def geler(venv):
+    """Les paquets installés dans `venv`, « nom==version » triés, lus dans les métadonnées (importlib.metadata) par le
+    Python qui exécute CETTE aide : jamais le Python du venv, aucun .pth du venv exécuté."""
+    import glob
+    from importlib import metadata
+    chemins = sorted(glob.glob(os.path.join(venv, "lib", "python*", "site-packages")))
+    paquets = set()
+    for d in metadata.distributions(path=chemins):
+        nom, version = d.metadata.get("Name"), d.version
+        if nom and version and nom.lower() not in ("pip", "setuptools", "wheel"):
+            paquets.add("%s==%s" % (nom, version))
+    return "".join(x + "\n" for x in sorted(paquets))
+
+
 def plan_echauffement(cle, famille, travail, deps="/deps"):
     """Le plan de l'échauffement `cle` dans `travail` (copie de travail du conteneur) : `{"etapes": [{"commande", "env",
     "obligatoire"}], "deplacer": [(source, destination)], "produit": verrou produit ou None, "verrouille": bool}`. Efface
@@ -453,7 +526,9 @@ def plan_echauffement(cle, famille, travail, deps="/deps"):
         raise ValueError("clé d'échauffement refusée")
     if cle == "unity":
         raise ValueError("unity : échauffement par la tâche 14g (licence)")
-    motif = _MANIFESTES.get("pip" if cle == "pip" else cle)
+    if cle == "yarn" and _yarn_berry(travail):
+        raise ValueError("yarn berry (yarnPath, extensions) : clé yarn-berry, avec l'accord réseau")
+    motif = _MANIFESTES.get("pip" if cle in ("pip", "pip-sources") else cle)
     if motif is not None:
         _garder_manifestes(travail, motif)
     existe = lambda n: os.path.isfile(os.path.join(travail, n))   # noqa: E731
@@ -462,45 +537,48 @@ def plan_echauffement(cle, famille, travail, deps="/deps"):
     def etape(commande, env=None, obligatoire=True):
         etapes.append({"commande": list(commande), "env": dict(env or {}), "obligatoire": obligatoire})
 
-    if cle in ("npm", "pnpm", "yarn"):
+    if cle in ("npm", "pnpm", "yarn", "yarn-berry"):
         if not existe("package.json"):
             raise ValueError("package.json absent")
         verrou = {"npm": next((n for n in ("package-lock.json", "npm-shrinkwrap.json") if existe(n)), None),
                   "pnpm": "pnpm-lock.yaml" if existe("pnpm-lock.yaml") else None,
-                  "yarn": "yarn.lock" if existe("yarn.lock") else None}[cle]
-        corepack = {"COREPACK_HOME": "/tmp/corepack", "COREPACK_ENABLE_DOWNLOAD_PROMPT": "0"}
+                  "yarn": "yarn.lock" if existe("yarn.lock") else None,
+                  "yarn-berry": "yarn.lock" if existe("yarn.lock") else None}[cle]
+        # Pour toutes les familles node : jamais le yarnPath du projet, jamais une URL de gestionnaire choisie par le projet.
+        corepack = {"COREPACK_HOME": "/tmp/corepack", "COREPACK_ENABLE_DOWNLOAD_PROMPT": "0", "YARN_IGNORE_PATH": "1",
+                    "COREPACK_ENABLE_UNSAFE_CUSTOM_URLS": "0"}
         if cle == "npm":
-            etape(["npm", "ci" if verrou else "install", "--ignore-scripts", "--no-audit", "--no-fund"])
+            etape(["npm", "ci" if verrou else "install", "--ignore-scripts", "--no-audit", "--no-fund"], corepack)
         elif cle == "pnpm":
             etape(["corepack", "pnpm", "install", "--ignore-scripts"] + (["--frozen-lockfile"] if verrou else []), corepack)
-        elif existe(".yarnrc.yml"):
+        elif cle == "yarn-berry":
             etape(["corepack", "yarn", "install", "--mode=skip-build"] + (["--immutable"] if verrou else []), corepack)
         else:
             etape(["corepack", "yarn", "install", "--ignore-scripts", "--non-interactive"]
                   + (["--frozen-lockfile"] if verrou else []), corepack)
         if not verrou:
-            produit, verrouille = {"npm": "package-lock.json", "pnpm": "pnpm-lock.yaml", "yarn": "yarn.lock"}[cle], False
+            produit, verrouille = {"npm": "package-lock.json", "pnpm": "pnpm-lock.yaml", "yarn": "yarn.lock",
+                                   "yarn-berry": "yarn.lock"}[cle], False
         deplacer.append(("node_modules", "node_modules"))
     elif cle in ("pip", "pip-sources"):
         exigences = sorted(n for n in os.listdir(travail) if re.fullmatch(r"requirements[^/]*\.txt", n) and existe(n))
         if not exigences:
             raise ValueError("requirements*.txt absent")
         venv = f"{deps}/venv"
+        noms = []
+        for n in exigences:
+            noms += _verifier_exigences(travail, n, set())
         etape(["python3", "-m", "venv", venv])
-        commande = [f"{venv}/bin/python", "-m", "pip", "install", "--no-input", "--disable-pip-version-check"]
+        # L'index est imposé ici (jamais celui d'une ligne du projet : elles sont refusées par _verifier_exigences).
+        commande = [f"{venv}/bin/python", "-m", "pip", "install", "--no-input", "--disable-pip-version-check",
+                    "--index-url", "https://pypi.org/simple"]
         if cle == "pip":
             commande.append("--only-binary=:all:")
         for n in exigences:
             commande += ["-r", n]
         etape(commande)
-        for n in exigences:
-            with open(os.path.join(travail, n), encoding="utf-8", errors="replace") as f:
-                lignes = [x.strip() for x in f if x.strip() and not x.strip().startswith(("#", "-"))]
-            if any("==" not in x for x in lignes):
-                verrouille = False
-        if not verrouille:
-            etape([f"{venv}/bin/python", "-m", "pip", "freeze", "--disable-pip-version-check"])
-            produit = "pip-freeze"
+        if any("==" not in x for x in noms):
+            verrouille, produit = False, "pip-freeze"          # gel par `geler` : jamais le Python du venv
     elif cle == "gradle":
         if not existe("gradlew"):
             raise ValueError("gradlew absent")
@@ -524,8 +602,11 @@ def plan_echauffement(cle, famille, travail, deps="/deps"):
             produit, verrouille = "Cargo.lock", False
     elif cle == "go":
         verrou = existe("go.sum")
+        # Hôtes imposés : le proxy et la base de sommes officiels, jamais « direct » (un chemin de module choisirait l'hôte).
         etape(["go", "mod", "download"], {"GOMODCACHE": f"{deps}/gomod", "GOPATH": "/tmp/go", "GOFLAGS": "-mod=mod",
-                                          "GOTOOLCHAIN": "local"})
+                                          "GOTOOLCHAIN": "local", "GOPROXY": "https://proxy.golang.org",
+                                          "GOSUMDB": "sum.golang.org", "GOPRIVATE": "", "GONOPROXY": "", "GONOSUMDB": "",
+                                          "GOINSECURE": ""})
         if not verrou:
             produit, verrouille = "go.sum", False
     return {"etapes": etapes, "deplacer": deplacer, "produit": produit, "verrouille": verrouille}
@@ -544,14 +625,12 @@ def echauffer(cle, famille, travail="/work", deps="/deps", meta="/deps-meta"):
     if cle == "gradle":
         with open("/tmp/myiafactory-resoudre.gradle", "w", encoding="utf-8") as f:
             f.write(_INIT_GRADLE)
-    gele = None
     for e in plan["etapes"]:
         env = dict(os.environ, **e["env"])
-        freeze = e["commande"][-2:] == ["freeze", "--disable-pip-version-check"]
-        r = subprocess.run(e["commande"], cwd=travail, env=env, stdin=subprocess.DEVNULL,
-                           stdout=subprocess.PIPE if freeze else None)
-        if freeze and r.returncode == 0:
-            gele = r.stdout
+        commande = list(e["commande"])
+        if commande[1:4] == ["-m", "pip", "install"] and os.environ.get("HTTPS_PROXY"):
+            commande += ["--proxy", os.environ["HTTPS_PROXY"]]
+        r = subprocess.run(commande, cwd=travail, env=env, stdin=subprocess.DEVNULL)
         if r.returncode != 0 and e["obligatoire"]:
             sys.stderr.write("echauffement : %s a rendu %d\n" % (e["commande"][0], r.returncode))
             return 1
@@ -560,9 +639,9 @@ def echauffer(cle, famille, travail="/work", deps="/deps", meta="/deps-meta"):
     for source, destination in plan["deplacer"]:
         if os.path.isdir(os.path.join(travail, source)):
             shutil.move(os.path.join(travail, source), os.path.join(deps, destination))
-    if plan["produit"] == "pip-freeze" and gele is not None:
-        with open(os.path.join(meta, "verrou-produit"), "wb") as f:
-            f.write(gele)
+    if plan["produit"] == "pip-freeze":
+        with open(os.path.join(meta, "verrou-produit"), "w", encoding="utf-8") as f:
+            f.write(geler(os.path.join(deps, "venv")))
     elif plan["produit"] and os.path.isfile(os.path.join(travail, plan["produit"])):
         shutil.copyfile(os.path.join(travail, plan["produit"]), os.path.join(meta, "verrou-produit"))
     if not plan["verrouille"]:
@@ -571,8 +650,9 @@ def echauffer(cle, famille, travail="/work", deps="/deps", meta="/deps-meta"):
     return 0
 
 
-_DISTRIBUTION = re.compile(r"distributionUrl=https\\?://services\.gradle\.org/distributions/gradle-"
-                           r"([0-9]{1,2}\.[0-9]{1,2}(?:\.[0-9]{1,2})?(?:-rc-[0-9]{1,2})?)-(?:bin|all)\.zip")
+_DISTRIBUTION = re.compile(r"https://services\.gradle\.org/distributions/gradle-"
+                           r"([0-9]{1,2}\.[0-9]{1,2}(?:\.[0-9]{1,2})?(?:-rc-[0-9]{1,2})?)-(bin|all)\.zip")
+_CLE_DISTRIBUTION = re.compile(r"\s*distributionUrl\s*[=:\s]\s*(.*)")
 
 
 def _membres(chemin, voulus):
@@ -597,19 +677,48 @@ def _membres(chemin, voulus):
     return trouves
 
 
+def _base36(n):
+    chiffres = "0123456789abcdefghijklmnopqrstuvwxyz"
+    s = ""
+    while n:
+        n, r = divmod(n, 36)
+        s = chiffres[r] + s
+    return s or "0"
+
+
 def wrapper_gradle(chemin):
-    """`(sha256 du gradle-wrapper.jar, version de la distribution)` lus dans l'instantané ; ValueError : jar ou propriétés
-    absents, ou distributionUrl hors de services.gradle.org (une autre source servirait n'importe quel code)."""
+    """`(sha256 du gradle-wrapper.jar, version, bin|all, dossier)` lus dans l'instantané ; `dossier` = celui où le wrapper
+    cherche la distribution (base 36 du MD5 de l'URL, comme `PathAssembler` de Gradle). La DERNIÈRE `distributionUrl` fait foi
+    (comme java.util.Properties). ValueError : jar ou propriétés absents, ou URL hors de services.gradle.org."""
     import hashlib
     jar, props = "gradle/wrapper/gradle-wrapper.jar", "gradle/wrapper/gradle-wrapper.properties"
     m = _membres(chemin, {jar, props})
     if jar not in m or props not in m:
         raise ValueError("wrapper-absent")
+    derniere = None
     for ligne in m[props].decode("utf-8", "replace").splitlines():
-        d = _DISTRIBUTION.fullmatch(ligne.strip())
-        if d:
-            return hashlib.sha256(m[jar]).hexdigest(), d.group(1)
-    raise ValueError("distribution-hors-services-gradle")
+        c = _CLE_DISTRIBUTION.fullmatch(ligne)
+        if c:
+            derniere = c.group(1).strip().replace("\\:", ":").replace("\\=", "=")
+    d = _DISTRIBUTION.fullmatch(derniere or "")
+    if not d:
+        raise ValueError("distribution-hors-services-gradle")
+    hache = _base36(int.from_bytes(hashlib.md5(derniere.encode("utf-8")).digest(), "big"))
+    return hashlib.sha256(m[jar]).hexdigest(), d.group(1), d.group(2), hache
+
+
+def versions_publiees(chemin):
+    """Les versions de https://services.gradle.org/versions/all dont `wrapperChecksumUrl` est EXACTEMENT l'URL officielle
+    attendue (toute autre est ignorée : jamais une URL lue dans la réponse n'est suivie)."""
+    with open(chemin, "rb") as f:
+        donnees = json.loads(f.read(32 * 1024 * 1024).decode("utf-8"))
+    versions = []
+    for e in donnees if isinstance(donnees, list) else []:
+        v = e.get("version") if isinstance(e, dict) else None
+        if (isinstance(v, str) and re.fullmatch(r"[0-9]{1,2}\.[0-9]{1,2}(\.[0-9]{1,2})?(-rc-[0-9]{1,2})?", v)
+                and e.get("wrapperChecksumUrl") == "https://services.gradle.org/distributions/gradle-%s-wrapper.jar.sha256" % v):
+            versions.append(v)
+    return versions
 
 
 def principal(argv):
@@ -621,11 +730,16 @@ def principal(argv):
         return 0
     if argv[:1] == ["--wrapper"] and len(argv) == 2:
         try:
-            somme, version = wrapper_gradle(argv[1])
+            sys.stdout.write("%s %s %s %s\n" % wrapper_gradle(argv[1]))
         except (ValueError, OSError) as e:
             sys.stderr.write("%s\n" % texte_sur(str(e)))
             return 3
-        sys.stdout.write("%s %s\n" % (somme, version))
+        return 0
+    if argv[:1] == ["--versions-gradle"] and len(argv) == 2:
+        try:
+            sys.stdout.write("".join(v + "\n" for v in versions_publiees(argv[1])[:2000]))
+        except (ValueError, OSError):
+            return 3
         return 0
     if argv[:1] == ["--echauffer"] and len(argv) == 3 and argv[1] in CLES and _MOTIF_CLE.fullmatch(argv[2]):
         return echauffer(argv[1], argv[2])

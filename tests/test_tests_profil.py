@@ -287,6 +287,30 @@ class AutresModulesTest(unittest.TestCase):
         self.assertEqual(ti.limites_pour("godot")["max_total"], 1024 * mo)
         self.assertEqual(ti.limites_pour(None)["max_total"], ti.MAX_TOTAL)
 
+    def test_famille_de_la_commande_lancee(self):
+        # Le choix d'image part de la famille de la COMMANDE : un dépôt Python sans marqueur qui contient un sous-dossier .NET
+        # Framework (N1) part au serveur dans myiafactory/tests pour `python3 outils/tests_paralleles.py`.
+        import tests_images
+        lancee = ["python3", "outils/tests_paralleles.py"]
+        p = analyser("python-sans-marqueur-et-dotnet-framework", lancee=lancee)
+        self.assertEqual(p.familles, ("python",))
+        self.assertIsNone(p.non_deportable)
+        choix = tests_images.choisir_image(p)
+        self.assertEqual((choix["image"], choix["derivee"]), ("myiafactory/tests", False))
+        self.assertIn("dotnet", analyser("python-sans-marqueur-et-dotnet-framework").familles)   # le projet entier, lui
+        node = analyser("node-npm", lancee=["npx", "jest"])
+        self.assertEqual(node.familles, ("node",))
+        vide = tp.analyser(tempfile.mkdtemp(), catalogue={}, lancee=["node", "x.js"])
+        self.assertEqual(vide.familles, ("node",))
+
+    def test_le_depot_lui_meme_part_dans_l_image_de_base(self):
+        import tests_images
+        for lancee in (["python3", "outils/tests_paralleles.py"], ["py", "-3.12", "outils/tests_paralleles.py"]):
+            with self.subTest(lancee=lancee):
+                p = tp.analyser(str(RACINE), lancee=lancee)
+                self.assertEqual(tests_images.choisir_image(p)["image"], "myiafactory/tests")
+                self.assertIsNone(p.non_deportable)
+
     def test_commande_conteneur_windows(self):
         c = tests_serveur.commande_conteneur
         self.assertEqual(c(["gradlew.bat", "testDebugUnitTest"]), ["./gradlew", "testDebugUnitTest"])

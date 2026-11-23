@@ -68,6 +68,7 @@ case "$1" in
     nom=""; prec=""
     for a in "$@"; do [ "$prec" = --name ] && nom="$a"; prec="$a"; done
     printf '%s\n' "$@" > "$ET/run-$nom.txt"
+    case "$nom" in essai-*) exit 0 ;; esac                    # essai du volume overlay (tâche 14d)
     cp "$HOME/tests/${nom#tests-}/entree/commande.json" "$ET/commande-$nom.json"
     echo "$nom" >> "${FAUX_ORDRE:-$ET/ordre}"
     if [ -n "${FAUX_JAMAIS_DEMARRE:-}" ]; then
@@ -127,7 +128,7 @@ FAUX = {
     "flock": FLOCK,
     "sudo": '[ "$1" = -n ] && shift\nexec "$@"',
     # FAUX_TIMEOUT : la durée est dépassée (le faux conteneur tourne, puis timeout rend 124)
-    "timeout": 'echo "timeout $*" >> "$FAUX_JOURNAL"\nshift\n'
+    "timeout": 'echo "timeout $*" >> "$FAUX_JOURNAL"\n[ "$1" = -k ] && shift 2\nshift\n'
                'if [ -n "${FAUX_TIMEOUT:-}" ] && [ "${4:-}" = run ]; then "$@"; exit 124; fi\nexec "$@"',
     "df": 'if [ "$1" = -Pi ]; then\n  echo "Filesystem Inodes IUsed IFree IUse% Mounted on"\n'
           '  i=900000; [ -f "$FAUX_ETAT/df_ifree" ] && read -r i < "$FAUX_ETAT/df_ifree"; [ -n "${FAUX_DF_IFREE:-}" ] && i=$FAUX_DF_IFREE\n'
@@ -363,7 +364,7 @@ class TestEnveloppeTests(unittest.TestCase):
         self.assertIn("timeout 1800 sudo -n docker run", self.journal)
         self.assertIn(f"docker rm -f tests-{ID}", self.journal)
         self.assertNotIn("docker kill", self.journal)                # conteneur fini de lui-même : rien à tuer
-        self.assertNotIn(f"deps-{ID}", self.journal.replace(f"tests-deps-{ID}", ""))   # cache prêt : aucun échauffement
+        self.assertNotIn(f"deps-{ID}", self.journal.replace(f"tests-deps-{ID}", "").replace(f"essai-deps-{ID}", ""))   # cache prêt : aucun échauffement
         self.assertEqual(json.loads((self.etat(ID) / f"commande-tests-{ID}.json").read_text(encoding="utf-8")),
                          json.loads(COMMANDE))
         self.verifier_fin(err, 3, refus=False)

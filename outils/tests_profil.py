@@ -83,8 +83,8 @@ _CACHES = {"python": "venv", "node": "node_modules", "gradle-android": "gradle-u
            "unity": "library", "ruby": "bundler", "php": "composer"}
 # (gestionnaire, le téléchargement exécute-t-il du code du projet ou de ses dépendances ?) : prudent par défaut.
 _GESTIONNAIRES = {"python": ("pip", True), "node": ("npm", True), "gradle-android": ("gradle", True),
-                  "gradle-jvm": ("gradle", True), "maven": ("maven", True), "dotnet": ("nuget", False),
-                  "go": ("go", False), "rust": ("cargo", True), "unity": ("upm", False), "ruby": ("bundler", True),
+                  "gradle-jvm": ("gradle", True), "maven": ("maven", True), "dotnet": ("nuget", True),
+                  "go": ("go", False), "rust": ("cargo", True), "unity": ("upm", True), "ruby": ("bundler", True),
                   "php": ("composer", True)}
 
 _VERSION = re.compile(r"v?(\d{1,4}(?:\.\d{1,4}){0,3})")
@@ -154,6 +154,9 @@ ECHAUFFEMENTS = {
              "execute_du_code": False},
     "yarn": {"commande": ["yarn", "install", "--frozen-lockfile", "--ignore-scripts"], "duree_s": 900, "plafond_go": 2,
              "execute_du_code": False},
+    # Yarn Berry : yarnPath et extensions (plugins) sont du code choisi par le projet.
+    "yarn-berry": {"commande": ["yarn", "install", "--immutable", "--mode=skip-build"], "duree_s": 900, "plafond_go": 2,
+                   "execute_du_code": True},
     "pip": {"commande": ["pip", "install", "--only-binary=:all:", "-r", "requirements.txt"], "duree_s": 900,
             "plafond_go": 2, "execute_du_code": False},
     "pip-sources": {"commande": ["pip", "install", "-r", "requirements.txt"], "duree_s": 900, "plafond_go": 2,
@@ -161,15 +164,18 @@ ECHAUFFEMENTS = {
     "gradle": {"commande": ["./gradlew", "--no-daemon", "dependencies"], "duree_s": 1800, "plafond_go": 6,
                "execute_du_code": True},
     "maven": {"commande": ["mvn", "-B", "dependency:go-offline"], "duree_s": 1800, "plafond_go": 6, "execute_du_code": True},
-    "dotnet": {"commande": ["dotnet", "restore"], "duree_s": 1800, "plafond_go": 6, "execute_du_code": False},
-    "cargo": {"commande": ["cargo", "fetch"], "duree_s": 1800, "plafond_go": 6, "execute_du_code": False},
+    # dotnet restore évalue les .props/.targets du projet (cibles, tâches en ligne) ; cargo lit .cargo/config.toml
+    # (credential-provider) : du code choisi par le projet (relecture 14d, C1).
+    "dotnet": {"commande": ["dotnet", "restore"], "duree_s": 1800, "plafond_go": 6, "execute_du_code": True},
+    "cargo": {"commande": ["cargo", "fetch"], "duree_s": 1800, "plafond_go": 6, "execute_du_code": True},
     "go": {"commande": ["go", "mod", "download"], "duree_s": 900, "plafond_go": 2, "execute_du_code": False},
     "unity": {"commande": ["unity-editor", "-batchmode", "-quit"], "duree_s": 3600, "plafond_go": 10, "execute_du_code": True},
 }
 _CLE_DE_FAMILLE = {"python": "pip", "node": "npm", "gradle-android": "gradle", "gradle-jvm": "gradle", "maven": "maven",
                    "dotnet": "dotnet", "go": "go", "rust": "cargo", "unity": "unity"}
 # Manifestes hachés à défaut de verrou (« sans verrou » : le cache est dit non verrouillé, § 5.13).
-_MANIFESTES = {"npm": ("package.json",), "pnpm": ("package.json",), "yarn": ("package.json",), "cargo": ("Cargo.toml",),
+_MANIFESTES = {"npm": ("package.json",), "pnpm": ("package.json",), "yarn": ("package.json",),
+               "yarn-berry": ("package.json",), "cargo": ("Cargo.toml",),
                "go": ("go.mod",)}
 
 
@@ -181,7 +187,10 @@ def cle_echauffement(profil: Profil, famille: Optional[str] = None) -> Optional[
         return None
     f = familles[0]
     if f == "node":
-        g = (profil.deps.get("node") or {}).get("gestionnaire")
+        d = profil.deps.get("node") or {}
+        g = d.get("gestionnaire")
+        if g == "yarn" and d.get("berry"):
+            return "yarn-berry"
         return g if g in ("npm", "pnpm", "yarn") else "npm"
     return _CLE_DE_FAMILLE[f]
 
@@ -206,7 +215,7 @@ def empreinte_deps(profil: Profil, racine: str, lire: Optional[Callable[[str], O
         textes = [(n, t) for n, t in textes if isinstance(t, str)]
         if not textes:
             return None
-        if cle in ("npm", "pnpm", "yarn"):
+        if cle in ("npm", "pnpm", "yarn", "yarn-berry"):
             pj = _json(textes[0][1])
             if not any(isinstance(pj.get(k), dict) and pj[k] for k in ("dependencies", "devDependencies",
                                                                        "optionalDependencies")):
@@ -476,7 +485,13 @@ def _node(c: _Contexte):
     a_test = isinstance(scripts, dict) and isinstance(scripts.get("test"), str)
     verrous = [n for n in ("package-lock.json", "pnpm-lock.yaml", "yarn.lock") if n in c.F]
     return {"outils": outils, "commande": [gestionnaire, "test"] if a_test else None, "verrou": verrous[:1],
-            "gestionnaire": gestionnaire}
+            "gestionnaire": gestionnaire, "berry": gestionnaire == "yarn" and _yarn_berry(pj, c)}
+
+
+def _yarn_berry(pj, c) -> bool:
+    """Yarn 2 et plus (Berry) : `packageManager` yarn@2+ ou un dossier `.yarn/` (`.yarnrc.yml` est exclu de l'instantané)."""
+    m = re.fullmatch(r"yarn@(\d{1,3})\..*", str(pj.get("packageManager") or ""))
+    return bool(m and int(m.group(1)) >= 2) or ".yarn" in c.D
 
 
 def _gradle(c: _Contexte):
@@ -835,6 +850,16 @@ def analyser(racine: str, commande: Optional[List[str]] = None, catalogue=None, 
     xmx, git_upm, explicites = None, False, 0
     ci_confirme = ci_contredit = False
     trouves = [(r.get("famille", nom), r) for nom, detecteur in _DETECTEURS for r in [detecteur(c)] if r is not None]
+    # La commande LANCÉE décide de la famille (donc de l'image et des capacités) : Python ou Node est ajouté avec ses défauts
+    # même sans fichier marqueur (python-stdlib), et les autres familles du projet (un sous-dossier .NET…) sont écartées du
+    # profil de CETTE commande : elles ne bloquent ni ne changent son image. Famille inconnue : le projet entier (prudent).
+    voulue = _famille_lancee(lancee) if lancee else None
+    if voulue == "gradle":
+        voulue = next((f for f, _ in trouves if f.startswith("gradle")), None)
+    if voulue in ("python", "node") and voulue not in [f for f, _ in trouves]:
+        trouves.append((voulue, {"outils": {}, "commande": None, "verrou": []}))
+    if voulue and voulue in [f for f, _ in trouves]:
+        trouves = [(f, r) for f, r in trouves if f == voulue]
     cible = _famille_cible(donnee, [f for f, _ in trouves])
     for famille, r in trouves:
         premiere = famille == cible
@@ -860,6 +885,8 @@ def analyser(racine: str, commande: Optional[List[str]] = None, catalogue=None, 
             empreinte = hashlib.sha256("\n".join(textes).encode("utf-8")).hexdigest() if textes else None
         deps[famille] = {"gestionnaire": gestionnaire, "verrou": verrou, "empreinte": empreinte,
                          "reseau": gestionnaire is not None, "execute_du_code": code}
+        if r.get("berry"):
+            deps[famille]["berry"] = True
         if famille in _CACHES:
             caches.append(_CACHES[famille])
         xmx = r.get("xmx") or xmx

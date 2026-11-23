@@ -14,9 +14,6 @@ from unittest import mock
 
 from moteur import figes
 
-from tests import plateforme_tests  # noqa: E402
-
-
 
 def iso(t):
     return datetime.fromtimestamp(t, timezone.utc).isoformat().replace("+00:00", "Z")
@@ -241,6 +238,22 @@ class Orphelins(Base):
             self.assertEqual(self.passer(s, 120), [])
 
 
+class ProcLinux(unittest.TestCase):
+    """La lecture de `/proc` sur un faux dossier (vaut sur tout système)."""
+
+    def test_un_processus_fini_non_releve_n_est_plus_la(self):
+        """Un zombie (état Z, ou X) est fini : son parent ne l'a pas encore relevé, son temps processeur ne bouge plus.
+        Le compter vivant laissait croire qu'une commande arrêtée tournait encore (essai au conteneur Linux)."""
+        with tempfile.TemporaryDirectory() as t:
+            racine = Path(t)
+            (racine / "stat").write_text("cpu  1 2 3\nbtime 1000000\n", encoding="utf-8")
+            for pid, etat in ((41, "S"), (42, "Z"), (43, "X"), (44, "R")):
+                (racine / str(pid)).mkdir()
+                champs = [etat, "7"] + ["0"] * 9 + ["150", "50"] + ["0"] * 6 + ["2500"]
+                (racine / str(pid) / "stat").write_text(f"{pid} (python) {' '.join(champs)} 0 0\n", encoding="utf-8")
+            self.assertEqual(sorted(figes._lister_proc(str(racine))), [41, 44])
+
+
 class Flux(unittest.TestCase):
     def test_commande_en_attente(self):
         t = 1_000_000.0
@@ -396,7 +409,6 @@ class VraisProcessus(unittest.TestCase):
             time.sleep(0.3)
         return arrets
 
-    @plateforme_tests.pas_encore_linux("vrais processus à arrêter par la surveillance : échoue au conteneur Linux, cause à préciser")
     def test_le_programme_qui_dort_est_arrete_l_etranger_et_l_agent_restent(self):
         etranger = self.lancer([sys.executable, "-c", DORT])
         agent, enfant = self.faux_agent(DORT)

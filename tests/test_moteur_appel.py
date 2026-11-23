@@ -182,6 +182,14 @@ class ClaudeP(unittest.TestCase):
         with self.assertRaises(appel.ErreurAppel):
             appel.appeler("c", "d", "haiku", executer=lambda *a: (1, b"boom"))
 
+    def test_code_non_nul_donne_le_motif_de_la_ligne_result(self):
+        """Le début du flux n'est que l'init : le vrai motif (ex. connexion expirée) est dans la ligne `result`."""
+        init = json.dumps({"type": "system", "subtype": "init", "tools": [], "padding": "x" * 400})
+        fin = json.dumps({"type": "result", "is_error": True, "result": "Failed to authenticate: login expired"})
+        with self.assertRaises(appel.ErreurAppel) as c:
+            appel.appeler("c", "d", "haiku", executer=lambda *a: (1, (init + "\n" + fin).encode()))
+        self.assertIn("Failed to authenticate: login expired", c.exception.raison)
+
     def test_sortie_illisible_leve(self):
         with self.assertRaises(appel.ErreurAppel):
             appel.appeler("c", "d", "haiku", executer=lambda *a: (0, b"pas du json"))

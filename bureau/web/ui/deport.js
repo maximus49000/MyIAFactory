@@ -22,11 +22,12 @@ export function actionsDe(deport) {
   return Array.isArray(liste) && liste.length ? liste : ACTIONS_GENERIQUES;
 }
 const LIEUX = [["poste", "Poste"], ["github", "GitHub"], ["serveur", "Serveur"]];
-const MSG_SERVEUR = "bientôt";
+// (les deux raisons de griser « Serveur » servent aussi à la page Réglages)
+export const MSG_SERVEUR = "bientôt";
 // Une action au seul serveur (la recette sur émulateur) : pas de défaut au poste, « Non réglé » (refusée) tant que le
 // Directeur ne l'a pas réglée sur serveur pour ce projet ; ce réglage vaut accord permanent.
 const NON_REGLE = ["", "Non réglé"];
-const MSG_SANS_SERVEUR = "déclarez d'abord un serveur (Serveurs), puis réglez sur serveur";
+export const MSG_SANS_SERVEUR = "déclarez d'abord un serveur (Serveurs), puis réglez sur serveur";
 export const NOTE_SERVEUR_SEUL = "Ne tourne que sur le serveur : la régler sur serveur vaut accord permanent pour ce " +
   "projet (l'agent la lance sans redemander). Non réglée, elle est refusée.";
 const surServeurSeul = (def) => Array.isArray(def.lieux) && !def.lieux.includes("poste") && !def.lieux.includes("github");
@@ -155,7 +156,7 @@ const ETATS_APERCU = {
 };
 
 // L'aperçu et la validation : le diff s'affiche, « Valider et pousser » envoie l'empreinte affichée (branche de travail).
-function blocApercu(fetchFn) {
+export function blocApercu(fetchFn) {
   const bloc = el("div", "deport-apercu");
   const zone = el("div", "deport-apercu-zone");
   const message = el("p", "note", "");

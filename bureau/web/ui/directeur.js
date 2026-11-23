@@ -5,17 +5,13 @@ import {el, ligne} from "./dom.js";
 import {tronquer, dateFr, listeDisponible, phrasesDirectionV1, retourSansReponse, suiviDuRetour, retoursRepondusNonVus,
         PREFIXE_VU_RETOUR, libelleLieuAgent} from "./texte.js";
 import {prenomAgent} from "./detail.js";
-import {demandeLecon, demandeToutes, demandeChallengeLecon, demandeAnomalie, enregistrerReglage,
-  enregistrerCloudDossierApprouve} from "./actions.js";
+import {demandeLecon, demandeToutes, demandeChallengeLecon, demandeAnomalie} from "./actions.js";
 import {contenuDecisionsV4, boutonDemande} from "./decisions.js";
-import {sectionLieux} from "./lieux.js";
-import {blocDeport} from "./deport.js";
 import {blocPoint, listeEchanges, marquerVu, TACHE_DU_CHEF} from "./point.js";
 import {coutsDesTaches, libelleCout, libelleDuree, totalDesTaches, libelleTotal} from "./couts.js";
 import {prefixesDeRepetition, titreAffiche} from "./repetitions.js";
 import {blocRetour, boutonRelancer, TEXTE_RELANCE} from "./detail.js";
 import {lignesModele} from "./polyvalent.js";
-import {sectionPartage} from "./partage.js";
 
 const ETAGES = [["projet", "Projet"], ["genre", "Genre"], ["skill", "Skill"]];
 
@@ -32,109 +28,6 @@ function lienTache(ctx, id, texte) {
   b.type = "button";
   b.addEventListener("click", () => ctx.ouvrirTache(id));
   return b;
-}
-
-export const AIDE_LECONS_AUTO = "Cochée, chaque leçon proposée est validée d'elle-même au niveau proposé (projet, genre " +
-  "ou skill). Les leçons genre et skill vont au partage des connaissances (s'il est activé).";
-
-export const AIDE_ANALYSE_BLOCAGES = "Cochée, le Chef analyse chaque tâche bloquée par un échec d'agent : il la relance " +
-  "avec une consigne, confie une correction, ou vous pose la question avec sa recommandation, et en tire une leçon. " +
-  "Il n'ouvre jamais un outil et ne dépense rien sans vous.";
-
-export const AIDE_LIVRAISON_SUR_DEMANDE = "Cochée, l'apk (8 à 14 minutes de construction) ne se fabrique pas tout seul " +
-  "quand le travail est conforme : il attend « Livrer maintenant » dans l'avis qui s'affiche. Décochée, la livraison part " +
-  "dès que plus rien n'est en cours.";
-
-export const AIDE_UNE_SESSION_MOYENNE = "Cochée, une évolution moyenne (dont vous validez le cahier ensuite) n'a plus de " +
-  "session de tests et de revue à part : l'agent qui programme relit et teste lui-même. Moins cher et plus court (3 à 7 " +
-  "minutes, 0,12 à 0,17 €), mais sans regard neuf d'un second agent. Décochée : comme avant.";
-
-export const AIDE_CLOUD_DOSSIER = "Le moteur répond lui-même « Yes, I trust this folder » quand Claude Code le " +
-  "demande pour lancer une session cloud dans ce projet.";
-
-// Le réglage « Valider les leçons automatiquement ».
-export function enregistrerLeconsAuto(valeur, fetchFn = fetch) {
-  return enregistrerReglage("lecons_auto", valeur, ["Les leçons seront validées automatiquement.",
-    "Les leçons attendent de nouveau le Directeur."], fetchFn);
-}
-
-// Le réglage « Analyse intelligente des blocages » (coché par défaut).
-export function enregistrerAnalyseBlocages(valeur, fetchFn = fetch) {
-  return enregistrerReglage("analyse_blocages", valeur, ["Le Chef analysera chaque blocage avant vous.",
-    "Les blocages vous reviennent directement, sans analyse du Chef."], fetchFn);
-}
-
-// Le réglage « Livrer seulement sur demande » (décoché par défaut).
-export function enregistrerLivraisonSurDemande(valeur, fetchFn = fetch) {
-  return enregistrerReglage("livraison_sur_demande", valeur, ["La livraison attendra « Livrer maintenant ».",
-    "La livraison repartira toute seule dès que le travail est conforme."], fetchFn);
-}
-
-// Le réglage « Évolution moyenne : une seule session » (décoché par défaut).
-export function enregistrerUneSessionMoyenne(valeur, fetchFn = fetch) {
-  return enregistrerReglage("une_session_moyenne", valeur, ["Une évolution moyenne se fera en une seule session.",
-    "Une évolution moyenne garde sa session de tests et de revue."], fetchFn);
-}
-
-// Une case, son aide et son message ; n'agit que par le serveur du bureau. `coche` : l'état lu dans l'état du bureau.
-function caseReglage(ctx, {classe, libelle, aide, coche, enregistrer, noter}) {
-  const bloc = el("div", classe);
-  const label = el("label", "lecons-auto-label");
-  const case_ = document.createElement("input");
-  case_.type = "checkbox";
-  case_.checked = coche;
-  label.append(case_, el("span", "", " " + libelle));
-  const message = el("p", "note", "");
-  message.setAttribute("aria-live", "polite");
-  case_.addEventListener("change", async () => {
-    const voulu = case_.checked;
-    case_.disabled = true;
-    const r = await enregistrer(voulu);
-    case_.disabled = false;
-    if (r.ok) { noter(voulu); ctx.rouvrir?.(); }
-    else case_.checked = !voulu;   // refus : la case redit l'état réel
-    message.textContent = r.message;
-  });
-  bloc.append(label, el("p", "note", aide), message);
-  return bloc;
-}
-
-function caseLeconsAuto(ctx) {
-  const e = ctx.etat;
-  return caseReglage(ctx, {classe: "lecons-auto", libelle: "Valider les leçons automatiquement", aide: AIDE_LECONS_AUTO,
-    coche: e.lecons_auto === true, enregistrer: (v) => enregistrerLeconsAuto(v), noter: (v) => { e.lecons_auto = v; }});
-}
-
-// À côté de « Valider les leçons automatiquement » ; absente de l'état (un ancien bureau) : cochée, comme le défaut.
-function caseAnalyseBlocages(ctx) {
-  const e = ctx.etat;
-  return caseReglage(ctx, {classe: "lecons-auto analyse-blocages", libelle: "Analyse intelligente des blocages",
-    aide: AIDE_ANALYSE_BLOCAGES, coche: e.analyse_blocages !== false, enregistrer: (v) => enregistrerAnalyseBlocages(v),
-    noter: (v) => { e.analyse_blocages = v; }});
-}
-
-// À côté de l'analyse des blocages : le réglage `livraison_sur_demande` (décochée si absente de l'état).
-function caseLivraisonSurDemande(ctx) {
-  const e = ctx.etat;
-  return caseReglage(ctx, {classe: "lecons-auto livraison-sur-demande", libelle: "Livrer seulement sur demande",
-    aide: AIDE_LIVRAISON_SUR_DEMANDE, coche: e.livraison_sur_demande === true,
-    enregistrer: (v) => enregistrerLivraisonSurDemande(v), noter: (v) => { e.livraison_sur_demande = v; }});
-}
-
-// À côté de la livraison sur demande : le réglage `une_session_moyenne` (décochée si absente de l'état).
-function caseUneSessionMoyenne(ctx) {
-  const e = ctx.etat;
-  return caseReglage(ctx, {classe: "lecons-auto une-session-moyenne", libelle: "Évolution moyenne : une seule session",
-    aide: AIDE_UNE_SESSION_MOYENNE, coche: e.une_session_moyenne === true,
-    enregistrer: (v) => enregistrerUneSessionMoyenne(v), noter: (v) => { e.une_session_moyenne = v; }});
-}
-
-// À côté des deux autres : le réglage `cloud_dossier_approuve` (décochée si absente de l'état).
-function caseCloudDossier(ctx) {
-  const e = ctx.etat;
-  return caseReglage(ctx, {classe: "lecons-auto cloud-dossier", libelle: "Dossier approuvé pour les sessions cloud",
-    aide: AIDE_CLOUD_DOSSIER, coche: e.cloud_dossier_approuve === true,
-    enregistrer: (v) => enregistrerCloudDossierApprouve(v), noter: (v) => { e.cloud_dossier_approuve = v; }});
 }
 
 const ETATS_ANOMALIE = {nouvelle: "nouvelle", vue: "vue", reglee: "réglée"};
@@ -294,7 +187,7 @@ function sectionAnciensAgents(ctx) {
 
 export function contenuDirecteur(ctx, contenu) {
   const e = ctx.etat;
-  contenu.append(el("h2", "", "Direction"));
+  contenu.append(el("h2", "", "Direction"));   // la page Réglages s'ouvre par la roue crantée de la barre du haut
   if (!listeDisponible(e)) {  // relevé en version 1 : le panneau d'avant
     for (const p of phrasesDirectionV1(e)) contenu.append(el("p", p.classe, p.texte));
     return;
@@ -305,16 +198,9 @@ export function contenuDirecteur(ctx, contenu) {
       : `${n} décisions attendent le Directeur (comptées par le projet).`));
   }
   if ((e.version ?? 1) >= 4) contenuDecisionsV4(ctx, contenu);
-  const lieux = (e.version ?? 1) >= 4 ? sectionLieux(ctx, boutonDemande) : null;   // absent : le relevé ne le publie pas
-  if (lieux) contenu.append(lieux);
   const menus = new Map();   // id de leçon -> son menu d'étage
   const cartes = (e.lecons || []).map((l) => carteLecon(ctx, l, menus));
   const section = partie("Leçons à valider", "Aucune leçon à valider", cartes);
-  if ((e.version ?? 1) >= 4 || e.lecons_auto === true) {
-    section.querySelector("h3").after(caseLeconsAuto(ctx), caseAnalyseBlocages(ctx), caseLivraisonSurDemande(ctx), caseUneSessionMoyenne(ctx), caseCloudDossier(ctx),
-      ...(e.deport ? [blocDeport(ctx)] : []));
-  }
-  if (e.agir && (e.version ?? 1) >= 4) contenu.append(sectionPartage());   // un réglage de tout le bureau
   const enAttente = (e.lecons || []).filter((l) => !l.verdict_demande);
   if (e.agir && e.lecons_auto !== true && enAttente.length >= 2) {
     // Tout valider ou tout invalider, chaque leçon avec l'étage montré dans son menu (même s'il a été changé).

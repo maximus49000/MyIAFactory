@@ -57,12 +57,15 @@ test("la lecture du rond est partagée avec les jauges", () => {
   assert.equal(vus.length, 1);
 });
 
-test("les fenêtres 5 h / semaine ne passent dans le panneau que sans la place des jauges", () => {
+test("le rond seul dans la barre ; les fenêtres 5 h / semaine dans son panneau, à toutes les largeurs", () => {
   const css = readFileSync(new URL("../style.css", import.meta.url), "utf8");
-  assert.match(css, /\.conso-principales \{ display: none; \}/);
-  assert.match(css, /@media \(max-width: 700px\) \{\s*\.bloc-abonnement \.jauges \{ display: none; \}\s*\.conso-principales \{ display: block; \}/);
+  assert.doesNotMatch(css, /\.conso-principales\s*\{[^}]*display:\s*none/);
+  assert.doesNotMatch(css, /\.jauges\b/);
   const barre = readFileSync(new URL("../ui/barre.js", import.meta.url), "utf8");
-  assert.match(barre, /blocAbonnement\.append\(creerConso\(\), jauges\)/);
+  assert.match(barre, /blocAbonnement\.append\(creerConso\(\)\);/);
+  assert.doesNotMatch(barre, /creerJauges|jauges/);
+  const conso = readFileSync(new URL("../ui/conso.js", import.meta.url), "utf8");
+  assert.match(conso, /el\("div", "conso-principales"\)/);
 });
 
 test("le panneau est fixe : la barre mobile défile et le rognerait", () => {

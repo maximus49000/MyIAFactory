@@ -17,6 +17,7 @@ from pathlib import Path
 from bureau import empreinte
 from bureau.empreinte import Cumul
 from installation import brouillons, creation, estimation, mise_en_place as mep, proposition
+from installation import scan
 from installation.dossier import Echec
 from moteur import appel, environnement, jugement
 from orchestrateur import fiches, modele_necessaire, outil
@@ -59,7 +60,8 @@ def dossier_du_tour(b, *, genres_connus, correction=None, proposer_maintenant=Fa
             "echange": copy.deepcopy(b["echange"]), "tours_de_questions": b["tours"], "tours_max": TOURS_MAX,
             "proposer_maintenant": bool(proposer_maintenant) or b["tours"] >= TOURS_MAX,
             "proposition_precedente": copy.deepcopy(b.get("objet")) if correction else None,
-            "correction": correction or None}
+            "correction": correction or None,
+            "connaissance": copy.deepcopy(b.get("connaissance"))}
 
 
 def questions_ouvertes(b):
@@ -238,6 +240,28 @@ def _outil_en_place(x):
 
 # --- Un tour.
 
+def _connaitre_le_repertoire(b, *, couche, appeler, maintenant=None):
+    """Le brouillon avec la connaissance du répertoire à scanner (`infos.repertoire`), faite une fois par répertoire :
+    inventaire et résumé (`scan.scanner`), usages gardés. Sans répertoire, la connaissance est retirée. Un répertoire
+    devenu introuvable est dit dans `connaissance.avertissement` : le tour continue sans lui."""
+    repertoire = (b["infos"].get("repertoire") or "").strip()
+    if not repertoire:
+        b["connaissance"] = None
+        return b
+    actuelle = b.get("connaissance")
+    if isinstance(actuelle, dict) and actuelle.get("source") == repertoire:
+        return b
+    try:
+        connaissance, usages = scan.scanner(repertoire, couche=couche, appeler=appeler)
+    except Echec as e:
+        b["connaissance"] = {"source": repertoire, "repertoire": repertoire, "resume": None, "avertissement": str(e)}
+        return b
+    connaissance["source"] = repertoire
+    b["connaissance"] = connaissance
+    b["usages"] = list(b["usages"]) + [dict(u, t=_iso(maintenant)) for u in usages]
+    return b
+
+
 def tour(b, *, reponses=None, correction=None, proposer_maintenant=False, genres_connus, couche,
          appeler=appel.appeler, verifier_environnement=environnement.verifier, prix_de=lambda modele: None,
          usages_du_genre=(), maintenant=None):
@@ -248,6 +272,7 @@ def tour(b, *, reponses=None, correction=None, proposer_maintenant=False, genres
     if reponses is not None:
         b = ajouter_reponses(b, reponses)
     b = copy.deepcopy(b)
+    b = _connaitre_le_repertoire(b, couche=couche, appeler=appeler, maintenant=maintenant)
     d = jugement.juger("definir_workflow", dossier_du_tour(b, genres_connus=genres_connus, correction=correction,
                                                            proposer_maintenant=proposer_maintenant),
                        couche=couche, appeler=appeler)
@@ -360,7 +385,17 @@ def vue(b, prix_de=lambda modele: None):
     return {"id": b["id"], "infos": b["infos"], "echange": b["echange"], "tours": b["tours"], "tours_max": TOURS_MAX,
             "proposition": b.get("proposition"), "erreur": None if etat == "en_cours" else erreur,
             "cout": cout_echange(b.get("usages") or [], prix_de), "tour": etat,
-            "en_cours": b.get("en_cours") if etat == "en_cours" else None}
+            "en_cours": b.get("en_cours") if etat == "en_cours" else None,
+            "connaissance": _resume_de_la_connaissance(b.get("connaissance"))}
+
+
+def _resume_de_la_connaissance(c):
+    """Ce que la page montre du scan : le répertoire, le nombre de fichiers, le résumé et l'avertissement."""
+    if not isinstance(c, dict):
+        return None
+    inv = c.get("inventaire") if isinstance(c.get("inventaire"), dict) else {}
+    return {"repertoire": c.get("repertoire"), "nb_fichiers": inv.get("nb_fichiers"), "resume": c.get("resume"),
+            "avertissement": c.get("avertissement")}
 
 
 def vue_actuelle(id_, prix_de=lambda modele: None, *, dossier=None):
@@ -377,10 +412,17 @@ def _verifier_les_infos(infos, bureau_json):
     le dossier parent disparaître, le bureau se remplir). `InfosAChanger` sinon ; rien n'est écrit."""
     try:
         nom = creation.verifier_nom(infos.get("nom"))
-        parent = creation.verifier_parent(infos.get("parent"))
-        if (parent / nom).exists():
-            raise Echec(f"« {nom} » existe déjà dans {parent} : choisissez un autre nom.")
-        mep._controler_bureau(Path(bureau_json), parent / nom / ".factory" / "reglages.json")
+        if (infos.get("repertoire") or "").strip():     # un dossier de code existant : il devient le projet, sur place
+            projet = scan.verifier_repertoire(infos["repertoire"])
+            if (projet / ".factory").exists():
+                raise Echec(f"« {projet} » a déjà un dossier .factory : c'est un projet MyIAFactory, la réparation de "
+                            "l'installateur s'en charge.")
+        else:
+            parent = creation.verifier_parent(infos.get("parent"))
+            if (parent / nom).exists():
+                raise Echec(f"« {nom} » existe déjà dans {parent} : choisissez un autre nom.")
+            projet = parent / nom
+        mep._controler_bureau(Path(bureau_json), projet / ".factory" / "reglages.json")
     except Echec as e:
         raise InfosAChanger(str(e)) from None
 
@@ -438,7 +480,8 @@ def valider(b, *, fable=(), installer=False, genre_description=None, bureau_json
     organisation = _organisation(p, infos, installer, list(fable or []), t.date().isoformat())
     nouveau = p["genre"]["nouveau"]
     fait = creation.creer_projet(
-        infos["parent"], infos["nom"], mots_interdits=infos.get("mots_interdits") or [],
+        infos["parent"], infos["nom"], adopter=(infos.get("repertoire") or "").strip() or None,
+        mots_interdits=infos.get("mots_interdits") or [],
         facturation=bool(infos.get("facturation")), github=False, description=infos.get("description"),
         genre=None if nouveau else p["genre"]["id"], organisation=organisation, bureau_json=bureau_json, git=git,
         gh=gh, maintenant=t, **({"calibrer": calibrer} if calibrer else {}))
@@ -499,7 +542,7 @@ def valider(b, *, fable=(), installer=False, genre_description=None, bureau_json
         if sortie_github != "fait":
             notes.append(sortie_github)
     brouillons.retirer(b["id"], dossier=dossier)
-    message = f"Le projet est créé dans {fait['projet']}, avec son workflow « {p['workflow']['id']} »."
+    message = f"Le projet est {'repris sur place' if infos.get('repertoire') else 'créé'} dans {fait['projet']}, avec son workflow « {p['workflow']['id']} »."
     if installation:
         message += " L'installation du poste démarre au premier passage du moteur."
     return {"reglages": fait["reglages"], "id": fait["id"], "projet": fait["projet"], "github": sortie_github,

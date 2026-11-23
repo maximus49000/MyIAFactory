@@ -371,6 +371,21 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat: etatBr
   barre.boutonFonctions.addEventListener("click", () => ouvrirPanneau("fonctionnalites", null));
   barre.surCatalogue((id) => ouvrirCatalogue(id));
 
+  // --- La roue crantée de la barre : la page Réglages, et les serveurs de travail (montés dans le panneau Direction,
+  // qui les lit après coup : on attend leur carte, au plus 3 s, puis on la fait venir en haut du panneau).
+  function ouvrirServeurs() {
+    ouvrirPanneau("direction", null);
+    let essais = 0;
+    const chercher = () => {
+      if (panneauOuvert?.type !== "direction") return;   // l'utilisateur est allé ailleurs entre-temps
+      const carteServeurs = panneau.querySelector(".carte-serveurs");
+      if (carteServeurs) carteServeurs.scrollIntoView({block: "start", behavior: "smooth"});
+      else if (++essais < 30) setTimeout(chercher, 100);
+    };
+    chercher();
+  }
+  barre.brancherMenu({ouvrirReglages: () => ouvrirPanneau("reglages", null), ouvrirServeurs});
+
   // --- Souris.
   let attente = null;
   conteneur.addEventListener("pointermove", (ev) => {

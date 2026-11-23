@@ -1,5 +1,5 @@
 // Le panneau Direction ne porte plus « Où tournent les actions » ni « Où s'exécutent les étapes » (page Réglages) ;
-// il garde un bouton « Réglages » ; et panneaux.js branche le type « reglages ».
+// son bouton « Réglages » est parti (la roue de la barre y mène) ; et panneaux.js branche le type « reglages ».
 import test from "node:test";
 import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
@@ -28,16 +28,19 @@ const ETAT = {version: 4, agir: true, lecons: [], decisions: 0,
   etapes_lieux: [{id: "build", nom: "Build", role: "dev", validation: false, lieu: "local"}],
   deport: {lieux: {apk: "poste", tests: "poste", charge: "poste", emulateur: "poste"}, avertissements: []}};
 
-test("Direction : plus de déport ni de lieux d'étapes, un bouton « Réglages »", async () => {
-  let ouvert = 0;
+test("Direction : plus de déport ni de lieux d'étapes", () => {
   const contenu = new Noeud("div");
-  contenuDirecteur({etat: ETAT, ouvrirReglages: () => { ouvert += 1; }, barre: {demander: async () => ({ok: true})}}, contenu);
+  contenuDirecteur({etat: ETAT, ouvrirReglages: () => {}, barre: {demander: async () => ({ok: true})}}, contenu);
   assert.doesNotMatch(contenu.textContent, /Où tournent les actions/);
   assert.doesNotMatch(contenu.textContent, /Où s'exécutent les étapes/);
-  const b = contenu.tous((n) => n.tagName === "button" && n.textContent === "Réglages")[0];
-  assert.ok(b);
-  for (const f of b.auteurs.click) await f();
-  assert.equal(ouvert, 1);
+});
+
+test("le_bouton_Reglages_de_Direction_a_disparu", () => {
+  // L'accès à la page Réglages passe par la roue crantée de la barre du haut.
+  const contenu = new Noeud("div");
+  contenuDirecteur({etat: ETAT, ouvrirReglages: () => {}, barre: {demander: async () => ({ok: true})}}, contenu);
+  assert.equal(contenu.tous((n) => n.tagName === "button" && n.textContent === "Réglages").length, 0);
+  assert.doesNotMatch(readFileSync(new URL("../ui/directeur.js", import.meta.url), "utf8"), /ctx\.ouvrirReglages/);
 });
 
 test("panneaux.js : le type « reglages » est branché, avec retour vers Direction", () => {

@@ -1,5 +1,6 @@
 // Essai réel : sur un écran d'ordinateur large, des boutons de la barre étaient écrasés à zéro (défilement caché).
-// Sur l'ordinateur, la barre passe à la ligne au lieu de cacher des boutons, et la scène suit sa hauteur.
+// Demande du Directeur (2026-11-23) : la barre tient sur une seule ligne ; ce qui ne tient pas passe dans le menu de la
+// roue crantée (barre-roue.test.js), jamais caché par un défilement.
 import {test} from "node:test";
 import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
@@ -13,14 +14,15 @@ function regle(selecteur) {
   return css.slice(i, css.indexOf("}", i));
 }
 
-test("sur l'ordinateur, la barre passe à la ligne", () => {
-  const r = regle("html:not(.mobile) #barre");
-  assert.match(r, /flex-wrap:\s*wrap/);
-  assert.match(r, /height:\s*auto/);
+test("la barre tient sur une ligne, sans défilement qui cache des boutons", () => {
+  const r = regle("#barre");
+  assert.match(r, /flex-wrap:\s*nowrap/);
+  assert.match(r, /overflow:\s*hidden/);
+  assert.doesNotMatch(css, /#barre\s*\{[^}]*overflow-x:\s*auto/);
 });
 
 test("les boutons du projet ne sont jamais écrasés", () => {
-  assert.match(regle("html:not(.mobile) .barre-actions"), /flex:\s*none/);
+  assert.match(regle(".barre-actions"), /flex:\s*none/);
 });
 
 test("la barre dit la pause d'une installation et l'attente de charge", async () => {

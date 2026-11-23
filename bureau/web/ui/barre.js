@@ -1,4 +1,5 @@
-// Le bandeau du haut : nom du projet, voyant de la factory, barre de charge de l'ordinateur.
+// Le bandeau du haut, sur une seule ligne : l'heure, le nom du projet, le voyant de la factory, la charge de l'ordinateur,
+// les boutons, et la roue crantée (menu des paramètres, barre-parametres.js) à droite.
 // Plus, sous la barre, le bandeau d'erreur quand le relevé est indisponible.
 // Tout texte venu du serveur passe par textContent.
 
@@ -12,6 +13,7 @@ import {creerJauges, definirAbonnement} from "./abonnement.js";
 import {surConso} from "./mesure.js";
 import {accuseDe, creerAccuses, majEtatAccuses, noterAccuse} from "./accuse.js";
 import {brancherOptimiser} from "./optimiser.js";
+import {creerHorloge, creerMenuParametres, raccourcir, resserrer} from "./barre-parametres.js";
 
 const INTERVALLE_CHARGE = 5000;
 const DUREE_MESSAGE = 4000;
@@ -63,7 +65,11 @@ export function creerBarre(entete, bandeau) {
   const trait = el("div", "charge-trait");
   trait.title = "Charge maximum pour lancer une nouvelle étape";
   piste.append(remplissage, trait);
-  const valeur = el("span", "charge-valeur", "—");
+  // La valeur : le pourcentage, puis « (max …) » que la barre resserrée laisse tomber (style.css, `.barre-compacte`).
+  const valeur = el("span", "charge-valeur");
+  const valeurPourcent = el("span", "charge-pourcent", "—");
+  const valeurMax = el("span", "charge-max", "");
+  valeur.append(valeurPourcent, valeurMax);
   // « Optimiser la charge » : ce qui charge l'ordinateur, et l'arrêt d'un programme sur le clic de l'utilisateur.
   const boutonOptimiser = el("button", "bouton-barre bouton-optimiser", "Optimiser la charge");
   boutonOptimiser.type = "button";
@@ -89,10 +95,46 @@ export function creerBarre(entete, bandeau) {
   const blocAbonnement = el("div", "bloc-abonnement");
   blocAbonnement.append(creerConso(), jauges);
   surConso(() => jauges.maj());
-  entete.append(blocAbonnement, titre, leVoyant, retenue, zoneActions, boutonNouvelle, boutonCorrection, boutonQuestion, boutonFonctions, zoneLivrable, boutonListe,
-                boutonTelephone, charge);
-  // La barre peut passer sur deux lignes : la scène et les panneaux se placent sous sa hauteur réelle.
+  // Libellés courts quand la place manque (le libellé entier reste l'infobulle et le nom accessible).
+  raccourcir(boutonNouvelle, "+ Nouv.");
+  raccourcir(boutonCorrection, "+ Corr.");
+  raccourcir(boutonQuestion, "?");
+  raccourcir(boutonFonctions, "Fonct.");
+  raccourcir(boutonListe, "Tâches");
+  raccourcir(boutonOptimiser, "Optim.");
+
+  // Maquette validée (2026-11-23) : l'heure à gauche, puis le titre et le projet, le voyant, la charge, les boutons ; la
+  // roue crantée seule à droite. « Associer un téléphone » est une entrée de son menu (le bouton reste hors de la barre).
+  const horloge = creerHorloge();
+  const separateur = el("span", "barre-separateur");
+  separateur.setAttribute("aria-hidden", "true");
+  const liens = {ouvrirReglages: null, ouvrirServeurs: null};   // donnés par les panneaux (`brancherMenu`), créés après
+  let replies = [];
+  const menu = creerMenuParametres({
+    get ouvrirReglages() { return liens.ouvrirReglages; },
+    get ouvrirServeurs() { return liens.ouvrirServeurs; },
+    get associerTelephone() { return boutonTelephone.hidden ? null : () => boutonTelephone.click(); },
+    actions: () => replies.flatMap(entreesDe),
+  });
+  entete.append(horloge.racine, separateur, titre, leVoyant, retenue, charge, blocAbonnement, zoneActions, boutonNouvelle, boutonCorrection,
+                boutonQuestion, boutonFonctions, zoneLivrable, boutonListe, menu.racine);
+
+  // Une seule ligne à toutes les largeurs : ce qui ne tient pas passe dans le groupe « Actions » du menu, de droite à
+  // gauche (barre-parametres.js). Sur téléphone : l'heure, le projet, le voyant et la roue seulement.
+  const telephone = () => document.documentElement.classList.contains("mobile");
+  const pliables = () => [...zoneActions.children, boutonNouvelle, boutonCorrection, boutonQuestion, boutonFonctions, zoneLivrable,
+                          boutonListe, ...(telephone() ? [boutonOptimiser] : [])];
+  // Les entrées du menu pour un élément replié : lui-même, ou les liens et boutons du « Dernier livrable ».
+  function entreesDe(e) {
+    const cibles = e === zoneLivrable ? [...e.querySelectorAll("a, button")] : [e];
+    return cibles.map((c) => ({libelle: c.dataset?.libelle || c.textContent.trim(), element: c, desactive: c.disabled === true}));
+  }
+  function ajuster() {
+    replies = resserrer(entete, pliables(), {telephone: telephone()});
+  }
+  // La scène et les panneaux se placent sous la hauteur réelle de la barre ; sa largeur change : on la resserre.
   new ResizeObserver(() => {
+    ajuster();
     document.documentElement.style.setProperty("--hauteur-barre", entete.offsetHeight + "px");
   }).observe(entete);
 
@@ -234,6 +276,7 @@ export function creerBarre(entete, bandeau) {
       o.selected = x.selected;
       choixProjet.append(o);
     }
+    ajuster();   // la liste des projets a changé de largeur
   }
   choixProjet.addEventListener("change", () => {
     if (choixProjet.value === ENTREE_NOUVEAU) {   // le formulaire s'ouvre ; le projet affiché reste le même
@@ -265,7 +308,8 @@ export function creerBarre(entete, bandeau) {
       remplissage.style.width = "0%";
       charge.classList.remove("depasse");
       charge.classList.add("indisponible");
-      valeur.textContent = c ? "Mesure indisponible" : "—";
+      valeurPourcent.textContent = c ? "Mesure indisponible" : "—";
+      valeurMax.textContent = "";
       trait.style.display = c && c.max ? "" : "none";
       if (c && c.max) trait.style.left = c.max + "%";
       return;
@@ -275,7 +319,8 @@ export function creerBarre(entete, bandeau) {
     trait.style.display = "";
     trait.style.left = Math.max(0, Math.min(100, c.max)) + "%";
     charge.classList.toggle("depasse", !c.feu_vert);
-    valeur.textContent = `${Math.round(c.charge)} % (max ${Math.round(c.max)} %)`;
+    valeurPourcent.textContent = `${Math.round(c.charge)} %`;
+    valeurMax.textContent = ` (max ${Math.round(c.max)} %)`;
   }
 
   async function rafraichirCharge() {
@@ -317,6 +362,12 @@ export function creerBarre(entete, bandeau) {
       const v4 = (etat.version ?? 1) >= 4 && etat.agir === true;
       boutonNouvelle.hidden = boutonCorrection.hidden = boutonQuestion.hidden = boutonFonctions.hidden = !v4;
       majLivrables(etat);
+      ajuster();   // des boutons ont pu paraître ou partir : la barre se resserre ou se desserre
+    },
+    // Les panneaux (créés après la barre) donnent de quoi ouvrir la page Réglages et les serveurs de travail.
+    brancherMenu({ouvrirReglages, ouvrirServeurs}) {
+      liens.ouvrirReglages = ouvrirReglages || null;
+      liens.ouvrirServeurs = ouvrirServeurs || null;
     },
     // Le relevé est indisponible : voyant en alerte et bandeau avec le message du serveur.
     majErreur(texte) {

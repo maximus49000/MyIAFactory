@@ -292,11 +292,7 @@ function sectionAnciensAgents(ctx) {
 
 export function contenuDirecteur(ctx, contenu) {
   const e = ctx.etat;
-  contenu.append(el("h2", "", "Direction"));
-  const reglages = el("button", "secondaire", "Réglages");   // lieux d'exécution et automatisations : la page Réglages
-  reglages.type = "button";
-  reglages.addEventListener("click", () => ctx.ouvrirReglages?.());
-  contenu.append(reglages);
+  contenu.append(el("h2", "", "Direction"));   // la page Réglages s'ouvre par la roue crantée de la barre du haut
   if (!listeDisponible(e)) {  // relevé en version 1 : le panneau d'avant
     for (const p of phrasesDirectionV1(e)) contenu.append(el("p", p.classe, p.texte));
     return;

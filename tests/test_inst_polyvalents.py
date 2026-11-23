@@ -21,9 +21,6 @@ METIERS = [
      "brief": "# Brief du métier : relecteur\n\nRelis."},
 ]
 
-from tests import plateforme_tests  # noqa: E402
-
-
 
 def poly(**extra):
     """Les champs du nouveau format à poser sur une proposition valide à l'ancienne."""
@@ -109,7 +106,6 @@ class MiseEnPlace(Base):
         p.update(poly(**extra))
         return mep.appliquer(p, MAINTENANT, git=self.git_simule, adresses=self.adresses)
 
-    @plateforme_tests.pas_encore_linux("écrit via le Base de test_inst_mise_en_place, non hermétique sous Linux")
     def test_mise_en_place_ecrit_metiers_et_agents(self):
         self.appliquer_poly()
         f = fa.lire(self.projet / ".factory" / "factory.json")
@@ -127,7 +123,6 @@ class MiseEnPlace(Base):
         self.assertEqual(dev["lieu"], "indifférent")
         self.assertEqual(metiers.lire_metier(briefs, "relecteur")["lieu"], "local")
 
-    @plateforme_tests.pas_encore_linux("écrit via le Base de test_inst_mise_en_place, non hermétique sous Linux")
     def test_mise_en_place_cloud_regle_les_places(self):
         self.appliquer_poly(agents={"locaux": 2, "cloud": 2}, cloud=True, agents_locaux_max=2)
         f = fa.lire(self.projet / ".factory" / "factory.json")
@@ -136,7 +131,6 @@ class MiseEnPlace(Base):
         self.assertEqual(sorted(x["lieu"] for x in lues), ["cloud", "cloud", "local", "local"])
         self.assertTrue(all(x["session"] is None for x in lues))
 
-    @plateforme_tests.pas_encore_linux("écrit via le Base de test_inst_mise_en_place, non hermétique sous Linux")
     def test_ecrire_organisation_ajoute_des_metiers_sans_toucher_l_equipe(self):
         self.appliquer_poly()
         chemin = self.projet / ".factory" / "factory.json"
@@ -150,7 +144,6 @@ class MiseEnPlace(Base):
         self.assertEqual(len(fiches.lire_toutes(f["fiches"])), 3)
         self.assertEqual(metiers.lire_metier(f["fiches"] / "briefs", "mixeur")["texte"], "Mixe.")
 
-    @plateforme_tests.pas_encore_linux("écrit via le Base de test_inst_mise_en_place, non hermétique sous Linux")
     def test_ecrire_organisation_refuse_sans_rien_ecrire(self):
         self.appliquer_poly()
         chemin = self.projet / ".factory" / "factory.json"
@@ -162,7 +155,6 @@ class MiseEnPlace(Base):
                                     workflow={"id": "w-son", "genre": None, "fonctionnalite": None}, metiers=[])
         self.assertEqual(sorted(c.name for c in f["fiches"].rglob("*")), avant)
 
-    @plateforme_tests.pas_encore_linux("écrit via le Base de test_inst_mise_en_place, non hermétique sous Linux")
     def test_ancien_format_inchange(self):
         self.appliquer()
         f = fa.lire(self.projet / ".factory" / "factory.json")

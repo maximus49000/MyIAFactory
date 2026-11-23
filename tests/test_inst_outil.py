@@ -7,13 +7,10 @@ import sys
 from pathlib import Path
 
 from installation import dossier
-from tests.inst_aide import AvecMaison, proposition_valide
+from tests.inst_aide import AvecMaison, proposition_valide, retirer_lien
 
 OUTIL = Path(__file__).resolve().parent.parent / "installation" / "outil.py"
 RACINE = Path(__file__).resolve().parent.parent
-
-from tests import plateforme_tests  # noqa: E402
-
 
 
 class TestOutil(AvecMaison):
@@ -45,9 +42,8 @@ class TestOutil(AvecMaison):
         for nom in ("orchestrateur", "bureau"):
             lien = dossier.skill() / nom
             dossier.creer_lien(RACINE / nom, lien)
-            self.addCleanup(os.rmdir, lien)   # retire la jonction seule
+            self.addCleanup(retirer_lien, lien)   # retire le lien seul
 
-    @plateforme_tests.pas_encore_linux("parcours réel sur une skill clonée (jonction de dossier) : échoue au conteneur Linux, cause à préciser")
     def test_parcours_vide_bout_en_bout(self):
         self.skill_clonee()
         code, r = self.lancer("preparer")

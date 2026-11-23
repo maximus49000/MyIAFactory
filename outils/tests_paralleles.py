@@ -21,6 +21,13 @@ Le dossier temporaire passé aux tests est écrit en chemin long : sous Windows,
 fait échouer les tests qui comparent des chemins. Un morceau en échec est relancé seul une fois, à la fin : s'il passe,
 il est signalé « instable » (sensible à la charge, souvent un test de chronométrage) ; sinon c'est un vrai échec, et
 le code de sortie vaut 1.
+
+Route serveur (`outils/tests_serveur.py`) : avec l'accord du Directeur pour ce dépôt (`deport_types.refus_route`), la
+suite s'envoie elle-même au serveur et y lance `python3 outils/tests_paralleles.py -j <cpus> --lents <n> <modules>`
+dans un conteneur Linux ; sa sortie est relayée telle quelle et son code rendu. `--touches` est résolu ici (il faut `git`)
+en liste de modules ; « Rien à tester. » ne contacte rien. Repli au poste (une ligne) dans les cas de `tests_serveur` ;
+`--serveur` force la route sans repli (code 4 si le serveur manque, 2 sans accord), `--local` reste au poste. Dans le
+conteneur (`MYIAFACTORY_TESTS_CONTENEUR=1`) : ni route ni verrou du poste, les morceaux restent isolés comme ici.
 """
 import argparse
 import json
@@ -106,6 +113,37 @@ def _environnement():
 # `campagne.executer` ou `attendre_son_tour` sans chemins n'atteint jamais le vrai verrou ni la vraie file (blocages du
 # 2026-11-23). Le lanceur, lui, garde le vrai verrou : la variable n'est posée que dans l'environnement des morceaux.
 VARIABLE_ETAT = "MYIAFACTORY_ETAT_TESTS"
+# Posée par l'enveloppe du serveur (`serveur_ovh/taches/lancer_tests.sh`) dans le conteneur : la suite y tourne sans
+# route (aucune récursion) et sans le verrou du poste (il n'y a pas de poste).
+CONTENEUR = "MYIAFACTORY_TESTS_CONTENEUR"
+
+
+def _refus_route(racine):
+    """None si le Directeur a accordé la route serveur des tests à ce dépôt, sinon la raison. Lu à l'appel
+    (`bureau.deport_types.refus_route`) ; une erreur inattendue est un refus : jamais de route sur un doute."""
+    try:
+        from bureau import deport_types
+        return deport_types.refus_route(str(racine), "tests")
+    except Exception as e:  # noqa: BLE001
+        return f"accord illisible ({type(e).__name__})"
+
+
+def _commande_serveur(o, liste, limites, max_elements, max_octets):
+    """La commande lancée dans le conteneur : `-j` = les cœurs de la place, puis les modules (`--touches` résolu) ou
+    les filtres donnés. Une liste de modules trop longue pour la commande (bornes de `tests_serveur`) : toute la
+    suite, qui les contient (jamais moins de tests)."""
+    tete = ["python3", "outils/tests_paralleles.py", "-j", str(limites["cpus"]), "--lents", str(o.lents)]
+    if o.decouper:
+        tete.append("--decouper")
+    cible = list(liste) if o.touches else list(o.filtres)
+    if o.touches and set(cible) == set(modules([])):
+        cible = []                                   # tout est touché : la suite entière, sans liste
+    commande = tete + cible
+    if o.touches and (len(commande) > max_elements
+                      or len(json.dumps(commande, ensure_ascii=False).encode("utf-8")) > max_octets):
+        print(f"Tests touchés : {len(cible)} modules, trop pour la commande du serveur : toute la suite.", flush=True)
+        commande = tete
+    return commande
 
 
 def _env_du_morceau(env, etat, numero):
@@ -146,7 +184,12 @@ def main(argv=None, lancer_morceau=None, poste=None):
                    help="seulement les tests touchés par ce qui diffère de la référence (défaut : origin/main)")
     a.add_argument("--sans-attendre", action="store_true",
                    help="refuser (code 3) au lieu d'attendre quand une autre campagne tourne sur le poste")
+    lieu = a.add_mutually_exclusive_group()
+    lieu.add_argument("--serveur", action="store_true",
+                      help="au serveur, sans repli au poste (code 4 si le serveur manque, 2 sans l'accord)")
+    lieu.add_argument("--local", action="store_true", help="au poste, même avec l'accord pour le serveur")
     o = a.parse_args(argv)
+    dans_le_conteneur = os.environ.get(CONTENEUR, "").strip() == "1"
     liste = modules(o.filtres)
     if o.touches:
         import impact_tests
@@ -161,6 +204,27 @@ def main(argv=None, lancer_morceau=None, poste=None):
     if not liste:
         print("Aucun module de test ne correspond.")
         return 1
+    lancer_morceau = lancer_morceau or lancer
+    if dans_le_conteneur:
+        return _campagne_isolee(o, liste, lancer_morceau)
+    if not o.local and (o.serveur or not _refus_route(RACINE)):
+        import tests_serveur   # importé ici : sans accord, la suite ne charge rien de la route
+        commande = _commande_serveur(o, liste, tests_serveur.LIMITES, tests_serveur.COMMANDE_MAX_ELEMENTS,
+                                     tests_serveur.COMMANDE_MAX_OCTETS)
+
+        def au_poste(commande, dossier=None, attendre=True):   # le repli : la campagne locale d'aujourd'hui
+            return _au_poste(o, liste, lancer_morceau, poste)
+        try:
+            # l'accord est revérifié par `executer` (avec `--serveur` aussi : il force la route, jamais l'accord)
+            return tests_serveur.executer(commande, dossier=RACINE, attendre=not o.sans_attendre, forcer=o.serveur,
+                                          executer_poste=au_poste)
+        except KeyboardInterrupt:
+            return 130
+    return _au_poste(o, liste, lancer_morceau, poste)
+
+
+def _au_poste(o, liste, lancer_morceau, poste=None):
+    """La campagne au poste : le vrai verrou (une campagne à la fois), puis les morceaux isolés."""
     if poste is None:
         import campagne as poste   # une seule campagne à la fois sur le poste (outils/campagne.py)
     if os.environ.get(VARIABLE_ETAT, "").strip():
@@ -170,13 +234,19 @@ def main(argv=None, lancer_morceau=None, poste=None):
     if not poste.attendre_son_tour(RACINE, attendre=not o.sans_attendre, verrou=verrou, attentes=attentes):
         return 3
     try:
-        etat = tempfile.mkdtemp(prefix="myiafactory-etat-tests-", dir=str(Path(tempfile.gettempdir()).resolve()))
-        try:
-            return _campagne(o, liste, etat, lancer_morceau or lancer)
-        finally:
-            shutil.rmtree(etat, ignore_errors=True)
+        return _campagne_isolee(o, liste, lancer_morceau)
     finally:
         poste.liberer(verrou)
+
+
+def _campagne_isolee(o, liste, lancer_morceau):
+    """Les morceaux, chacun avec son dossier d'état sous `<temp>/myiafactory-etat-tests-…` (dans le conteneur : `/tmp`,
+    un tmpfs inscriptible ; `HOME=/tmp`, `TMPDIR` absent)."""
+    etat = tempfile.mkdtemp(prefix="myiafactory-etat-tests-", dir=str(Path(tempfile.gettempdir()).resolve()))
+    try:
+        return _campagne(o, liste, etat, lancer_morceau)
+    finally:
+        shutil.rmtree(etat, ignore_errors=True)
 
 
 def _campagne(o, liste, etat, lancer_morceau=lancer):

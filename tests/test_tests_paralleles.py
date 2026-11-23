@@ -43,10 +43,13 @@ class TestIsolationDesMorceaux(unittest.TestCase):
         self.addCleanup(self._t.cleanup)
         for p in (mock.patch.object(tests_paralleles, "DUREES", Path(self._t.name) / "durees.json"),
                   mock.patch.object(tests_paralleles, "modules", lambda filtres: ["test_a", "test_b", "test_c"]),
+                  # sans l'accord du serveur : le chemin du poste, jamais la vraie route (voir test_tests_paralleles_route)
+                  mock.patch.object(tests_paralleles, "_refus_route", lambda racine: "pas d'accord (test)"),
                   mock.patch.dict(os.environ)):
             p.start()
             self.addCleanup(p.stop)
         os.environ.pop(campagne.VARIABLE_ETAT, None)       # le lanceur tel que lancé depuis Git bash
+        os.environ.pop(tests_paralleles.CONTENEUR, None)
         self.envs, self.echouer = {}, {"test_b"}
 
     def lancer(self, morceau, env):

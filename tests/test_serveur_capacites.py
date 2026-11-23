@@ -30,7 +30,7 @@ class CatalogueTests(unittest.TestCase):
     def test_contenu_du_catalogue(self):
         self.assertEqual(set(sc.CATALOGUE), {"base", "durcissement", "android-build", "android-emulateur", "emulateur-image",
                                              "unity-cli", "unity-editeur", "session-graphique", "agent", "agent-abonnement", "tests-image", "tests-android",
-                                             "unity-licence", "unity-bac-a-sable"})
+                                             "unity-licence", "unity-bac-a-sable", "flutter-sdk"})
         self.assertEqual(sc.CATALOGUE["durcissement"].depend, ("base",))
         self.assertEqual(sc.CATALOGUE["android-emulateur"].depend, ("android-build",))
         self.assertEqual(sc.CATALOGUE["base"].etape, "docker")

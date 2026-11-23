@@ -76,22 +76,33 @@ test("la ligne de cle publique est affichee et copiable", async () => {
   assert.equal(boutons(sans, "Copier la ligne").length, 0);
 });
 
-test("le choix serveur est grise avec ce qui manque", () => {
+test("l'aptitude des lieux est en lecture seule : plus aucun bouton radio, le « Manque » reste", () => {
   const c = ecranServeurs(ETAT, {fetchFn: reseau({}), planifier: minuterie(), lieux: LIEUX});
-  const choix = c.tous((n) => n.tagName === "input" && n.type === "radio");
-  const serveur = choix.find((n) => n.value === "serveur");
-  assert.equal(serveur.disabled, true);
-  assert.equal(choix.find((n) => n.value === "poste").disabled, false);
-  assert.equal(choix.find((n) => n.value === "github").disabled, false);
+  assert.equal(c.tous((n) => n.tagName === "input" && n.type === "radio").length, 0);
+  const zone = c.tous((n) => n.className.includes("serveurs-lieux"))[0];
+  assert.equal(zone.tous((n) => n.tagName === "input").length, 0);
+  assert.match(zone.tous((n) => n.tagName === "h3")[0].textContent, /^Aptitude des lieux$/);
+  assert.doesNotMatch(c.textContent, /Où tournent les actions/);
   assert.match(c.textContent, /Manque : android-build/);
   assert.match(c.textContent, /Capacités manquantes sur « Mon serveur »/);
+  assert.match(c.textContent, /Ce n'est qu'un conseil : le choix reste au Directeur\./);
+  assert.match(c.className, /carte-serveurs/);
 });
 
-test("le choix serveur est actif quand les capacites sont presentes", () => {
+test("quand les capacites sont presentes, plus de « Manque »", () => {
   const c = ecranServeurs(ETAT, {fetchFn: reseau({}), planifier: minuterie(), lieux: LIEUX_OK});
-  const serveur = c.tous((n) => n.tagName === "input" && n.type === "radio").find((n) => n.value === "serveur");
-  assert.equal(serveur.disabled, false);
   assert.doesNotMatch(c.textContent, /Manque :/);
+});
+
+test("« Régler dans Réglages » appelle ouvrirReglages ; absent sans l'option", () => {
+  let appels = 0;
+  const c = ecranServeurs(ETAT, {fetchFn: reseau({}), planifier: minuterie(), lieux: LIEUX, ouvrirReglages: () => { appels++; }});
+  const lien = boutons(c, "Régler dans Réglages");
+  assert.equal(lien.length, 1);
+  lien[0].auteurs.click[0]();
+  assert.equal(appels, 1);
+  const sans = ecranServeurs(ETAT, {fetchFn: reseau({}), planifier: minuterie(), lieux: LIEUX});
+  assert.equal(boutons(sans, "Régler dans Réglages").length, 0);
 });
 
 test("chaque lieu porte sa couleur par classe, son libelle en toutes lettres, sa raison au survol et la legende", () => {
@@ -441,8 +452,9 @@ test("tester la connexion lance la sonde puis suit l etat par la minuterie injec
   assert.ok(m.taches[0].ms >= 1000);
   await m.tic();
   assert.match(c.textContent, /présente/);
-  const serveur = c.tous((n) => n.tagName === "input" && n.type === "radio").find((n) => n.value === "serveur");
-  assert.equal(serveur.disabled, false);
+  const pastilleServeur = c.tous((n) => n.className.includes("lieu-pastille") && n.attributs["data-lieu"] === "serveur")[0];
+  assert.match(pastilleServeur.className, /niveau-recommande/);     // les lieux relus au relevé redessinent la carte
+  assert.doesNotMatch(c.textContent, /Manque :/);
   for (let i = 0; i < 12 && m.taches.length; i++) await m.tic();
   assert.equal(m.taches.length, 0);
 });

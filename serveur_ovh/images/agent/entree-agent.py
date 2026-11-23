@@ -45,7 +45,8 @@ l'agent a commité n'est caché par .gitattributes, une fusion ou un renommage) 
 jouent. L'hôte y cherche le jeton (grep -F). Code 0 : texte complet ; 3 : contrôle impossible (l'hôte n'en rapatrie rien).
 
 Environnement posé par lancer_agent.sh : HOME et AGENT_DUREE_S (la durée duree_s passée à l'enveloppe, celle de son veilleur ;
-elle l'emporte sur limites.duree_s de demande.json : l'échéance interne et celle du veilleur partent de la même valeur).
+elle l'emporte sur limites.duree_s de demande.json : l'échéance interne et celle du veilleur partent de la même valeur) ;
+AGENT_FLUTTER=1 pour un projet Flutter (SDK de l'hôte en lecture seule sur /opt/flutter-sdk : `environnement_flutter`).
 Réservées aux tests (jamais posées par lancer_agent.sh) : AGENT_RACINE (préfixe des chemins /entree, /travail, /sortie,
 /maison, /run/identifiants/jeton ; « / » par défaut) et AGENT_CLAUDE (commande de claude, liste JSON ; ["claude"] par défaut).
 """
@@ -104,6 +105,9 @@ MOTIF_BASE = re.compile(r"[0-9a-f]{40}")
 MOTIF_ID = re.compile(r"t[0-9]{8}-[0-9]{6}-[0-9a-f]{4}")
 MOTIF_JETON = re.compile(r"[A-Za-z0-9._-]{20,400}")
 SANS_LIEN = getattr(os, "O_NOFOLLOW", 0)
+# Projet Flutter : chemins FIXES des SDK de l'hôte montés en lecture seule par lancer_agent.sh (environnement_flutter).
+FLUTTER_RACINE = "/opt/flutter-sdk"
+ANDROID_RACINE = "/opt/android-sdk"
 
 
 class Refus(Exception):
@@ -580,6 +584,19 @@ def signal_recu(_numero, _cadre):
         tuer_groupe(SIGNAL["proc"])
 
 
+def environnement_flutter(c, chemin):
+    """Projet Flutter (AGENT_FLUTTER=1, posé par lancer_agent.sh avec le SDK de l'hôte monté en lecture seule sur
+    /opt/flutter-sdk) : les variables de claude et de ses outils, toutes FIXES (rien n'est lu du projet ni de la demande) ;
+    le cache des paquets (pub get) sous /maison, inscriptible et gardé à la reprise. Toute autre valeur : rien."""
+    if os.environ.get("AGENT_FLUTTER") != "1":
+        return {}
+    env = {"PATH": f"{FLUTTER_RACINE}/bin:{chemin}", "FLUTTER_ROOT": FLUTTER_RACINE,
+           "PUB_CACHE": os.path.join(c["maison"], ".pub-cache"), "FLUTTER_SUPPRESS_ANALYTICS": "true", "CI": "true"}
+    if os.path.isdir(os.path.join(os.environ.get("AGENT_RACINE") or "/", ANDROID_RACINE.lstrip("/"))):
+        env.update(ANDROID_HOME=ANDROID_RACINE, ANDROID_SDK_ROOT=ANDROID_RACINE)
+    return env
+
+
 def lancer_claude(c, options, d, jeton, depot, erreurs):
     """Lance claude ; rend (code, echeance) : code 128 + signal s'il a été tué, non nul si le flux a été coupé, l'échéance
     interne atteinte ou un signal reçu ; echeance vrai si l'échéance interne l'a arrêté."""
@@ -588,6 +605,7 @@ def lancer_claude(c, options, d, jeton, depot, erreurs):
     env = {"PATH": os.environ.get("PATH", "/usr/local/bin:/usr/bin:/bin"), "HOME": c["maison"], "LANG": "C.UTF-8",
            "BASH_DEFAULT_TIMEOUT_MS": "1800000", "BASH_MAX_TIMEOUT_MS": "1800000", "DISABLE_AUTOUPDATER": "1",
            "CLAUDE_CODE_OAUTH_TOKEN": jeton}
+    env.update(environnement_flutter(c, env["PATH"]))
     if os.name == "nt" and os.environ.get("SYSTEMROOT"):
         env["SYSTEMROOT"] = os.environ["SYSTEMROOT"]
     flux = Borne(os.path.join(c["sortie"], "flux.jsonl"), d["flux_octets"],

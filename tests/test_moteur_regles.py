@@ -7,6 +7,7 @@ from moteur import agents, appel, detache, jugement, regles
 from orchestrateur import factory as fa
 from orchestrateur import workflows as wf
 from tests.orch_aide import AvecProjet
+from tests.test_reglages_effectif import bureau_avec
 
 FICHE_REMI = ("Clé : rel-1\nPrénom : Rémi\nRôle : relecteur\nService : dev\nModèle : Sonnet\nLieu : local\n\n"
               "Relit.\n\n## Leçons\n")
@@ -856,6 +857,31 @@ class Serie(Base):
         self.assertEqual({v["phase"] for v in self.etat["elements"].values()}, {regles.A_LIVRER})
         self.assertTrue(regles.livrer_si_calme(self.projet, self.etat, force=True))   # le clic livre
         self.assertNotIn("attente_livraison", self.etat)
+
+    def a_la_porte_de_la_livraison(self):
+        self.livrer_deux()
+        for v in self.etat["elements"].values():
+            v["phase"], v["taches"] = regles.A_LIVRER, []
+            v["pas"] = len(regles._production(self.projet, "f1")) - 1
+
+    def test_la_livraison_sur_demande_posee_au_global_retient_la_livraison(self):
+        """Page Réglages : « Livrer seulement sur demande » coché au global agit sur un projet sans valeur propre."""
+        self.a_la_porte_de_la_livraison()
+        regl = self.dossier / "reglages.json"
+        self.projet.fichier_reglages = regl
+        self.projet.fichier_bureau = bureau_avec(regl, reglages={"livraison_sur_demande": True})
+        self.assertFalse(regles.livrer_si_calme(self.projet, self.etat))
+        self.assertIn("Livrer maintenant", self.etat["attente_livraison"]["texte"])
+
+    def test_un_fichier_du_bureau_illisible_laisse_le_reglage_du_projet(self):
+        self.a_la_porte_de_la_livraison()
+        regl = self.dossier / "reglages.json"
+        regl.write_text(json.dumps({"livraison_sur_demande": True}), encoding="utf-8")
+        abime = self.dossier / "bureau-abime.json"
+        abime.write_text("[1, 2", encoding="utf-8")
+        self.projet.fichier_reglages, self.projet.fichier_bureau = regl, abime
+        self.assertFalse(regles.livrer_si_calme(self.projet, self.etat))
+        self.assertIn("Livrer maintenant", self.etat["attente_livraison"]["texte"])
 
     def test_sans_le_reglage_la_livraison_part_au_calme(self):
         self.livrer_deux()
@@ -1820,6 +1846,15 @@ class ParcoursSelonLaTaille(Base):
     def test_le_reglage_une_session_marque_le_cahier_d_une_evolution_moyenne(self):
         self.cahier_de_taille({"valeur": "moyenne", "pourquoi": "Trois écrans différents."})
         self.projet.une_session_moyenne = True
+        self.traiter(type="cahier", fonctionnalite="f1", verdict="valider")
+        self.assertIs(self.fonc()["cahier"].get("une_session"), True)
+
+    def test_le_reglage_une_session_pose_au_global_marque_le_cahier(self):
+        """Page Réglages : « Évolution moyenne : une seule session » coché au global agit sur un projet sans valeur."""
+        self.cahier_de_taille({"valeur": "moyenne", "pourquoi": "Trois écrans différents."})
+        regl = self.dossier / "reglages.json"
+        self.projet.fichier_reglages = regl
+        self.projet.fichier_bureau = bureau_avec(regl, reglages={"une_session_moyenne": True})
         self.traiter(type="cahier", fonctionnalite="f1", verdict="valider")
         self.assertIs(self.fonc()["cahier"].get("une_session"), True)
 

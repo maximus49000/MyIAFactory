@@ -9,6 +9,7 @@
   "node": "22",
   "claude_code": "2.1.328",
   "android_sdk": {"platform": "android-36", "build_tools": "36.0.0", "emulator_image": "system-images;android-34;google_apis;x86_64"},
+  "flutter": {"version": "3.47.1", "canal": "stable", "manifeste": "https://storage.googleapis.com/flutter_infra_release/releases/releases_linux.json", "note": "archive officielle verifiee par le sha256 du manifeste avant extraction, installee sur l hote dans ~/flutter-sdk (jamais dans une image), montee en lecture seule chez les agents d un projet Flutter"},
   "unity_cli": "script officiel https://unity.com/install.sh telecharge puis verifie (non vide, #!) avant execution, lance avec UNITY_CLI_SKIP_SETUP=1 (sans son etape finale qui installerait des skills dans les clients d'agents) ; il telecharge lui-meme le binaire et verifie son SHA-256 ; il peut ajouter ~/.local/bin au PATH du profil shell (~/.bashrc) ; installation dans ~/.local/bin/unity (version non epinglee : suit l'outil officiel) ; aucun editeur installe",
   "unity_hub": "depot apt https://hub.unity3d.com/linux/repos/deb stable main, cle https://hub.unity3d.com/linux/keys/public, paquet unityhub (version non epinglee : suit le depot officiel)"
 }

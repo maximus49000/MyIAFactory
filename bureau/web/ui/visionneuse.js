@@ -8,6 +8,12 @@ import {el} from "./dom.js";
 import {imagesLegendees} from "./texte.js";
 import {reessayerImage} from "./reessai.js";
 
+// Une maquette HTML (`cahier.maquette` seul) : une page de l'agent, donc non fiable. Elle n'est montrée que dans un
+// <iframe sandbox="allow-scripts"> (jamais allow-same-origin, allow-top-navigation, allow-popups ni allow-forms) dont la
+// source /api/maquette porte une CSP `sandbox` : sans origine, sans réseau, sans cookie ni stockage du bureau.
+export const estMaquetteHtml = (chemin) => /\.html?$/i.test(String(chemin || ""));
+export const SANDBOX_MAQUETTE = "allow-scripts";
+
 // L'image voisine dans une série de n images (on fait le tour : après la dernière, la première).
 export function voisine(n, i, sens) {
   return n > 0 ? (i + sens + n) % n : 0;
@@ -31,6 +37,15 @@ export function ouvrirVisionneuse(images, depart, url, declencheur = document.ac
   fond.setAttribute("aria-label", "Images du message");
   const img = document.createElement("img");
   reessayerImage(img);
+  const cadre = document.createElement("iframe");           // la maquette HTML : bac à sable strict, jamais d'origine
+  cadre.setAttribute("sandbox", SANDBOX_MAQUETTE);
+  cadre.setAttribute("referrerpolicy", "no-referrer");
+  cadre.className = "visionneuse-maquette";
+  cadre.hidden = true;
+  const onglet = el("a", "visionneuse-onglet", "Ouvrir dans un onglet");
+  onglet.setAttribute("target", "_blank");
+  onglet.setAttribute("rel", "noopener noreferrer");
+  onglet.hidden = true;
   const compteur = el("div", "visionneuse-compteur", "");
   const fermer = el("button", "visionneuse-fermer", "×");
   const avant = el("button", "visionneuse-fleche gauche", "‹");
@@ -41,7 +56,18 @@ export function ouvrirVisionneuse(images, depart, url, declencheur = document.ac
   }
   const legende = el("p", "visionneuse-legende", "");
   const montrer = () => {
-    img.src = url(liste[i].chemin);
+    const html = estMaquetteHtml(liste[i].chemin);
+    img.hidden = html;
+    cadre.hidden = onglet.hidden = !html;
+    if (html) {
+      img.removeAttribute?.("src");
+      cadre.src = url(liste[i].chemin);
+      cadre.setAttribute("title", liste[i].legende || "Maquette interactive");
+      onglet.href = url(liste[i].chemin);
+    } else {
+      cadre.removeAttribute?.("src");
+      img.src = url(liste[i].chemin);
+    }
     img.alt = liste[i].legende || `Image ${i + 1} sur ${liste.length}`;
     legende.textContent = liste[i].legende;
     legende.hidden = !liste[i].legende;
@@ -57,7 +83,7 @@ export function ouvrirVisionneuse(images, depart, url, declencheur = document.ac
     else if (ev.key === "ArrowRight") { ev.stopPropagation(); if (liste.length > 1) aller(1); }
     else if (ev.key === "Tab") {
       ev.stopPropagation();
-      const f = [fermer, avant, apres].filter((b) => !b.hidden);
+      const f = [fermer, onglet, avant, apres].filter((b) => !b.hidden);
       const k = f.indexOf(document.activeElement);
       ev.preventDefault();
       f[(k + (ev.shiftKey ? -1 : 1) + f.length) % f.length].focus();
@@ -77,7 +103,7 @@ export function ouvrirVisionneuse(images, depart, url, declencheur = document.ac
   apres.addEventListener("click", () => aller(1));
   fond.addEventListener("click", (ev) => { if (ev.target === fond) clore(); });
   document.addEventListener("keydown", clavier, true);
-  fond.append(img, legende, avant, apres, compteur, fermer);
+  fond.append(img, cadre, onglet, legende, avant, apres, compteur, fermer);
   document.body.classList?.add("visionneuse-ouverte");
   document.body.append(fond);
   courante = clore;

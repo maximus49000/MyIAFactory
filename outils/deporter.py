@@ -64,6 +64,7 @@ import deport_depot  # noqa: E402
 import github_actions  # noqa: E402
 from bureau import deport_conso  # noqa: E402
 from bureau.deport import a_attendre, lieu_effectif  # noqa: E402
+from bureau.registre import lieux_du_type  # noqa: E402
 from bureau.deport_types import (MSG_REGLEZ_SERVEUR, SERVIES_AU_SERVEUR, catalogue_du_projet,  # noqa: E402
                                  racine_du_projet, refus_accord, refus_route, routee_au_serveur, servie_au_serveur)
 
@@ -150,26 +151,33 @@ def retirer_attente(id_, repertoire=EN_COURS):
 
 # --- lieux -------------------------------------------------------------------------------------------------------
 
-def _lieux_ecrits(chemin):
-    """Les lieux écrits tels quels dans la clé `deport` d'un fichier JSON (sans les défauts) ; {} si illisible."""
+def _json_de(chemin):
+    """Le contenu JSON d'un fichier ; {} s'il est absent, illisible ou n'est pas un objet."""
     try:
         donnees = json.loads(Path(chemin).read_text(encoding="utf-8-sig"))
-    except (OSError, ValueError):
+    except (OSError, ValueError, RecursionError):
         return {}
-    d = donnees.get("deport") if isinstance(donnees, dict) else None
+    return donnees if isinstance(donnees, dict) else {}
+
+
+def _lieux_ecrits(chemin):
+    """Les lieux écrits tels quels dans la clé `deport` d'un fichier JSON (sans les défauts) ; {} si illisible."""
+    d = _json_de(chemin).get("deport")
     lieux = d.get("lieux") if isinstance(d, dict) else None
     return dict(lieux) if isinstance(lieux, dict) else {}
 
 
 def _lieux(dossier, reglages, bureau):
-    """`(lieux effectifs {action: lieu}, catalogue)` : surcharge du projet, sinon défaut du bureau, sinon poste. Le
-    projet est le plus proche dossier (`dossier` ou ses parents) qui contient `.factory/`."""
+    """`(lieux effectifs {action: lieu}, catalogue)` : surcharge du projet, puis niveau type du bureau
+    (`types.<genre>.deport.lieux`), puis défaut global du bureau, sinon poste. Le projet est le plus proche dossier
+    (`dossier` ou ses parents) qui contient `.factory/`."""
     projet = racine_du_projet(dossier)
-    catalogue = catalogue_du_projet(projet)[1]
+    genre, catalogue = catalogue_du_projet(projet)
     chemin = Path(reglages) if reglages else Path(projet) / ".factory" / "reglages.json"
     globaux, projet = _lieux_ecrits(bureau), _lieux_ecrits(chemin)
+    du_type = lieux_du_type(_json_de(bureau), genre)
     # une action au seul serveur ne prend que le réglage du projet, sinon None (non réglée : refusée)
-    return {a: lieu_effectif(globaux, projet, a, catalogue) for a in catalogue}, catalogue
+    return {a: lieu_effectif(globaux, projet, a, catalogue, type_=du_type) for a in catalogue}, catalogue
 
 
 def lieux_refuses(lieux, action, catalogue):

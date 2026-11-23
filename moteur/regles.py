@@ -216,9 +216,13 @@ class Projet:
         self.verifier_environnement = verifier_environnement or environnement.verifier
         self.bureau = bureau              # le fichier du bureau : les mesures d'usage par genre servent à l'estimation
         self.fichier_reglages = None      # les réglages du bureau pour ce projet (posé à l'ouverture), relus à chaque passage
+        # le fichier du bureau dont vient le projet (`boucle.projets_du_bureau`) : ses niveaux global et type entrent
+        # dans les valeurs effectives des réglages (`reglage_effectif`) ; None pour un projet ouvert seul
+        self.fichier_bureau = None
         self.lecons_auto = False          # réglage `lecons_auto` : les leçons proposées sont validées d'elles-mêmes
         self.analyse_blocages = False     # réglage `analyse_blocages` (vrai par défaut à l'ouverture) : le Chef analyse
         self.livraison_sur_demande = False   # réglage `livraison_sur_demande` : la livraison attend « Livrer maintenant »
+        self.livraison_github = False        # réglage `livraison_github` : les livrables terminés partent en release GitHub
         self.une_session_moyenne = False     # réglage `une_session_moyenne` : code, tests et revue d'une évolution moyenne
         self.ligne_a_dire = None     # dite une seule fois au bureau, dans la réponse de la première demande traitée
         base = self.factory.resolve().parent
@@ -2431,7 +2435,8 @@ def _sur_passer_polyvalent(projet, demande, etat):
 
 def _sur_depot_git(projet, demande, etat):
     """Le clic « Créer le dépôt Git » : dépôt local si besoin, dépôt GitHub privé et poussée (`lancer depot`)."""
-    r = lancer(projet, "depot", {"action": "creer", "confirme": True})
+    r = lancer(projet, "depot", {"action": "creer", "confirme": True,
+                                  **({"allegement": True} if demande.get("allegement") is True else {})})
     _terminer(projet, {"demande": demande["id"]}, r["texte"])
     projet._cloud_raison = (None, 0.0)
     return []
@@ -2568,12 +2573,38 @@ def _rejouer_le_retour(projet, etat, fid):
     return _retoucher_prototype(projet, etat, fid, f"{marque}de l'utilisateur, resté sans suite :\n{texte}")
 
 
-def _prototype_fait(projet, etat, f):
-    """L'élément du prototype est fait (sa méthode est validée) : la série ne le reprend pas."""
+def _suite_du_prototype(projet, fid, taches):
+    """Le rang de la première étape du flux que le prototype n'a pas tenue. Le prototype est une seule tâche, du rôle de
+    la première étape de production : il tient les premières étapes de ce rôle et les validations qui les suivent (le
+    Directeur a validé le prototype) ; les étapes des autres rôles restent à faire pour son élément (cas réel, FM_Stats :
+    la maquette validée, la fonctionnalité était déclarée terminée sans code, ni tests, ni livraison). Sans tâche de
+    prototype (une méthode reprise), rien n'a été fait : tout le flux reste."""
+    roles = [t.get("role") for t in taches if str(t.get("etape")) == "prototype"]
+    pas = _production(projet, fid)
+    k = 0
+    while roles and roles[-1] and k < len(pas) and (wf.est_validation(pas[k]) or pas[k].get("role") == roles[-1]):
+        k += 1
+    return k
+
+
+def _taches_du_prototype(projet, fid, eid):
+    detail = lancer(projet, "detail", {"fonctionnalite": fid, "taches": True})
+    return [t for t in detail.get("taches") or [] if t.get("element") == eid and str(t.get("etape")) == "prototype"]
+
+
+def _prototype_fait(projet, etat, f, taches=None):
+    """L'élément du prototype a fini son prototype (sa méthode est validée) : il est fait si le prototype a tenu tout le
+    flux, sinon il entre dans la série à la première étape que le prototype n'a pas tenue (`_suite_du_prototype`)."""
     e = _element_du_prototype(projet, etat, f)
-    if e:
-        _m(etat, "elements")[f"{f['id']}/{e['id']}"] = {"fid": f["id"], "element": e, "phase": "fait", "pas": 0,
+    if not e:
+        return
+    v = _m(etat, "elements")[f"{f['id']}/{e['id']}"] = {"fid": f["id"], "element": e, "phase": "fait", "pas": 0,
                                                         "tour": 0, "corrections": 0, "taches": []}
+    debut = _suite_du_prototype(projet, f["id"], _taches_du_prototype(projet, f["id"], e["id"]) if taches is None
+                                else taches)
+    if debut < len(_production(projet, f["id"])):
+        v.update(phase="flux", pas=debut, attendus=0, rapports=[])
+        _tache_de_flux(projet, etat, v)
 
 
 def _reponse_a_une_question(projet, etat, demande, f, accord):
@@ -2668,14 +2699,18 @@ def _attente(court, fid, etat):
 # --- Les places d'agents et les validations-barrières (conception 2026-11-12-parallelisme-design.md).
 
 def _places(projet, court, fac=None):
-    """Les places du projet : `{locaux, cloud}` libres (le maximum moins les tâches actives tenues par un agent de ce
-    lieu) et `total` (les deux maximums). Les places cloud effectives : voir `depart.places_cloud`."""
+    """Les places du projet : `{locaux, cloud, serveur}` libres (le maximum moins les tâches actives tenues par un agent
+    de ce lieu) et `total` (les maximums local et cloud, comme avant). Les places cloud effectives : voir
+    `depart.places_cloud` ; les places serveur (`agents_serveur_max`, 0 par défaut) sont comptées à part, jamais prises
+    sur les places locales."""
     fac = fac or _factory(projet)
     lieux = {a["cle"]: a["lieu"] for a in court["agents"]}
     actifs = [lieux[t["agent"]] for t in court["taches"] if t["active"] and t.get("agent") in lieux]
     cloud_max = dep.places_cloud(fac.get("agents_cloud_max"), projet.cloud_max, "cloud" in lieux.values())
     return {"locaux": max(0, fac["agents_locaux_max"] - actifs.count("local")),
-            "cloud": max(0, cloud_max - actifs.count("cloud")), "total": fac["agents_locaux_max"] + cloud_max}
+            "cloud": max(0, cloud_max - actifs.count("cloud")),
+            "serveur": max(0, (fac.get("agents_serveur_max") or 0) - actifs.count("serveur")),
+            "total": fac["agents_locaux_max"] + cloud_max}
 
 
 def _concerne(element, etape_id):
@@ -3060,8 +3095,11 @@ def _ligne_du_lieu(ctx, lieu, ensuite=False):
     s = "s" if n > 1 else ""
     accord = s if mot == "locale" else ""
     noms = ", ".join(dict.fromkeys(ctx.prenoms.get(o["agent"], o["agent"]) for o in occupants))
-    if lieu == "serveur" and n and outil.serveur_hors_ligne():
+    raison = outil.raison_serveur(ctx.fac) if lieu == "serveur" and n else None
+    if raison == "hors ligne":
         ligne = f"{quoi} ; le serveur est hors ligne (aucune sonde récente ne le dit prêt pour les agents)"
+    elif raison:
+        ligne = f"{quoi} ; {raison} (projet Flutter : capacité flutter-sdk à installer)"
     elif occupants and len(occupants) >= n:
         ligne = f"{quoi} ; {n} place{s} {mot}{accord}, occupée{s} par {noms}"
     elif n == 0:
@@ -3090,7 +3128,7 @@ def _raison_agent(ctx, t, lieu):
         return "aucun agent cloud libre", "aucun agent cloud libre", detail, "quand un agent cloud se libérera"
     occupants = ctx.occupants()
     s = "s" if ctx.places["total"] > 1 else ""
-    if occupants and ctx.places["locaux"] == 0 and ctx.places["cloud"] == 0:
+    if occupants and ctx.places["locaux"] == 0 and ctx.places["cloud"] == 0 and ctx.places["serveur"] == 0:
         detail = [f"{ctx.places['total']} place{s} au total, toutes prises"]
     else:
         detail = [f"aucun agent libre ne peut la prendre ({t.get('role') or 'sans rôle'})"]
@@ -3220,8 +3258,8 @@ def _demarrer_en_attente(projet, etat, fid):
         etat["charge_rouge"] = mesure       # la raison des tâches retenues (voir `noter_les_attentes`)
         etat["attente_charge"] = {"texte": texte_d_attente_de_charge(mesure), "charge": mesure["charge"],
                                   "plafond": mesure["plafond"], "taches": [t["id"] for t in attente]}
-        places["locaux"] = 0        # un agent cloud ne compte pas dans la charge du poste
-        if not places["cloud"]:
+        places["locaux"] = 0        # un agent cloud (ou serveur) ne compte pas dans la charge du poste
+        if not places["cloud"] and not places["serveur"]:
             return []
     actions, solos, en_flux = [], [], []
     for t in attente:
@@ -3242,25 +3280,28 @@ def _demarrer_en_attente(projet, etat, fid):
                                         else [lot])]
     polyvalents = any(_polyvalent(a) for a in court["agents"])
     if polyvalents:      # n'importe quel agent libre peut prendre une tâche : on occupe d'abord toutes les places
-        lots = _repartir_sur_les_places(lots, places["locaux"] + places["cloud"])
+        lots = _repartir_sur_les_places(lots, places["locaux"] + places["cloud"] + places["serveur"])
     # les tâches qui mènent à une validation du Directeur d'abord (l'ordre d'avant, sinon)
     lots.sort(key=lambda lot: min(0 if _avant_une_validation(par_id[i], barrieres) else 1 for i in lot["ids"]))
     parties = set()
     for lot in lots:
-        if not places["locaux"] and not places["cloud"]:
+        if not places["locaux"] and not places["cloud"] and not places["serveur"]:
             break
         premiere = par_id[lot["ids"][0]]
         # le lieu que les étapes du lot imposent (`lieu` écrit), sinon leurs métiers (projet polyvalent : `Lieu :` d'un brief)
         reserves = {_lieu_reserve(projet, court, par_id[i], fac) for i in lot["ids"]}
         local_ok = places["locaux"] > 0 and "cloud" not in reserves
         cloud_ok = places["cloud"] > 0 and "local" not in reserves
+        # le serveur : ses propres places (`agents_serveur_max`), jamais une tâche qui exige le poste ou le cloud
+        serveur_ok = places["serveur"] > 0 and not reserves & {"local", "cloud"}
         if polyvalents and mn.rang(_modele_voulu(projet, court, premiere, lot["modele"])) >= mn.rang(mn.FABLE):
             accord = premiere.get("fable_accordee")
             if accord is None:       # la décision au bureau de direction, avant tout départ ; la tâche attend
                 _demander_fable(projet, court, premiere)
                 continue
-            if accord is True:       # le cloud ne fait jamais tourner Fable : une place locale
-                cloud_ok = False
+            if accord is True:       # le cloud ne fait jamais tourner Fable (ni le serveur, par prudence) : le poste
+                cloud_ok = serveur_ok = False
+        ok = {"local": local_ok, "cloud": cloud_ok, "serveur": serveur_ok}
         voulu = premiere.get("agent") if premiere.get("etape") == "cadrage" or premiere["id"] in etat["a_lancer"] \
             else None
         ancien = next((a for a in court["agents"] if a["cle"] == premiere.get("agent")), None)
@@ -3269,17 +3310,18 @@ def _demarrer_en_attente(projet, etat, fid):
         agent = None
         if voulu is not None:
             libre = next((a for a in court["agents"] if a["cle"] == voulu), {})
-            if libre.get("libre", False) and (cloud_ok if libre.get("lieu") == "cloud" else local_ok):
+            if libre.get("libre", False) and ok.get(libre.get("lieu"), local_ok):
                 agent = voulu
             elif not (libre and (_polyvalent(libre) or _hors_du_lieu(libre, reserves))
                       and premiere.get("etape") != "cadrage"):
                 continue       # un spécialiste à l'ancienne, ou l'agent attitré du cadrage : la tâche l'attend
         if agent is None:      # (un agent polyvalent occupé : n'importe quel autre agent libre la reprend)
-            agent = _choisir_agent(projet, etat, court, premiere, lot["modele"], local_ok=local_ok, cloud_ok=cloud_ok)
+            agent = _choisir_agent(projet, etat, court, premiere, lot["modele"], local_ok=local_ok, cloud_ok=cloud_ok,
+                                   serveur_ok=serveur_ok)
             if agent is None:
                 continue
         lieu = next((a["lieu"] for a in court["agents"] if a["cle"] == agent), "local")
-        places["cloud" if lieu == "cloud" else "locaux"] -= 1
+        places[{"cloud": "cloud", "serveur": "serveur"}.get(lieu, "locaux")] -= 1
         actions.append(_partir(projet, etat, court, agent, lot["ids"], lot["lot"], par_id, modele_voulu=lot["modele"]))
         parties.update(lot["ids"])
         court = _etat(projet)    # l'agent est pris : le prochain lot voit l'état à jour
@@ -3334,9 +3376,10 @@ def ramener_sur_le_poste(projet, etat):
 def _hors_du_lieu(agent, reserves):
     """Vrai si l'agent est là où la tâche ne peut pas tourner (cloud quand elle exige le poste, ou l'inverse) : la
     tâche ne l'attend pas, un autre agent du bon lieu la prend (une correction de livraison reprise par l'agent cloud
-    qui l'avait ratée faute de SDK, MyFridgeCleaner t52)."""
-    lieu = "cloud" if agent.get("lieu") == "cloud" else "local"
-    return ("local" in reserves and lieu == "cloud") or ("cloud" in reserves and lieu == "local")
+    qui l'avait ratée faute de SDK, MyFridgeCleaner t52). Un agent du serveur est hors du lieu d'une tâche qui exige le
+    poste ou le cloud."""
+    lieu = agent.get("lieu") if agent.get("lieu") in ("cloud", "serveur") else "local"
+    return ("local" in reserves and lieu != "local") or ("cloud" in reserves and lieu != "cloud")
 
 
 def _repartir_sur_les_places(lots, libres):
@@ -3415,19 +3458,58 @@ def demarrer_installation(projet, etat, tid):
     return [_partir(projet, etat, court, agent, [tid], None, {tid: t})]
 
 
-def _choisir_agent(projet, etat, court, tache, modele, local_ok=True, cloud_ok=None):
+def _ordre_des_lieux(fac, role):
+    """L'ordre des lieux où chercher l'agent d'une tâche du rôle `role` (`depart.ordre_du_metier`), ou `None` pour un
+    projet à l'ancienne (aucune place serveur, ni ordre ni ordre par métier réglés) : le choix d'avant, à l'identique.
+    Même règle que `outil._bascule_des_lieux`."""
+    serveur = fac.get("agents_serveur_max") or 0
+    regle = fac.get("ordre_lieux") not in (None, dep.ORDRE_PAR_DEFAUT) or bool(fac.get("ordre_lieux_par_metier"))
+    return dep.ordre_du_metier(fac, role) if serveur or regle else None
+
+
+def _choisir_agent(projet, etat, court, tache, modele, local_ok=True, cloud_ok=None, serveur_ok=None):
     """L'agent qui prend la tâche de modèle nécessaire `modele` : un agent local libre dont le plafond (le modèle de sa
     fiche) suffit, le plus petit d'abord (s'il reste une place locale) ; sinon, en renfort, un agent cloud libre au
     plafond suffisant (s'il reste une place cloud, voir `agents_cloud_max`, et si le projet est sur GitHub) ; sinon, si
     le cloud est impossible, l'agent local équivalent (un autre du même rôle, la tâche ramenée à son plafond), en le
-    disant au bureau. `cloud_ok` absent : les places cloud du projet sont recomptées."""
+    disant au bureau. `cloud_ok` absent : les places cloud du projet sont recomptées.
+
+    Un projet qui règle ses lieux (places serveur, `ordre_lieux`, `ordre_lieux_par_metier`, voir `_ordre_des_lieux`) et
+    un départ qui dit s'il reste une place serveur (`serveur_ok` booléen) : les lieux sont essayés dans l'ordre du projet
+    (ou du métier), chacun seulement s'il lui reste une place ; un lieu absent de l'ordre n'est jamais utilisé. Le lieu
+    imposé par l'étape ou le métier reste lu par `agent-libre` (une étape `lieu: local` refuse le serveur). `serveur_ok`
+    absent (une installation, qui s'installe sur le poste) : le choix d'avant."""
+    role = tache.get("role")
+    ordre = _ordre_des_lieux(_factory(projet), role) if serveur_ok is not None else None
+    if ordre is None:
+        return _agent_local(projet, tache, modele, local_ok) \
+            or _agent_cloud(projet, etat, court, tache, modele, local_ok, cloud_ok)
+    for lieu in ordre:
+        if lieu == "local":
+            cle = _agent_local(projet, tache, modele, local_ok)
+        elif lieu == "serveur":
+            cle = _agent_local(projet, tache, modele, serveur_ok, lieu="serveur")
+        else:      # le repli sur l'agent local équivalent, seulement si le local fait partie de l'ordre
+            cle = _agent_cloud(projet, etat, court, tache, modele, local_ok and "local" in ordre, cloud_ok)
+        if cle:
+            return cle
+    return None
+
+
+def _agent_local(projet, tache, modele, ok, lieu="local"):
+    """L'agent libre du poste (ou du serveur, `lieu`) pour la tâche, par `agent-libre` (le `lieu` de son étape et le
+    métier y sont lus), ou `None` (`ok` faux : plus de place à ce lieu)."""
+    if not ok:
+        return None
+    de_la_tache = {"tache": tache["id"]} if tache.get("id") else {}    # le `lieu` de son étape
+    return lancer(projet, "agent-libre", {"role": tache.get("role"), "lieu": lieu,
+                                          **({"modele": modele} if modele else {}), **de_la_tache})["agent"]
+
+
+def _agent_cloud(projet, etat, court, tache, modele, local_ok, cloud_ok):
+    """Le renfort cloud de `_choisir_agent` (et son repli sur l'agent local équivalent si le cloud est impossible)."""
     role = tache.get("role")
     de_la_tache = {"tache": tache["id"]} if tache.get("id") else {}    # le `lieu` de son étape
-    if local_ok:
-        local = lancer(projet, "agent-libre", {"role": role, "lieu": "local", **({"modele": modele} if modele else {}),
-                                               **de_la_tache})
-        if local["agent"]:
-            return local["agent"]
     clouds = {a["cle"] for a in court["agents"] if a["lieu"] == "cloud"}
     # Le modèle de la fiche est un plafond (local comme cloud) : l'agent prend une tâche de ce modèle ou d'un modèle
     # moindre, et la fait tourner sur le modèle de la tâche (voir `_partir`) ; jamais une tâche d'un modèle au-dessus.
@@ -3915,7 +3997,8 @@ def _matiere(projet, etat, t):
                         "sans jargon : ce qu'on veut obtenir et pourquoi), affiché en tête de la tâche ; précise-le "
                         "ensuite si les réponses le changent. **Une seule série de questions** : dès que l'utilisateur y a répondu, écris le "
                         "cahier des charges sans reposer de questions (ce qui reste ouvert, choisis-le toi-même et dis-le "
-                        "dans ton message). Le cahier : une maquette (images PNG ou JPEG que tu fabriques, écrites dans "
+                        "dans ton message). Le cahier : une maquette (images PNG ou JPEG, ou page HTML autonome, y compris dynamique : un seul fichier, styles "
+                        "et scripts en ligne, sans ressource externe ni réseau, 2 Mo au plus ; écrites dans "
                         f"`{_dossier_des_pieces(projet)}/{fid}/`) et la liste des étapes à réaliser, dans l'ordre : "
                         'rends `"cahier": {"maquette": [{"chemin": "…", "legende": "…"}], "etapes": [textes]}` : chaque '
                         "maquette a sa légende, une phrase (160 caractères au plus) qui dit à quoi elle correspond (écran, "
@@ -5834,6 +5917,7 @@ def avancer(projet, etat):
             lancer(projet, "decision", {"action": "lever", "id": d["id"]})
     _liberer_les_lots_orphelins(projet, etat, _etat(projet))
     livrer_si_calme(projet, etat, force=bool(etat.pop("livrer_maintenant", False)))
+    _publier_les_livrables(projet)
     actions += _demarrer_en_attente(projet, etat, None)
     if not projet.pause_globale:
         _noter_les_places_libres(projet, etat)
@@ -6026,7 +6110,9 @@ def _reprendre_l_element(projet, etat, f, element, taches):
     pas = [t for t in taches if _pas_de_serie(t)]
     if not pas:
         if any(str(t.get("etape")) == "prototype" for t in taches) or all(t["colonne"] == "fait" for t in taches):
-            _etat_element(etat, fid, element)["phase"] = "fait"     # l'élément du prototype, fait avec la méthode
+            # l'élément du prototype : la suite de son flux est créée à la validation de la méthode (`_prototype_fait`) ;
+            # sans aucune tâche de flux, c'est une série lancée avant cette règle, il reste fait (rien n'est rouvert)
+            _etat_element(etat, fid, element)["phase"] = "fait"
         return None       # sinon une tâche à part, encore ouverte : il sera repris quand elle sera faite
     etapes = [str(t["etape"]).split(":", 1)[1] for t in pas
               if str(t["etape"]).startswith((ETAPES_DE_FLUX, ETAPES_DE_VALIDATION))]
@@ -6214,6 +6300,18 @@ def _sur_livrer_maintenant(projet, demande, etat):
 _SUR["livrer_maintenant"] = _sur_livrer_maintenant
 
 
+def _sur_publier_livrable(projet, demande, etat):
+    """Le clic « Publier maintenant » : les livrables terminés partent en releases GitHub, ceux qui avaient échoué aussi
+    (`lancer publier`, avec `relancer`), même si la livraison automatique est désactivée."""
+    r = lancer(projet, "publier", {"relancer": True})
+    textes = [x["texte"] for x in r.get("fonctionnalites") or []]
+    _terminer(projet, {"demande": demande["id"]}, " ".join(textes) or "Aucun livrable téléchargeable à publier.")
+    return []
+
+
+_SUR["publier_livrable"] = _sur_publier_livrable
+
+
 # --- Les jugements : leur décision revient ici.
 
 # --- L'analyse d'un blocage par le Chef (jugement `analyser_blocage`).
@@ -6240,34 +6338,49 @@ JOURNAL_DE_L_ANALYSE = 12             # les dernières lignes du journal envoyé
 SUIVRE, PRECISER, LAISSER = "suivre", "preciser", "laisser"
 
 
-def _une_session_active(projet):
-    """Le réglage `une_session_moyenne` (faux si absent), relu à chaque validation de cahier."""
+def reglage_effectif(projet, cle):
+    """La valeur effective du réglage `cle` du projet, relue : projet, puis type, puis global (fichier du bureau du
+    projet, s'il en a un), puis défaut (`reglages.charger_effectif`). Des réglages du projet illisibles laissent le
+    dernier état connu (l'attribut du même nom) ; un fichier du bureau illisible, le projet seul."""
     if getattr(projet, "fichier_reglages", None) is not None:
         try:
-            return reglages_du_bureau.charger(projet.fichier_reglages)["une_session_moyenne"] is True
+            return reglages_du_bureau.charger_effectif(projet.fichier_reglages,
+                                                       getattr(projet, "fichier_bureau", None))[cle]
         except reglages_du_bureau.ReglagesInvalides:
             pass
-    return getattr(projet, "une_session_moyenne", False) is True
+    return getattr(projet, cle, False)
+
+
+def _une_session_active(projet):
+    """Le réglage `une_session_moyenne` (faux si absent), relu à chaque validation de cahier."""
+    return reglage_effectif(projet, "une_session_moyenne") is True
+
+
+def _livraison_github(projet):
+    """Le réglage `livraison_github` (faux si absent ; propre au projet, jamais hérité), relu à chaque passage."""
+    return reglage_effectif(projet, "livraison_github") is True
+
+
+def _publier_les_livrables(projet):
+    """Réglage « Livrer automatiquement sur GitHub » : les livrables des fonctionnalités terminées pas encore publiés
+    partent en releases (`lancer publier`). Un échec est noté dans l'avis de fin (jamais refait seul : « Publier
+    maintenant » le relance) ; il ne bloque jamais le passage."""
+    if not _livraison_github(projet):
+        return
+    try:
+        lancer(projet, "publier", {})
+    except (Refus, ErreurMoteur):
+        pass
 
 
 def _livraison_sur_demande(projet):
     """Le réglage `livraison_sur_demande` (faux si absent), relu à chaque passage."""
-    if getattr(projet, "fichier_reglages", None) is not None:
-        try:
-            return reglages_du_bureau.charger(projet.fichier_reglages)["livraison_sur_demande"] is True
-        except reglages_du_bureau.ReglagesInvalides:
-            pass
-    return getattr(projet, "livraison_sur_demande", False) is True
+    return reglage_effectif(projet, "livraison_sur_demande") is True
 
 
 def _analyse_active(projet):
     """Le réglage « Analyse intelligente des blocages » (`analyse_blocages`, vrai si absent), relu à chaque blocage."""
-    if getattr(projet, "fichier_reglages", None) is not None:
-        try:
-            return reglages_du_bureau.charger(projet.fichier_reglages)["analyse_blocages"] is True
-        except reglages_du_bureau.ReglagesInvalides:
-            pass
-    return getattr(projet, "analyse_blocages", False) is True
+    return reglage_effectif(projet, "analyse_blocages") is True
 
 
 def _journal(projet, tid, texte):
@@ -6432,7 +6545,7 @@ def _lecon_du_chef(projet, t, lecon):
     except Refus as ex:
         _journal(projet, t["id"], f"Leçon du Chef non notée : {ex}")
         return
-    if getattr(projet, "lecons_auto", False):
+    if reglage_effectif(projet, "lecons_auto"):      # relu : une valeur posée au global ou au type agit aussi
         try:
             r = lancer(projet, "lecon", {"action": "appliquer", "lot": [{"id": i, "verdict": "valider", "etage": etage}]})
             x = (r.get("resultats") or [{}])[0]

@@ -261,7 +261,6 @@ export function ecranServeurs(etat, options = {}) {
   let courant = etat;
   let lieux = options.lieux || null;
   const infos = new Map();      // id du serveur -> {ouvert, actions, apercu, message, chargement}
-  const choix = {};             // action -> lieu retenu (local : le conseil ne déplace jamais rien)
   let lance = null;             // genre du travail qu'on vient de lancer (« sonder » | « installer ») : on guette sa fin
   let sansTravail = 0;
   let poignee = null;
@@ -647,7 +646,7 @@ export function ecranServeurs(etat, options = {}) {
     }, vives ? INTERVALLE_MS : INTERVALLE_REPOS_MS);
   }
 
-  // ---- « Où tournent les actions »
+  // ---- « Aptitude des lieux » : lecture seule ; le choix se fait dans la page Réglages
   function legende() {
     const l = el("div", "lieux-legende");
     for (const [n, libelle] of Object.entries(NIVEAUX)) {
@@ -666,20 +665,13 @@ export function ecranServeurs(etat, options = {}) {
       const f = objet(fiches[nom]);
       const niveau = NIVEAUX[f.niveau] ? f.niveau : "indisponible";
       const permis = nom === "serveur" ? f.permis === true : f.permis !== false;
-      const radio = el("input", "lieu-radio");
-      radio.type = "radio";
-      radio.name = `lieu-${action}`;
-      radio.value = nom;
-      radio.disabled = !permis;
-      radio.checked = choix[action] === nom && permis;
-      radio.addEventListener("change", () => { if (radio.checked) choix[action] = nom; });
       const pastille = el("span", `lieu-pastille niveau-${niveau}`);
       pastille.setAttribute("data-lieu", nom);
       const etiquette = el("span", "lieu-etiquette", `${LIBELLES_LIEUX[nom]} — ${NIVEAUX[niveau]}`);
       etiquette.setAttribute("data-lieu", nom);
       if (texte(f.raison)) etiquette.setAttribute("title", f.raison);
-      const choixLieu = el("label", `lieu-choix lieu-${nom}${permis ? "" : " lieu-grise"}`);
-      choixLieu.append(radio, pastille, etiquette);
+      const choixLieu = el("span", `lieu-choix lieu-${nom}${permis ? "" : " lieu-grise"}`);
+      choixLieu.append(pastille, etiquette);
       lieuxLigne.append(choixLieu);
     }
     l.append(lieuxLigne);
@@ -696,9 +688,15 @@ export function ecranServeurs(etat, options = {}) {
 
   function dessinerLieux() {
     zoneLieux.replaceChildren();
-    zoneLieux.append(el("h3", "", "Où tournent les actions"));
+    zoneLieux.append(el("h3", "", "Aptitude des lieux"));
     if (lieuxVides(lieux)) { zoneLieux.append(el("p", "ligne-detail", "Les lieux ne sont pas lus pour l'instant.")); return; }
     zoneLieux.append(legende(), el("p", "lieux-conseil", AVERTISSEMENT_CONSEIL));
+    if (typeof options.ouvrirReglages === "function") {
+      const regler = el("button", "bouton lieux-regler", "Régler dans Réglages");
+      regler.type = "button";
+      regler.addEventListener("click", () => options.ouvrirReglages());
+      zoneLieux.append(regler);
+    }
     for (const a of ACTIONS) if (lieux[a] && typeof lieux[a] === "object") zoneLieux.append(ligneLieux(a, lieux[a]));
   }
 

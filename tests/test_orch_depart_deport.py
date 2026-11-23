@@ -147,6 +147,21 @@ class TestLectureDesReglages(unittest.TestCase):
         self.ecrire(self.projet / ".factory" / "reglages.json", {"lieux": {a: "poste" for a in GENERIQUE}})
         self.assertEqual(self.consigne(), "")
 
+    def test_le_niveau_type_du_bureau_compte(self):
+        """`types.<genre>.deport.lieux` (page Réglages, niveau type) entre le global et le projet."""
+        android = "application-mobile-android"
+        (self.projet / ".factory" / "factory.json").write_text(json.dumps({"genre": android}), encoding="utf-8")
+        self.bureau.write_text(json.dumps({"types": {android: {"deport": {"lieux": {"apk": "github"}}}}}),
+                               encoding="utf-8")
+        self.assertIn("deporter apk", self.consigne())
+        self.ecrire(self.projet / ".factory" / "reglages.json", {"lieux": {"apk": "poste"}})
+        self.assertEqual(self.consigne(), "")
+        # un autre genre, ou un niveau type abîmé : rien
+        (self.projet / ".factory" / "reglages.json").unlink()
+        self.bureau.write_text(json.dumps({"types": {"autre": {"deport": {"lieux": {"apk": "github"}}},
+                                                     android: {"deport": "github"}}}), encoding="utf-8")
+        self.assertEqual(self.consigne(), "")
+
     def test_reglages_ailleurs_ajoutent_l_option(self):
         autre = self.projet / "reglages.json"
         self.ecrire(autre, {"lieux": {"apk": "github"}})

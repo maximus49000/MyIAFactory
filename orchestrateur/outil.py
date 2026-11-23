@@ -85,7 +85,7 @@ TYPES_DEMANDE = ("bouton", "deplacer", "retour", "lecon", "challenge", "solution
                  "organisation", "genre_fonctionnalite", "environnement", "elargir_genre", "valider_etape", "partenaire_regle", "partenaire_inscrit", "faire_chez_partenaire", "partenaires_actualiser",
                  "partenaires_maj", "installer_outil", "parallelisme", "recruter", "depot_git", "outil_agent", "accord_agent", "regle_projet",
                  "serie_arretee", "fin_vue", "fable_tache", "passer_polyvalent", "proposer_decoupage", "decoupage_lieux",
-                 "lieu_etape", "regroupement_etape", "blocage_analyse", "anomalie", "livrer_maintenant",
+                 "lieu_etape", "regroupement_etape", "blocage_analyse", "anomalie", "livrer_maintenant", "publier_livrable",
                  "question", "question_approfondir")
 AGENT_ORCHESTRATEUR = "orchestrateur"   # les appels de jugement du moteur : connu de chaque projet, sans fiche
 MODELES_INTERDITS = ("Fable",)   # un outil ne choisit jamais Fable
@@ -222,10 +222,19 @@ def chemins_d_images(images):
     return [rel.chemin_d_image(x) for x in images or []]
 
 
+MAQUETTES_HTML = (".html",)   # `cahier.maquette` seul : une page autonome, montrée dans un bac à sable (sans réseau)
+
+
 def images_montrables(chemins, cle):
-    """Refuse tout de suite une image que le bureau ne montrerait pas (SVG, WebP…), avec la marche à suivre."""
+    """Refuse tout de suite une image que le bureau ne montrerait pas (SVG, WebP…), avec la marche à suivre.
+    `cahier.maquette` accepte en plus une page `.html` autonome."""
+    acceptees = IMAGES_MONTREES + (MAQUETTES_HTML if cle == "cahier.maquette" else ())
     for c in chemins:
-        if Path(c).suffix.lower() not in IMAGES_MONTREES:
+        if Path(c).suffix.lower() not in acceptees:
+            if cle == "cahier.maquette":
+                raise Refus(f"« {cle} » : « {c} » n'est ni une image PNG ou JPEG, ni une page HTML, et le bureau ne montre que "
+                            "celles-là. Convertissez-la en PNG (par exemple une capture de son rendu) ou donnez une page HTML "
+                            "autonome (un seul fichier, styles et scripts en ligne, sans ressource externe).")
             raise Refus(f"« {cle} » : « {c} » n'est pas une image PNG ou JPEG, et le bureau ne montre que celles-là. "
                         "Convertissez-la en PNG (par exemple une capture de son rendu), puis donnez ce chemin.")
     return chemins
@@ -3547,7 +3556,7 @@ def releve_recrutement(ctx, s, fiches):
     par_lieu = {k: rc.proposer(ctx.f, s, fiches, places_c, d["github"], lieu=k) for k in ("cloud", "local")}
     try:
         essai = json.loads(_fichier_depot(ctx).read_text(encoding="utf-8"))
-        essai = {k: essai[k] for k in ("t", "fait", "texte", "url") if k in essai} if isinstance(essai, dict) else None
+        essai = {k: essai[k] for k in ("t", "fait", "texte", "url", "allegement") if k in essai} if isinstance(essai, dict) else None
     except (OSError, ValueError):
         essai = None
     roles = rc.roles_du_projet(ctx.f, fiches)
@@ -3589,15 +3598,67 @@ def cmd_recruter(ctx, e):
     return {"ok": True, "agents": [{k: x[k] for k in ("cle", "prenom", "role", "modele", "lieu")} for x in nouvelles]}
 
 
+def _fichier_livrable(ctx, chemin):
+    """Le fichier d'un livrable : son chemin compté depuis le dossier du projet, sinon depuis la factory."""
+    c = Path(chemin)
+    for base in (_projet(ctx), Path(ctx.f["base"])):
+        p = c if c.is_absolute() else base / c
+        if p.is_file():
+            return p
+    return c if c.is_absolute() else _projet(ctx) / c
+
+
+def cmd_publier(ctx, e):
+    """`{fonctionnalite?: id, relancer?: bool}` : publie en releases GitHub privées les livrables téléchargeables (apk, zip…)
+    de l'avis de fin des fonctionnalités terminées (`installation.publication`). Sans `fonctionnalite`, toutes celles dont
+    la fin n'est pas encore publiée ; `relancer` refait celles qui avaient échoué. L'envoi se fait hors du verrou du
+    suivi ; le résultat est noté dans `fin.publication` et le lien de chaque release dans `fin.livrables[].lien`. Un
+    échec est dit en clair (jamais une erreur) : la livraison locale n'en dépend pas. Rend `{fonctionnalites: [...]}`."""
+    from installation import publication
+    cible = e.get("fonctionnalite")
+    if cible is not None and not isinstance(cible, str):
+        raise Refus("« fonctionnalite » est un identifiant.")
+    s = ctx.suivi.lire()
+    a_faire = []
+    for f in s["fonctionnalites"]:
+        fin = f.get("fin")
+        if not isinstance(fin, dict) or (cible and f["id"] != cible):
+            continue
+        pub = fin.get("publication")
+        if isinstance(pub, dict) and (pub.get("fait") or not e.get("relancer")) and not cible:
+            continue
+        if any(publication.publiable(x.get("chemin")) for x in fin.get("livrables") or []):
+            a_faire.append((f["id"], [dict(x) for x in fin.get("livrables") or []]))
+    projet = _projet(ctx)
+    rendu = []
+    for fid, livrables in a_faire:
+        r = publication.publier_livrables(projet, livrables, lambda c: _fichier_livrable(ctx, c), GIT,
+                                          GH or publication.executer_gh, GH or publication.executer_gh_long)
+        with ctx.suivi.transaction() as s2:
+            f = _fonc(s2, fid)
+            if isinstance(f.get("fin"), dict):
+                liens = {x["chemin"]: x.get("url") for x in r["releases"] if x.get("url")}
+                for x in f["fin"].get("livrables") or []:
+                    if liens.get(x.get("chemin")):
+                        x["lien"] = liens[x["chemin"]]
+                f["fin"]["publication"] = {"t": su.maintenant(), "fait": r["fait"], "texte": r["texte"][:600],
+                                           "releases": [{k: x[k] for k in ("tag", "url", "fait") if k in x}
+                                                        for x in r["releases"]]}
+        rendu.append({"id": fid, "fait": r["fait"], "texte": r["texte"]})
+    return {"fonctionnalites": rendu}
+
+
 def cmd_depot(ctx, e):
-    """`{action: creer, confirme: true}` : le clic « Créer le dépôt Git » du Directeur (jamais sans lui). Dépôt git
+    """`{action: creer, confirme: true, allegement?: true}` : le clic « Créer le dépôt Git » du Directeur (jamais sans lui) ;
+    `allegement` : son accord aux exclusions proposées pour un dossier trop lourd. Dépôt git
     local si besoin, puis dépôt GitHub privé et poussée (`creation.depot_github`). Le résultat est noté pour le
     bureau et rendu `{fait, url, texte}`."""
     from installation import creation
     if e.get("action") != "creer" or e.get("confirme") is not True:
         raise Refus("« depot » demande action: creer et confirme: vrai (le clic du Directeur).")
     projet = _projet(ctx)
-    r = creation.depot_github(projet, rc.nom_de_depot(ctx.f.get("nom") or projet.name), GIT, GH or creation.executer_gh)
+    r = creation.depot_github(projet, rc.nom_de_depot(ctx.f.get("nom") or projet.name), GIT, GH or creation.executer_gh,
+                              allegement=e.get("allegement") is True)
     ecrire_json_atomique(_fichier_depot(ctx), {"t": su.maintenant(), **r})
     return r
 
@@ -3646,8 +3707,9 @@ DOSSIER_PLATEFORME = None     # le dossier de la plateforme (serveurs.json, serv
 SONDE_PERIMEE_S = 24 * 3600     # une sonde plus vieille que 24 h ne dit plus que le serveur est en ligne
 
 
-def serveur_hors_ligne(dossier=None, maintenant=None):
-    """Vrai si aucun serveur déclaré n'a, à la dernière sonde, les capacités `agent` et `agent-abonnement` présentes et
+def serveur_hors_ligne(dossier=None, maintenant=None, besoin="agent-serveur"):
+    """Vrai si aucun serveur déclaré n'a, à la dernière sonde, les capacités du `besoin` (par défaut `agent` et
+    `agent-abonnement` ; `agent-flutter` y ajoute `flutter-sdk`) présentes et
     constatées il y a moins de 24 h (état local `serveurs-etat.json` : aucune connexion). Une date de sonde illisible, ou
     la moindre erreur de lecture, vaut hors ligne ; une capacité sans date (état ancien) n'est pas jugée périmée."""
     try:
@@ -3665,7 +3727,7 @@ def serveur_hors_ligne(dossier=None, maintenant=None):
             caps = (connu.get(serveur.id) or {}).get("capacites")
             caps = caps if isinstance(caps, dict) else {}
             pret = True
-            for c in serveur_capacites.BESOINS["agent-serveur"]:
+            for c in serveur_capacites.BESOINS[besoin]:
                 e = caps.get(c) if isinstance(caps.get(c), dict) else {}
                 if e.get("statut") not in serveur_tache.STATUTS_PRETS:
                     pret = False
@@ -3679,6 +3741,31 @@ def serveur_hors_ligne(dossier=None, maintenant=None):
         return True
     except Exception:       # tout souci de lecture : on ne peut pas dire qu'il est en ligne
         return True
+
+
+def besoin_serveur(fac):
+    """Le besoin d'un agent serveur de ce projet (`fac` : sa factory lue) : `agent-flutter` pour un projet Flutter
+    (`outils/projet_flutter.py`), sinon `agent-serveur`. Toute erreur de lecture : `agent-serveur` (comme avant)."""
+    try:
+        chemin = Path(fac["chemin"])
+        projet = chemin.parent.parent if chemin.parent.name == ".factory" else chemin.parent
+        outils = str(Path(__file__).resolve().parent.parent / "outils")
+        if outils not in sys.path:
+            sys.path.append(outils)
+        import projet_flutter
+        return "agent-flutter" if projet_flutter.est_flutter(projet) else "agent-serveur"
+    except Exception:
+        return "agent-serveur"
+
+
+def raison_serveur(fac):
+    """Pourquoi le serveur ne peut pas prendre un agent de ce projet, ou None : « hors ligne » (aucun serveur prêt pour
+    les agents), « flutter-sdk absent du serveur » (projet Flutter, aucun serveur prêt n'a le SDK Flutter)."""
+    if serveur_hors_ligne():
+        return "hors ligne"
+    if besoin_serveur(fac) == "agent-flutter" and serveur_hors_ligne(besoin="agent-flutter"):
+        return "flutter-sdk absent du serveur"
+    return None
 
 
 def actifs_abonnement(ctx, s, bureau=None):
@@ -3742,7 +3829,14 @@ def _bascule_des_lieux(ctx, role, garde=False):
         return None
     return {"ordre_lieux": depart.ordre_du_metier(ctx.f, role),
             "places": {"local": ctx.f["agents_locaux_max"], "serveur": serveur, "cloud": places_cloud_du_projet(ctx)},
-            "hors_ligne": frozenset({"serveur"}) if serveur and serveur_hors_ligne() else frozenset()}
+            "hors_ligne": _serveur_indisponible(ctx) if serveur else frozenset()}
+
+
+def _serveur_indisponible(ctx):
+    """`{"serveur"}` (avec sa raison, dite par `depart`) si le serveur ne peut pas prendre un agent de ce projet, sinon vide :
+    le choix retombe alors sur le lieu suivant de l'ordre."""
+    raison = raison_serveur(ctx.f)
+    return depart.HorsLigne({"serveur"}, {"serveur": raison}) if raison else frozenset()
 
 
 def cmd_agent_libre(ctx, e):
@@ -3833,15 +3927,17 @@ BUREAU_DEPORT = "~/MyIAFactory/bureau.json"   # remplacé par les tests
 def _deport_du_depart(ctx, bureau=None):
     """La consigne des actions déportées pour l'agent de ce projet. "" si tout est au poste, et aussi au moindre
     souci (réglages absents ou illisibles, contexte invalide) : une consigne manquante vaut mieux qu'un départ
-    cassé. Lieux effectifs : surcharge du projet, sinon défaut du bureau, sinon poste."""
+    cassé. Lieux effectifs : surcharge du projet, puis niveau type du bureau (`types.<genre>.deport.lieux`), puis
+    défaut global du bureau, sinon poste."""
     try:
         from bureau.deport import lieu_effectif
         from bureau.deport_types import catalogue_du_projet
+        from bureau.registre import lieux_du_type
 
-        def deport(chemin):
+        def brut(chemin):
             try:
-                d = json.loads(Path(chemin).read_text(encoding="utf-8-sig")).get("deport")
-            except (OSError, ValueError, AttributeError):
+                d = json.loads(Path(chemin).read_text(encoding="utf-8-sig"))
+            except (OSError, ValueError, RecursionError):
                 return {}
             return d if isinstance(d, dict) else {}
 
@@ -3850,12 +3946,14 @@ def _deport_du_depart(ctx, bureau=None):
             return v if isinstance(v, dict) else {}
 
         projet = _projet(ctx)
-        catalogue = catalogue_du_projet(projet)[1]
+        genre, catalogue = catalogue_du_projet(projet)
         par_defaut = projet / ".factory" / "reglages.json"
         reglages = Path(ctx.f["reglages"]) if ctx.f.get("reglages") else par_defaut
-        du_projet = deport(reglages)
-        globaux = deport(Path(bureau or BUREAU_DEPORT).expanduser())
-        lieux = {a: lieu_effectif(objet(globaux, "lieux"), objet(du_projet, "lieux"), a, catalogue)
+        du_projet = objet(brut(reglages), "deport")
+        fichier_bureau = brut(Path(bureau or BUREAU_DEPORT).expanduser())
+        globaux = objet(fichier_bureau, "deport")
+        du_type = lieux_du_type(fichier_bureau, genre)
+        lieux = {a: lieu_effectif(objet(globaux, "lieux"), objet(du_projet, "lieux"), a, catalogue, type_=du_type)
                  for a in catalogue}
         ailleurs = str(reglages) if reglages != par_defaut else None
         return depart.deport_consigne(lieux, catalogue, objet(du_projet, "commandes"), str(projet), ailleurs)
@@ -4119,7 +4217,7 @@ COMMANDES = {
     "organisation": (cmd_organisation, "obligatoire"), "lots": (cmd_lots, "obligatoire"), "detail": (cmd_detail, "obligatoire"), "document": (cmd_document, "obligatoire"), "ecrire": (cmd_ecrire, "obligatoire"), "usage": (cmd_usage, "obligatoire"),
     "partenaires": (cmd_partenaires, "obligatoire"), "parallelisme": (cmd_parallelisme, "obligatoire"),
     "recruter": (cmd_recruter, "obligatoire"), "equipe": (cmd_equipe, "aucune"),
-    "polyvalents": (cmd_polyvalents, "obligatoire"), "depot": (cmd_depot, "obligatoire"), "regles": (cmd_regles, "obligatoire"), "anomalies": (cmd_anomalies, "facultative"), "questions": (cmd_questions, "facultative"),
+    "polyvalents": (cmd_polyvalents, "obligatoire"), "depot": (cmd_depot, "obligatoire"), "publier": (cmd_publier, "obligatoire"), "regles": (cmd_regles, "obligatoire"), "anomalies": (cmd_anomalies, "facultative"), "questions": (cmd_questions, "facultative"),
     "lieux": (cmd_lieux, "obligatoire"),
 }
 

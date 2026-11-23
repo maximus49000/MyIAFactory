@@ -7,6 +7,7 @@ import unittest
 from moteur import agents, jugement, regles
 from orchestrateur import fiches as fi
 from tests.test_moteur_regles import Base, _lu, decision, usage
+from tests.test_reglages_effectif import bureau_avec
 
 REPOS = ("Repos non validé : le test sur émulateur rend « ok » à tort (captures = invite système), le jeu affiche un "
          "écran noir après fermeture de l'invite.")
@@ -102,6 +103,24 @@ class Echec(Blocage):
         self.assertTrue(self.tache()["bloquee"])
         self.assertTrue(any(x.startswith("Analyse du Chef impossible") for x in self.journal()))
         self.assertEqual([d for d in self.suivi()["decisions_projet"] if d["genre"] == "blocage_analyse"], [])
+
+    def regler_au_global(self, **valeurs):
+        regl = self.dossier / "reglages.json"
+        self.projet.fichier_reglages = regl
+        self.projet.fichier_bureau = bureau_avec(regl, reglages=valeurs)
+
+    def test_le_global_du_bureau_decoche_l_analyse(self):
+        """Page Réglages : « Analyse intelligente des blocages » décochée au global agit sur un projet sans valeur."""
+        self.regler_au_global(analyse_blocages=False)
+        actions = self.retour_agent()
+        self.assertEqual(self.jugements(actions), [])
+        self.assertTrue(self.tache()["bloquee"])
+        self.assertFalse(any("Chef" in x for x in self.journal()))
+
+    def test_lecon_validee_tout_de_suite_avec_lecons_auto_au_global(self):
+        self.regler_au_global(lecons_auto=True)
+        self.appliquer(self.jugements(self.retour_agent())[0], RETOUR)
+        self.assertIn("Leçon validée : " + LECON, self.journal())
 
     def test_reglage_decoche_comportement_d_aujourd_hui(self):
         self.projet.analyse_blocages = False

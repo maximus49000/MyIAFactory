@@ -238,7 +238,9 @@ def _appeler_claude(consigne, dossier, modele, executer, outils, dossier_travail
     r, evenements = _lire_flux(sortie)
     snap = abonnement.instantane_depuis(evenements, time.time())
     if code != 0:
-        raise ErreurAppel(f"claude a rendu le code {code} : {_extrait(sortie)}", _usages_de(r or {}, snap))
+        # le vrai motif est dans la ligne `result` (ex. connexion expirée) ; le début du flux n'est que l'init
+        motif = str((r or {}).get("result") or "").strip()[:300] or _extrait(sortie)
+        raise ErreurAppel(f"claude a rendu le code {code} : {motif}", _usages_de(r or {}, snap))
     if r is None:
         raise ErreurAppel(f"sortie de claude illisible : {_extrait(sortie)}")
     usages = _usages_de(r, snap)

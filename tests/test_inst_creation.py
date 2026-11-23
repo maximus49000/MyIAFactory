@@ -83,6 +83,144 @@ class Base(AvecMaison):
         return self.parent / nom / ".factory" / "factory.json"
 
 
+class TestAdoption(Base):
+    """Un dossier de code existant devient le projet, sur place : seul `.factory` s'y ajoute."""
+
+    def code(self):
+        d = self.base / "mon code"
+        d.mkdir(parents=True)
+        (d / "main.py").write_text("print('x')\n", encoding="utf-8")
+        (d / ".gitignore").write_text("*.pyc\n", encoding="utf-8")
+        return d
+
+    def adopter(self, d, **kw):
+        kw.setdefault("git", self.git)
+        kw.setdefault("gh", self.gh)
+        return creation.creer_projet(None, "Casse-briques", adopter=str(d), bureau_json=self.bureau, **kw)
+
+    def test_le_dossier_devient_le_projet_et_le_code_est_intact(self):
+        d = self.code()
+        r = self.adopter(d)
+        self.assertEqual(Path(r["projet"]).resolve(), d.resolve())
+        self.assertTrue((d / ".factory" / "factory.json").is_file())
+        self.assertEqual((d / "main.py").read_text(encoding="utf-8"), "print('x')\n")
+        self.assertIn("*.pyc", (d / ".gitignore").read_text(encoding="utf-8"))
+        self.assertIn(".env", (d / ".gitignore").read_text(encoding="utf-8"))
+        self.assertFalse((d / ".factory.tmp").exists())
+        self.assertEqual(len(reglages.lire_bureau(self.bureau)["projets"]), 1)
+
+    def test_un_dossier_deja_installe_est_refuse(self):
+        d = self.code()
+        (d / ".factory").mkdir()
+        with self.assertRaises(Echec):
+            self.adopter(d)
+
+    def test_dossier_absent_ou_dans_la_skill_refuse(self):
+        with self.assertRaises(Echec):
+            self.adopter(self.base / "absent")
+
+    def test_un_echec_rend_le_dossier_tel_qu_il_etait(self):
+        d = self.code()
+        avant = instantane(self.base)
+        original = mep.inscrire
+
+        def echoue(*a, **k):
+            raise Echec("inscription impossible")
+        mep.inscrire = echoue
+        self.addCleanup(setattr, mep, "inscrire", original)
+        with self.assertRaises(Echec):
+            self.adopter(d)
+        self.assertEqual(instantane(self.base), avant)
+        self.assertEqual((d / ".gitignore").read_text(encoding="utf-8"), "*.pyc\n")
+        self.assertTrue((d / "main.py").is_file())
+
+
+class TestPoids(Base):
+    """GitHub : un dossier trop lourd n'est jamais ajouté à l'aveugle ; le bureau propose des exclusions, appliquées
+    seulement à l'accord de l'utilisateur."""
+
+    def dossier_avec(self, **tailles):
+        d = self.base / "lourd"
+        d.mkdir(exist_ok=True)
+        for nom, ko in tailles.items():
+            chemin = d / nom
+            chemin.parent.mkdir(parents=True, exist_ok=True)
+            chemin.write_bytes(b"x" * (ko * 1024))
+        return d
+
+    def git_listant(self, d):
+        fichiers = sorted(str(p.relative_to(d)).replace("\\", "/") for p in d.rglob("*") if p.is_file())
+        return Executeur({"-c core.quotepath=off": (0, chr(10).join(fichiers))})
+
+    def test_un_dossier_leger_passe(self):
+        d = self.dossier_avec(**{"a.py": 10, "b.py": 20})
+        self.assertIsNone(creation.proposer_allegement(d, self.git_listant(d)))
+
+    def test_les_gros_fichiers_donnent_des_exclusions_proposees(self):
+        d = self.dossier_avec(**{"a.py": 10, "build/lib/x.so": 60 * 1024, "Livrables/v1.apk": 60 * 1024,
+                                 "seed.db.bak-1": 60 * 1024, "base.db": 60 * 1024})
+        p = creation.proposer_allegement(d, self.git_listant(d))
+        self.assertEqual(sorted(p["regles"]), sorted(["/build/", "*.apk", "*.bak*", "/base.db"]))
+        self.assertGreater(p["avant_mo"], 200)
+        self.assertEqual(p["apres_mo"], 0)
+        self.assertIn("Rien n'a été ajouté", p["texte"])
+
+    def test_le_total_trop_gros_ajoute_les_plus_gros_dossiers(self):
+        d = self.base / "total"
+        d.mkdir()
+        original = creation.DEPOT_MAX
+        creation.DEPOT_MAX = 100 * 1024
+        self.addCleanup(setattr, creation, "DEPOT_MAX", original)
+        for n in ("gros/a.bin", "gros/b.bin", "petit/c.txt"):
+            (d / n).parent.mkdir(exist_ok=True)
+            (d / n).write_bytes(b"x" * (60 * 1024 if n.startswith("gros") else 1024))
+        p = creation.proposer_allegement(d, self.git_listant(d))
+        self.assertEqual(p["regles"], ["/gros/"])
+
+    def test_github_ne_fait_pas_git_add_sur_un_dossier_trop_lourd(self):
+        d = self.dossier_avec(**{"base.db": 60 * 1024})
+        git = self.git_listant(d)
+        r = creation.github(d, "FM_Stats", git, Executeur())
+        self.assertIn("propose cet allègement", r)
+        self.assertNotIn(["add", "."], [a for a, _ in git.appels])
+        self.assertNotIn("commit", [a[0] for a, _ in git.appels])
+
+    def test_depot_github_propose_sans_rien_ajouter(self):
+        d = self.dossier_avec(**{"base.db": 60 * 1024})
+        (d / ".git").mkdir()
+        git = self.git_listant(d)
+        r = creation.depot_github(d, "FM_Stats", git, Executeur())
+        self.assertFalse(r["fait"])
+        self.assertEqual(r["allegement"]["regles"], ["/base.db"])
+        self.assertNotIn(["add", "."], [a for a, _ in git.appels])
+        self.assertNotIn("/base.db", (d / ".gitignore").read_text(encoding="utf-8"))
+
+    def test_l_accord_ecrit_les_exclusions_puis_cree_le_depot(self):
+        d = self.dossier_avec(**{"a.py": 1, "base.db": 60 * 1024})
+        (d / ".git").mkdir()
+        (d / ".gitignore").write_text("*.pyc" + chr(10), encoding="utf-8")
+        git = Executeur()
+
+        def avec_filtre(args, cwd):
+            if args[:3] == ["-c", "core.quotepath=off", "ls-files"]:
+                ignore = (d / ".gitignore").read_text(encoding="utf-8")
+                fichiers = [p.name for p in d.iterdir() if p.is_file() and p.name != ".gitignore"
+                            and ("/" + p.name) not in ignore.split()]
+                git.appels.append((list(args), str(cwd)))
+                return 0, chr(10).join(fichiers)
+            return git(args, cwd)
+        r = creation.depot_github(d, "FM_Stats", avec_filtre, Executeur(), allegement=True)
+        texte = (d / ".gitignore").read_text(encoding="utf-8")
+        self.assertIn("*.pyc", texte)
+        self.assertIn("/base.db", texte)
+        self.assertIn(["add", "."], [a for a, _ in git.appels])
+        self.assertTrue(r["fait"], r["texte"])
+
+    def test_git_muet_ne_bloque_pas(self):
+        d = self.dossier_avec(**{"a.py": 1})
+        self.assertIsNone(creation.proposer_allegement(d, Executeur({"-c core.quotepath=off": (1, "erreur")})))
+
+
 class TestCreation(Base):
     def test_cree_l_arborescence_complete(self):
         r = self.creer()
@@ -260,8 +398,8 @@ class TestCreation(Base):
         r = self.creer(github=True)
         self.assertEqual(r["github"], "fait")
         projet = str(self.parent / "Casse-briques")
-        self.assertEqual([a for a, _ in self.git.appels][:2], [["init"], ["add", "."]])
-        sans_identite = [a for a in self.git.appels if a[0][0] != "config"]    # l'identité git est réglée avant
+        self.assertEqual([a for a, _ in self.git.appels if a[0] != "-c"][:2], [["init"], ["add", "."]])
+        sans_identite = [a for a in self.git.appels if a[0][0] not in ("config", "-c")]    # l'identité git est réglée avant
         self.assertEqual(sans_identite[2][0][:1], ["commit"])
         self.assertTrue(all(c == projet for _, c in self.git.appels + self.gh.appels))
         creer = [a for a, _ in self.gh.appels if a[:2] == ["repo", "create"]]

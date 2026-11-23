@@ -116,18 +116,84 @@ body.panneau-ouvert #scene { right: var(--largeur-panneau); }
 .bulle.grise::after { border-top-color: #e4e1dc; }
 
 /* --- Bandeau du haut --- */
+/* Une seule ligne à toutes les largeurs (demande du Directeur) : ce qui ne tient pas se raccourcit puis passe dans le
+   menu de la roue crantée (ui/barre-parametres.js, classes .barre-icones, .barre-compacte, .replie). */
 #barre {
+  --marge-barre: 16px;
+  --largeur-menu-parametres: 250px;
+  --retenue-min: 8em;
+  --choix-min: 12em;   /* plancher du sélecteur de projets ; il descend aux derniers resserrements */
   position: fixed;
   top: 0; left: 0; right: 0;
   height: var(--hauteur-barre);
   z-index: 10;
   display: flex;
+  flex-wrap: nowrap;
   align-items: center;
   gap: 16px;
-  padding: 0 16px;
+  padding: 0 var(--marge-barre);
+  overflow: hidden;   /* jamais de défilement qui cache des boutons : le resserrement mesure ce débordement */
   background: rgba(255, 253, 248, 0.94);
   box-shadow: 0 2px 10px rgba(61, 58, 75, 0.15);
 }
+#barre > * { flex: none; }
+#barre .replie { display: none !important; }
+/* L'heure en grand, la date en petit dessous : le seul bloc sur deux lignes. */
+.barre-horloge { display: flex; flex-direction: column; align-items: flex-start; line-height: 1.1; cursor: default; }
+.barre-heure { font-weight: 800; font-size: 18px; font-variant-numeric: tabular-nums; }
+.barre-date { font-size: 11px; color: #6d6980; white-space: nowrap; }
+.barre-separateur { align-self: stretch; width: 1px; margin: 10px 0; background: #e2d9c8; }
+/* La roue crantée, seule à l'extrémité droite, et son menu aligné à droite sous elle. */
+.barre-parametres { margin-left: auto; }
+.barre-roue {
+  display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; padding: 0;
+  border: 1px solid #cfc7b6; border-radius: 50%; background: #fff; color: var(--encre); cursor: pointer;
+}
+.barre-roue:hover, .barre-parametres.ouvert .barre-roue { background: #efe8da; }
+.menu-parametres {
+  /* fixe : la barre coupe ce qui la dépasse (overflow: hidden) */
+  position: fixed; top: calc(var(--hauteur-barre) - 4px); right: var(--marge-barre); z-index: 35;
+  width: min(var(--largeur-menu-parametres), calc(100vw - 2 * var(--marge-barre)));
+  max-height: calc(100vh - var(--hauteur-barre) - 16px); overflow-y: auto;
+  padding: 6px; border: 1px solid #cfc6b4; border-radius: 10px; background: var(--papier);
+  box-shadow: 0 6px 20px rgba(61, 58, 75, 0.28);
+}
+.menu-parametres[hidden], .menu-parametres-entree[hidden], .menu-parametres-groupe[hidden] { display: none; }
+.menu-parametres-entree {
+  display: flex; flex-direction: column; align-items: flex-start; width: 100%; padding: 7px 10px; border: 0; border-radius: 6px;
+  background: none; color: var(--encre); font: inherit; font-size: 14px; font-weight: 700; text-align: left; cursor: pointer;
+}
+.menu-parametres-entree:hover:not(:disabled), .menu-parametres-entree:focus-visible { background: #efe8da; outline: none; }
+.menu-parametres-entree:disabled { opacity: 0.45; cursor: default; }
+.menu-parametres-legende { font-size: 12px; font-weight: 400; color: #6d6980; }
+.menu-parametres-groupe { margin-top: 4px; padding-top: 4px; border-top: 1px solid #efe8da; }
+.menu-parametres-titre { padding: 4px 10px 2px; font-size: 11px; font-weight: 800; color: #6d6980; text-transform: uppercase; letter-spacing: 0.04em; }
+/* (1) libellés courts, (2) la charge réduite à son pourcentage. */
+.libelle-court { display: none; }
+#barre.barre-icones .libelle-long { display: none; }
+#barre.barre-icones .libelle-court { display: inline; }
+#barre.barre-compacte .charge-etiquette, #barre.barre-compacte .charge-piste, #barre.barre-compacte .charge-max { display: none; }
+#barre.barre-compacte .charge-valeur { min-width: 0; }
+/* (4) tout est replié et la place manque encore : le nom du bureau (si le projet est connu) et la retenue (elle passe en
+   tête du menu de la roue) ; (5) le nom simple du projet. Ne sont jamais cachés : le rond de consommation, la roue et le
+   sélecteur de projets (.barre-choix, seul accès pour changer de projet ou en créer un), qui se resserre à la place. */
+#barre.barre-etroite .barre-titre:has(.barre-projet:not(:empty)) .barre-logo, #barre.barre-etroite .barre-retenue,
+#barre.barre-minimale .barre-projet { display: none; }
+/* Le titre rogne ce qui dépasse (un sélecteur serré ne gonfle plus la largeur mesurée de la barre) sans descendre sous
+   la place du sélecteur. */
+.mobile #barre > .barre-titre, #barre.barre-minimale > .barre-titre { flex: 0 1 auto; min-width: 0; overflow: hidden; }
+#barre > .barre-titre:has(> .barre-choix:not([hidden])) { min-width: var(--choix-min); }
+#barre .barre-choix { min-width: var(--choix-min); text-overflow: ellipsis; }
+#barre.barre-etroite { --choix-min: 9em; }
+#barre.barre-minimale { --choix-min: 6em; }
+#barre.barre-minimale .barre-choix { max-width: 12em; }
+#barre.barre-etroite .barre-projet::before { content: none; }
+.menu-parametres-retenue { margin-bottom: 4px; padding-bottom: 4px; border-bottom: 1px solid #efe8da; }
+.menu-parametres-retenu { padding: 6px 10px; border-radius: 6px; background: #fbf0d4; color: #7a5a0c; font-size: 13px; font-weight: 600;
+  overflow-wrap: anywhere; cursor: default; }
+.menu-parametres-retenu + .menu-parametres-retenu { margin-top: 4px; }
+/* Filet de sécurité : la roue n'est jamais coupée par le bord droit. */
+.barre-parametres { position: sticky; right: 0; padding-left: 6px; background: var(--papier); }
 .barre-titre { flex: none; display: flex; align-items: baseline; gap: 10px; }
 .barre-logo { font-weight: 800; font-size: 17px; white-space: nowrap; flex: none; }
 .barre-projet {
@@ -136,8 +202,21 @@ body.panneau-ouvert #scene { right: var(--largeur-panneau); }
 }
 .barre-projet:not(:empty)::before { content: "· "; }
 
-.voyant { flex: none; display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 14px; white-space: nowrap; }
-.barre-retenue { flex: none; display: flex; flex-direction: column; gap: 2px; font-size: 13px; font-weight: 600; }
+/* Le voyant : la pastille seule (ui/voyant.js) ; son texte est l'infobulle, posée dans le <body> (la barre coupe ce qui dépasse). */
+.voyant { flex: none; display: flex; align-items: center; justify-content: center; padding: 6px; border-radius: 50%; cursor: help; }
+.voyant:focus-visible { outline: 2px solid #3d3a4b; outline-offset: 1px; }
+.sr-seulement { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.voyant-bulle {
+  position: fixed; z-index: 40; max-width: min(320px, calc(100vw - 16px)); padding: 6px 10px; border-radius: 8px;
+  background: #3d3a4b; color: #fff; font-size: 13px; font-weight: 600; line-height: 1.3; box-shadow: 0 4px 14px rgba(61, 58, 75, 0.3);
+  pointer-events: none;
+}
+.barre-retenue { display: flex; gap: 4px; font-size: 13px; font-weight: 600; }
+/* Dans la barre, sur la même ligne : la retenue se raccourcit (points de suspension) jusqu'à --retenue-min. */
+#barre > .barre-retenue { flex: 0 1 auto; min-width: var(--retenue-min); overflow: hidden; }
+#barre > .barre-retenue[hidden] { display: none; }
+#barre .retenue { flex: 0 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#barre .retenue[data-ton="attentes"] { flex-wrap: nowrap; }
 .retenue { padding: 3px 9px; border-radius: 8px; background: #fbf0d4; color: #7a5a0c; overflow-wrap: anywhere; }
 .retenue[data-ton="attente"] { background: #e8eefb; color: #2f4a86; }
 .retenue[data-ton="attentes"] { background: #e8eefb; color: #2f4a86; display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
@@ -158,12 +237,12 @@ body.panneau-ouvert #scene { right: var(--largeur-panneau); }
 .kanban-carte-resume { color: #5b5868; font-size: 12px; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .resume-tache { color: #4a4757; font-size: 13px; margin: 2px 0 6px; }
 .kanban-carte-travail { color: #2f6b3f; font-size: 12px; overflow-wrap: anywhere; }
-.voyant-lampe { width: 12px; height: 12px; border-radius: 50%; background: #9a96a6; box-shadow: 0 0 0 3px rgba(154, 150, 166, 0.25); }
+.voyant-lampe { width: 15px; height: 15px; border-radius: 50%; background: #9a96a6; box-shadow: 0 0 0 3px rgba(154, 150, 166, 0.25); }
 .voyant[data-ton="ok"] .voyant-lampe { background: #3aa65b; box-shadow: 0 0 0 3px rgba(58, 166, 91, 0.25); }
 .voyant[data-ton="pause"] .voyant-lampe { background: #e0a21b; box-shadow: 0 0 0 3px rgba(224, 162, 27, 0.28); }
 .voyant[data-ton="alerte"] .voyant-lampe { background: #d65a31; box-shadow: 0 0 0 3px rgba(214, 90, 49, 0.28); }
 
-.charge { flex: none; margin-left: auto; display: flex; align-items: center; gap: 10px; font-size: 13px; font-weight: 700; cursor: default; }
+.charge { flex: none; display: flex; align-items: center; gap: 10px; font-size: 13px; font-weight: 700; cursor: default; }
 .charge-piste {
   position: relative;
   width: clamp(100px, 14vw, 220px);
@@ -192,39 +271,21 @@ body.panneau-ouvert #scene { right: var(--largeur-panneau); }
 .charge-valeur { min-width: 110px; white-space: nowrap; }
 .charge.depasse .charge-valeur { color: #b6401c; }
 
-/* --- Les jauges de l'abonnement Claude (5 h, semaine) : orange à 80 %, rouge à 95 %. --- */
-.jauges { flex: none; display: flex; align-items: center; gap: 12px; font-size: 12px; cursor: default; }
-.jauges[hidden], .jauges-vide[hidden], .jauge[hidden] { display: none; }
-.jauges-vide { font-weight: 700; color: #6d6980; white-space: nowrap; display: inline-flex; align-items: center; gap: 8px; }
+/* --- La connexion Claude Code (panneau du rond). --- */
 .connexion-claude { display: inline-flex; align-items: center; gap: 8px; }
 .connexion-claude[hidden], .connexion-claude-retour[hidden] { display: none; }
 .connexion-claude-retour { font-weight: 400; white-space: normal; max-width: 260px; }
 .connexion-claude-retour[data-ok="false"] { color: #b6401c; }
 .conso-panneau .connexion-claude { margin-top: 8px; flex-wrap: wrap; }
-.jauge { --ton: #3f9d5a; display: flex; flex-direction: column; gap: 1px; min-width: 0; }
-.jauge[data-ton="attention"] { --ton: #d9962b; }
-.jauge[data-ton="alerte"] { --ton: #d65a31; }
-.jauge[data-ton="inconnu"] { --ton: #8a8396; }
-.jauge-tete { display: flex; align-items: center; gap: 6px; font-weight: 700; }
-.jauge-nom { white-space: nowrap; }
-.jauge-piste { width: 54px; height: 8px; border-radius: 999px; background: #e6dfd2; overflow: hidden; flex: none; }
-.jauge-plein { display: block; height: 100%; background: var(--ton); transition: width 0.6s ease, background 0.3s; }
-.jauge-valeur { min-width: 34px; text-align: right; color: var(--ton); white-space: nowrap; }
-.jauge[data-ton="attention"] .jauge-valeur, .jauge[data-ton="alerte"] .jauge-valeur { filter: brightness(0.8); }
-.jauge-detail { font-size: 11px; color: #6d6980; white-space: nowrap; }
 /* La part estimée d'un coût : approximative, donc discrète. */
 .cout-part { font-size: 12px; color: #6d6980; cursor: help; }
 /* L'empreinte carbone estimée (EcoLogits) : le lien vers sa méthode reste discret. */
 .lien-methode { font-size: 11px; color: inherit; opacity: 0.75; text-decoration: underline; cursor: pointer; }
 
 /* --- Boutons de la factory --- */
-.barre-actions { flex: 0 1 auto; min-width: 0; display: flex; flex-wrap: nowrap; gap: 8px; overflow-x: auto; scrollbar-width: none; }
+/* Les boutons du projet ne sont jamais écrasés ni cachés par un défilement : ceux qui ne tiennent pas passent dans le menu. */
+.barre-actions { flex: none; display: flex; flex-wrap: nowrap; gap: 8px; }
 .barre-actions:empty { display: none; }
-/* Sur l'ordinateur, la barre passe à la ligne plutôt que de cacher des boutons ; la scène suit sa hauteur (ui/barre.js). */
-@media (min-width: 901px) {
-  html:not(.mobile) #barre { height: auto; min-height: 52px; flex-wrap: wrap; row-gap: 6px; padding-top: 6px; padding-bottom: 6px; }
-  html:not(.mobile) .barre-actions { flex: none; overflow: visible; }
-}
 .bouton-barre {
   flex: none;
   padding: 5px 12px;
@@ -370,15 +431,10 @@ body.panneau-ouvert #scene { right: var(--largeur-panneau); }
 .conseil p { margin: 0 0 8px; line-height: 1.4; }
 
 @media (max-width: 900px) {
-  #barre { gap: 10px; padding: 0 10px; }
-  .barre-projet { display: none; }
+  #barre { --marge-barre: 10px; gap: 10px; }
   .charge-valeur { min-width: 0; font-size: 12px; }
   .charge-etiquette { display: none; }
   .charge-piste { width: clamp(60px, 12vw, 120px); }
-  /* Une barre trop étroite se fait défiler au doigt : la charge et les boutons restent accessibles. */
-  #barre { overflow-x: auto; scrollbar-width: none; }
-  #barre::-webkit-scrollbar { display: none; }
-  #barre > * { flex: none; }
 }
 
 /* --- Détail d'une tâche, vue liste --- */
@@ -494,7 +550,7 @@ body.panneau-ouvert #scene { right: var(--largeur-panneau); }
 /* --- Plusieurs projets : sélecteur, livrables. */
 .barre-choix {
   font: inherit; padding: 2px 6px; border: 1px solid #cfc6b4; border-radius: 6px; background: #fffdf7; color: inherit;
-  max-width: 22em;
+  min-width: 12em; max-width: 18em;
 }
 .barre-livrable { position: relative; display: inline-block; }
 .menu-livrables { position: relative; }
@@ -512,9 +568,10 @@ body.panneau-ouvert #scene { right: var(--largeur-panneau); }
 .conso[data-ton="attention"] { --ton: #d9962b; }
 .conso[data-ton="alerte"] { --ton: #d65a31; }
 .conso-rond {
-  display: flex; align-items: center; gap: 6px; padding: 2px 6px; background: none; border: 0; border-radius: 16px;
-  cursor: pointer; font: inherit; font-size: 13px; font-weight: 700; color: inherit;
+  display: flex; align-items: center; padding: 2px; background: none; border: 0; border-radius: 20px;
+  cursor: pointer; font: inherit; color: inherit;
 }
+.conso-nombre { font-size: 12px; font-weight: 700; fill: currentColor; }
 .conso-rond:hover, .conso-rond:focus-visible { background: rgba(0,0,0,.07); }
 .conso-fond, .conso-arc { fill: none; stroke-width: 4; }
 .conso-fond { stroke: #d9d3c4; }
@@ -539,13 +596,8 @@ body.panneau-ouvert #scene { right: var(--largeur-panneau); }
 .conso-sous-titre { font-size: 12px; font-weight: 700; color: #6b6573; margin: 2px 0 6px; }
 /* Une mesure reprise du dernier appel du moteur (lecture directe indisponible) : l'arc est atténué. */
 .conso[data-source="moteur"] .conso-arc { opacity: .6; }
-/* Le rond et les jauges font un seul bloc ; les fenêtres 5 h / semaine ne sont dans le panneau que sans la place des jauges. */
-.bloc-abonnement { flex: none; display: flex; align-items: center; gap: 10px; min-width: 0; }
-.conso-principales { display: none; }
-@media (max-width: 700px) {
-  .bloc-abonnement .jauges { display: none; }
-  .conso-principales { display: block; }
-}
+/* Dans la barre, le rond seul (jamais caché) ; les fenêtres 5 h / semaine sont dans son panneau, à toutes les largeurs. */
+.bloc-abonnement { flex: none; display: flex; align-items: center; }
 
 /* --- Fonctionnalité et discussion. */
 .parcours { display: flex; flex-wrap: wrap; gap: 4px; margin: 0 0 10px; padding: 0; list-style: none; font-size: 12.5px; }
@@ -804,6 +856,12 @@ body.panneau-grand .cat-grille { grid-template-columns: repeat(auto-fill, minmax
 .vignette-bouton:hover { background: rgba(61, 58, 75, 1); }
 .visionneuse { position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; background: rgba(20, 20, 28, 0.88); }
 .visionneuse img { width: min(86vh, 92vw); height: auto; max-height: 86vh; object-fit: contain; border-radius: 6px; background: #fff; }
+.visionneuse-maquette { width: min(96vw, 1200px); height: 88vh; border: 0; border-radius: 6px; background: #fff; }
+.visionneuse-maquette[hidden], .visionneuse img[hidden], .visionneuse-onglet[hidden] { display: none; }
+.visionneuse-onglet { position: absolute; top: max(14px, env(safe-area-inset-top)); left: 16px; z-index: 1; padding: 8px 12px; border-radius: 8px; color: #fff; background: rgba(0, 0, 0, 0.55); text-decoration: underline; }
+.val-vignette-html { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; min-width: 140px; min-height: 100px; padding: 12px; }
+.val-maquette-icone { font-size: 28px; line-height: 1; }
+.vignette-maquette-html { position: static; opacity: 1; }
 .visionneuse-fleche, .visionneuse-fermer { position: absolute; border: 0; color: #fff; background: rgba(255, 255, 255, 0.14); cursor: pointer; border-radius: 50%; }
 .visionneuse-fleche { top: 50%; width: 52px; height: 52px; margin-top: -26px; font-size: 34px; line-height: 1; }
 .visionneuse-fleche.gauche { left: 16px; } .visionneuse-fleche.droite { right: 16px; }
@@ -1008,14 +1066,16 @@ div.cout-etape > .cout-etape-ligne { width: 100%; }
 /* --- Téléphone et tablette (classe « mobile » posée par main.js : moins de 768 px, ou pointeur grossier) --- */
 #scene { touch-action: none; }   /* glisser et pincer sont gérés par la page (ui/gestes.js) */
 
-.mobile #barre { gap: 8px; padding: 0 10px; overflow-x: auto; scrollbar-width: none; }
-.mobile #barre::-webkit-scrollbar { display: none; }
-.mobile #barre > * { flex: none; }
-.mobile .barre-logo { font-size: 15px; }
+/* Téléphone : l'heure, le rond de consommation, le projet, le voyant et la roue ; le reste est dans le menu de la roue. */
+.mobile #barre { --marge-barre: 10px; --choix-min: 6em; gap: 8px; }
+.mobile #barre .barre-date, .mobile #barre .barre-logo, .mobile #barre .charge, .mobile #barre .barre-retenue,
+.mobile #barre .barre-actions, .mobile #barre .barre-livrable { display: none; }
+.mobile .barre-projet:not(:empty)::before { content: none; }
+.mobile .barre-projet:not([hidden]) { display: block; max-width: none; }
+.mobile .barre-choix { max-width: 46vw; }
+.mobile .barre-roue { width: 40px; height: 40px; }
+.mobile .menu-parametres-entree { min-height: 44px; }
 .mobile .bouton-barre { min-height: 38px; }
-.mobile .charge { margin-left: 0; }
-.mobile .charge-etiquette { display: none; }
-.mobile .charge-valeur { min-width: 0; font-size: 12px; }
 
 /* Les panneaux prennent tout l'écran, sous la barre, avec un bouton « Fermer » bien visible. */
 .mobile .panneau { left: 0; right: 0; width: 100vw; padding-top: 56px; z-index: 30; }
@@ -1447,7 +1507,7 @@ html.mobile .question-actions .bouton { min-height: 44px; }
 .lieux-action { border-top: 1px solid #eee7d6; padding: 6px 0; }
 .lieux-choix, .lieux-legende { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
 .lieu-choix { display: inline-flex; align-items: center; gap: 5px; }
-.lieu-grise { opacity: 0.6; cursor: not-allowed; }
+.lieu-grise { opacity: 0.6; }
 .lieu-pastille { display: inline-block; width: 12px; height: 12px; border-radius: 50%; border: 1px solid rgba(0, 0, 0, 0.25); }
 .lieu-pastille.niveau-recommande { background: #3f9b57; }
 .lieu-pastille.niveau-possible { background: #e0a52a; }
@@ -1478,3 +1538,14 @@ html.mobile .question-actions .bouton { min-height: 44px; }
 .tache-statut-ok { background: #dcefdc; color: #2f6b3f; }
 .tache-statut-plantage, .tache-statut-erreur { background: #f6d9d4; color: #9a2f22; }
 .tache-statut-limite { background: #f6e6c8; color: #7a5410; }
+
+/* Page Réglages : onglets de niveau, ligne de réglage, pastille d'origine, confirmation */
+.reglages-niveaux { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+.onglet-niveau { padding: 4px 10px; border: 1px solid var(--fond-2); border-radius: 12px; background: var(--papier); color: var(--encre); font: inherit; cursor: pointer; }
+.onglet-niveau.actif { background: var(--fond-2); font-weight: 700; }
+.onglet-niveau:disabled { opacity: 0.5; cursor: not-allowed; }
+.ligne-reglage { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin: 6px 0; }
+.ligne-reglage.herite .lecons-auto-label { opacity: 0.6; }
+.ligne-reglage.verrouille, .ligne-reglage.inapplicable { opacity: 0.55; }
+.pastille-origine { padding: 1px 8px; border-radius: 10px; background: var(--fond-2); font-size: 0.8em; }
+.reglages-message:empty { display: none; }

@@ -108,6 +108,12 @@ _CATALOGUE = {
         # un éditeur lisible et exécutable par les autres (« r-x » en fin des droits : unity-tests n'est ni propriétaire ni du groupe)
         "&& stat -c %A /opt/unity/editors/*/Editor/Unity 2>/dev/null | grep -q 'r.x$'",
         0.0, 5),
+    # SDK Flutter de l'HÔTE (~/flutter-sdk, version épinglée de versions.json), monté en lecture seule dans le conteneur des
+    # agents d'un projet Flutter ; Flutter pour Android s'appuie sur le SDK Android de l'hôte (android-build). Le marqueur
+    # porte la version : une autre version épinglée le rend périmé (MARQUEURS de serveur_installation).
+    "flutter-sdk": Capacite(
+        "flutter-sdk", "Flutter (SDK de l'hôte, en lecture seule chez les agents)", ("android-build",), "flutter_sdk",
+        "test -s ~/.myiafactory/flutter-sdk.version && test -x ~/flutter-sdk/bin/flutter", 3.0, 12),
     # Étape humaine : le jeton de l'abonnement est enregistré UNE fois par le Directeur ; la sonde ne lit jamais son contenu
     # (droits du dossier et du fichier, fichier non vide).
     "agent-abonnement": Capacite(
@@ -133,6 +139,8 @@ _BESOINS = {
     # un agent du projet tourne sur le serveur : seul (branche et rapport) ou pilote (il conduit l'émulateur par le pont fermé)
     "agent-serveur": ("agent", "agent-abonnement"),
     "agent-pilote": ("agent", "agent-abonnement", "emulateur-image"),
+    # un agent d'un projet Flutter (pubspec.yaml qui dépend de flutter, vu sur le poste) : en plus, le SDK Flutter de l'hôte
+    "agent-flutter": ("agent", "agent-abonnement", "flutter-sdk"),
     # les campagnes de tests d'un projet routées au serveur (`lancer.py tests …`) tournent dans l'image de tests
     "tests-serveur": ("tests-image",),
     "tests-serveur-android": ("tests-android",),

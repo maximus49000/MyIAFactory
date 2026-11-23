@@ -1326,6 +1326,10 @@ def _verifier_recrutement(x, erreurs):
     elif d.get("essai") is not None and not (_est_dict(d["essai"]) and isinstance(d["essai"].get("fait"), bool)
                                              and _texte(d["essai"].get("texte", ""))):
         erreurs.append(f"{q} : « depot.essai » demande « fait » (vrai ou faux) et « texte ».")
+    elif _est_dict(d.get("essai")) and d["essai"].get("allegement") is not None and not (
+            _est_dict(d["essai"]["allegement"]) and isinstance(d["essai"]["allegement"].get("regles"), list)
+            and all(_texte(r) for r in d["essai"]["allegement"]["regles"])):
+        erreurs.append(f"{q} : « depot.essai.allegement » demande « regles » (liste de textes).")
     if not _texte_ou_nul(x.get("cloud_impossible")):
         erreurs.append(f"{q} : « cloud_impossible » est un texte ou nul.")
     for champ in ("polyvalent", "reprise_possible"):

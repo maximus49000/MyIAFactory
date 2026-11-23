@@ -3,11 +3,14 @@ import json
 import os
 import re
 import tempfile
+import threading
+import time
 import unicodedata
 from pathlib import Path
 
 from .deport import LIEUX_PAR_DEFAUT, valider_lieux
-from .deport_types import catalogue_union
+from .deport_types import catalogue_du_projet, catalogue_union
+from .registre import REGISTRE, valeur_effective, verifier_valeur
 from .releve import MOTIF_GENRE  # un id de projet suit le même motif qu'un genre
 # Le verrou d'écriture d'un fichier partagé vit dans `verrou_fichier` (compatible Python 3.9 : le lanceur des agents
 # l'importe aussi pour le sceau des tests) ; ses réglages d'attente s'y trouvent (`VERROU_ATTENTE_S`, `VERROU_PERIME_S`).
@@ -26,6 +29,9 @@ DEFAUTS = {"port": 8770, "charge_max": 75, "fraicheur_min": 30, "releve": {}, "p
            # Vrai : la livraison (la construction de l'apk, 8 à 14 min) ne part pas toute seule quand les éléments sont
            # conformes ; elle attend « Livrer maintenant » (essai de coûts du 2026-11-19). Faux : comme avant.
            "livraison_sur_demande": False,
+           # Vrai : chaque livrable téléchargeable terminé (apk, zip…) est publié en release GitHub privée du projet
+           # (`installation.publication`) ; le projet doit être sur GitHub. Faux (par défaut) : rien n'est publié seul.
+           "livraison_github": False,
            # Vrai : une évolution moyenne (cahier validé ensuite) n'a plus de session de tests et de revue à part ; la
            # programmation relit et teste elle-même (essai de coûts du 2026-11-19 : 0,12 à 0,17 € et 3 à 7 min de moins,
            # mais plus de regard neuf). Faux : comme avant.
@@ -44,19 +50,114 @@ class ReglagesInvalides(Exception):
 
 
 def charger(chemin):
+    return _charger(chemin)[0]
+
+
+def _charger(chemin):
+    """`(réglages complétés des défauts, réglages tels qu'écrits dans le fichier du projet)`."""
     chemin = Path(chemin)
     r = json.loads(json.dumps(DEFAUTS))
+    donnees = {}
     if chemin.exists():
         try:
             donnees = json.loads(chemin.read_text(encoding="utf-8-sig"))
-        except (ValueError, OSError) as e:
+        except (ValueError, OSError, RecursionError) as e:
             raise ReglagesInvalides(f"Réglages illisibles ({chemin}) : {e}")
         if not isinstance(donnees, dict):
             raise ReglagesInvalides(f"Réglages illisibles ({chemin}) : un objet JSON est attendu")
         r.update(donnees)
     _verifier_moteur(r)
     r["dossier"] = str(chemin.parent)
+    return r, donnees
+
+
+def charger_effectif(chemin_projet, fichier_bureau=None):
+    """`charger(chemin_projet)` où chaque réglage du registre prend sa valeur effective : projet, puis type (le genre
+    du projet), puis global, puis défaut (`registre.valeur_effective`). Ce que lisent le moteur et l'état du bureau,
+    pour qu'une valeur posée au global ou au type agisse vraiment. Sans fichier du bureau, ou s'il est illisible ou
+    abîmé : exactement `charger` (le projet seul) ; un problème du fichier du bureau ne lève jamais. Des réglages du
+    projet illisibles lèvent `ReglagesInvalides`, comme `charger`."""
+    r, brut = _charger(chemin_projet)
+    if fichier_bureau is None:
+        return r
+    try:
+        niveaux = _niveaux_du_bureau(fichier_bureau)
+    except (ReglagesInvalides, OSError, TypeError, ValueError):   # absent, illisible, abîmé, chemin invalide
+        return r
+    genre = _genre_du_projet(r["dossier"])
+    genre = None if genre == "generique" else genre      # comme la page Réglages : pas de niveau type sans genre
+    for reglage in REGISTRE:
+        valeur, _ = valeur_effective(reglage, brut, niveaux, genre)
+        if type(valeur) is bool:     # les niveaux du bureau sont filtrés par `lire_bureau` ; garde de plus
+            r[reglage.cle] = valeur
     return r
+
+
+# Le moteur relit les réglages effectifs plusieurs fois par passage et par projet : le fichier du bureau et le genre
+# du projet ne sont relus que s'ils ont changé (date en ns et taille). Une entrée par chemin (la dernière lue) : le cache
+# ne grossit pas au-delà des fichiers connus. Le bureau a plusieurs fils : chaque entrée est posée d'une seule
+# affectation, sous verrou. Les valeurs rendues sont partagées : à lire seulement.
+_CACHE_BUREAU = {}
+_CACHE_GENRE = {}
+_VERROU_CACHES = threading.Lock()
+_CACHE_MAX = 64
+# Un refus du fichier du bureau peut venir d'un fichier de projet qui manquait un instant : le fichier du bureau n'a
+# pas changé quand il revient. Un refus gardé est donc relu après ce délai (secondes) ; une lecture réussie suit
+# seulement la signature du fichier.
+_REFUS_RELU_APRES = 5.0
+
+
+def _signature(chemin):
+    """`(date en ns, taille, numéro de fichier)` du fichier, ou None s'il n'existe pas (ou n'est pas lisible). Le numéro
+    change quand un remplacement atomique (`os.replace`) pose un autre fichier."""
+    try:
+        st = os.stat(chemin)
+    except (OSError, ValueError):
+        return None
+    return (st.st_mtime_ns, st.st_size, st.st_ino)
+
+
+def _poser(cache, cle, valeur):
+    with _VERROU_CACHES:
+        if cle not in cache and len(cache) >= _CACHE_MAX:
+            cache.clear()
+        cache[cle] = valeur
+
+
+def _niveaux_du_bureau(fichier_bureau):
+    """`{"reglages", "types"}` du fichier du bureau, lus par `lire_bureau` (seule source) ; relus seulement si le
+    fichier a changé. Lève `ReglagesInvalides` (ou OSError, TypeError, ValueError) comme `lire_bureau` ; un refus est
+    gardé lui aussi, jusqu'au prochain changement du fichier ou, au plus, `_REFUS_RELU_APRES` secondes."""
+    cle = str(Path(fichier_bureau))
+    signature = _signature(cle)
+    if signature is None:          # fichier disparu : jamais une ancienne lecture
+        with _VERROU_CACHES:
+            _CACHE_BUREAU.pop(cle, None)
+        raise ReglagesInvalides(f"Fichier du bureau introuvable ({cle}).")
+    entree = _CACHE_BUREAU.get(cle)
+    maintenant = time.monotonic()
+    if (entree is None or entree[0] != signature
+            or (entree[2] is not None and maintenant - entree[3] > _REFUS_RELU_APRES)):
+        try:
+            lu = lire_bureau(cle)
+            entree = (signature, {"reglages": lu["reglages"], "types": lu["types"]}, None, maintenant)
+        except ReglagesInvalides as e:
+            entree = (signature, None, str(e), maintenant)
+        _poser(_CACHE_BUREAU, cle, entree)
+    if entree[2] is not None:      # une exception neuve : relever la même ferait grossir sa trace à chaque passage
+        raise ReglagesInvalides(entree[2])
+    return entree[1]
+
+
+def _genre_du_projet(dossier):
+    """Le genre de `catalogue_du_projet(dossier)`, relu seulement si l'un de ses deux `factory.json` a changé."""
+    dossier = str(dossier)
+    signature = tuple(_signature(os.path.join(dossier, *p)) for p in ((".factory", "factory.json"), ("factory.json",)))
+    entree = _CACHE_GENRE.get(dossier)
+    if entree is None or entree[0] != signature:
+        entree = (signature, catalogue_du_projet(dossier)[0])
+        _poser(_CACHE_GENRE, dossier, entree)
+    return entree[1]
 
 
 def _verifier_moteur(r):
@@ -75,6 +176,8 @@ def _verifier_moteur(r):
         raise ReglagesInvalides("Réglages : « analyse_blocages » doit valoir true ou false.")
     if type(r.get("livraison_sur_demande")) is not bool:
         raise ReglagesInvalides("Réglages : « livraison_sur_demande » doit valoir true ou false.")
+    if type(r.get("livraison_github")) is not bool:
+        raise ReglagesInvalides("Réglages : « livraison_github » doit valoir true ou false.")
     if type(r.get("une_session_moyenne")) is not bool:
         raise ReglagesInvalides("Réglages : « une_session_moyenne » doit valoir true ou false.")
     r["deport"] = normaliser_deport(r.get("deport"), "Réglages")
@@ -129,7 +232,7 @@ def lire_bureau(chemin):
     chemin = Path(chemin)
     try:
         donnees = json.loads(chemin.read_text(encoding="utf-8-sig"))
-    except (ValueError, OSError) as e:
+    except (ValueError, OSError, RecursionError) as e:
         raise ReglagesInvalides(f"Fichier du bureau illisible ({chemin}) : {e}")
     if not isinstance(donnees, dict):
         raise ReglagesInvalides(f"Fichier du bureau illisible ({chemin}) : un objet JSON est attendu")
@@ -178,10 +281,88 @@ def lire_bureau(chemin):
     if "agents_abonnement_max" in donnees and (type(plafond) is not int or not
                                                 AGENTS_ABONNEMENT_MAX[0] <= plafond <= AGENTS_ABONNEMENT_MAX[1]):
         raise ReglagesInvalides("Fichier du bureau : « agents_abonnement_max » doit être un entier de 1 à 32 (ou absent).")
+    deport = normaliser_deport(donnees.get("deport", {}), "Fichier du bureau")
+    # les niveaux de la page Réglages se lisent avec tolérance (conception, risques : valeur inconnue = défaut) : une
+    # clé écrite à la main ou par une version plus récente est écartée et dite, jamais un bureau ou un moteur arrêté
+    ignores = []
     return {"port": port, "projets": sortie, "acces": lire_acces(donnees.get("acces", {})),
             "agents_abonnement_max": plafond,
             "moteur": lire_moteur_du_bureau(donnees.get("moteur", {})),
-            "deport": normaliser_deport(donnees.get("deport", {}), "Fichier du bureau")}
+            "deport": deport,
+            # les lieux tels qu'écrits dans le fichier, sans les défauts : ce que la résolution à trois niveaux lit
+            "deport_lieux_explicites": dict(donnees.get("deport", {}).get("lieux", {})),
+            "reglages": _lire_reglages_du_niveau(donnees.get("reglages"), "reglages", ignores),
+            "types": _lire_types_du_bureau(donnees.get("types"), ignores),
+            "ignores": ignores}
+
+
+def _lire_reglages_du_niveau(v, nom, ignores):
+    """Les réglages posés à un niveau (global ou type) : `{id: valeur}` ; un id absent du registre, ou une valeur qui
+    n'a pas sa forme (« oui » pour une case, null), est écarté et dit dans `ignores` (les écrivains, eux, le
+    refusent) : la résolution le lit comme non réglé."""
+    if v is None:
+        return {}
+    if not isinstance(v, dict):
+        ignores.append(f"Fichier du bureau : « {nom} » ignoré : un objet {{réglage: valeur}} est attendu.")
+        return {}
+    connus = {r.id: r for r in REGISTRE}
+    gardes = {}
+    for id_, valeur in v.items():
+        if id_ not in connus:
+            ignores.append(f"Fichier du bureau : « {nom} » : le réglage inconnu « {id_} » est ignoré.")
+            continue
+        try:
+            if valeur is None:
+                raise ValueError("« %s » doit avoir une valeur (null n'en est pas une)." % connus[id_].libelle)
+            verifier_valeur(connus[id_], valeur)
+        except ValueError as e:
+            ignores.append(f"Fichier du bureau : « {nom} » : la valeur de « {id_} » est ignorée : {e}")
+            continue
+        gardes[id_] = valeur
+    return gardes
+
+
+def _lire_types_du_bureau(v, ignores):
+    """`types` : `{genre: {"reglages": {...}, "deport": {"lieux": {...}}}}`. Un genre, un niveau ou un lieu abîmé est
+    écarté (dit dans `ignores`) ; le reste est gardé. Les lieux gardés sont ceux que le bureau accepte."""
+    if v is None:
+        return {}
+    if not isinstance(v, dict):
+        ignores.append("Fichier du bureau : « types » ignoré : un objet {genre: réglages} est attendu.")
+        return {}
+    sortie = {}
+    for genre, niveau in v.items():
+        if not MOTIF_GENRE.match(genre):
+            ignores.append(f"Fichier du bureau : « types » : genre « {genre} » invalide (lettres minuscules, "
+                           "chiffres et tirets), ignoré.")
+            continue
+        if not isinstance(niveau, dict):
+            ignores.append(f"Fichier du bureau : « types.{genre} » ignoré : un objet est attendu.")
+            continue
+        entree = dict(niveau)
+        entree["reglages"] = _lire_reglages_du_niveau(niveau.get("reglages"), f"types.{genre}.reglages", ignores)
+        if "deport" in niveau:
+            d = niveau["deport"]
+            if not isinstance(d, dict):
+                ignores.append(f"Fichier du bureau : « types.{genre}.deport » ignoré : un objet est attendu.")
+                del entree["deport"]
+            else:
+                lieux = d.get("lieux", {})
+                if not isinstance(lieux, dict):
+                    ignores.append(f"Fichier du bureau : « types.{genre}.deport.lieux » ignoré : un objet "
+                                   "{action: lieu} est attendu.")
+                    lieux = {}
+                gardes = {}
+                for action, lieu in lieux.items():
+                    try:
+                        valider_lieux({action: lieu}, catalogue=catalogue_union())
+                    except ValueError as e:
+                        ignores.append(f"Fichier du bureau : « types.{genre}.deport.lieux » : {e} Ignoré.")
+                        continue
+                    gardes[action] = lieu
+                entree["deport"] = {**d, "lieux": gardes}
+        sortie[genre] = entree
+    return sortie
 
 
 def lire_moteur_du_bureau(v):
@@ -233,35 +414,107 @@ def fixer_agents_abonnement_max(chemin, valeur):
     n'est jamais perdue). Rend la valeur écrite."""
     if valeur is not None and (type(valeur) is not int or not AGENTS_ABONNEMENT_MAX[0] <= valeur <= AGENTS_ABONNEMENT_MAX[1]):
         raise ValueError("« agents_abonnement_max » doit être un entier de 1 à 32 (ou nul : aucun plafond).")
+    def poser(donnees):
+        if valeur is None:
+            donnees.pop("agents_abonnement_max", None)
+        else:
+            donnees["agents_abonnement_max"] = valeur
+        return valeur
+    return _modifier_bureau(chemin, poser)
+
+
+def _modifier_bureau(chemin, fonction):
+    """Réécrit le fichier du bureau : sous verrou, relit le contenu, le passe à `fonction(donnees)` (qui le modifie sur
+    place et rend la valeur de retour), puis écrit de façon atomique. Rend ce que rend `fonction`."""
     chemin = Path(chemin)
     try:
         with _verrou_fichier(chemin):
-            return _fixer_plafond(chemin, valeur)
+            try:
+                donnees = json.loads(chemin.read_text(encoding="utf-8-sig"))
+            except (ValueError, OSError, RecursionError) as e:
+                raise ReglagesInvalides(f"Fichier du bureau illisible ({chemin}) : {e}")
+            if not isinstance(donnees, dict):
+                raise ReglagesInvalides(f"Fichier du bureau illisible ({chemin}) : un objet JSON est attendu")
+            retour = fonction(donnees)
+            _ecrire_fichier(chemin, donnees)
+            return retour
     except TimeoutError as e:
         raise ReglagesInvalides(str(e)) from None
 
 
-def _fixer_plafond(chemin, valeur):
-    try:
-        donnees = json.loads(chemin.read_text(encoding="utf-8-sig"))
-    except (ValueError, OSError) as e:
-        raise ReglagesInvalides(f"Fichier du bureau illisible ({chemin}) : {e}")
-    if not isinstance(donnees, dict):
-        raise ReglagesInvalides(f"Fichier du bureau illisible ({chemin}) : un objet JSON est attendu")
-    if valeur is None:
-        donnees.pop("agents_abonnement_max", None)
+def _verifier_chemin_reglage(chemin_cle, valeur):
+    """Un réglage du registre (`("reglages", id)` ou `("types", genre, "reglages", id)`) n'est écrit que si l'id est
+    connu, le niveau permis pour lui et la valeur de la bonne forme (`None` efface). Les autres chemins (lieux du
+    déport) sont validés par leurs appelants."""
+    if chemin_cle[0] == "reglages":
+        niveau, motif = "global", len(chemin_cle) == 2
+    elif len(chemin_cle) >= 3 and chemin_cle[0] == "types" and chemin_cle[2] == "reglages":
+        niveau, motif = "type", len(chemin_cle) == 4
     else:
-        donnees["agents_abonnement_max"] = valeur
-    fd, tmp = tempfile.mkstemp(dir=str(chemin.parent), suffix=".tmp")
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            json.dump(donnees, f, ensure_ascii=False, indent=2)
-        os.replace(tmp, chemin)
-    except BaseException:
-        if os.path.exists(tmp):
-            os.unlink(tmp)
-        raise
-    return valeur
+        return
+    if not motif:
+        raise ValueError("Chemin de réglage invalide dans le fichier du bureau : %s." % ".".join(map(str, chemin_cle)))
+    r = next((x for x in REGISTRE if x.id == chemin_cle[-1]), None)
+    if r is None:
+        raise ValueError("Réglage inconnu : « %s »." % (chemin_cle[-1],))
+    if niveau not in r.niveaux:
+        raise ValueError("« %s » se règle seulement au niveau %s." % (r.libelle, " ou ".join(r.niveaux)))
+    verifier_valeur(r, valeur)
+
+
+def fixer_niveau_bureau(chemin_bureau, chemin_cle, valeur):
+    """Pose `valeur` au chemin imbriqué `chemin_cle` du fichier du bureau (ex. `("deport", "lieux", "tests")`,
+    `("types", "android", "reglages", "lecons_auto")`) ; `None` supprime la clé et élague les objets laissés vides.
+    Le fichier est relu sous verrou : le reste est gardé. Rend `valeur`."""
+    chemin_cle = tuple(chemin_cle)
+    if not chemin_cle:
+        raise ValueError("Le chemin de la clé du bureau est vide.")
+    _verifier_chemin_reglage(chemin_cle, valeur)
+
+    def poser(donnees):
+        if valeur is None:
+            pile = [donnees]
+            for c in chemin_cle[:-1]:
+                suivant = pile[-1].get(c)
+                if not isinstance(suivant, dict):
+                    return None   # rien à effacer
+                pile.append(suivant)
+            if chemin_cle[-1] not in pile[-1]:
+                return None
+            del pile[-1][chemin_cle[-1]]
+            for i in range(len(pile) - 1, 0, -1):   # élague les objets vidés, jamais la racine
+                if pile[i]:
+                    break
+                del pile[i - 1][chemin_cle[i - 1]]
+            return None
+        courant = donnees
+        for c in chemin_cle[:-1]:
+            suivant = courant.setdefault(c, {})
+            if not isinstance(suivant, dict):
+                raise ReglagesInvalides(f"Fichier du bureau : « {c} » n'est pas un objet.")
+            courant = suivant
+        courant[chemin_cle[-1]] = valeur
+        return valeur
+    return _modifier_bureau(chemin_bureau, poser)
+
+
+def effacer_cle(chemin_projet, cle):
+    """Retire la clé à plat `cle` des réglages du projet (le projet retombe sur le type, le global ou le défaut).
+    Écriture atomique ; rend les réglages rechargés."""
+    chemin = Path(chemin_projet)
+    if chemin.exists():
+        try:
+            with _verrou_fichier(chemin):
+                try:
+                    donnees = json.loads(chemin.read_text(encoding="utf-8-sig"))
+                except (ValueError, OSError, RecursionError) as e:
+                    raise ReglagesInvalides(f"Réglages illisibles ({chemin}) : {e}")
+                if isinstance(donnees, dict) and cle in donnees:
+                    del donnees[cle]
+                    _ecrire_fichier(chemin, donnees)
+        except TimeoutError as e:
+            raise ReglagesInvalides(str(e)) from None
+    return charger(chemin)
 
 
 def fixer_analyse_blocages(chemin, valeur):
@@ -276,6 +529,13 @@ def fixer_livraison_sur_demande(chemin, valeur):
     if type(valeur) is not bool:
         raise ValueError("« livraison_sur_demande » doit valoir true ou false.")
     return _ecrire_cle(chemin, "livraison_sur_demande", valeur)
+
+
+def fixer_livraison_github(chemin, valeur):
+    """Note si les livrables terminés sont publiés seuls en releases GitHub (vrai ou faux, rien d'autre)."""
+    if type(valeur) is not bool:
+        raise ValueError("« livraison_github » doit valoir true ou false.")
+    return _ecrire_cle(chemin, "livraison_github", valeur)
 
 
 def fixer_une_session_moyenne(chemin, valeur):
@@ -293,14 +553,25 @@ def fixer_cloud_dossier_approuve(chemin, valeur):
 
 
 def _ecrire_cle(chemin, cle, valeur):
+    """Pose la clé à plat `cle` : relue et réécrite SOUS VERROU (une autre écriture du même fichier n'est pas perdue)."""
     chemin = Path(chemin)
-    donnees = {}
-    if chemin.exists():
-        try:
-            donnees = json.loads(chemin.read_text(encoding="utf-8-sig"))
-        except (ValueError, OSError) as e:
-            raise ReglagesInvalides(f"Réglages illisibles ({chemin}) : {e}")
-    donnees[cle] = valeur
+    try:
+        with _verrou_fichier(chemin):
+            donnees = {}
+            if chemin.exists():
+                try:
+                    donnees = json.loads(chemin.read_text(encoding="utf-8-sig"))
+                except (ValueError, OSError, RecursionError) as e:
+                    raise ReglagesInvalides(f"Réglages illisibles ({chemin}) : {e}")
+            donnees[cle] = valeur
+            _ecrire_fichier(chemin, donnees)
+    except TimeoutError as e:
+        raise ReglagesInvalides(str(e)) from None
+    return charger(chemin)
+
+
+def _ecrire_fichier(chemin, donnees):
+    """Écriture atomique (fichier temporaire voisin puis remplacement)."""
     fd, tmp = tempfile.mkstemp(dir=str(chemin.parent), suffix=".tmp")
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
@@ -310,4 +581,3 @@ def _ecrire_cle(chemin, cle, valeur):
         if os.path.exists(tmp):
             os.unlink(tmp)
         raise
-    return charger(chemin)

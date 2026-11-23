@@ -160,6 +160,29 @@ class TestPoste(Base):
                                                       encoding="utf-8")
         self.assertEqual(deporter.lieu_de("tests", ["--dossier", str(d)], bureau=self.bureau), "poste")
 
+    def test_le_niveau_type_du_bureau_s_applique_entre_global_et_projet(self):
+        """`types.<genre>.deport.lieux` (page Réglages, niveau type) : lu comme le bureau le montre."""
+        android = "application-mobile-android"
+        self.bureau.write_text(json.dumps({"deport": {"lieux": {"tests": "poste"}},
+                                           "types": {android: {"deport": {"lieux": {"tests": "github"}}},
+                                                     "autre-genre": {"deport": {"lieux": {"tests": "poste"}}}}}),
+                               encoding="utf-8")
+        d = self.projet(genre=android)
+        self.assertEqual(deporter.lieu_de("tests", ["--dossier", str(d)], bureau=self.bureau), "github")
+        self.assertTrue(deporter.faut_deporter("tests", ["--dossier", str(d)], bureau=self.bureau))
+        (d / ".factory" / "reglages.json").write_text(json.dumps({"deport": {"lieux": {"tests": "poste"}}}),
+                                                      encoding="utf-8")
+        self.assertEqual(deporter.lieu_de("tests", ["--dossier", str(d)], bureau=self.bureau), "poste")
+        # un niveau type abîmé est ignoré, jamais une panne
+        self.bureau.write_text(json.dumps({"types": {android: {"deport": {"lieux": ["github"]}}}}), encoding="utf-8")
+        (d / ".factory" / "reglages.json").unlink()
+        self.assertEqual(deporter.lieu_de("tests", ["--dossier", str(d)], bureau=self.bureau), "poste")
+        # un projet générique n'a pas de niveau type
+        self.bureau.write_text(json.dumps({"types": {"generique": {"deport": {"lieux": {"tests": "github"}}}}}),
+                               encoding="utf-8")
+        (d / ".factory" / "factory.json").unlink()
+        self.assertEqual(deporter.lieu_de("tests", ["--dossier", str(d)], bureau=self.bureau), "poste")
+
     def test_reglages_donnes_en_option(self):
         d = self.projet()
         r = self.tmp / "autre.json"

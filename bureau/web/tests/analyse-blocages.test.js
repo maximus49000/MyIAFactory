@@ -16,7 +16,7 @@ globalThis.document = {createElement: (t) => new Noeud(t)};
 globalThis.Option = class extends Noeud { constructor(texte, valeur) { super("option"); this._texte = texte; this.value = valeur; } };
 
 const {contenuDecisionsV4} = await import("../ui/decisions.js");
-const {enregistrerAnalyseBlocages, AIDE_ANALYSE_BLOCAGES, anomaliesAMontrer} = await import("../ui/directeur.js");
+const {anomaliesAMontrer} = await import("../ui/directeur.js");
 const {demandeBlocageAnalyse, demandeAnomalie} = await import("../ui/actions.js");
 
 function rendre(etat) {
@@ -80,15 +80,4 @@ test("les anomalies : les plus récentes d'abord, les réglées n'apparaissent p
   assert.deepEqual(anomaliesAMontrer(etat).map((a) => a.id), ["a3", "a2"]);   // une anomalie réglée disparaît de la liste
 
   assert.deepEqual(anomaliesAMontrer({}), []);
-});
-
-test("la case « Analyse intelligente des blocages » écrit analyse_blocages", async () => {
-  assert.match(AIDE_ANALYSE_BLOCAGES, /n'ouvre jamais un outil/);
-  const vus = [];
-  const r = await enregistrerAnalyseBlocages(false, async (url, options) => { vus.push([url, options]); return {ok: true}; });
-  assert.equal(r.ok, true);
-  assert.match(vus[0][0], /\/api\/reglages/);
-  assert.deepEqual(JSON.parse(vus[0][1].body), {analyse_blocages: false});
-  const coupe = await enregistrerAnalyseBlocages(true, async () => { throw new Error("réseau"); });
-  assert.deepEqual(coupe, {ok: false, message: "Serveur du bureau injoignable."});
 });

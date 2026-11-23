@@ -145,12 +145,15 @@ def infos(srv, corps):
     if (refus := _garde(srv)) is not None:
         return refus
     brouillons, definition, _ = _outils(srv)
-    from installation import creation
+    from installation import creation, scan
     from installation.dossier import Echec
     for cle in ("parent", "nom", "description"):
         _, erreur = _texte(corps, cle, True)
         if erreur:
             return 400, {"erreur": erreur}
+    repertoire = corps.get("repertoire")
+    if repertoire is not None and not isinstance(repertoire, str):
+        return 400, {"erreur": "« repertoire » doit être un texte."}
     mots = corps.get("mots_interdits", [])
     if not isinstance(mots, list) or not all(isinstance(m, str) for m in mots):
         return 400, {"erreur": "« mots_interdits » doit être une liste de textes."}
@@ -169,6 +172,8 @@ def infos(srv, corps):
         nouvelles = {"parent": corps["parent"], "nom": nom, "mots_interdits": [m.strip() for m in mots if m.strip()],
                      "facturation": bool(corps.get("facturation", False)), "github": bool(corps.get("github", False)),
                      "description": description}
+        if repertoire and repertoire.strip():
+            nouvelles["repertoire"] = str(scan.verifier_repertoire(repertoire))
         definition._verifier_les_infos(nouvelles, srv.fichier_bureau)
         with brouillons._VERROU:
             if corps.get("id") is None:
@@ -181,6 +186,8 @@ def infos(srv, corps):
                 if b["echange"] and bool(b["infos"].get("facturation")) != nouvelles["facturation"]:
                     raise Echec("La facturation ne se change plus une fois l'échange commencé : le chef a déjà "
                                 "organisé le projet avec ou sans elle.")
+                if (b["infos"].get("repertoire") or "") != (nouvelles.get("repertoire") or ""):
+                    b["connaissance"] = None    # un autre répertoire : le scan sera refait au prochain tour
                 b["infos"] = nouvelles
                 brouillons.ecrire(b, dossier=srv.dossier_creations)
     except Echec as e:

@@ -210,6 +210,21 @@ du bureau (onglet de facturation) ou dans `.factory/factory.json` du projet :
 du lieu) **et une fiche d'agent libre**. Un lieu imposé (le `lieu` écrit de l'étape de la tâche, ou le métier réservé à un lieu) l'emporte sur l'ordre. Un projet sans place
 serveur, sans ordre réglé et sans plafond garde le comportement d'avant, à l'identique.
 
+**Le choix de l'agent par le moteur** (`moteur/regles.py`, `_demarrer_en_attente` et `_choisir_agent`) applique cette règle à toute tâche qui part d'elle-même
+(prototype, étape du flux, correction...) :
+- les places serveur sont **comptées à part** (`agents_serveur_max` moins les tâches actives d'agents serveur) : un agent serveur ne prend jamais une place locale,
+  et la charge du poste ne retient pas le serveur ;
+- les lieux sont essayés dans l'ordre du projet (ou du métier) ; un lieu sans place libre, hors ligne ou sans fiche libre passe au suivant ; un lieu absent de
+  l'ordre n'est jamais utilisé, même avec une place libre ;
+- une étape au `lieu` écrit (`local` : `dev-local`, `livraison`...) ou un métier réservé reste à son lieu : jamais au serveur ;
+- une tâche dont Fable est accordé reste au poste (comme pour le cloud, par prudence).
+
+**L'agent attitré ou repris.** L'agent attitré du **cadrage** est choisi au poste et le reste (la discussion avec le Directeur). Une tâche **reprise** (déjà commencée)
+revient de préférence au même agent polyvalent, **à son lieu**, s'il est libre et que ce lieu a une place et convient à l'étape ; sinon n'importe quel agent la reprend
+selon l'ordre des lieux : elle repart d'un contexte neuf (le départ ordinaire ne reprend jamais une session). La reprise d'une session (`--resume`, réponse aux
+questions d'un agent) ne passe pas par ce choix : elle repart toujours là où la session est née (un agent serveur sur le serveur, un agent local au poste).
+Une installation d'outils garde le choix d'avant (le poste, puis le cloud).
+
 **Le plafond d'abonnement** est **au-dessus** des places par lieu : c'est le nombre total d'agents actifs, **tous lieux et tous projets du bureau**,
 que l'abonnement supporte. Atteint, la tâche attend : « plafond d'abonnement atteint (n/n) ». Un fichier du bureau illisible ou un plafond invalide ferme
 aussi la porte (« plafond d'abonnement : réglage illisible (chemin) ») : on ne retire pas la garde en silence.
@@ -305,6 +320,66 @@ raison et pose au Directeur la question habituelle d'une fusion impossible (comm
 - **Si l'image change** dans le dépôt (Dockerfile, entrée ou client du pont), le marqueur `~/.myiafactory/agent-image.version` ne correspond plus : la capacité `agent` devient « À mettre à jour » et il faut la réinstaller
   (même mécanisme que `emulateur-image`).
 
+<a id="projets-flutter"></a>
+## Projets Flutter (capacité `flutter-sdk`)
+
+Un agent serveur d'un projet **Flutter** (FM_Stats : `android_app/pubspec.yaml`) a besoin de l'outil `flutter`. Il n'est
+**jamais dans l'image** : le SDK vit sur l'**hôte**, dans `~/flutter-sdk`, et n'est monté **qu'en lecture seule** dans le
+conteneur des agents des projets Flutter.
+
+- **La capacité `flutter-sdk`** (étape `flutter_sdk` de `mise_en_place.sh`, dépend d'`android-build`) : Flutter **stable
+  épinglé** (clé `flutter` de `serveur_ovh/versions.json`, aujourd'hui 3.47.1, la version du poste). Le manifeste officiel
+  `releases_linux.json` (storage.googleapis.com/flutter_infra_release) est téléchargé puis lu (JSON) : **une seule** archive
+  Linux de cette version au canal stable, nom vérifié par motif strict, SHA-256 de 64 hexadécimaux ; l'archive est
+  téléchargée, **vérifiée par ce SHA-256 avant extraction** (jamais de `curl | sh`), puis mise en place atomiquement (une
+  autre version est mise de côté dans `~/flutter-sdk.ancien.<date>`, jamais supprimée par l'étape). Suivent
+  `flutter precache --android --universal` (rien d'autre), l'acceptation des licences Android (`sdkmanager --licenses`,
+  avertissement seulement) et le fichier `bin/cache/lockfile`. Marqueur `~/.myiafactory/flutter-sdk.version`
+  (« `flutter=<version>;canal=stable` ») écrit en dernier ; changer la version de `versions.json` le rend **périmé** : la
+  capacité est alors refaite. Jamais sous root ; environ 3 Go ; idempotente (rien n'est retéléchargé si le marqueur est à jour).
+  Un `~/flutter-sdk` **déjà présent** qui annonce la bonne version (`flutter --version`) est **gardé sans contrôle de
+  somme** : seuls cette étape ou l'utilisateur du serveur peuvent l'avoir posé (hors menace). Délai SSH de l'étape :
+  3600 s, au-dessus de la somme de ses délais internes (3480 s).
+- **Après cette mise à jour, l'image `agent` doit être reconstruite** : l'entrée du conteneur (`entree-agent.py`) a
+  changé, donc la capacité `agent` apparaît « **À mettre à jour** » jusqu'à la réinstallation de `agent-serveur`
+  (`py -3.12 lancer.py plateforme serveurs installer <id> agent-serveur --accord`, ou `agent-flutter`, qui la comprend).
+  D'ici là, les agents serveur partent avec l'ancienne image (sans les variables Flutter).
+- **L'installer** : besoin `agent-flutter` (= `agent` + `agent-abonnement` + `flutter-sdk`). L'écran Serveurs du bureau ne
+  propose pas encore cette action ; en ligne de commande, aperçu puis accord :
+  `py -3.12 lancer.py plateforme serveurs apercu <id> agent-flutter` puis
+  `py -3.12 lancer.py plateforme serveurs installer <id> agent-flutter --accord`.
+- **Le projet est reconnu sur le poste** (`outils/projet_flutter.py`) : un `pubspec.yaml` à la racine ou dans un
+  sous-dossier direct dont la section `dependencies:` déclare `flutter:` + `sdk: flutter`. La demande de l'agent porte alors
+  `"flutter": true` (un booléen, relu sur le serveur par un motif strict ; une clé en double ou une autre valeur fait échouer
+  la tâche) et le serveur choisi doit avoir `flutter-sdk`. **Bascule** : pour un projet Flutter, un serveur sans
+  `flutter-sdk` compte comme indisponible **pour ce projet** : le choix retombe sur le lieu suivant de l'ordre (le poste),
+  avec la raison « serveur : flutter-sdk absent du serveur » ; un projet non Flutter n'est pas concerné.
+- **Dans le conteneur** (mêmes durcissements : utilisateur de l'hôte, `--read-only`, `--cap-drop ALL`,
+  `no-new-privileges`…) : **SDK en copie sur écriture par tâche : lecture sur `~/flutter-sdk`, jamais modifié ;
+  écritures dans la couche de la tâche.** Flutter écrit dans son propre SDK (`bin/cache` à chaque lancement,
+  `packages/flutter_tools/.dart_tool` pour `flutter analyze`… : constaté sur le serveur réel, en lecture seule
+  `flutter analyze` échouait). `/opt/flutter-sdk` est donc un **volume overlay propre à la tâche** `flutter-<id>` (aucun
+  montage du SDK de l'hôte en bind) : couche basse `~/flutter-sdk` entier (jamais modifiée),
+  couche haute et dossier de travail `~/taches/<id>/flutter-up` et `flutter-work` (0700, même disque). Le volume est créé
+  par `sudo -n docker volume create --driver local --opt type=overlay …`, puis **prouvé** avant l'agent par un
+  `docker run --rm --network none` bref qui le monte (un overlay n'est monté qu'au lancement d'un conteneur) ; refusé : la
+  tâche échoue « **flutter : overlay refusé** », jamais de repli en écriture sur le SDK de l'hôte. Il est retiré à la fin
+  de la tâche, sur un échec de l'enveloppe et, à chaque lancement d'un agent Flutter, pour les tâches finies (balayage) ;
+  `flutter-up` compte dans le plafond `travail/` + `maison/`. L'image `agent` ne change pas. `~/android-sdk` sur
+  `/opt/android-sdk` en lecture seule. L'entrée pose des valeurs **fixes** :
+  `PATH` (`/opt/flutter-sdk/bin` en tête), `FLUTTER_ROOT`, `PUB_CACHE=/maison/.pub-cache` (inscriptible, gardé à la
+  reprise, compté dans les 8 Go de `travail/` + `maison/`), `ANDROID_HOME`, `CI=true`, `FLUTTER_SUPPRESS_ANALYTICS=true`.
+  `flutter pub get` passe par le **réseau sortant ouvert** des agents (pub.dev).
+- **Le droit d'appeler `flutter`** n'est jamais donné par la capacité : c'est la règle `Bash(flutter:*)` de la fiche de
+  l'agent (jamais `Bash` seul), ouverte par le Directeur (décision `outil_agent`, « Autoriser ce programme ») ou par
+  `{"action": "ouvrir_outil", "cle": "<agent>", "outil": "Bash(flutter:*)"}` envoyé à `orchestrateur/outil.py --factory <F>
+  lancer fiche`. La règle couvre une commande qui **commence** par `flutter` ; dans une commande composée (`cd x && flutter
+  test`), chaque morceau doit être couvert : préférer `flutter pub get --directory android_app`, et pour `flutter test`
+  un `cd android_app` seul puis `flutter test`.
+- **Limites** : l'image n'a pas de JDK : `flutter build apk` ne marche pas dans le conteneur d'agent (seulement
+  `pub get`, `analyze`, `test`). Les tests routés au serveur (`lancer.py tests`) ne connaissent pas encore la famille
+  `flutter`.
+
 <a id="connexion-a-l-abonnement"></a>
 ## Connexion à l'abonnement
 
@@ -385,3 +460,7 @@ Tout ce qui précède est vérifié par des tests simulés. À prouver sur le se
 - Le parcours de dossiers sans suivre de lien (**`O_NOFOLLOW`**) et les droits **0700 / 0600** sur le serveur réel.
 - La fenêtre de **60 s** de `docker stop` : l'entrée conclut-elle (restes, paquet, `fin.json`) dans ce délai sur un vrai projet ?
 - La **neutralisation des filtres** (`info/attributes`, `.gitattributes`) avec la version de Git du conteneur.
+- **Flutter** : avec l'overlay du SDK entier, `flutter analyze` et `flutter test` passent à la main (2026-11-23, couche
+  haute d'environ 76 Ko) ; restent `flutter pub get`, `analyze` et `test` dans le conteneur de l'agent lancé par
+  l'enveloppe, la suppression du volume en fin de tâche, les bibliothèques système dont `flutter_tester` a besoin dans l'image (Ubuntu
+  minimal) ; le nom exact de l'archive et la présence de la 3.47.1 dans `releases_linux.json`.

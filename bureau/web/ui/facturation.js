@@ -626,8 +626,23 @@ export function demandeRecrutementAuto(apercu, lieu = "mieux") {
 }
 
 // Le clic « Créer le dépôt Git » : le seul consentement à la création du dépôt GitHub privé.
-export function demandeDepot() {
-  return {type: "depot_git", confirme: true};
+// `allegement` : l'accord aux exclusions proposées pour un dossier trop lourd (elles sont écrites au .gitignore).
+export function demandeDepot(allegement = false) {
+  return allegement === true ? {type: "depot_git", confirme: true, allegement: true} : {type: "depot_git", confirme: true};
+}
+
+// « Publier maintenant » : les livrables terminés (apk, zip…) partent en releases GitHub privées du projet.
+export function demandePublication() {
+  return {type: "publier_livrable", confirme: true};
+}
+
+// Le bloc « Publier maintenant » de la configuration git d'un projet déjà sur GitHub. Le réglage « Livrer
+// automatiquement sur GitHub » est dans la page Réglages (roue crantée), pas ici.
+function blocLivraisonGithub(ctx) {
+  const bloc = el("div", "livraison-github");
+  const erreur = el("p", "saisie-erreur", "");
+  bloc.append(boutonDemande(ctx, "Publier maintenant", demandePublication, erreur), erreur);
+  return bloc;
 }
 
 function choix(options, valeur) {
@@ -676,6 +691,7 @@ export function partieRecrutement(ctx) {
       p.append(a);
     } else p.append("en place");
     bloc.append(p);
+    if (agir) bloc.append(blocLivraisonGithub(ctx));
   } else {
     bloc.append(el("p", "avertissement", `Agents cloud impossibles : ${r.raisonCloud}`));
     if (r.creable && agir) {
@@ -687,6 +703,16 @@ export function partieRecrutement(ctx) {
     }
   }
   if (r.essai && !r.github) bloc.append(el("p", r.essai.fait ? "note" : "avertissement", r.essai.texte || ""));
+  const allegement = r.essai?.allegement;
+  if (allegement && !r.github && r.creable && agir) {      // dossier trop lourd : exclusions proposées, à accepter
+    const regles = Array.isArray(allegement.regles) ? allegement.regles : [];
+    const liste = el("ul", "note");
+    for (const x of regles) liste.append(el("li", "", x));
+    const erreurAllegement = el("p", "saisie-erreur", "");
+    bloc.append(el("p", "note", `Exclusions proposées (${allegement.avant_mo ?? "?"} Mo → ${allegement.apres_mo ?? "?"} Mo) :`), liste,
+                boutonDemande(ctx, "Accepter l'allègement et créer le dépôt", () => demandeDepot(true), erreurAllegement),
+                erreurAllegement);
+  }
   if (!r.roles.length) {
     bloc.append(el("p", "note", "Le projet n'a pas encore de workflow : rien à recruter."));
     return bloc;

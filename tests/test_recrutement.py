@@ -406,12 +406,12 @@ class Depot_git(Base):
         self.assertEqual(self.outil("depot", entree={"action": "creer"})[0], 1)
 
     def test_projet_sans_git(self):
-        git, gh = Executeur({"remote get-url": (0, "https://github.com/moi/projet.git")}), Executeur()
+        git, gh = Executeur({"remote get-url": (0, "https://github.com/moi/projet.git"), "rev-parse --verify": (1, ""), "diff --cached": (1, "")}), Executeur()
         code, r = self.creer(git, gh)
         self.assertEqual(code, 0, r)
         self.assertTrue(r["fait"])
         self.assertEqual(r["url"], "https://github.com/moi/projet")
-        self.assertEqual([a[0] for a in git.appels if a[0] != "config"][:3], ["init", "add", "commit"])
+        self.assertEqual([a[0] for a in git.appels if a[0] not in ("config", "-c", "rev-parse", "diff")][:3], ["init", "add", "commit"])
         creer = [a for a in gh.appels if a[:2] == ["repo", "create"]]
         self.assertEqual(len(creer), 1)
         self.assertIn("--private", creer[0])

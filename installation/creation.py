@@ -5,6 +5,7 @@ Le projet est vide d'organisation jusqu'à sa première demande (le moteur propo
 l'inscription ne laisse rien : ni dossier à moitié écrit, ni bureau changé. Un échec de GitHub ne défait rien : le projet
 reste créé, en local, et le résultat dit pourquoi.
 """
+import fnmatch
 import json
 import os
 import re
@@ -120,6 +121,108 @@ def regler_identite(projet, git, gh=executer_gh):
     git(["config", "user.email", f"{ident}+{login}@users.noreply.github.com"], projet)
 
 
+FICHIER_MAX = 50 * 1024 * 1024        # GitHub avertit au-delà de 50 Mo et refuse au-delà de 100 Mo
+DEPOT_MAX = 1024 * 1024 * 1024        # un dépôt de plus de 1 Go est déconseillé par GitHub
+
+
+_MO = 1024 * 1024
+_ARTEFACTS = {"apk", "aab", "ipa", "zip", "7z", "rar", "iso", "exe", "dll", "so", "dmp", "mp4", "mov", "avi"}
+_DOSSIERS_DE_BUILD = {"build", "dist", "out", "target", "node_modules", ".dart_tool", ".gradle", "__pycache__", ".venv",
+                      "venv", ".next", "Pods", "DerivedData"}
+ENTETE_ALLEGEMENT = "# Allégement pour GitHub (MyIAFactory) : trop lourd pour le dépôt"
+
+
+def _regle_pour(rel):
+    """La règle `.gitignore` qui écarte ce gros fichier : son dossier de build, son type d'artefact ou de sauvegarde,
+    sinon le fichier lui-même."""
+    parts = rel.split("/")
+    for i, p in enumerate(parts[:-1]):
+        if p in _DOSSIERS_DE_BUILD:
+            return "/" + "/".join(parts[:i + 1]) + "/"
+    nom = parts[-1]
+    if "." in nom and nom.rsplit(".", 1)[1].lower() in _ARTEFACTS:
+        return "*." + nom.rsplit(".", 1)[1].lower()
+    if ".bak" in nom:
+        return "*.bak*"
+    return "/" + rel
+
+
+def _ecartee(rel, regle):
+    if regle.endswith("/"):
+        return rel.startswith(regle.lstrip("/"))
+    if regle.startswith("/"):
+        return rel == regle[1:]
+    return fnmatch.fnmatch(rel.rsplit("/", 1)[-1], regle)
+
+
+def _fichiers_a_ajouter(projet, git):
+    """`[(taille, chemin relatif)]` de ce que `git add .` ajouterait (fichiers non ignorés), ou `None` si git ne répond pas
+    (dossier pas encore un dépôt git : non mesurable)."""
+    code, sortie = git(["-c", "core.quotepath=off", "ls-files", "--others", "--exclude-standard"], projet)
+    if code != 0:
+        return None
+    fichiers = []
+    for rel in sortie.splitlines():
+        try:
+            fichiers.append(((Path(projet) / rel.strip()).stat().st_size, rel.strip()))
+        except OSError:
+            continue
+    return fichiers
+
+
+def proposer_allegement(projet, git):
+    """`None` si ce que `git add .` ajouterait reste poussable sur GitHub (aucun fichier de plus de 50 Mo, 1 Go au plus en
+    tout) ; sinon la proposition `{regles, avant_mo, apres_mo, gros, texte}` : les règles `.gitignore` qui l'allègent
+    (dossiers de build, artefacts, sauvegardes, gros fichiers, puis les plus gros dossiers si le total reste trop
+    grand), et ce qu'il resterait. N'ajoute ni n'écrit rien : c'est l'utilisateur qui accepte."""
+    fichiers = _fichiers_a_ajouter(projet, git)
+    if fichiers is None:
+        return None
+    total = sum(t for t, _ in fichiers)
+    gros = sorted(((t, r) for t, r in fichiers if t > FICHIER_MAX), reverse=True)
+    if not gros and total <= DEPOT_MAX:
+        return None
+    regles = []
+    for _, rel in gros:
+        r = _regle_pour(rel)
+        if r not in regles:
+            regles.append(r)
+    restant = [(t, r) for t, r in fichiers if not any(_ecartee(r, x) for x in regles)]
+    while sum(t for t, _ in restant) > DEPOT_MAX:
+        par_dossier = {}
+        for t, r in restant:
+            if "/" in r:
+                par_dossier[r.split("/", 1)[0]] = par_dossier.get(r.split("/", 1)[0], 0) + t
+        if not par_dossier:
+            break
+        lourd = max(par_dossier, key=par_dossier.get)
+        regles.append(f"/{lourd}/")
+        restant = [(t, r) for t, r in restant if not r.startswith(lourd + "/")]
+    apres = sum(t for t, _ in restant)
+    exemples = [f"{t // _MO} Mo  {rel}" for t, rel in gros[:6]]
+    texte = (f"Le dossier pèse {total // _MO} Mo à envoyer"
+             + (f", dont {len(gros)} fichier(s) de plus de 50 Mo (GitHub refuse au-delà de 100 Mo)" if gros else "")
+             + f". Pour le mettre sur GitHub, je propose d'exclure du dépôt : {', '.join(regles)} ; il ferait alors "
+               f"{apres // _MO} Mo. Rien n'a été ajouté ni envoyé : acceptez pour appliquer ces exclusions au "
+               ".gitignore et créer le dépôt." + (" Plus gros fichiers : " + " ; ".join(exemples) + "." if exemples else ""))
+    return {"regles": regles, "avant_mo": total // _MO, "apres_mo": apres // _MO,
+            "gros": [rel for _, rel in gros[:20]], "texte": texte}
+
+
+def appliquer_allegement(projet, regles):
+    """Ajoute au `.gitignore` du projet les règles de l'allègement accepté (une fois chacune, sous un en-tête)."""
+    chemin = Path(projet) / ".gitignore"
+    texte = chemin.read_text(encoding="utf-8-sig") if chemin.is_file() else ""
+    fin = "\r\n" if "\r\n" in texte else "\n"
+    presentes = {x.strip() for x in texte.splitlines()}
+    neuves = [r for r in regles if r not in presentes]
+    if not neuves:
+        return
+    bloc = ([] if not texte or texte.endswith("\n") else [""]) + ["", ENTETE_ALLEGEMENT] + neuves
+    with open(chemin, "w", encoding="utf-8", newline="") as f:
+        f.write(texte + fin.join(bloc) + fin)
+
+
 def github(projet, nom, git, gh=executer_gh):
     """Crée le dépôt privé et pousse. Rend « fait » ou la raison (et le geste pour le faire à la main)."""
     code, sortie = gh(["auth", "status"], projet)
@@ -129,6 +232,11 @@ def github(projet, nom, git, gh=executer_gh):
                 "GitHub n'a pas été fait : gh n'est pas connecté à votre compte. Lancez « gh auth login », puis, dans "
                 f"le dossier du projet : gh repo create {nom} --private --source . --push.")
     for args in (["init"], ["add", "."], ["commit", "-m", MESSAGE_PREMIER_COMMIT]):
+        if args[0] == "add":
+            lourd = proposer_allegement(projet, git)
+            if lourd:      # jamais un `git add .` à l'aveugle : le bureau propose l'allègement, l'utilisateur accepte
+                return ("GitHub n'a pas été fait : " + lourd["texte"] + " Dans le bureau, « Créer le dépôt Git » "
+                        "propose cet allègement et le crée à votre accord.")
         if args[0] == "commit":
             regler_identite(projet, git, gh)
         code, sortie = git(args, projet)
@@ -146,13 +254,18 @@ def github(projet, nom, git, gh=executer_gh):
 _depot = github   # `creer_projet` a un paramètre `github`
 
 
-def depot_github(projet, nom, git, gh=executer_gh):
+def depot_github(projet, nom, git, gh=executer_gh, allegement=False):
     """Le dépôt GitHub **privé** d'un projet qui existe déjà (le bouton « Créer le dépôt Git » du bureau ; le clic est
     le consentement). Règle d'abord le `.gitignore` (convention de l'installation : `.env` et les fichiers propres au
     poste restent hors du dépôt, `.factory` est versionné) ; sans `.git`, c'est `github` (init, premier commit, dépôt,
     poussée) ; avec un `.git` sans origine, un commit si besoin puis le dépôt. Une origine existante n'est jamais
     remplacée. Rend `{"fait": bool, "url": str | None, "texte": str}` (le texte dit le résultat ou la raison, et la
-    commande à lancer)."""
+    commande à lancer).
+
+    Un dossier trop lourd pour GitHub (un fichier de plus de 50 Mo, ou plus de 1 Go) n'est jamais ajouté à l'aveugle :
+    sans `allegement`, rien n'est ajouté et le résultat porte `allegement` (`proposer_allegement` : les règles
+    `.gitignore` proposées et la taille qui resterait) ; avec `allegement` (l'utilisateur a accepté), ces règles sont
+    écrites au `.gitignore` et le dépôt est créé."""
     from orchestrateur import recrutement
     projet = Path(projet)
     try:
@@ -182,11 +295,29 @@ def depot_github(projet, nom, git, gh=executer_gh):
             "Le dépôt n'a pas été créé : gh (l'outil GitHub, cli.github.com) n'est pas installé sur ce poste." if absent
             else "Le dépôt n'a pas été créé : gh n'est pas connecté à votre compte. Lancez « gh auth login », puis "
                  "cliquez de nouveau « Créer le dépôt Git ».")}
-    if not (projet / ".git").exists():
-        r = github(projet, nom, git, gh)
-        if r != "fait":
-            return {"fait": False, "url": None, "texte": r.replace("GitHub n'a pas été fait", "Le dépôt n'a pas été créé")}
-    else:
+    depot_pret = (projet / ".git").exists()
+    if not depot_pret:
+        code, sortie = git(["init"], projet)    # sans dépôt, on ne peut pas mesurer : `git init` d'abord (sans risque)
+        depot_pret = code == 0
+        if not depot_pret:      # git absent ou en échec : `github` en donne la raison et le geste à la main
+            r = github(projet, nom, git, gh)
+            if r != "fait":
+                return {"fait": False, "url": None,
+                        "texte": r.replace("GitHub n'a pas été fait", "Le dépôt n'a pas été créé")}
+    if depot_pret:
+        lourd = proposer_allegement(projet, git)
+        if lourd and not allegement:
+            return {"fait": False, "url": None, "texte": "Le dépôt n'a pas été créé : " + lourd["texte"],
+                    "allegement": {k: lourd[k] for k in ("regles", "avant_mo", "apres_mo", "gros")}}
+        if lourd:
+            try:
+                appliquer_allegement(projet, lourd["regles"])
+            except OSError as e:
+                return {"fait": False, "url": None, "texte": f"Le .gitignore n'a pas pu être allégé : {e}"}
+            reste = proposer_allegement(projet, git)
+            if reste:
+                return {"fait": False, "url": None, "texte": "Le dépôt n'a pas été créé : même allégé, le dossier reste "
+                        "trop lourd. " + reste["texte"]}
         code, sortie = git(["add", "."], projet)
         if code != 0:
             return {"fait": False, "url": None, "texte": f"Le dépôt n'a pas été créé : git add a échoué. {sortie}"[:400]}
@@ -218,10 +349,10 @@ def calibrer_le_poste(bureau_json):
         return CHARGE_MAX_DEFAUT
 
 
-def creer_projet(parent, nom, *, origine=None, mots_interdits=(), facturation=False, github=False, description=None,
+def creer_projet(parent, nom, *, adopter=None, origine=None, mots_interdits=(), facturation=False, github=False, description=None,
                  genre=None, organisation=None, bureau_json, git=executer_git, gh=executer_gh, maintenant=None,
                  calibrer=calibrer_le_poste):
-    """Crée `<parent>/<nom>/` avec sa configuration `.factory/` sans workflow ni agent, l'inscrit au bureau commun
+    """Crée `<parent>/<nom>/` (ou adopte un dossier existant, voir `adopter`) avec sa configuration `.factory/` sans workflow ni agent, l'inscrit au bureau commun
     `bureau_json`, puis, si `github`, crée son dépôt privé.
 
     `origine` : le fichier de réglages du projet d'origine (charge, modèle de l'orchestrateur, agents locaux, couche du
@@ -230,13 +361,24 @@ def creer_projet(parent, nom, *, origine=None, mots_interdits=(), facturation=Fa
     tout le travail). `organisation` : l'organisation validée avec le chef, `{"services":
     [nouveaux], "agents", "briefs", "workflow": {id, genre, flux}, "environnement"}`, écrite dans la même transaction que
     la configuration (un refus n'écrit rien). Rend {"reglages": Path, "id": str, "projet": Path, "github":
-    "fait" | "non demandé" | <la raison>}. `Echec(message)` : rien n'est créé."""
+    "fait" | "non demandé" | <la raison>}. `Echec(message)` : rien n'est créé.
+
+    `adopter` : un dossier de code existant qui devient le dossier du projet (`parent` est alors ignoré) : seul `.factory/`
+    y est ajouté, avec les règles du `.gitignore` ; le code n'est ni copié ni déplacé. Un dossier qui a déjà un `.factory`
+    est refusé (c'est le travail de la réparation). Un refus rend le dossier tel qu'il était."""
     from datetime import datetime
     nom = verifier_nom(nom)
-    parent = verifier_parent(parent)
-    projet = parent / nom
-    if projet.exists():
-        raise Echec(f"« {nom} » existe déjà dans {parent} : choisissez un autre nom.")
+    if adopter is not None:
+        from installation import scan
+        projet = scan.verifier_repertoire(str(adopter))
+        if (projet / ".factory").exists() or (projet / ".factory.tmp").exists():
+            raise Echec(f"« {projet} » a déjà un dossier .factory : c'est un projet MyIAFactory, la réparation de "
+                        "l'installateur s'en charge.")
+    else:
+        parent = verifier_parent(parent)
+        projet = parent / nom
+        if projet.exists():
+            raise Echec(f"« {nom} » existe déjà dans {parent} : choisissez un autre nom.")
     if genre is not None and not (isinstance(genre, str) and fa.MOTIF_GENRE.match(genre)):
         raise Echec("Le genre du projet est un identifiant (minuscules, chiffres et tirets).")
     if description is not None and not (isinstance(description, str) and description.strip()):
@@ -268,8 +410,10 @@ def creer_projet(parent, nom, *, origine=None, mots_interdits=(), facturation=Fa
         else:
             p.update(agents=[dict(a) for a in organisation["agents"]], briefs=dict(organisation["briefs"]))
     bureau_avant = mep._lire_octets(bureau_json)
+    gitignore_avant = mep._lire_octets(projet / ".gitignore") if adopter is not None else None
     try:
-        projet.mkdir()
+        if adopter is None:
+            projet.mkdir()
         tmp = projet / ".factory.tmp"
         mep._ecrire_configuration(tmp, p, genre, maintenant or datetime.now())
         tmp.rename(projet / ".factory")
@@ -277,7 +421,12 @@ def creer_projet(parent, nom, *, origine=None, mots_interdits=(), facturation=Fa
         mep.inscrire(bureau_json, reglages_json)
         fa.lire(projet / ".factory" / "factory.json")
     except BaseException as e:
-        shutil.rmtree(projet, ignore_errors=True)
+        if adopter is None:
+            shutil.rmtree(projet, ignore_errors=True)
+        else:       # le code de l'utilisateur n'est jamais touché : on retire seulement ce qu'on a ajouté
+            shutil.rmtree(projet / ".factory.tmp", ignore_errors=True)
+            shutil.rmtree(projet / ".factory", ignore_errors=True)
+            mep._remettre(projet / ".gitignore", gitignore_avant)
         mep._remettre(bureau_json, bureau_avant)
         if isinstance(e, (OSError, fa.FactoryInvalide)):
             raise Echec(f"Le projet n'a pas pu être créé : {e}") from e

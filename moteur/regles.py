@@ -216,9 +216,13 @@ class Projet:
         self.verifier_environnement = verifier_environnement or environnement.verifier
         self.bureau = bureau              # le fichier du bureau : les mesures d'usage par genre servent à l'estimation
         self.fichier_reglages = None      # les réglages du bureau pour ce projet (posé à l'ouverture), relus à chaque passage
+        # le fichier du bureau dont vient le projet (`boucle.projets_du_bureau`) : ses niveaux global et type entrent
+        # dans les valeurs effectives des réglages (`reglage_effectif`) ; None pour un projet ouvert seul
+        self.fichier_bureau = None
         self.lecons_auto = False          # réglage `lecons_auto` : les leçons proposées sont validées d'elles-mêmes
         self.analyse_blocages = False     # réglage `analyse_blocages` (vrai par défaut à l'ouverture) : le Chef analyse
         self.livraison_sur_demande = False   # réglage `livraison_sur_demande` : la livraison attend « Livrer maintenant »
+        self.livraison_github = False        # réglage `livraison_github` : les livrables terminés partent en release GitHub
         self.une_session_moyenne = False     # réglage `une_session_moyenne` : code, tests et revue d'une évolution moyenne
         self.ligne_a_dire = None     # dite une seule fois au bureau, dans la réponse de la première demande traitée
         base = self.factory.resolve().parent
@@ -2431,7 +2435,8 @@ def _sur_passer_polyvalent(projet, demande, etat):
 
 def _sur_depot_git(projet, demande, etat):
     """Le clic « Créer le dépôt Git » : dépôt local si besoin, dépôt GitHub privé et poussée (`lancer depot`)."""
-    r = lancer(projet, "depot", {"action": "creer", "confirme": True})
+    r = lancer(projet, "depot", {"action": "creer", "confirme": True,
+                                  **({"allegement": True} if demande.get("allegement") is True else {})})
     _terminer(projet, {"demande": demande["id"]}, r["texte"])
     projet._cloud_raison = (None, 0.0)
     return []
@@ -5835,6 +5840,7 @@ def avancer(projet, etat):
             lancer(projet, "decision", {"action": "lever", "id": d["id"]})
     _liberer_les_lots_orphelins(projet, etat, _etat(projet))
     livrer_si_calme(projet, etat, force=bool(etat.pop("livrer_maintenant", False)))
+    _publier_les_livrables(projet)
     actions += _demarrer_en_attente(projet, etat, None)
     if not projet.pause_globale:
         _noter_les_places_libres(projet, etat)
@@ -6215,6 +6221,18 @@ def _sur_livrer_maintenant(projet, demande, etat):
 _SUR["livrer_maintenant"] = _sur_livrer_maintenant
 
 
+def _sur_publier_livrable(projet, demande, etat):
+    """Le clic « Publier maintenant » : les livrables terminés partent en releases GitHub, ceux qui avaient échoué aussi
+    (`lancer publier`, avec `relancer`), même si la livraison automatique est désactivée."""
+    r = lancer(projet, "publier", {"relancer": True})
+    textes = [x["texte"] for x in r.get("fonctionnalites") or []]
+    _terminer(projet, {"demande": demande["id"]}, " ".join(textes) or "Aucun livrable téléchargeable à publier.")
+    return []
+
+
+_SUR["publier_livrable"] = _sur_publier_livrable
+
+
 # --- Les jugements : leur décision revient ici.
 
 # --- L'analyse d'un blocage par le Chef (jugement `analyser_blocage`).
@@ -6241,34 +6259,49 @@ JOURNAL_DE_L_ANALYSE = 12             # les dernières lignes du journal envoyé
 SUIVRE, PRECISER, LAISSER = "suivre", "preciser", "laisser"
 
 
-def _une_session_active(projet):
-    """Le réglage `une_session_moyenne` (faux si absent), relu à chaque validation de cahier."""
+def reglage_effectif(projet, cle):
+    """La valeur effective du réglage `cle` du projet, relue : projet, puis type, puis global (fichier du bureau du
+    projet, s'il en a un), puis défaut (`reglages.charger_effectif`). Des réglages du projet illisibles laissent le
+    dernier état connu (l'attribut du même nom) ; un fichier du bureau illisible, le projet seul."""
     if getattr(projet, "fichier_reglages", None) is not None:
         try:
-            return reglages_du_bureau.charger(projet.fichier_reglages)["une_session_moyenne"] is True
+            return reglages_du_bureau.charger_effectif(projet.fichier_reglages,
+                                                       getattr(projet, "fichier_bureau", None))[cle]
         except reglages_du_bureau.ReglagesInvalides:
             pass
-    return getattr(projet, "une_session_moyenne", False) is True
+    return getattr(projet, cle, False)
+
+
+def _une_session_active(projet):
+    """Le réglage `une_session_moyenne` (faux si absent), relu à chaque validation de cahier."""
+    return reglage_effectif(projet, "une_session_moyenne") is True
+
+
+def _livraison_github(projet):
+    """Le réglage `livraison_github` (faux si absent ; propre au projet, jamais hérité), relu à chaque passage."""
+    return reglage_effectif(projet, "livraison_github") is True
+
+
+def _publier_les_livrables(projet):
+    """Réglage « Livrer automatiquement sur GitHub » : les livrables des fonctionnalités terminées pas encore publiés
+    partent en releases (`lancer publier`). Un échec est noté dans l'avis de fin (jamais refait seul : « Publier
+    maintenant » le relance) ; il ne bloque jamais le passage."""
+    if not _livraison_github(projet):
+        return
+    try:
+        lancer(projet, "publier", {})
+    except (Refus, ErreurMoteur):
+        pass
 
 
 def _livraison_sur_demande(projet):
     """Le réglage `livraison_sur_demande` (faux si absent), relu à chaque passage."""
-    if getattr(projet, "fichier_reglages", None) is not None:
-        try:
-            return reglages_du_bureau.charger(projet.fichier_reglages)["livraison_sur_demande"] is True
-        except reglages_du_bureau.ReglagesInvalides:
-            pass
-    return getattr(projet, "livraison_sur_demande", False) is True
+    return reglage_effectif(projet, "livraison_sur_demande") is True
 
 
 def _analyse_active(projet):
     """Le réglage « Analyse intelligente des blocages » (`analyse_blocages`, vrai si absent), relu à chaque blocage."""
-    if getattr(projet, "fichier_reglages", None) is not None:
-        try:
-            return reglages_du_bureau.charger(projet.fichier_reglages)["analyse_blocages"] is True
-        except reglages_du_bureau.ReglagesInvalides:
-            pass
-    return getattr(projet, "analyse_blocages", False) is True
+    return reglage_effectif(projet, "analyse_blocages") is True
 
 
 def _journal(projet, tid, texte):
@@ -6433,7 +6466,7 @@ def _lecon_du_chef(projet, t, lecon):
     except Refus as ex:
         _journal(projet, t["id"], f"Leçon du Chef non notée : {ex}")
         return
-    if getattr(projet, "lecons_auto", False):
+    if reglage_effectif(projet, "lecons_auto"):      # relu : une valeur posée au global ou au type agit aussi
         try:
             r = lancer(projet, "lecon", {"action": "appliquer", "lot": [{"id": i, "verdict": "valider", "etage": etage}]})
             x = (r.get("resultats") or [{}])[0]

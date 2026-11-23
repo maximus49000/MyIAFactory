@@ -268,6 +268,66 @@ class TestTour(Base):
         self.assertNotIn("sk-ant", (self.d / f"{b['id']}.json").read_text(encoding="utf-8"))
 
 
+class TestRepertoire(Base):
+    """Le scan d'un répertoire existant : inventaire et résumé, faits une fois, donnés au chef."""
+
+    def code(self):
+        d = self.base / "code"
+        d.mkdir()
+        (d / "main.py").write_text("print('bonjour')\n", encoding="utf-8")
+        return str(d)
+
+    def test_le_chef_recoit_la_connaissance_du_repertoire(self):
+        faux = Faux("Un jeu de casse-briques en Python.", QUESTIONS)
+        b = self.tour(self.brouillon(repertoire=self.code()), faux)
+        scan, chef = faux.dossiers
+        self.assertIn("arbre", scan)
+        self.assertEqual(chef["connaissance"]["resume"], "Un jeu de casse-briques en Python.")
+        self.assertIn("main.py", chef["connaissance"]["inventaire"]["arbre"])
+        self.assertEqual(len(b["usages"]), 2)       # le scan et le chef sont comptés
+        self.assertEqual(definition.vue(b)["connaissance"]["resume"], "Un jeu de casse-briques en Python.")
+
+    def test_le_scan_se_fait_une_fois_par_repertoire(self):
+        b = self.tour(self.brouillon(repertoire=self.code()), Faux("Résumé.", QUESTIONS))
+        faux = Faux(proposition(genre="jeu-web", nouveau=None))
+        self.tour(definition.ajouter_reponses(b, [{"question": "style", "texte": "Néon"},
+                                                 {"question": "niveaux", "texte": "10"}]), faux)
+        self.assertEqual(len(faux.dossiers), 1)     # aucun nouveau scan
+        self.assertEqual(faux.dossiers[0]["connaissance"]["resume"], "Résumé.")
+
+    def test_sans_repertoire_pas_de_connaissance(self):
+        faux = Faux(QUESTIONS)
+        self.tour(self.brouillon(), faux)
+        self.assertIsNone(faux.dossiers[0]["connaissance"])
+
+    def test_repertoire_disparu_le_tour_continue_avec_un_avertissement(self):
+        faux = Faux(QUESTIONS)
+        self.tour(self.brouillon(repertoire=str(self.base / "disparu")), faux)
+        self.assertIn("n'existe pas", faux.dossiers[0]["connaissance"]["avertissement"])
+
+    def test_resume_rate_l_inventaire_reste(self):
+        faux = Faux(appel.ErreurAppel("connexion perdue"), QUESTIONS)
+        b = self.tour(self.brouillon(repertoire=self.code()), faux)
+        c = faux.dossiers[-1]["connaissance"]
+        self.assertIsNone(c["resume"])
+        self.assertIn("connexion perdue", c["avertissement"])
+        self.assertIn("main.py", c["inventaire"]["arbre"])
+        self.assertEqual(b["tours"], 1)
+
+    def test_le_resume_est_lu_en_lecture_seule_dans_le_repertoire(self):
+        vus = []
+
+        def appeler(consigne, dossier, modele, *, couche="claude", **kw):
+            vus.append((modele, kw))
+            return appel.Reponse("Résumé.", [dict(USAGE)]) if modele == "haiku" else                 appel.Reponse(json.dumps(QUESTIONS), [dict(USAGE)])
+        code = self.code()
+        definition.tour(self.brouillon(repertoire=code), genres_connus=GENRES, couche="claude", appeler=appeler,
+                        verifier_environnement=a_installer, maintenant=T0)
+        modele, kw = vus[0]
+        self.assertEqual((modele, kw["outils"]), ("haiku", ["Read", "Glob", "Grep"]))
+        self.assertEqual(Path(kw["dossier_travail"]), Path(code).resolve())
+
+
 class TestEnArriere(Base):
     def lancer(self, b, faux, **kw):
         kw.setdefault("genres_connus", GENRES)
@@ -426,7 +486,7 @@ class TestEnArriere(Base):
         b = self.brouillon()
         self.lancer(b, Faux(QUESTIONS), en_arriere=False)
         v = definition.vue(self.relire(b), prix)
-        self.assertEqual(sorted(v), ["cout", "echange", "en_cours", "erreur", "id", "infos", "proposition", "tour",
+        self.assertEqual(sorted(v), ["connaissance", "cout", "echange", "en_cours", "erreur", "id", "infos", "proposition", "tour",
                                      "tours", "tours_max"])
         self.assertEqual((v["tours"], v["tours_max"], v["tour"]), (1, 4, "libre"))
         self.assertGreater(v["cout"]["tokens"], 0)
@@ -486,6 +546,32 @@ class TestValider(Base):
         code, r = outil.executer(self.factory(nom), ["releve"])
         self.assertEqual(code, 0, r)
         return r
+
+    def test_un_repertoire_existant_devient_le_projet_sur_place(self):
+        code = self.base / "mon code"
+        code.mkdir()
+        (code / "main.py").write_text("print('x')", encoding="utf-8")
+        infos = dict(INFOS, parent=str(self.parent), repertoire=str(code))
+        b = brouillons.creer(infos, dossier=self.d, maintenant=T0)
+        b = definition.tour(b, genres_connus=GENRES, couche="api", appeler=Faux(proposition()),
+                            verifier_environnement=a_installer, maintenant=T0)
+        brouillons.ecrire(b, dossier=self.d, maintenant=T0)
+        r = self.valider(b, executer=Pont({"genre": (0, {"genre": "jeu-android", "cree": True})}))
+        self.assertEqual(Path(r["projet"]).resolve(), code.resolve())
+        self.assertTrue((code / ".factory" / "factory.json").is_file())
+        self.assertEqual((code / "main.py").read_text(encoding="utf-8"), "print('x')")
+        self.assertFalse((self.parent / "Casse-briques").exists())
+        self.assertIn("repris sur place", r["message"])
+
+    def test_un_repertoire_deja_installe_est_refuse_a_la_validation(self):
+        code = self.base / "mon code"
+        (code / ".factory").mkdir(parents=True)
+        infos = dict(INFOS, parent=str(self.parent), repertoire=str(code))
+        b = brouillons.creer(infos, dossier=self.d, maintenant=T0)
+        b = definition.tour(b, genres_connus=GENRES, couche="api", appeler=Faux(proposition()),
+                            verifier_environnement=a_installer, maintenant=T0)
+        with self.assertRaises(definition.InfosAChanger):
+            self.valider(b)
 
     def test_rien_tant_que_rien_n_est_valide(self):
         b = self.pret()

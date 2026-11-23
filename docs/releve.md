@@ -422,7 +422,7 @@ Ces routes concernent **tout le bureau commun** (pas de `?projet=`). Le format d
 
 ## Les jauges d'abonnement (état servi à la page)
 
-Les jauges et le rond lisent la même mesure, servie par `GET /api/conso` (le compte, sinon le dernier appel du moteur : `source` vaut `"compte"` ou `"moteur"`, `mesure` est l'instant de la mesure en secondes epoch, `part` la part estimée). Le format du relevé ne change pas. `GET /api/etat` porte de son côté `abonnement` : `{instantane, pourcent_par_euro: {five_hour, seven_day}, mesures, minimum, maintenant}`, ou `null` quand la couche des appels est l'API (rien à afficher). `instantane` est le dernier lu dans `~/MyIAFactory/abonnement.json` (`null` : « pas encore mesuré »). `pourcent_par_euro` est le nombre de points de pourcentage de l'abonnement par euro (équivalent tarif API) ; `null` tant que `mesures` est sous `minimum` (« en cours d'étalonnage »). Les pourcentages sont ceux du compte, pas ceux de ce seul bureau.
+Le rond (dans la barre) et les jauges « 5 h » et « Semaine » (dans le panneau du rond, plus dans la barre) lisent la même mesure, servie par `GET /api/conso` (le compte, sinon le dernier appel du moteur : `source` vaut `"compte"` ou `"moteur"`, `mesure` est l'instant de la mesure en secondes epoch, `part` la part estimée). Le format du relevé ne change pas. `GET /api/etat` porte de son côté `abonnement` : `{instantane, pourcent_par_euro: {five_hour, seven_day}, mesures, minimum, maintenant}`, ou `null` quand la couche des appels est l'API (rien à afficher). `instantane` est le dernier lu dans `~/MyIAFactory/abonnement.json` (`null` : « pas encore mesuré »). `pourcent_par_euro` est le nombre de points de pourcentage de l'abonnement par euro (équivalent tarif API) ; `null` tant que `mesures` est sous `minimum` (« en cours d'étalonnage »). Les pourcentages sont ceux du compte, pas ceux de ce seul bureau.
 
 ## Ce qui retient le travail (état servi à la page)
 
@@ -506,7 +506,7 @@ Le bureau qui suit plusieurs projets (fichier de bureau commun) crée un projet 
 | Route | Corps | Effet |
 |---|---|---|
 | `GET /api/creations` | — (ou `?id=` pour un brouillon) | les brouillons à reprendre, avec leur coût en euros, et le coût des échanges abandonnés |
-| `POST /api/creations/infos` | `parent`, `nom`, `description`, … (+ `id` pour changer un brouillon) | première fenêtre validée : contrôle du nom et du dossier, brouillon créé ; rien n'est encore écrit dans un projet |
+| `POST /api/creations/infos` | `parent`, `nom`, `description`, `repertoire?` (un dossier existant à scanner), … (+ `id` pour changer un brouillon) | première fenêtre validée : contrôle du nom et du dossier, brouillon créé ; rien n'est encore écrit dans un projet |
 | `POST /api/creations/tour` | `id`, `reponses?`, `correction?`, `proposer_maintenant?` | un tour d'échange avec le chef (jugement `definir_workflow`), lancé en arrière-plan : la réponse marque le brouillon `tour: "en_cours"`, la page le relit ; 4 tours de questions au plus avant la proposition |
 | `POST /api/creations/valider` | `id` ; facultatifs : `fable` (les clés des agents cochés pour Fable), `installer` (vrai : créer la tâche d'installation des outils), `genre_description` (la phrase du genre nouveau) | crée le projet avec son workflow de genre, ses services, ses agents et son genre, l'inscrit au bureau, verse les usages de l'échange à son relevé |
 | `POST /api/creations/supprimer` | `id` | abandonne le brouillon (ses usages restent comptés) |

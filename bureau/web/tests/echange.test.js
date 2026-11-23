@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {
   corpsInfos, verifierInfos, corpsTour, basculer, corpsCorrection, corpsProposerMaintenant, choisir, vueEchange, texteCout,
   lignesProposition, agentsFable, installationPossible, outilsAutonomes, outilsManquants, corpsValidation, suiteValidation, lignesBrouillons,
-  texteAbandonnes, texteAttente, utiliseLeFormulaireActuel, envoyer, DELAI_RELECTURE_MS,
+  texteAbandonnes, texteAttente, utiliseLeFormulaireActuel, envoyer, DELAI_RELECTURE_MS, erreurDeConnexion,
 } from "../ui/echange.js";
 
 const CHAMPS = {parent: " C:/p ", nom: " Jeu ", mots: "x, y", facturation: true, github: false, description: " Un jeu. "};
@@ -258,4 +258,17 @@ test("lignesProposition montre les métiers et le nombre d'agents", () => {
   assert.deepEqual(agentsFable(poly), []);
   // l'ancien format est inchangé
   assert.match(lignesProposition(PROPOSITION).join("\n"), /Équipe à recruter/);
+});
+
+test("corpsInfos : le répertoire à scanner n'est envoyé que s'il est donné", () => {
+  assert.equal("repertoire" in corpsInfos(CHAMPS, null), false);
+  assert.equal(corpsInfos({...CHAMPS, repertoire: "  C:/code  "}, null).repertoire, "C:/code");
+  assert.equal("repertoire" in corpsInfos({...CHAMPS, repertoire: "   "}, null), false);
+});
+
+test("erreurDeConnexion : reconnaît une connexion Claude perdue, pas une autre erreur", () => {
+  assert.equal(erreurDeConnexion("L'appel a échoué : claude a rendu le code 1 : Failed to authenticate: this login reached its time limit"), true);
+  assert.equal(erreurDeConnexion("Run `claude auth login` to sign in again"), true);
+  assert.equal(erreurDeConnexion("délai dépassé (600 s)"), false);
+  assert.equal(erreurDeConnexion(null), false);
 });

@@ -77,13 +77,15 @@ export function creerConso(url = "/api/conso") {
   bouton.type = "button";
   bouton.setAttribute("aria-haspopup", "true");
   bouton.setAttribute("aria-expanded", "false");
-  const dessin = svg("svg", {viewBox: "0 0 36 36", width: "30", height: "30", "aria-hidden": "true"});
+  // Le nombre restant (sans « % ») est écrit au centre du cercle.
+  const dessin = svg("svg", {viewBox: "0 0 36 36", width: "36", height: "36", "aria-hidden": "true"});
   const fond = svg("circle", {cx: 18, cy: 18, r: RAYON, class: "conso-fond"});
   const arc = svg("circle", {cx: 18, cy: 18, r: RAYON, class: "conso-arc", transform: "rotate(-90 18 18)"});
   arc.style.strokeDasharray = String(CIRCONFERENCE);
-  dessin.append(fond, arc);
-  const chiffre = el("span", "conso-chiffre", "—");
-  bouton.append(dessin, chiffre);
+  const chiffre = svg("text", {x: 18, y: 18, class: "conso-nombre", "text-anchor": "middle", "dominant-baseline": "central"});
+  chiffre.textContent = "—";
+  dessin.append(fond, arc, chiffre);
+  bouton.append(dessin);
   const panneau = el("div", "conso-panneau");
   panneau.hidden = true;
   racine.append(bouton, panneau);
@@ -94,12 +96,13 @@ export function creerConso(url = "/api/conso") {
 
   function afficher() {
     const c = donnees;
-    bouton.title = libelleRond(c);
     const dispo = !!c && c.disponible === true;
+    bouton.title = libelleRond(c);
+    bouton.setAttribute("aria-label", dispo ? bouton.title : "Consommation Claude Code indisponible");
     racine.dataset.ton = dispo ? tonReste(c.reste) : "inconnu";
     racine.dataset.source = dispo ? c.source || "compte" : "";
     arc.style.strokeDashoffset = String(CIRCONFERENCE * (1 - (dispo ? partRestante(c.reste) : 0)));
-    chiffre.textContent = dispo ? Math.round(c.reste) + " %" : "—";
+    chiffre.textContent = dispo ? String(Math.round(c.reste)) : "—";
     panneau.replaceChildren();
     panneau.append(el("div", "conso-titre", dispo ? `Il reste ${Math.round(c.reste)} %` : "Consommation Claude Code"));
     if (!dispo) {

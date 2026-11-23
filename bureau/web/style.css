@@ -558,9 +558,10 @@ body.panneau-ouvert #scene { right: var(--largeur-panneau); }
 .conso[data-ton="attention"] { --ton: #d9962b; }
 .conso[data-ton="alerte"] { --ton: #d65a31; }
 .conso-rond {
-  display: flex; align-items: center; gap: 6px; padding: 2px 6px; background: none; border: 0; border-radius: 16px;
-  cursor: pointer; font: inherit; font-size: 13px; font-weight: 700; color: inherit;
+  display: flex; align-items: center; padding: 2px; background: none; border: 0; border-radius: 20px;
+  cursor: pointer; font: inherit; color: inherit;
 }
+.conso-nombre { font-size: 12px; font-weight: 700; fill: currentColor; }
 .conso-rond:hover, .conso-rond:focus-visible { background: rgba(0,0,0,.07); }
 .conso-fond, .conso-arc { fill: none; stroke-width: 4; }
 .conso-fond { stroke: #d9d3c4; }

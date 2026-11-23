@@ -243,7 +243,7 @@ test("le_rond_de_consommation_precede_l_heure_et_n_est_jamais_cache", () => {
     if (!/display:\s*none|visibility:\s*hidden/.test(r.corps)) continue;
     for (const s of r.sel.split(",")) {
       const dernier = s.trim().split(/\s+/).pop();
-      assert.ok(![".bloc-abonnement", ".conso", ".conso-rond", ".conso-chiffre"].includes(dernier), `« ${s.trim()} » cache le rond`);
+      assert.ok(![".bloc-abonnement", ".conso", ".conso-rond", ".conso-nombre"].includes(dernier), `« ${s.trim()} » cache le rond`);
     }
   }
   assert.doesNotMatch(css, /\.mobile[^{]*\.bloc-abonnement[^{]*\{/);

@@ -44,9 +44,16 @@ class AvecCopie(unittest.TestCase):
 
 
 class TestDemo(AvecCopie):
-    def test_demo_a_et_b_valides(self):
+    # Tout `bureau.json` est écarté de l'instantané envoyé au serveur (`outils/tests_instantane.EXCLUS` : celui du
+    # Directeur porte ses jetons), même celui de la démo : au serveur, ce seul contrôle n'a pas son fichier.
+    @unittest.skipUnless((EXEMPLES / "bureau.json").is_file(),
+                         "exemples/bureau.json n'est jamais envoyé au serveur (tout bureau.json est écarté de "
+                         "l'instantané)")
+    def test_bureau_de_la_demo_nomme_a_et_b(self):
         bureau = reglages.lire_bureau(EXEMPLES / "bureau.json")
         self.assertEqual([p["id"] for p in bureau["projets"]], ["demo", "demo-b"])
+
+    def test_demo_a_et_b_valides(self):
         a, b = lire(EXEMPLES / "demo" / "releve.json"), lire(EXEMPLES / "demo-b" / "releve.json")
         for r in (a, b):
             self.assertEqual(r["version"], 4)

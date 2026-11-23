@@ -118,7 +118,7 @@ export function creerBarre(entete, bandeau) {
     retenue: () => (!retenue.hidden && (telephone() || entete.classList.contains(CLASSE_ETROITE))
       ? [...retenue.children].map((s) => s.textContent) : []),
   });
-  entete.append(blocAbonnement, horloge.racine, separateur, titre, leVoyant.racine, retenue, charge, zoneActions, boutonNouvelle, boutonCorrection,
+  entete.append(blocAbonnement, horloge.racine, separateur, titre, leVoyant.racine, leVoyant.annonce, retenue, charge, zoneActions, boutonNouvelle, boutonCorrection,
                 boutonQuestion, boutonFonctions, zoneLivrable, boutonListe, menu.racine);
 
   // Une seule ligne à toutes les largeurs : ce qui ne tient pas passe dans le menu de la roue, de droite à gauche

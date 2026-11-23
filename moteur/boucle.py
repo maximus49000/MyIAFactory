@@ -970,6 +970,15 @@ class Moteur:
             try:
                 e = self.executer_agent(depart, matiere, agent=fiche, modele=modele, dossier_projet=str(projet.dossier),
                                         tache=tache, lot=lot, executeur=executeur, **plus)
+                rapatrier = getattr(executeur, "rapatrier_livrables", None)
+                if reponse is None and rapatrier is not None and getattr(e, "rapport", None) is not None:
+                    # ses livrables déclarés (apk…), ignorés par git donc absents du paquet : rapatriés en octets, dits
+                    # au journal de la tâche ; jamais un échec de la tâche. Ici, l'exécuteur est encore connu du moteur :
+                    # l'arrêt du bureau coupe le rapatriement (`ExecuteurServeur.rapatrier_livrables`)
+                    try:
+                        e.livrables = rapatrier(e.rapport)
+                    except Exception as ex:      # noqa: BLE001
+                        e.livrables = [f"Livrables non rapatriés : {type(ex).__name__} : {ex}"[:300]]
             except Exception as ex:          # noqa: BLE001 — un retour toujours : la tâche ne reste jamais « active »
                 e = agents.Execution(tache, fiche["cle"], lot, erreur=f"agent serveur : {type(ex).__name__} : {ex}"[:500],
                                      modele=modele)
@@ -987,14 +996,6 @@ class Moteur:
             e.serveur = True
             if not getattr(e, "erreur", None):      # l'agent est revenu sans erreur : le serveur répond, sonde à refaire
                 self._sonde_demandee = True
-            rapatrier = getattr(executeur, "rapatrier_livrables", None)
-            if reponse is None and rapatrier is not None and getattr(e, "rapport", None) is not None:
-                # ses livrables déclarés (apk…), ignorés par git donc absents du paquet : rapatriés en octets, dits au
-                # journal de la tâche ; jamais un échec de la tâche (`ExecuteurServeur.rapatrier_livrables`)
-                try:
-                    e.livrables = rapatrier(e.rapport)
-                except Exception as ex:      # noqa: BLE001
-                    e.livrables = [f"Livrables non rapatriés : {type(ex).__name__} : {ex}"[:300]]
             if reponse is not None:
                 e.reponse = reponse
             elif getattr(executeur, "branche", None):

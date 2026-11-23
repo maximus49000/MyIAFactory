@@ -499,10 +499,13 @@ class Livrables(Base):
         self.assertEqual(ex.branche, f"agent/{TACHE}")                 # les commits reviennent comme avant
         st._noter(self.dossier, ID2, {"cree": "2026-11-20T10:15:00Z"})
         import serveur_livrables as sl
-        vus = []
+        vus, arrets = [], []
 
-        def faux_rapatrier(ident, projet, chemins, debut=None, dossier=None, ssh=None):
+        def faux_rapatrier(ident, projet, chemins, debut=None, dossier=None, ssh=None, arret=None):
             vus.append((ident, projet, chemins, debut, dossier))
+            arrets.append(arret())
+            ex._arret = True
+            arrets.append(arret())                  # l'arrêt demandé pendant le rapatriement est vu
             return [{"chemin": chemins[0], "statut": "rapatrie", "taille": 2048, "sha256": "c" * 64}]
 
         with mock.patch.object(sl, "rapatrier", faux_rapatrier):
@@ -511,6 +514,7 @@ class Livrables(Base):
                                 st._epoch("2026-11-20T10:15:00Z"), self.dossier)])
         self.assertEqual(lignes, ["Livrable rapatrié : android_app/build/app/outputs/flutter-apk/app-release.apk "
                                   "(2,0 Ko, cccccccccccccccc)"])
+        self.assertEqual(arrets, [False, True])
 
     def test_sans_livrable_rien_et_jamais_d_exception(self):
         self.faux()

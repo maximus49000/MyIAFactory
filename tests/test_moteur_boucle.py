@@ -726,6 +726,8 @@ class FauxExecuteurServeur:
 
     def rapatrier_livrables(self, rapport):
         self.rapports.append(rapport)
+        if getattr(self, "verifier", None):
+            self.verifier()
         return list(self.livrables)
 
     def arreter(self):
@@ -830,16 +832,20 @@ class Serveur(Base):
     def test_livrables_rapatries_dits_au_journal_de_la_tache(self):
         from moteur import executeur_serveur
         ligne = "Livrable rapatrié : android_app/build/app.apk (2,0 Ko, cccccccccccccccc)"
+        vus = []
 
         def fabrique(*a, **kw):
             ex = FauxExecuteurServeur(*a, **kw)
             ex.livrables = [ligne, "Livrable non rapatrié : ../x.apk : chemin avec « .. » : refusé"]
+            # pendant le rapatriement, l'exécuteur reste connu du moteur : l'arrêt du bureau l'atteint
+            ex.verifier = lambda: vus.append(any(v is ex for v in self.moteur._serveurs.values()))
             self.executeurs.append(ex)
             return ex
         with mock.patch.object(executeur_serveur, "ExecuteurServeur", fabrique):
             self.partir()
         (ex,) = self.executeurs
         self.assertEqual(ex.rapports[0]["statut"], "fait")
+        self.assertEqual(vus, [True])
         self.moteur.tour()
         self.assertEqual(self.tache_suivie()["colonne"], "fait")
         self.assertIn(ligne, self.journal())

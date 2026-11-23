@@ -648,7 +648,9 @@ class ExecuteurServeur:
             _sa, st = _modules()
             fiche = st.Index(self.dossier).lire().get(ident) or {}
             debut = st._epoch(fiche.get("cree")) or st._epoch(fiche.get("debut"))
-            resultats = sl.rapatrier(ident, self.projet, chemins, debut=debut, dossier=self.dossier, ssh=self.ssh)
+            # l'arrêt du bureau (`arreter`) est lu avant chaque fichier et pendant les transferts
+            resultats = sl.rapatrier(ident, self.projet, chemins, debut=debut, dossier=self.dossier, ssh=self.ssh,
+                                     arret=lambda: self._arret)
             return [sl.ligne(r) for r in resultats]
         except Exception as e:  # noqa: BLE001 - le rapatriement des livrables ne fait jamais échouer la tâche
             return [f"Livrables non rapatriés : {type(e).__name__} : {e}"[:300]]

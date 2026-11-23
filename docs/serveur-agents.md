@@ -126,22 +126,33 @@ que le rapport déclare livrables (`fichiers` avec `livrable: true`) ; le bureau
 (`outils/serveur_livrables.py`, appelé par `ExecuteurServeur.rapatrier_livrables`).
 
 - **Quels fichiers.** Seulement ceux du rapport, chacun revalidé au poste : chemin relatif au projet, sans `..`, sans lecteur ni `/`
-  initial, segments au motif strict (lettres, chiffres, `_ . + -`, jamais un segment qui commence par « . » : ni `.git` ni `.android`) ;
-  extension dans la liste fermée des livrables téléchargeables du bureau (`releve.TELECHARGEABLES`) ; **jamais** une clé ou un certificat
-  (`.keystore`, `.jks`, `.pem`, `.key`, `.p12`, `.pfx`…) ni rien sous `maison/`, `android-signature/` ou `agent-identifiants/` ;
-  **8 fichiers** au plus, **500 Mo** chacun, **1 Go** en tout.
+  initial, segments au motif strict (lettres, chiffres, `_ . + -`, jamais un segment qui commence par « . ») ; extension dans une liste
+  **fermée et minimale** propre au rapatriement : `.apk`, `.aab`, `.zip` (aucun exécutable du poste : ni `.exe`, `.msi`, `.dmg`,
+  `.jar`) ; le chemin doit être une **sortie de build Android** : `(^|/)build/(app/)?outputs/(flutter-apk|apk|bundle)/<fichier>`,
+  exigé pour un fichier neuf comme pour un fichier existant (Gradle range `apk/release/…` et `bundle/release/…` un niveau plus bas :
+  refusés tant qu'aucune décision n'élargit le motif) ; **jamais** une clé ou un certificat (`.keystore`, `.jks`, `.pem`, `.key`,
+  `.p12`, `.pfx`…) ni rien sous `maison/`, `android-signature/`, `agent-identifiants/`, `node_modules/`, `venv/`, `.venv/`,
+  `vendor/`, `.git/`, `.factory/`, `site-packages/` ; **8 fichiers** au plus, **500 Mo** chacun, **1 Go** en tout.
 - **Pourquoi côté poste.** La liste n'est connue que du rapport, lu par le moteur sur le poste ; l'enveloppe du serveur n'est pas
   modifiée. Le poste envoie chaque chemin validé comme une **valeur** insérée dans deux scripts figés (aucun espace, guillemet ni
-  caractère de motif possible) : le **manifeste** (taille et SHA-256 de chaque fichier, calculés au serveur), puis l'**envoi** d'un
-  fichier. Au serveur, le fichier doit être ordinaire (ni lien symbolique, ni lien dur, ni dossier lié sur le chemin : chemin physique
-  égal au chemin demandé) sous `~/taches/<id>/travail/projet/` ; un fichier qui contient le jeton de l'abonnement est refusé (même
-  contrôle `grep -F` que la sortie ; un contenu compressé n'y est pas lisible, comme pour la sortie).
+  caractère de motif possible) : le **manifeste** (taille et SHA-256), puis l'**envoi** d'un fichier.
+- **Au serveur.** `~/taches/<id>`, `travail` et `travail/projet` ne sont pas des liens et `pwd -P` vaut bien ce chemin ; aucun
+  composant du chemin demandé n'est un lien. Le fichier est ouvert **une fois** (descripteur 3), vérifié sur ce descripteur
+  (`stat -L /proc/self/fd/3` : fichier ordinaire, un seul lien, même inode que le chemin), puis haché ou envoyé **depuis ce
+  descripteur** : un échange de fichier entre le contrôle et la lecture ne passe pas. Un fichier qui contient le jeton de
+  l'abonnement est refusé (même `grep -F` que la sortie).
+- **Limite connue.** Un `.zip` (ou un APK, qui en est un) peut contenir n'importe quoi, une clé comprise, et son contenu compressé
+  n'est pas lisible par le `grep -F` du jeton : le contrôle porte sur le chemin et l'extension, pas sur le contenu d'une archive.
 - **Au poste.** Les octets arrivent dans un fichier temporaire du **même dossier**, la taille et le SHA-256 sont vérifiés contre le
-  manifeste, puis le fichier est **renommé** (atomique) ; un écart jette le temporaire. La destination doit rester dans le projet (aucun
-  lien suivi, dossiers créés un par un) et être **ignorée par git** (un livrable n'entre jamais dans l'historique ni dans le commit
-  « Factory : … »). Un fichier déjà là n'est remplacé que s'il est **plus ancien que la tâche** (date `cree` de l'index) **et** sous un
-  dossier de build (`build`, `dist`, `out`, `outputs`, `release`, `target`…) ; sinon il est gardé et la raison est dite.
-- **Résultat dit.** Une ligne par fichier dans le journal de la tâche : « Livrable rapatrié : `<chemin>` (`<taille>`, `<sha16>`) », ou
+  manifeste, puis le fichier est **renommé** (atomique) ; un écart jette le temporaire et retire les dossiers créés pour lui.
+  L'espace libre doit couvrir la taille plus 1 Go. La destination reste dans le projet (aucun lien suivi), n'est jamais un fichier
+  **suivi par git**, et son chemin est écrit dans **`.git/info/exclude`** (local, jamais commité, une ligne `/<chemin>`, une seule fois)
+  avant le renommage : le commit « Factory : … » (`git add -A`) ne l'ajoute jamais, même si l'agent a retiré `/build/` du
+  `.gitignore`. Un fichier déjà là n'est remplacé que s'il est **plus ancien que la tâche** (date `cree` de l'index) ; sinon il est
+  gardé et la raison est dite.
+- **Arrêt.** L'arrêt du bureau est lu avant chaque fichier et pendant un transfert (ssh coupé) ; les fichiers restants sont dits
+  « arrêt demandé ». Délai d'un envoi : taille à 1 Mo/s plus 60 s, 30 min au plus ; manifeste : 3 min.
+- **Résultat dit.** Une ligne par fichier dans le journal de la tâche (caractères de contrôle remplacés) : « Livrable rapatrié : `<chemin>` (`<taille>`, `<sha16>`) », ou
   « Livrable non rapatrié : `<chemin>` : `<raison>` ». Un refus ou une panne ne fait **jamais** échouer la tâche et ne touche pas aux
   commits rapatriés (la branche `agent/<tâche>` revient comme avant).
 

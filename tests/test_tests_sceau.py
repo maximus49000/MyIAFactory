@@ -2,6 +2,7 @@
 
 Tests économes : un dossier temporaire par classe, `maintenant` fixe, aucun `sleep`, aucun sous-processus."""
 import json
+import os
 import shutil
 import tempfile
 import threading
@@ -48,7 +49,7 @@ class TestSceau(unittest.TestCase):
 
     def test_lire_sceau_absent_ou_illisible_rend_les_defauts(self):
         cas = [None, "{pas du json", "[1, 2]", '"texte"', '{"p": [1]}', '{"p": {"campagnes": NaN}}',
-               b"\xff\xfe\x00garbage", "[" * 100000 + "]" * 100000,
+               b"\xff\xfe\x00garbage", "[" * 5000 + "]" * 5000,
                '{"p": {"budget_s": "beaucoup", "campagnes": -3, "cumul_s": true, "tache_auto": 1, "alertes": []}}']
         for contenu in cas:
             lu = tests_sceau.lire("p", sceau=self.sceau(contenu))
@@ -99,6 +100,58 @@ class TestSceau(unittest.TestCase):
         with self.assertRaises(ValueError):                       # une valeur non JSON (NaN) n'est jamais écrite
             tests_sceau.modifier("p", lambda e: e.update(cumul_s=float("nan")), sceau=chemin, maintenant=maintenant)
         self.assertEqual(chemin.read_bytes(), avant)
+        self.assertEqual(sorted(p.name for p in chemin.parent.iterdir()), [chemin.name])
+
+    def test_imbrication_profonde_et_id_bizarre_ne_levent_jamais(self):
+        """Une imbrication de 600 niveaux (lue par `json`, mais trop profonde pour la copie) : le sceau est illisible,
+        `lire` rend les défauts et `modifier` lève `SceauIllisible` sans rien écrire ; un id non hachable : défauts."""
+        profond = ('{"p": {"campagnes": 2, "x": ' + "[" * 600 + "]" * 600 + '}, "q": {"campagnes": 5}}').encode()
+        chemin = self.sceau(profond)
+        self.assertEqual(tests_sceau.lire("p", sceau=chemin), tests_sceau.ENTREE_VIDE)
+        self.assertEqual(tests_sceau.lire_etat("q", sceau=chemin), (tests_sceau.ENTREE_VIDE, "illisible"))
+        with self.assertRaises(tests_sceau.SceauIllisible):
+            tests_sceau.modifier("q", lambda e: None, sceau=chemin, maintenant=maintenant)
+        self.assertEqual(chemin.read_bytes(), profond)
+        bon = self.sceau('{"p": {"campagnes": 2}}')
+        for id_bizarre in (["p"], {"p": 1}, None, 3):
+            self.assertEqual(tests_sceau.lire(id_bizarre, sceau=bon), tests_sceau.ENTREE_VIDE, msg=repr(id_bizarre))
+        self.assertEqual(tests_sceau.lire_etat(["p"], sceau=bon)[1], "illisible")
+
+    def test_lire_etat_distingue_absent_et_illisible(self):
+        e = tests_sceau.ENTREE_VIDE
+        self.assertEqual(tests_sceau.lire_etat("p", sceau=self.sceau()), (e, "absent"))
+        self.assertEqual(tests_sceau.lire_etat("p", sceau=self.sceau("{abime")), (e, "illisible"))
+        bon = self.sceau('{"p": {"campagnes": 2}}')
+        self.assertEqual(tests_sceau.lire_etat("p", sceau=bon), ({**e, "campagnes": 2}, "ok"))
+        self.assertEqual(tests_sceau.lire_etat("autre", sceau=bon), (e, "absent"))   # sceau lisible, projet inconnu
+
+    def test_modifier_attente_courte_du_lanceur(self):
+        chemin = self.sceau("{}")
+        marque = Path(str(chemin) + ".verrou")
+        marque.write_text("", encoding="utf-8")                   # une autre écriture du sceau est en cours
+        self.assertEqual(tests_sceau.ATTENTE_LANCEUR_S, 2)
+        with self.assertRaises(TimeoutError):
+            tests_sceau.modifier("p", lambda e: None, sceau=chemin, maintenant=maintenant, attente_s=0)
+        self.assertEqual(chemin.read_text(encoding="utf-8"), "{}")
+
+    def test_ecriture_reessaie_un_sceau_occupe(self):
+        """Sous Windows, `os.replace` échoue quand un lecteur tient le sceau ouvert : 5 essais espacés de 20 ms."""
+        from unittest import mock
+        from bureau import verrou_fichier
+        chemin = self.sceau("{}")
+        vrai, pauses, echecs = os.replace, [], [PermissionError("occupé")]
+
+        def replace(a, b):
+            if echecs:
+                raise echecs.pop()
+            vrai(a, b)
+        with mock.patch.object(os, "replace", replace), mock.patch.object(verrou_fichier, "_dormir", pauses.append):
+            tests_sceau.modifier("p", lambda e: e.update(campagnes=1), sceau=chemin, maintenant=maintenant)
+            self.assertEqual((tests_sceau.lire("p", sceau=chemin)["campagnes"], pauses), (1, [0.02]))
+            echecs.extend([PermissionError("occupé")] * 5)
+            with self.assertRaises(PermissionError):
+                tests_sceau.modifier("p", lambda e: e.update(campagnes=2), sceau=chemin, maintenant=maintenant)
+        self.assertEqual(tests_sceau.lire("p", sceau=chemin)["campagnes"], 1)
         self.assertEqual(sorted(p.name for p in chemin.parent.iterdir()), [chemin.name])
 
     def test_modifier_cree_le_sceau_et_son_dossier(self):

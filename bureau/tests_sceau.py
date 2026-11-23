@@ -19,7 +19,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable
 
-from .verrou_fichier import verrou_fichier
+from .verrou_fichier import remplacer, verrou_fichier
 
 SCEAU = Path("~/MyIAFactory/tests-sceau.json").expanduser()
 BUDGET_DEFAUT_S = 300
@@ -27,6 +27,8 @@ BUDGET_MIN_S, BUDGET_MAX_S = 60, 3600
 ENTREE_VIDE = {"budget_s": 300, "commande_complete": None, "reference_s": None, "campagnes": 0, "cumul_s": 0.0,
                "derniers_nb_tests": None, "tache_auto": False, "commande_refusee": None, "alertes": {}, "maj": None}
 TAILLE_MAX = 1024 * 1024          # douze projets tiennent en quelques Ko : au-delà, le fichier n'est pas un sceau
+PROFONDEUR_MAX = 32               # un sceau a 3 ou 4 niveaux ; au-delà, il est illisible (jamais de RecursionError)
+ATTENTE_LANCEUR_S = 2             # l'attente du verrou côté lanceur : une campagne ne patiente pas 10 s pour mesurer
 
 
 class SceauIllisible(Exception):
@@ -111,17 +113,55 @@ def _charger(sceau):
         raise SceauIllisible("sceau illisible : %s" % e)
     if not isinstance(donnees, dict):
         raise SceauIllisible("sceau illisible : un objet JSON est attendu")
+    if _profondeur(donnees) > PROFONDEUR_MAX:
+        # `json` lit jusqu'à ~1 000 niveaux, mais la copie (`deepcopy`) et l'écriture s'arrêtent bien avant : un sceau
+        # aussi imbriqué n'en est pas un (et ne doit jamais faire lever RecursionError aux appelants)
+        raise SceauIllisible("sceau illisible : imbrication trop profonde")
     return donnees
+
+
+def _profondeur(valeur):
+    """La profondeur d'imbrication d'une valeur JSON, sans récursion (une liste ou un objet compte un niveau)."""
+    pire, pile = 0, [(valeur, 1)]
+    while pile:
+        v, p = pile.pop()
+        if isinstance(v, dict):
+            enfants = v.values()
+        elif isinstance(v, list):
+            enfants = v
+        else:
+            continue
+        pire = max(pire, p)
+        if pire > PROFONDEUR_MAX:
+            return pire
+        pile.extend((e, p + 1) for e in enfants)
+    return pire
+
+
+def lire_etat(id_projet: str, sceau=SCEAU):
+    """`(entrée, état)` : l'entrée du projet complétée par `ENTREE_VIDE`, et `"ok"` (sceau lisible, projet présent),
+    `"absent"` (pas de sceau, ou pas d'entrée pour ce projet) ou `"illisible"` (sceau abîmé, ou id inutilisable) ; dans
+    ces deux derniers cas, une copie de `ENTREE_VIDE`. Les règles d'alerte s'en servent pour ne pas confondre un sceau
+    abîmé avec un projet neuf. Ne lève jamais."""
+    try:
+        donnees = _charger(sceau)
+        if donnees is None:
+            return _completer(None), "absent"
+        brute = donnees.get(id_projet)          # un id non hachable lève TypeError : illisible
+        if brute is None and id_projet not in donnees:
+            return _completer(None), "absent"
+        return _completer(brute), "ok"
+    except Exception:  # noqa: BLE001 — illisible ou inattendu : une lecture ne casse jamais l'appelant
+        return copy.deepcopy(ENTREE_VIDE), "illisible"
 
 
 def lire(id_projet: str, sceau=SCEAU) -> dict:
     """L'entrée du projet complétée par `ENTREE_VIDE` ; absente ou illisible : une copie de `ENTREE_VIDE`. Ne lève
     jamais."""
     try:
-        donnees = _charger(sceau)
-    except Exception:  # noqa: BLE001 — illisible ou inattendu : une lecture ne casse jamais l'appelant
-        donnees = None
-    return _completer(donnees.get(id_projet) if isinstance(donnees, dict) else None)
+        return lire_etat(id_projet, sceau)[0]
+    except Exception:  # noqa: BLE001 — par construction `lire_etat` ne lève pas ; garde-fou
+        return copy.deepcopy(ENTREE_VIDE)
 
 
 def _ecrire(sceau, donnees):
@@ -135,7 +175,7 @@ def _ecrire(sceau, donnees):
             f.write(texte.encode("utf-8"))
             f.flush()
             os.fsync(f.fileno())
-        os.replace(temporaire, str(sceau))
+        remplacer(temporaire, sceau)
     except BaseException:
         try:
             os.unlink(temporaire)
@@ -145,17 +185,18 @@ def _ecrire(sceau, donnees):
 
 
 def modifier(id_projet: str, changer: Callable[[dict], None], sceau=SCEAU,
-             maintenant: Callable[[], str] = _maintenant) -> dict:
+             maintenant: Callable[[], str] = _maintenant, attente_s=None) -> dict:
     """Sous `verrou_fichier(sceau)` : relit le sceau, applique `changer` à l'entrée du projet (complétée), pose `maj`,
     écrit par fichier temporaire puis `os.replace`, et rend l'entrée écrite. Les autres projets sont gardés tels quels.
     Sceau présent mais illisible : `SceauIllisible`, rien n'est écrit. `changer` qui lève, ou une valeur non JSON :
-    l'exception remonte, rien n'est écrit. Peut lever `TimeoutError` (verrou) ou `OSError` (disque)."""
+    l'exception remonte, rien n'est écrit. `attente_s` : l'attente du verrou (défaut : celle des réglages, 10 s ; le
+    lanceur passe `ATTENTE_LANCEUR_S`). Peut lever `TimeoutError` (verrou) ou `OSError` (disque)."""
     if not isinstance(id_projet, str) or not id_projet:
         raise ValueError("identifiant de projet invalide")
     dossier = Path(os.path.abspath(str(sceau))).parent
     if not os.path.lexists(str(sceau)):
         dossier.mkdir(parents=True, exist_ok=True)
-    with verrou_fichier(sceau):
+    with verrou_fichier(sceau, attente_s=attente_s):
         donnees = _charger(sceau)
         if donnees is None:
             donnees = {}

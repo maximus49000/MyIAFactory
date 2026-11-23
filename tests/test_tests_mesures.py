@@ -3,10 +3,12 @@
 Tests économes : dossiers temporaires créés une fois par classe, `bureau.json` et sceau injectés, `maintenant` fixe,
 aucun `sleep`, aucun sous-processus."""
 import ast
+import contextlib
 import json
 import os
 import shutil
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 
@@ -20,6 +22,24 @@ CLES = {"t", "lieu", "source", "tache", "commande", "portee", "duree_s", "attent
 
 def maintenant():
     return T
+
+
+@contextlib.contextmanager
+def _garde_boucle(toujours_existe=False, limite=200):
+    """Remplace `os.open` pendant le bloc : au-delà de `limite` appels, `RuntimeError` (une boucle sans fin devient un
+    échec franc au lieu de bloquer la campagne) ; `toujours_existe` : chaque ouverture dit « existe déjà »."""
+    from unittest import mock
+    vrai, appels = os.open, [0]
+
+    def ouvrir(*a, **k):
+        appels[0] += 1
+        if appels[0] > limite:
+            raise RuntimeError("boucle sans fin dans le verrou")
+        if toujours_existe:
+            raise FileExistsError(a[0])
+        return vrai(*a, **k)
+    with mock.patch.object(verrou_fichier.os, "open", ouvrir):
+        yield
 
 
 def _ligne_valide(**autres):
@@ -53,7 +73,111 @@ class TestModules(unittest.TestCase):
             with self.assertRaises(OSError):
                 with verrou_fichier.verrou_fichier(tmp / "f.json"):
                     pass
+            # même chose quand l'ouverture exclusive dit « existe déjà » (le chemin POSIX) : la reprise échoue, la main
+            # est rendue au bout de l'attente
+            with _garde_boucle(toujours_existe=True):
+                with self.assertRaises(TimeoutError):
+                    with verrou_fichier.verrou_fichier(tmp / "f.json"):
+                        pass
         self.assertTrue(marque.is_dir())
+
+
+class TestVerrou(unittest.TestCase):
+    """Le verrou ne tourne jamais sans fin : l'échéance est vérifiée à chaque tour. Attente ramenée à 0 (pas de sommeil
+    réel) ; une garde transforme une boucle sans fin en échec franc."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = Path(tempfile.mkdtemp())
+        cls.n = 0
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmp, ignore_errors=True)
+
+    def fichier(self):
+        type(self).n += 1
+        return self.tmp / ("f%d.json" % self.n)
+
+    def test_marque_qui_disparait_sans_cesse_ne_boucle_pas(self):
+        from unittest import mock
+        with mock.patch.object(verrou_fichier, "VERROU_ATTENTE_S", 0), _garde_boucle(toujours_existe=True):
+            with self.assertRaises(TimeoutError):           # « existe » à l'ouverture, absente au constat
+                with verrou_fichier.verrou_fichier(self.fichier()):
+                    pass
+
+    def test_lien_casse_a_la_place_de_la_marque(self):
+        from unittest import mock
+        chemin = self.fichier()
+        marque = Path(str(chemin) + ".verrou")
+        try:
+            os.symlink(str(self.tmp / "nulle-part"), str(marque))
+        except (OSError, NotImplementedError):
+            self.skipTest("liens symboliques indisponibles ici")
+        with mock.patch.object(verrou_fichier, "VERROU_ATTENTE_S", 0), _garde_boucle():
+            with self.assertRaises(TimeoutError):           # lien récent : attendu, puis la main est rendue
+                with verrou_fichier.verrou_fichier(chemin):
+                    pass
+            self.assertFalse(os.path.exists(str(self.tmp / "nulle-part")))   # la cible du lien n'est jamais créée
+            with mock.patch.object(verrou_fichier, "VERROU_PERIME_S", -1):   # (Windows ne date pas un lien lui-même)
+                with verrou_fichier.verrou_fichier(chemin):   # lien périmé : repris (constat par `lstat`)
+                    pass
+        self.assertFalse(os.path.lexists(str(marque)))
+
+    def test_marque_recente_d_un_autre_programme(self):
+        from unittest import mock
+        chemin = self.fichier()
+        marque = Path(str(chemin) + ".verrou")
+        marque.write_text("", encoding="utf-8")
+        with mock.patch.object(verrou_fichier, "VERROU_ATTENTE_S", 0):
+            with self.assertRaises(TimeoutError):
+                with verrou_fichier.verrou_fichier(chemin):
+                    pass
+        with self.assertRaises(TimeoutError):                 # attente courte du lanceur, sans toucher au réglage
+            with verrou_fichier.verrou_fichier(chemin, attente_s=0):
+                pass
+        self.assertTrue(marque.exists())                      # la marque d'autrui n'est pas enlevée
+
+    def test_reentrance_leve_timeout_sans_bloquer(self):
+        from unittest import mock
+        issue = []
+
+        def fil():
+            with verrou_fichier.verrou_fichier(self.fichier()):
+                try:
+                    with verrou_fichier.verrou_fichier(self.fichier()):
+                        issue.append("pris")
+                except TimeoutError:
+                    issue.append("timeout")
+        with mock.patch.object(verrou_fichier, "VERROU_ATTENTE_S", 0.05):
+            f = threading.Thread(target=fil, daemon=True)
+            f.start()
+            f.join(2)
+            if f.is_alive():                                  # l'ancien verrou bloquait : on le libère pour finir
+                verrou_fichier._VERROU_ECRITURE.release()
+                f.join(2)
+        self.assertEqual(issue, ["timeout"])
+
+    def test_remplacer_reessaie_un_fichier_occupe(self):
+        from unittest import mock
+        source, cible = self.fichier(), self.fichier()
+        source.write_text("1", encoding="utf-8")
+        vrai, pauses, echecs = os.replace, [], [PermissionError("occupé"), PermissionError("occupé")]
+
+        def replace(a, b):
+            if echecs:
+                raise echecs.pop()
+            vrai(a, b)
+        with mock.patch.object(verrou_fichier.os, "replace", replace), \
+                mock.patch.object(verrou_fichier, "_dormir", pauses.append):
+            verrou_fichier.remplacer(source, cible)
+            self.assertEqual(cible.read_text(encoding="utf-8"), "1")
+            self.assertEqual(pauses, [0.02, 0.02])
+            source.write_text("2", encoding="utf-8")
+            echecs.extend([PermissionError("occupé")] * 5)
+            with self.assertRaises(PermissionError):
+                verrou_fichier.remplacer(source, cible)
+        self.assertEqual(cible.read_text(encoding="utf-8"), "1")
 
     def test_valeurs_du_spec(self):
         m = tests_mesures
@@ -134,10 +258,49 @@ class TestJournal(unittest.TestCase):
         chemin.write_text("".join(json.dumps(_ligne_valide(i=i)) + "\n" for i in range(2000)), encoding="utf-8")
         tests_mesures.ajouter(chemin, _ligne_valide(i=2000))
         lignes = chemin.read_text(encoding="utf-8").splitlines()
-        self.assertEqual(len(lignes), 2000)
-        self.assertEqual([json.loads(lignes[0])["i"], json.loads(lignes[-1])["i"]], [1, 2000])
+        self.assertEqual(tests_mesures.LIGNES_APRES_ROTATION, 1800)        # de la marge : pas une réécriture par ajout
+        self.assertEqual(len(lignes), 1800)
+        self.assertEqual([json.loads(lignes[0])["i"], json.loads(lignes[-1])["i"]], [201, 2000])
         self.assertEqual(sorted(p.name for p in chemin.parent.iterdir()), [chemin.name])   # pas de temporaire laissé
-        self.assertEqual(len(tests_mesures.lire(chemin)), 2000)
+        tests_mesures.ajouter(chemin, _ligne_valide(i=2001))
+        self.assertEqual([l["i"] for l in tests_mesures.lire(chemin)][::1800], [201, 2001])  # 1 801 : simple ajout
+
+    def test_ajouter_refuse_un_lien_dur(self):
+        chemin = self.journal()
+        chemin.parent.mkdir(parents=True)
+        autre = chemin.parent.parent / "precieux.txt"
+        autre.write_bytes(b"ne pas toucher")
+        try:
+            os.link(str(autre), str(chemin))
+        except (OSError, NotImplementedError):
+            self.skipTest("liens durs indisponibles ici")
+        with self.assertRaises(OSError):
+            tests_mesures.ajouter(chemin, _ligne_valide(i=1))
+        self.assertEqual(autre.read_bytes(), b"ne pas toucher")
+
+    def test_ajouter_refuse_un_dossier_factory_en_lien(self):
+        chemin = self.journal()
+        ailleurs = chemin.parent.parent / "ailleurs"
+        ailleurs.mkdir(parents=True)
+        try:
+            os.symlink(str(ailleurs), str(chemin.parent), target_is_directory=True)
+        except (OSError, NotImplementedError):
+            try:
+                import _winapi
+                _winapi.CreateJunction(str(ailleurs), str(chemin.parent))
+            except (ImportError, AttributeError, OSError):
+                self.skipTest("ni lien symbolique ni jonction ici")
+        with self.assertRaises(OSError):
+            tests_mesures.ajouter(chemin, _ligne_valide(i=1))
+        self.assertEqual(list(ailleurs.iterdir()), [])
+
+    def test_max_n_des_mesures(self):
+        chemin = self.journal()
+        self.assertEqual(tests_mesures.max_n(chemin), 0)
+        for l in (_ligne_valide(n=3), _ligne_valide(n=9, source="declare"), _ligne_valide(n=True),
+                  _ligne_valide(n="12"), _ligne_valide(n=5), _ligne_valide(), _ligne_valide(n=4)):
+            tests_mesures.ajouter(chemin, l)
+        self.assertEqual(tests_mesures.max_n(chemin), 5)
 
     def test_ajouter_cree_le_dossier_et_refuse_une_ligne_trop_longue(self):
         chemin = self.journal()
@@ -330,7 +493,7 @@ class TestNoter(unittest.TestCase):
                         {"commande": "npx vitest run", "portee": "complete", "code": 0},
                         {"commande": "x", "portee": "toutes", "duree_s": 1, "code": 0},
                         "pas un objet"]
-        n = tests_mesures.noter_declarations(dossier, "cloud", "t-9", declarations, bureau=bureau,
+        n = tests_mesures.noter_declarations(dossier, "cloud", "t-9", declarations, bureau=bureau, sceau=sceau,
                                              maintenant=maintenant)
         self.assertEqual(n, 2)
         lignes = tests_mesures.lire(tests_mesures.journal_de(dossier))
@@ -338,9 +501,37 @@ class TestNoter(unittest.TestCase):
                          [("declare", "partielle", 12.3, "cloud", "t-9", 0), ("declare", "complete", 250.0, "cloud",
                                                                             "t-9", 1)])
         self.assertEqual(sceau.read_bytes(), b'{"autre": {"campagnes": 3}}')
-        self.assertEqual(tests_mesures.noter_declarations(self.tmp, "cloud", None, declarations, bureau=bureau), 0)
-        self.assertEqual(tests_mesures.noter_declarations(dossier, "ailleurs", None, declarations, bureau=bureau), 0)
-        self.assertEqual(tests_mesures.noter_declarations(dossier, "serveur", None, "pas une liste", bureau=bureau), 0)
+        self.assertEqual(sorted(p.name for p in sceau.parent.iterdir()), [sceau.name])     # verrou rendu
+        for args in ((self.tmp, "cloud", None, declarations), (dossier, "ailleurs", None, declarations),
+                     (dossier, "serveur", None, "pas une liste")):
+            self.assertEqual(tests_mesures.noter_declarations(*args, bureau=bureau, sceau=sceau), 0)
+
+    def test_noter_declarations_sous_le_verrou_du_journal(self):
+        """Les déclarations s'écrivent sous le même verrou que les campagnes du poste (celui du sceau, attente courte) :
+        une rotation simultanée ne peut pas perdre leur ligne. Verrou tenu ailleurs : rien n'est écrit, rien ne lève."""
+        from unittest import mock
+        dossier, bureau, sceau, _ = self.projet(sceau=b"{}")
+        marque = Path(str(sceau) + ".verrou")
+        marque.write_text("", encoding="utf-8")                      # une campagne du poste écrit en ce moment
+        with mock.patch.object(tests_sceau, "ATTENTE_LANCEUR_S", 0):
+            n = tests_mesures.noter_declarations(dossier, "serveur", None, [{"commande": "x", "portee": "complete",
+                                                                             "duree_s": 1, "code": 0}],
+                                                 bureau=bureau, sceau=sceau, maintenant=maintenant)
+            self.assertEqual(n, 0)
+            self.assertFalse(tests_mesures.journal_de(dossier).exists())
+            self.assertIsNone(self.noter((dossier, bureau, sceau, None)))  # le lanceur n'attend pas 10 s non plus
+        self.assertTrue(marque.exists())
+
+    def test_run_deja_note_dans_les_50_dernieres_lignes_seulement(self):
+        pr = self.projet()
+        long_run = "r" * 60                                                # tronqué à 40 au journal : reconnu quand même
+        self.assertIsNotNone(self.noter(pr, run=long_run, lieu="github"))
+        self.assertIsNone(self.noter(pr, run=long_run, lieu="github"))
+        journal = tests_mesures.journal_de(pr[0])
+        with open(str(journal), "a", encoding="utf-8") as f:              # 50 campagnes plus récentes, d'un coup
+            f.write("".join(json.dumps(_ligne_valide(run=i)) + "\n" for i in range(50)))
+        self.assertIsNotNone(self.noter(pr, run=long_run, lieu="github"))  # sortie des 50 dernières : notée
+        self.assertIsNone(self.noter(pr, run=49, lieu="github"))
 
 
 if __name__ == "__main__":

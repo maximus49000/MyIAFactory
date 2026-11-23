@@ -22,10 +22,12 @@ from typing import List, Optional, Tuple
 from . import tests_sceau
 from .deport_types import _lire_json_sur, _norme, _racine_des_reglages, _sans_prefixe
 from .tests_sceau import SCEAU, SceauIllisible, _maintenant  # noqa: F401 — SceauIllisible : pour les appelants
+from .verrou_fichier import remplacer, verrou_fichier
 
 BUREAU = Path("~/MyIAFactory/bureau.json").expanduser()
 NOM_JOURNAL = "tests-mesures.jsonl"
 MAX_LIGNES = 2000
+LIGNES_APRES_ROTATION = 1800      # la rotation garde de la marge : une réécriture toutes les 200 campagnes
 MAX_OCTETS_LIGNE = 2048
 MAX_COMMANDE = 200
 LIEUX = ("poste", "github", "cloud", "serveur")
@@ -189,22 +191,63 @@ def _refuser_constante(nom):
     raise ValueError("valeur non JSON : %s" % nom)
 
 
-def _exiger_fichier_ordinaire(chemin):
-    """`OSError` si `chemin` existe sans être un fichier ordinaire (dossier, lien, périphérique) : on n'écrit jamais à
-    travers un lien posé à la place du journal."""
+_REPARSE = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
+
+
+def _est_un_lien(s):
+    """Vrai pour un lien symbolique, ou, sous Windows, tout point d'analyse (jonction, lien) : jamais suivi."""
+    return stat.S_ISLNK(s.st_mode) or bool(getattr(s, "st_file_attributes", 0) & _REPARSE)
+
+
+def _exiger_dossier_sur(dossier):
+    """`OSError` si le dossier du journal (`.factory`) est un lien, une jonction ou autre chose qu'un dossier : on
+    n'écrit jamais dans un autre dossier par ce détour."""
+    s = os.lstat(str(dossier))
+    if _est_un_lien(s) or not stat.S_ISDIR(s.st_mode):
+        raise OSError("le dossier du journal est un lien ou n'est pas un dossier : %s" % dossier)
+
+
+def _exiger_fichier_ordinaire(chemin, unique=False):
+    """`OSError` si `chemin` existe sans être un fichier ordinaire (dossier, lien, jonction, périphérique) ou, avec
+    `unique`, s'il a d'autres noms (lien dur : écrire dedans écrirait dans un autre fichier). Absent : rien à dire."""
     try:
         s = os.lstat(str(chemin))
     except FileNotFoundError:
-        return
-    if not stat.S_ISREG(s.st_mode):
+        return None
+    if _est_un_lien(s) or not stat.S_ISREG(s.st_mode):
         raise OSError("le journal n'est pas un fichier ordinaire : %s" % chemin)
+    if unique and s.st_nlink != 1:
+        raise OSError("le journal a plusieurs noms (lien dur) : %s" % chemin)
+    return s
 
 
-def _lire_fin(chemin, maxi=LECTURE_MAX):
+def _ouvrir_sur(chemin, drapeaux):
+    """Ouvre le journal sans suivre de lien, puis vérifie sur le descripteur que c'est bien un fichier ordinaire à un
+    seul nom, et le même que celui du chemin (pas d'échange entre la vérification et l'ouverture). Rend le
+    descripteur ; `OSError` sinon (descripteur fermé)."""
+    _exiger_fichier_ordinaire(chemin, unique=True)
+    fd = os.open(str(chemin), drapeaux | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0), 0o644)
+    try:
+        f = os.fstat(fd)
+        l = _exiger_fichier_ordinaire(chemin, unique=True)
+        if (not stat.S_ISREG(f.st_mode) or f.st_nlink != 1 or l is None
+                or (f.st_ino and l.st_ino and f.st_ino != l.st_ino)):
+            raise OSError("le journal a changé pendant son ouverture : %s" % chemin)
+        return fd
+    except BaseException:
+        os.close(fd)
+        raise
+
+
+def _lire_fin(chemin, maxi=LECTURE_MAX, strict=False):
     """`(octets, complet)` : tout le fichier s'il fait au plus `maxi` octets, sinon sa fin, à partir d'une ligne
-    entière. Fichier ordinaire seulement (`OSError` sinon)."""
-    _exiger_fichier_ordinaire(chemin)
-    with open(str(chemin), "rb") as f:
+    entière. Fichier ordinaire seulement (`OSError` sinon) ; `strict` : ouvert comme pour écrire (un seul nom)."""
+    if strict:
+        fd = _ouvrir_sur(chemin, os.O_RDONLY)
+    else:
+        _exiger_fichier_ordinaire(chemin)
+        fd = os.open(str(chemin), os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0))
+    with os.fdopen(fd, "rb") as f:
         taille = os.fstat(f.fileno()).st_size
         if taille <= maxi:
             return f.read(maxi + 1), True
@@ -216,41 +259,48 @@ def _lire_fin(chemin, maxi=LECTURE_MAX):
 
 def ajouter(chemin: Path, ligne: dict) -> None:
     """Ajoute `ligne` (JSON sur une ligne, 2 Ko au plus, sinon `ValueError`) au journal ; au-delà de `MAX_LIGNES`, le
-    réécrit par fichier temporaire puis `os.replace` en gardant les 2 000 dernières. Peut lever `OSError`."""
+    réécrit par fichier temporaire puis `os.replace` en gardant les `LIGNES_APRES_ROTATION` dernières (la marge évite
+    une réécriture à chaque ajout). Jamais à travers un lien, une jonction ou un lien dur. Peut lever `OSError`."""
     brut = json.dumps(ligne, ensure_ascii=False, allow_nan=False).encode("utf-8") + b"\n"
     if len(brut) > MAX_OCTETS_LIGNE:
         raise ValueError("ligne de journal trop longue (%d octets)" % len(brut))
     chemin = Path(chemin)
     chemin.parent.mkdir(parents=True, exist_ok=True)
-    _exiger_fichier_ordinaire(chemin)
-    drapeaux = (os.O_WRONLY | os.O_APPEND | os.O_CREAT | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0))
-    fd = os.open(str(chemin), drapeaux, 0o644)
-    with os.fdopen(fd, "ab") as f:
-        taille = os.fstat(f.fileno()).st_size
-        if taille:
-            with open(str(chemin), "rb") as g:          # une dernière ligne tronquée ne doit pas avaler la nôtre
-                g.seek(taille - 1)
-                if g.read(1) != b"\n":
-                    brut = b"\n" + brut
-        f.write(brut)
+    _exiger_dossier_sur(chemin.parent)
+    fd = _ouvrir_sur(chemin, os.O_RDWR | os.O_APPEND | os.O_CREAT)
+    try:
+        taille = os.fstat(fd).st_size
+        if taille:                                       # une dernière ligne tronquée ne doit pas avaler la nôtre
+            os.lseek(fd, taille - 1, os.SEEK_SET)
+            if os.read(fd, 1) != b"\n":
+                brut = b"\n" + brut
+        reste = memoryview(brut)
+        while reste:
+            reste = reste[os.write(fd, reste):]
         taille += len(brut)
+    finally:
+        os.close(fd)
     if taille > SEUIL_ROTATION:
         _tourner(chemin)
 
 
 def _tourner(chemin):
-    """Garde les `MAX_LIGNES` dernières lignes si le journal en compte plus (ou s'il dépasse la lecture bornée)."""
-    brut, complet = _lire_fin(chemin)
+    """Garde les `LIGNES_APRES_ROTATION` dernières lignes si le journal en compte plus de `MAX_LIGNES` (ou s'il dépasse
+    la lecture bornée). Même prudence qu'à l'ajout : dossier et fichier vérifiés avant de lire et avant de remplacer."""
+    _exiger_dossier_sur(chemin.parent)
+    brut, complet = _lire_fin(chemin, strict=True)
     lignes = [l for l in brut.split(b"\n") if l.strip()]
     if complet and len(lignes) <= MAX_LIGNES:
         return
     fd, temporaire = tempfile.mkstemp(prefix=".tests-mesures-", suffix=".tmp", dir=str(chemin.parent))
     try:
         with os.fdopen(fd, "wb") as f:
-            f.write(b"".join(l + b"\n" for l in lignes[-MAX_LIGNES:]))
+            f.write(b"".join(l + b"\n" for l in lignes[-LIGNES_APRES_ROTATION:]))
             f.flush()
             os.fsync(f.fileno())
-        os.replace(temporaire, str(chemin))
+        _exiger_dossier_sur(chemin.parent)
+        _exiger_fichier_ordinaire(chemin, unique=True)
+        remplacer(temporaire, chemin)
     except BaseException:
         try:
             os.unlink(temporaire)
@@ -264,13 +314,7 @@ def _valide(d):
             and d.get("portee") in PORTEES and _nombre(d.get("duree_s")))
 
 
-def lire(chemin: Path) -> List[dict]:
-    """Les lignes valides du journal, dans l'ordre (JSON objet de 2 Ko au plus, `lieu`, `source` et `portee` connus,
-    `duree_s` nombre positif ou nul) ; absent ou illisible : `[]`. Ne lève jamais."""
-    try:
-        brut, _ = _lire_fin(chemin)
-    except Exception:  # noqa: BLE001 — absent, dossier, lien, droits : rien à lire
-        return []
+def _analyser(brut):
     sortie = []
     for b in brut.split(b"\n"):
         if len(b) > MAX_OCTETS_LIGNE:
@@ -285,6 +329,31 @@ def lire(chemin: Path) -> List[dict]:
         if _valide(d):
             sortie.append(d)
     return sortie
+
+
+def lire(chemin: Path) -> List[dict]:
+    """Les lignes valides du journal, dans l'ordre (JSON objet de 2 Ko au plus, `lieu`, `source` et `portee` connus,
+    `duree_s` nombre positif ou nul) ; absent ou illisible : `[]`. Ne lève jamais."""
+    try:
+        return _analyser(_lire_fin(chemin)[0])
+    except Exception:  # noqa: BLE001 — absent, dossier, lien, droits : rien à lire
+        return []
+
+
+def _dernieres(chemin, n):
+    """Les `n` dernières lignes valides, en ne lisant que la fin du journal (`n` × 2 Ko au plus). Ne lève jamais."""
+    try:
+        return _analyser(_lire_fin(chemin, maxi=n * MAX_OCTETS_LIGNE)[0])[-n:]
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def max_n(chemin: Path) -> int:
+    """Le plus grand numéro de campagne `n` des lignes `source: "mesure"` du journal (0 s'il n'y en a pas). Les règles
+    d'alerte comparent ce numéro aux compteurs du sceau (`max n` < `campagnes` : des mesures ont disparu) au lieu de
+    compter des lignes, que la rotation enlève. Ne lève jamais."""
+    return max([l["n"] for l in lire(chemin)
+                if l.get("source") == "mesure" and type(l.get("n")) is int and l["n"] >= 0] or [0])
 
 
 # ---------------------------------------------------------------------------------------------------- la sortie
@@ -334,19 +403,28 @@ def meme_commande(a: str, b: Optional[str]) -> bool:
 # ---------------------------------------------------------------------------------------------------- noter
 
 
+
+
 class _DejaNote(Exception):
     """Cette exécution GitHub est déjà au journal : rien à écrire, ni au sceau."""
+
+
+def _cle_run(run):
+    """La forme comparable d'un identifiant d'exécution : celle que garde le journal (texte de 40 caractères au plus),
+    pour qu'un `run` long soit reconnu malgré la troncature."""
+    return _texte(str(run), MAX_RUN)
 
 
 def noter_campagne(dossier, *, commande: str, duree_s, attente_s, code, fin="", octets=None, lieu="poste", tache=None,
                    run=None, bureau=BUREAU, sceau=SCEAU, maintenant=_maintenant) -> Optional[dict]:
     """Note une campagne mesurée par le lanceur : la ligne du journal du projet enregistré qui contient `dossier`, et
-    au sceau, sous son verrou, `campagnes += 1`, `cumul_s += duree_s`, `n = campagnes`. La portée vient de la commande
-    enregistrée (`complete` si c'est elle, aux blancs près). Une campagne complète verte avec un nombre de tests met
-    `derniers_nb_tests` à jour, sauf baisse de plus de 2 % (l'alerte tient jusqu'à « C'est voulu »). La ligne est écrite
-    SOUS le verrou du sceau, avant lui : compteurs et journal avancent ensemble, et un journal qu'on ne peut pas écrire
-    ne compte rien. Rend la ligne ; projet non enregistré, `run` déjà noté ou toute erreur : `None` (la mesure ne casse
-    jamais une campagne)."""
+    au sceau, sous son verrou (attente courte, `tests_sceau.ATTENTE_LANCEUR_S`), `campagnes += 1`,
+    `cumul_s += duree_s`, `n = campagnes`. La portée vient de la commande enregistrée (`complete` si c'est elle, aux
+    blancs près). Une campagne complète verte avec un nombre de tests met `derniers_nb_tests` à jour, sauf baisse de
+    plus de 2 % (l'alerte tient jusqu'à « C'est voulu »). La ligne est écrite SOUS le verrou du sceau, avant lui :
+    compteurs et journal avancent ensemble, et un journal qu'on ne peut pas écrire ne compte rien. Une exécution GitHub
+    (`run`) déjà présente dans les 50 dernières lignes n'est pas notée deux fois. Rend la ligne ; projet non enregistré,
+    `run` déjà noté ou toute erreur : `None` (la mesure ne casse jamais une campagne)."""
     try:
         trouve = projet_enregistre(dossier, bureau)
         if trouve is None:
@@ -358,8 +436,8 @@ def noter_campagne(dossier, *, commande: str, duree_s, attente_s, code, fin="", 
 
         def changer(entree):
             if run is not None:
-                recents = lire(journal)[-RUN_RECENTS:]
-                if any("run" in l and str(l["run"]) == str(run) for l in recents):
+                cle = _cle_run(run)
+                if any("run" in l and _cle_run(l["run"]) == cle for l in _dernieres(journal, RUN_RECENTS)):
                     raise _DejaNote()
             portee = "complete" if meme_commande(commande, entree["commande_complete"]) else "partielle"
             l = ligne(lieu=lieu, source="mesure", tache=tache, commande=commande, portee=portee, duree_s=duree_s,
@@ -374,16 +452,20 @@ def noter_campagne(dossier, *, commande: str, duree_s, attente_s, code, fin="", 
             ajouter(journal, l)
             note["ligne"] = l
 
-        tests_sceau.modifier(id_, changer, sceau=sceau, maintenant=maintenant)
+        tests_sceau.modifier(id_, changer, sceau=sceau, maintenant=maintenant,
+                             attente_s=tests_sceau.ATTENTE_LANCEUR_S)
         return note.get("ligne")
     except Exception:  # noqa: BLE001 — OSError, ValueError, TimeoutError, SceauIllisible, _DejaNote… : tues
         return None
 
 
-def noter_declarations(dossier, lieu, tache, declarations: list, bureau=BUREAU, maintenant=_maintenant) -> int:
+def noter_declarations(dossier, lieu, tache, declarations: list, bureau=BUREAU, sceau=SCEAU,
+                       maintenant=_maintenant) -> int:
     """Une ligne `source: "declare"` par déclaration valide d'un agent du cloud ou du serveur (`{"commande", "portee":
-    "touches" | "complete", "duree_s", "code"}` ; `touches` devient `partielle`), 20 au plus, sans toucher au sceau.
-    Rend le nombre de lignes écrites ; ne lève jamais."""
+    "touches" | "complete", "duree_s", "code"}` ; `touches` devient `partielle`), 20 au plus. Le sceau n'est pas
+    modifié, mais son verrou est pris (attente courte) : les campagnes du poste écrivent le journal sous ce même verrou,
+    et une rotation ne peut pas perdre une déclaration. Verrou indisponible : rien n'est écrit. Rend le nombre de lignes
+    écrites ; ne lève jamais."""
     ecrites = 0
     try:
         if lieu not in LIEUX or not isinstance(declarations, list):
@@ -392,6 +474,7 @@ def noter_declarations(dossier, lieu, tache, declarations: list, bureau=BUREAU, 
         if trouve is None:
             return 0
         journal = journal_de(trouve[1])
+        lignes = []
         for d in declarations[:MAX_DECLARATIONS]:
             if not isinstance(d, dict) or not isinstance(d.get("portee"), str):
                 continue
@@ -399,12 +482,18 @@ def noter_declarations(dossier, lieu, tache, declarations: list, bureau=BUREAU, 
             if portee is None:
                 continue
             try:
-                l = ligne(lieu=lieu, source="declare", tache=tache, commande=d.get("commande"), portee=portee,
-                          duree_s=d.get("duree_s"), attente_s=0.0, code=d.get("code"), t=maintenant())
+                lignes.append(ligne(lieu=lieu, source="declare", tache=tache, commande=d.get("commande"),
+                                    portee=portee, duree_s=d.get("duree_s"), attente_s=0.0, code=d.get("code"),
+                                    t=maintenant()))
             except ValueError:
                 continue
-            ajouter(journal, l)
-            ecrites += 1
+        if not lignes:
+            return 0
+        Path(os.path.abspath(str(sceau))).parent.mkdir(parents=True, exist_ok=True)
+        with verrou_fichier(sceau, attente_s=tests_sceau.ATTENTE_LANCEUR_S):
+            for l in lignes:
+                ajouter(journal, l)
+                ecrites += 1
     except Exception:  # noqa: BLE001 — une déclaration ne casse jamais le moteur
         return ecrites
     return ecrites

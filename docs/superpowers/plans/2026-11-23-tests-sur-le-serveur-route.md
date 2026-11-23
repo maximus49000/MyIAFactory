@@ -866,6 +866,10 @@ existant (octets, pas de chemin) ; (3) étape locale `zipalign` + `apksigner sig
 par le Directeur au poste (jamais lu, stocké ni journalisé par l'outil) ; (4) action « Release signé » du bureau : build au serveur puis signature locale,
 lieu `serveur` ; la signature n'est jamais exécutée par un agent. **Tests :** faux serveur/faux `apksigner` ; essai réel J15b sur FM_Stats.
 
+### Task 15e (ajoutée le 2026-11-23, demande du Directeur) : réglage « signature des APK » par projet
+
+Pour un projet Android/Flutter, le choix de la signature appartient à l'utilisateur : nouveau champ dans les paramètres « projet » (page Réglages à trois niveaux : global / type / projet ; valeur par défaut = la plus sûre) : (a) **le serveur signe avec la clé de debug copiée** (`~/android-signature/debug.keystore`, montée en lecture seule dans le conteneur de l'agent : c'est ce qui est codé pour FM_Stats sur la branche `flutter-build-apk` en attendant) ; (b) **le serveur construit, le poste signe** (tâche 15d) ; (c) **aucune clé ne quitte le poste**, build non signée ou clé jetable. Le montage de la clé de debug n'a lieu que si le réglage du projet choisit (a). **Files :** réglages (`bureau/reglages*.py`, page Réglages), `moteur/executeur_serveur.py` (demande : `signature`), `serveur_ovh/taches/lancer_agent.sh`. **Tests :** faux serveur ; défaut sans montage.
+
 ### Task 16: Documentation, CLAUDE.md et suite complète (contrôleur)
 
 **Files:**

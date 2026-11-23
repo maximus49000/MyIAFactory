@@ -131,6 +131,26 @@
 - [ ] **Step 4:** `py -3.12 outils/tests_paralleles.py --touches` → passe.
 - [ ] **Step 5: commit** `feat(bureau): la page Réglages remplace le déport et les étapes dans Direction`.
 
+### Task 5 bis: Barre du haut : heure, une seule ligne, roue crantée et menu (demande du Directeur, maquette validée le 2026-11-23)
+
+**Files:** Modify `bureau/web/ui/barre.js` (`creerBarre`, `entete.append(...)` l.92), `bureau/web/ui/panneaux.js` (relier `ouvrirReglages`, retirer le bouton « Réglages » de Direction ajouté en Task 5 : `directeur.js:207-210`), `bureau/web/style.css` (`#barre` l.119, `.barre-actions` l.221), `bureau/web/main.js` si la barre y est montée ; Create `bureau/web/tests/barre-roue.test.js`.
+
+**Interfaces:**
+- Consumes : `ctx.ouvrirReglages` (Task 5) ; les boutons existants de la barre (`boutonNouvelle`, `boutonCorrection`, `boutonQuestion`, `boutonFonctions`, `boutonListe`, `boutonTelephone`) ; `ouvrirPanneau(type, id)` de `panneaux.js` (types `"reglages"` ; le panneau Serveurs reste monté par la carte Direction : le menu l'ouvre par `ouvrirPanneau("direction", null)` puis fait défiler jusqu'à lui).
+- Produces : `export function creerMenuParametres({ouvrirReglages, ouvrirServeurs, associerTelephone, actions}) -> {racine: HTMLElement, fermer(): void}` ; `export function formaterHeure(date: Date) -> {heure: "HH:MM", date: "lun. 23 nov."}` (français, jour abrégé).
+
+Exigences (maquette validée) :
+- **Gauche** : l'heure `HH:MM` (mise à jour toutes les 15 s) avec la date en petit **en dessous** (seul bloc sur deux lignes), puis un séparateur, puis le titre et le projet, le voyant, la charge, les boutons existants.
+- **Extrémité droite** : une roue crantée (`button`, `aria-label="Paramètres"`, `aria-haspopup="menu"`, `aria-expanded` vrai/faux) qui ouvre un menu `role="menu"` : « Réglages » (ouvre le panneau reglages), « Serveurs de travail », « Associer un téléphone » ; Échap et un clic ailleurs le ferment ; la roue reprend le focus à la fermeture.
+- **Une seule ligne à toutes les largeurs** : `#barre` en `flex-wrap: nowrap`, jamais de retour à la ligne ; quand la place manque, dans cet ordre : les libellés des boutons deviennent des icônes avec `title`, la jauge de charge devient son pourcentage, les actions restantes (« Nouvelle fonctionnalité », « Nouvelle correction », « Une question », « Fonctionnalités », « Toutes les tâches ») passent dans un groupe « Actions » du menu. Téléphone : heure, projet, voyant et roue seulement. Le `ResizeObserver` qui pose `--hauteur-barre` reste.
+- Le bouton « Réglages » du panneau Direction est retiré (l'accès passe par la roue) ; son test est adapté.
+
+- [ ] **Step 1: tests** (faux DOM comme `bureau/web/tests/barre.test.js`) : `formaterHeure_donne_HH_MM_et_date_courte` (date fixe `new Date(2026, 10, 23, 14, 32)` → `{heure: "14:32", date: "lun. 23 nov."}`) ; `la_roue_a_les_attributs_aria_et_ouvre_le_menu` ; `le_menu_propose_les_trois_entrees_et_ferme_sur_echap` ; `choisir_reglages_appelle_ouvrirReglages_et_ferme` ; `la_barre_est_nowrap` (la feuille `style.css`, lue comme texte, déclare `flex-wrap: nowrap` pour `#barre` et aucun `flex-wrap: wrap` sur `#barre` ni sur `.barre-actions`) ; `les_actions_repliees_sont_dans_le_groupe_Actions_du_menu` ; `le_bouton_Reglages_de_Direction_a_disparu`.
+- [ ] **Step 2:** `python lancer.py tests --dossier . -- node --test bureau/web/tests/barre-roue.test.js bureau/web/tests/barre.test.js bureau/web/tests/directeur-reglages.test.js` → échec.
+- [ ] **Step 3:** implémenter `creerMenuParametres` et `formaterHeure` dans `bureau/web/ui/barre-parametres.js` (nouveau fichier, un rôle) ; `barre.js` ne fait que l'appeler ; resserrement par CSS (`container-query` ou `@media` sur la largeur de `#barre`) plus le repli des actions dans le menu par un `ResizeObserver` existant ; aucune largeur codée en dur sans variable CSS.
+- [ ] **Step 4:** mêmes tests → passe ; puis `py -3.12 outils/tests_paralleles.py --touches` → passe.
+- [ ] **Step 5: commit** `feat(bureau): barre du haut : heure, une seule ligne, roue crantée et menu`.
+
 ### Task 6: « Serveurs de travail » : aptitude des lieux en lecture seule
 
 **Files:** Modify `bureau/web/ui/serveurs.js` (l.589-641, `choix` l.214), `bureau/web/tests/serveurs.test.js`.

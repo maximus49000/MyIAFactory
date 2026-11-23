@@ -43,7 +43,9 @@ Sur le serveur (tout sous l'utilisateur déclaré, jamais root) :
 ~/android-sdk                        le SDK Android de l'hôte, monté en lecture seule dans le conteneur
 ~/flutter-sdk                        le SDK Flutter de l'hôte (capacité flutter-sdk, marqueur ~/.myiafactory/flutter-sdk.version),
                                      monté en lecture seule chez les agents des projets Flutter : voir serveur-agents.md#projets-flutter
-                                     (cette mise à jour change l'image agent : réinstaller agent-serveur)
+                                     (cette mise à jour change l'image agent : réinstaller agent-serveur) ; bin/cache
+                                     en copie sur écriture par tâche : volume overlay flutter-<id>, couche haute dans
+                                     ~/taches/<id>/flutter-up (et flutter-work), retiré à la fin de la tâche
 ```
 
 Sur le poste (`~/MyIAFactory`, avec majuscules) : `taches.json` (l'**index** des tâches, un simple cache : la vérité est sur le

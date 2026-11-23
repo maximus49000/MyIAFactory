@@ -45,9 +45,13 @@
 # Flutter : « "flutter": true » dans demande.json (écrit par le poste quand le projet a un pubspec.yaml qui dépend de
 #   flutter ; une seule clé, true ou false, sinon refusé ; absente = false) -> ~/flutter-sdk (capacité flutter-sdk, exigée :
 #   dossier ordinaire, bin/flutter, bin/cache/lockfile, marqueur ~/.myiafactory/flutter-sdk.version) monté EN LECTURE SEULE
-#   sur /opt/flutter-sdk, un fichier de verrou PROPRE à la tâche (~/taches/<id>/flutter-verrou, vide) monté par-dessus
-#   /opt/flutter-sdk/bin/cache/lockfile (seul fichier que flutter écrit dans son SDK), ~/android-sdk en lecture seule sur
-#   /opt/android-sdk s'il existe, et -e AGENT_FLUTTER=1 (l'entrée pose alors PATH, FLUTTER_ROOT, PUB_CACHE sous /maison,
+#   sur /opt/flutter-sdk, SAUF bin/cache : flutter y écrit (engine.stamp, engine.realm, lockfile) ; il reçoit un volume
+#   overlay PROPRE à la tâche, flutter-<id> (lowerdir = ~/flutter-sdk/bin/cache, jamais modifié ; upperdir et workdir =
+#   ~/taches/<id>/flutter-up et flutter-work, 0700, même disque), créé par `docker volume create` puis PROUVÉ par un
+#   `docker run --rm --network none` bref qui le monte (un overlay n'est monté qu'au run) : refusé -> tâche échouée
+#   « flutter : overlay refusé », jamais de repli en écriture sur le SDK de l'hôte. Le volume est retiré à la fin (conclure),
+#   sur un échec de l'enveloppe (echec) et, à chaque lancement Flutter, ceux des tâches finies (balayage) ; flutter-up compte
+#   dans le plafond travail + maison. ~/android-sdk en lecture seule sur /opt/android-sdk s'il existe, et -e AGENT_FLUTTER=1 (l'entrée pose alors PATH, FLUTTER_ROOT, PUB_CACHE sous /maison,
 #   ANDROID_HOME, CI=true et FLUTTER_SUPPRESS_ANALYTICS : valeurs fixes). Aucun autre droit : mêmes durcissements.
 # Durée : duree_s (argument 3) fait foi ; elle est passée au conteneur (-e AGENT_DUREE_S) : l'échéance interne de l'entrée
 #   (duree_s - 120 s) et celle du veilleur partent de la même valeur, quoi que porte limites.duree_s dans demande.json.
@@ -233,18 +237,50 @@ controle_secret() {
   return 2
 }
 
+# --- Flutter : bin/cache en copie sur écriture, par tâche --------------------
+
+VOLUME_FLUTTER="flutter-$ID"                # $ID validé par MOTIF_ID : nom fermé
+
+# Retire le volume overlay de CETTE tâche (s'il a été préparé : flutter-up existe) ; jamais d'erreur. Le conteneur parti avec
+# --rm peut tenir le volume un instant : trois essais.
+retirer_volume_flutter() {
+  local n
+  [ -d "$DOSSIER/flutter-up" ] || return 0
+  for n in 1 2 3; do
+    dk 30 volume rm "$VOLUME_FLUTTER" >/dev/null 2>&1 && return 0
+    dk 30 volume inspect "$VOLUME_FLUTTER" >/dev/null 2>&1 || return 0
+    sleep 1
+  done
+  return 0
+}
+
+# Balayage : les volumes flutter-<id> (motif strict) des tâches à l'état final (une sortie anormale de leur veilleur a pu
+# les laisser) ; jamais celui d'une tâche en cours ni d'un nom hors motif.
+balayer_volumes_flutter() {
+  local v t
+  while IFS= read -r v; do
+    [[ $v == flutter-* ]] || continue
+    t="${v#flutter-}"
+    [[ $t =~ $MOTIF_ID ]] && [ "$t" != "$ID" ] || continue
+    grep -qE '"etat": "(terminee|arretee|echouee)"' "$TACHES/$t/etat.json" 2>/dev/null || continue
+    dk 30 volume rm "$v" >/dev/null 2>&1
+  done < <(dk 30 volume ls -q --filter "name=^flutter-t" 2>/dev/null)
+  return 0
+}
+
 # --- Veilleur (détaché) ----------------------------------------------------
 
 veilleur() {
   { : >&8; } 2>/dev/null || exit 2                  # sans la place héritée de l'enveloppe, jamais de veilleur
   printf '%s\n' "$$" > "$DOSSIER/veilleur.pid"
-  local debut_iso debut_s maintenant pannes=0 etat_conteneur motif ko prochaine pause libre dernier_du
+  local debut_iso debut_s maintenant pannes=0 etat_conteneur motif ko prochaine pause libre dernier_du mesures
   debut_iso=$(debut_ecrit); [ -n "$debut_iso" ] || debut_iso=$(maintenant_iso)
   debut_s=$(date +%s)
   dernier_du=$debut_s
   FINI=0
   conclure() {   # conclure <etat> <statut> <raison>
     FINI=1
+    retirer_volume_flutter                 # projet Flutter : le volume overlay de la tâche (le conteneur est arrêté)
     ecrire_etat "$1" "$2" "$debut_iso" "$(maintenant_iso)" "$3"
     liberer_creneau
     exit 0
@@ -315,7 +351,9 @@ veilleur() {
     # travail/ + maison/ : plus coûteux à mesurer, toutes les DU_TRAVAIL_S secondes seulement.
     if [ $((maintenant - dernier_du)) -ge "$DU_TRAVAIL_S" ]; then
       dernier_du=$maintenant
-      ko=$(du -sck --apparent-size -- "$DOSSIER/travail" "$DOSSIER/maison" 2>/dev/null | tail -n 1 | cut -f1)
+      mesures=("$DOSSIER/travail" "$DOSSIER/maison")
+      [ -d "$DOSSIER/flutter-up" ] && mesures+=("$DOSSIER/flutter-up")      # projet Flutter : la couche haute de bin/cache
+      ko=$(du -sck --apparent-size -- "${mesures[@]}" 2>/dev/null | tail -n 1 | cut -f1)
       if [[ $ko =~ ^[0-9]+$ ]] && [ "$ko" -gt "$TRAVAIL_MAX_KO" ]; then
         arreter_puis terminee limite "Limite atteinte : travail et maison trop volumineux (${ko} Ko, maximum ${TRAVAIL_MAX_KO} Ko)"
       fi
@@ -336,7 +374,7 @@ if [ "$VEILLEUR" = 1 ]; then veilleur; exit 0; fi
 
 veilleur_vivant() { processus_vivant "$DOSSIER/veilleur.pid" "--veilleur $ID"; }
 enveloppe_vivante() { processus_vivant "$DOSSIER/enveloppe.pid" "lancer_agent.sh $ID"; }
-echec() { arreter_pont_et_emulation; fin_erreur "$1"; }   # fin_erreur (commun.sh) après le départ éventuel du pont
+echec() { arreter_pont_et_emulation; retirer_volume_flutter; fin_erreur "$1"; }   # fin_erreur (commun.sh) : après pont et volume
 
 # Un identifiant ne sert qu'une fois : seul un état absent ou en_attente (jamais démarré) peut être relancé. Rien n'est modifié.
 if [ -f "$DOSSIER/etat.json" ] && ! grep -q '"etat": "en_attente"' "$DOSSIER/etat.json"; then
@@ -475,10 +513,22 @@ COMMANDE=(run --pull never -d --rm --name "tache-$ID" --label "$GENRE" --user "$
   -v "$JETON:/run/identifiants/jeton:ro")
 if [ "$MODE" = pilote ]; then COMMANDE+=(-v "$DOSSIER/pont:/pont" -v "$DOSSIER/outil:/outil:ro"); fi
 if [ "$FLUTTER" = 1 ]; then                        # --mount : une source absente est une erreur, jamais créée par root
-  rm -f -- "$DOSSIER/flutter-verrou"
-  : > "$DOSSIER/flutter-verrou" || echec "Fichier de verrou de Flutter non créable (~/taches/$ID/flutter-verrou)."
+  balayer_volumes_flutter
+  mkdir -p -- "$DOSSIER/flutter-up" "$DOSSIER/flutter-work" && chmod 700 "$DOSSIER/flutter-up" "$DOSSIER/flutter-work" ||
+    echec "flutter : dossiers de l'overlay non créables (~/taches/$ID/flutter-up, flutter-work)."
+  dk 60 volume create --driver local --opt type=overlay --opt device=overlay \
+    --opt "o=lowerdir=$FLUTTER_SDK/bin/cache,upperdir=$DOSSIER/flutter-up,workdir=$DOSSIER/flutter-work" "$VOLUME_FLUTTER" \
+    >/dev/null 2>>"$DOSSIER/docker-run.log" || echec "flutter : overlay refusé (volume non créé : voir docker-run.log)."
+  # Preuve : `volume create` ne monte rien ; un run bref, sans réseau ni dossier de l'hôte, monte le volume et y lit le verrou.
+  VERIF=(run --rm --pull never --name "verif-flutter-$ID" --label "$GENRE" --network none --user "$UTILISATEUR" --read-only
+    --cap-drop ALL --security-opt no-new-privileges --pids-limit 64 --memory 256m --memory-swap 256m
+    --mount "type=volume,src=$VOLUME_FLUTTER,dst=/opt/flutter-sdk/bin/cache" "$IMAGE" test -f /opt/flutter-sdk/bin/cache/lockfile)
+  if ! dk 120 "${VERIF[@]}" >/dev/null 2>>"$DOSSIER/docker-run.log"; then
+    dk 30 rm -f "verif-flutter-$ID" >/dev/null 2>&1
+    echec "flutter : overlay refusé (le volume de bin/cache ne se monte pas : voir docker-run.log) ; le SDK de l'hôte n'est jamais monté en écriture."
+  fi
   COMMANDE+=(--mount "type=bind,src=$FLUTTER_SDK,dst=/opt/flutter-sdk,readonly"
-    --mount "type=bind,src=$DOSSIER/flutter-verrou,dst=/opt/flutter-sdk/bin/cache/lockfile" -e AGENT_FLUTTER=1)
+    --mount "type=volume,src=$VOLUME_FLUTTER,dst=/opt/flutter-sdk/bin/cache" -e AGENT_FLUTTER=1)
   if [ -d "$SDK_ANDROID" ] && [ ! -L "$SDK_ANDROID" ]; then
     COMMANDE+=(--mount "type=bind,src=$SDK_ANDROID,dst=/opt/android-sdk,readonly")
   fi

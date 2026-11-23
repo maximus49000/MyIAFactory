@@ -1859,6 +1859,15 @@ def _executer(cmd, cwd, entree=None):
             raise subprocess.TimeoutExpired(cmd, delai)
     except subprocess.TimeoutExpired:
         _tuer_arbre(p)
+        # L'arbre tué, les tubes arrivent vite en fin : laisser les lecteurs finir (borné) pour pouvoir les fermer.
+        # Sans cela, sous Linux (killpg instantané), les lecteurs tournaient encore et les tubes restaient ouverts.
+        fin_arret = time.monotonic() + 2
+        try:
+            p.wait(timeout=2)
+        except subprocess.TimeoutExpired:
+            pass
+        for f in fils:
+            f.join(max(0.0, fin_arret - time.monotonic()))
         raise
     finally:
         # Les tubes sont fermés dès que leur lecteur a fini ; fermer un tube encore lu par un fil bloquerait.

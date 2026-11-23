@@ -593,13 +593,11 @@ class TestObtenir(unittest.TestCase):
         for p in crees:
             self.assertTrue(p.stdout.closed and p.stderr.closed)
 
-    @plateforme_tests.pas_encore_linux("sous-processus python et tubes fermés : échoue au conteneur Linux, cause à préciser")
     def test_executer_trop_long_ferme_les_tubes(self):
         self._avec_delai_court()
         crees = self._processus_lances()
         with self.assertRaises(subprocess.TimeoutExpired):
             releve._executer([sys.executable, "-c", "import time; time.sleep(30)"], str(self.tmp))
-        time.sleep(0.5)
         self.assertTrue(crees[0].stdout.closed and crees[0].stderr.closed)
 
     def test_obtenir_commande_trop_longue(self):

@@ -3894,15 +3894,17 @@ BUREAU_DEPORT = "~/MyIAFactory/bureau.json"   # remplacé par les tests
 def _deport_du_depart(ctx, bureau=None):
     """La consigne des actions déportées pour l'agent de ce projet. "" si tout est au poste, et aussi au moindre
     souci (réglages absents ou illisibles, contexte invalide) : une consigne manquante vaut mieux qu'un départ
-    cassé. Lieux effectifs : surcharge du projet, sinon défaut du bureau, sinon poste."""
+    cassé. Lieux effectifs : surcharge du projet, puis niveau type du bureau (`types.<genre>.deport.lieux`), puis
+    défaut global du bureau, sinon poste."""
     try:
         from bureau.deport import lieu_effectif
         from bureau.deport_types import catalogue_du_projet
+        from bureau.registre import lieux_du_type
 
-        def deport(chemin):
+        def brut(chemin):
             try:
-                d = json.loads(Path(chemin).read_text(encoding="utf-8-sig")).get("deport")
-            except (OSError, ValueError, AttributeError):
+                d = json.loads(Path(chemin).read_text(encoding="utf-8-sig"))
+            except (OSError, ValueError, RecursionError):
                 return {}
             return d if isinstance(d, dict) else {}
 
@@ -3911,12 +3913,14 @@ def _deport_du_depart(ctx, bureau=None):
             return v if isinstance(v, dict) else {}
 
         projet = _projet(ctx)
-        catalogue = catalogue_du_projet(projet)[1]
+        genre, catalogue = catalogue_du_projet(projet)
         par_defaut = projet / ".factory" / "reglages.json"
         reglages = Path(ctx.f["reglages"]) if ctx.f.get("reglages") else par_defaut
-        du_projet = deport(reglages)
-        globaux = deport(Path(bureau or BUREAU_DEPORT).expanduser())
-        lieux = {a: lieu_effectif(objet(globaux, "lieux"), objet(du_projet, "lieux"), a, catalogue)
+        du_projet = objet(brut(reglages), "deport")
+        fichier_bureau = brut(Path(bureau or BUREAU_DEPORT).expanduser())
+        globaux = objet(fichier_bureau, "deport")
+        du_type = lieux_du_type(fichier_bureau, genre)
+        lieux = {a: lieu_effectif(objet(globaux, "lieux"), objet(du_projet, "lieux"), a, catalogue, type_=du_type)
                  for a in catalogue}
         ailleurs = str(reglages) if reglages != par_defaut else None
         return depart.deport_consigne(lieux, catalogue, objet(du_projet, "commandes"), str(projet), ailleurs)

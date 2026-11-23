@@ -39,8 +39,9 @@ def valider_lieux(lieux, etape_serveur=False, catalogue=GENERIQUE):
     return dict(lieux)
 
 
-def lieu_effectif(global_, projet, action, catalogue=None):
-    """Lieu d'une action : la surcharge du projet l'emporte, sinon le réglage global, sinon le poste.
+def lieu_effectif(global_, projet, action, catalogue=None, type_=None):
+    """Lieu d'une action : la surcharge du projet l'emporte, puis celle du type (`type_`, {action: lieu}, s'il y en a
+    un), puis le réglage global, sinon le poste. Une valeur du type qui n'est pas un lieu connu est ignorée.
 
     Avec `catalogue`, une action qui ne tourne pas au poste (la recette sur émulateur, au seul serveur) ne prend que le
     réglage du projet (accord permanent donné projet par projet, jamais hérité du bureau) ; sans lui, ou s'il n'est
@@ -48,7 +49,11 @@ def lieu_effectif(global_, projet, action, catalogue=None):
     if catalogue is not None and action in catalogue and sans_poste(catalogue[action]):
         lieu = (projet or {}).get(action)
         return lieu if isinstance(lieu, str) and lieu in catalogue[action]["lieux"] else None
-    for source in (projet, global_):
+    if type_ and type_.get(action) in LIEUX:
+        type_ = {action: type_[action]}
+    else:
+        type_ = None
+    for source in (projet, type_, global_):
         if source and source.get(action):
             return source[action]
     return "poste"

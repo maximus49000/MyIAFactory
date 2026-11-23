@@ -1,8 +1,8 @@
 // Le rond du bandeau : la synthèse, ce qu'il reste du forfait Claude Code sur la fenêtre la plus tendue. Un clic ouvre
-// un petit panneau : la courbe du quota de la semaine (sans répéter les chiffres des jauges), la remise à zéro, la
+// un petit panneau : les deux fenêtres (5 h, semaine), la courbe du quota de la semaine, la remise à zéro, la
 // répartition par modèle, la part estimée des coûts et un bouton « Voir plus » (la fenêtre de semaine.js / semaine-vue.js).
-// Quand la barre manque de place (téléphone), les deux fenêtres (5 h, semaine) que les jauges montrent y sont reprises.
-// C'est aussi la source unique des jauges (mesure.js).
+// Le rond est seul dans la barre, à toutes les largeurs : le détail des fenêtres n'est que dans ce panneau.
+// C'est aussi la source unique de la lecture (mesure.js).
 // Quand la lecture directe du compte manque, le serveur se rabat sur le dernier appel du moteur et le dit.
 // Tout texte venu du serveur passe par textContent.
 
@@ -77,13 +77,15 @@ export function creerConso(url = "/api/conso") {
   bouton.type = "button";
   bouton.setAttribute("aria-haspopup", "true");
   bouton.setAttribute("aria-expanded", "false");
-  const dessin = svg("svg", {viewBox: "0 0 36 36", width: "30", height: "30", "aria-hidden": "true"});
+  // Le nombre restant (sans « % ») est écrit au centre du cercle.
+  const dessin = svg("svg", {viewBox: "0 0 36 36", width: "36", height: "36", "aria-hidden": "true"});
   const fond = svg("circle", {cx: 18, cy: 18, r: RAYON, class: "conso-fond"});
   const arc = svg("circle", {cx: 18, cy: 18, r: RAYON, class: "conso-arc", transform: "rotate(-90 18 18)"});
   arc.style.strokeDasharray = String(CIRCONFERENCE);
-  dessin.append(fond, arc);
-  const chiffre = el("span", "conso-chiffre", "—");
-  bouton.append(dessin, chiffre);
+  const chiffre = svg("text", {x: 18, y: 18, class: "conso-nombre", "text-anchor": "middle", "dominant-baseline": "central"});
+  chiffre.textContent = "—";
+  dessin.append(fond, arc, chiffre);
+  bouton.append(dessin);
   const panneau = el("div", "conso-panneau");
   panneau.hidden = true;
   racine.append(bouton, panneau);
@@ -94,12 +96,13 @@ export function creerConso(url = "/api/conso") {
 
   function afficher() {
     const c = donnees;
-    bouton.title = libelleRond(c);
     const dispo = !!c && c.disponible === true;
+    bouton.title = libelleRond(c);
+    bouton.setAttribute("aria-label", dispo ? bouton.title : "Consommation Claude Code indisponible");
     racine.dataset.ton = dispo ? tonReste(c.reste) : "inconnu";
     racine.dataset.source = dispo ? c.source || "compte" : "";
     arc.style.strokeDashoffset = String(CIRCONFERENCE * (1 - (dispo ? partRestante(c.reste) : 0)));
-    chiffre.textContent = dispo ? Math.round(c.reste) + " %" : "—";
+    chiffre.textContent = dispo ? String(Math.round(c.reste)) : "—";
     panneau.replaceChildren();
     panneau.append(el("div", "conso-titre", dispo ? `Il reste ${Math.round(c.reste)} %` : "Consommation Claude Code"));
     if (!dispo) {
@@ -112,8 +115,7 @@ export function creerConso(url = "/api/conso") {
       panneau.append(el("p", "conso-source", `Lecture directe indisponible (${c.raison || "compte injoignable"}) : ` +
         `${agePhrase(c)}.`));
     }
-    // Les chiffres des deux fenêtres sont ceux des jauges : le panneau ne les répète que lorsque les jauges sont
-    // repliées (étroit). Au clic : la courbe de la semaine, puis ce que les jauges ne disent pas.
+    // Les deux fenêtres (5 h, semaine), puis la courbe de la semaine et le détail par modèle.
     const principales = c.fenetres.filter((f) => PRINCIPALES.includes(f.cle));
     const modeles = c.fenetres.filter((f) => !PRINCIPALES.includes(f.cle));
     if (principales.length) {

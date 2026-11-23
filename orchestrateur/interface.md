@@ -560,7 +560,7 @@ refait celles qui avaient échoué. L'envoi se fait hors du verrou du suivi ; le
 `{t, fait, texte, releases: [{tag, url, fait}]}` et le lien de chaque release dans `fin.livrables[].lien`. Un échec (projet
 pas sur GitHub, gh absent ou déconnecté, fichier trop gros) est dit en clair et ne bloque jamais la livraison locale.
 Rend `{fonctionnalites: [{id, fait, texte}]}`. Le réglage `livraison_github` (« Livrer automatiquement sur GitHub », décoché
-par défaut, dans la configuration git du bureau) fait lancer cette commande par le moteur à chaque passage ; la demande
+par défaut, réglage du niveau projet seulement, dans Réglages : roue dentée en haut à droite) fait lancer cette commande par le moteur à chaque passage ; la demande
 `publier_livrable` (« Publier maintenant », `confirme`) la lance sur un clic, avec `relancer`.
 
 ### `regles`

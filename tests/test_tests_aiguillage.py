@@ -208,6 +208,23 @@ class TestAiguillage(Base):
         self.assertEqual(self.lancer(["--dossier", src, "--", "x"]), 0)
         self.assertEqual(self.vus, [("poste", ["--dossier", src, "--", "x"])])
 
+    def test_le_niveau_type_du_bureau_envoie_sur_github(self):
+        """`types.<genre>.deport.lieux.tests = github` (page Réglages, niveau type) : `lancer.py tests` passe par
+        deporter, comme pour un réglage du projet ; le projet l'emporte toujours."""
+        android = "application-mobile-android"
+        (self.p / ".factory" / "factory.json").write_text(json.dumps({"genre": android}), encoding="utf-8")
+        self.ecrire_bureau([self.reglages])
+        b = json.loads(self.bureau.read_text(encoding="utf-8"))
+        b["types"] = {android: {"deport": {"lieux": {"tests": "github"}}}}
+        self.bureau.write_text(json.dumps(b), encoding="utf-8")
+        src = str(self.p / "src")
+        self.assertEqual(self.lancer(["--dossier", src, "--", "x"]), 0)
+        self.assertEqual(self.vus, [("deporter", ["tests", "--dossier", src, "--", "x"])])
+        self.ecrire_reglages({"tests": "poste"})
+        self.vus.clear()
+        self.assertEqual(self.lancer(["--dossier", src, "--", "x"]), 0)
+        self.assertEqual(self.vus, [("poste", ["--dossier", src, "--", "x"])])
+
     def test_options_retirees_de_la_commande(self):
         ici = os.getcwd()
         os.chdir(str(self.tmp))      # jamais la racine du dépôt : le dossier courant est le dossier temporaire

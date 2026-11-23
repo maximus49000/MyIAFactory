@@ -86,29 +86,24 @@ class TestCatalogue(unittest.TestCase):
     def test_choix_de_la_route(self):
         self.assertEqual(tests_serveur._image_de_la_campagne(profil(["python"], python="3.12"), None),
                          (None, None, ("tests-image",)))                           # ligne de commande d'avant
-        tests_images.CACHE_GRADLE_PRET = True
-        try:
-            self.assertEqual(tests_serveur._image_de_la_campagne(profil(["gradle-android"], **FRIDGE), None),
-                             ("myiafactory/tests-android", "gradle-android", ("tests-android",)))
-            for p, sdk in ((profil(["node"], node="18"), None),
-                           (profil(["gradle-android"], **FRIDGE), {"platforms": ["android-34"], "build_tools": ["34.0.0"]})):
-                with self.assertRaises(tests_serveur.Repli):
-                    tests_serveur._image_de_la_campagne(p, sdk)
-        finally:
-            tests_images.CACHE_GRADLE_PRET = False
+        self.assertTrue(tests_images.CACHE_GRADLE_PRET)                               # 14d : l'échauffement existe
+        self.assertEqual(tests_serveur._image_de_la_campagne(profil(["gradle-android"], **FRIDGE), None),
+                         ("myiafactory/tests-android", "gradle-android", ("tests-android",)))
+        for p, sdk in ((profil(["node"], node="18"), None),
+                       (profil(["gradle-android"], **FRIDGE), {"platforms": ["android-34"], "build_tools": ["34.0.0"]})):
+            with self.assertRaises(tests_serveur.Repli):
+                tests_serveur._image_de_la_campagne(p, sdk)
 
-    def test_gradle_se_replie_tant_que_le_cache_n_existe_pas(self):
-        self.assertFalse(tests_images.CACHE_GRADLE_PRET)                              # 14d le passera à vrai
-        for p in (profil(["gradle-android"], **FRIDGE), profil(["gradle-jvm"], jdk="17")):
-            with self.assertRaises(tests_serveur.Repli) as e:
-                tests_serveur._image_de_la_campagne(p, None)
-            self.assertIn("cache Gradle du serveur pas encore préparé : 14d", e.exception.raison)
-        self.assertEqual(tests_images.choisir_image(profil(["gradle-android"], **FRIDGE))["image"], "myiafactory/tests-android")
-        tests_images.CACHE_GRADLE_PRET = True
+    def test_interrupteur_du_cache_gradle(self):
+        self.assertEqual(tests_serveur._image_de_la_campagne(profil(["gradle-jvm"], jdk="17"), None)[1], "gradle-jvm")
+        tests_images.CACHE_GRADLE_PRET = False                                        # interrupteur : tout Gradle au poste
         try:
-            self.assertEqual(tests_serveur._image_de_la_campagne(profil(["gradle-jvm"], jdk="17"), None)[1], "gradle-jvm")
+            for p in (profil(["gradle-android"], **FRIDGE), profil(["gradle-jvm"], jdk="17")):
+                with self.assertRaises(tests_serveur.Repli) as e:
+                    tests_serveur._image_de_la_campagne(p, None)
+                self.assertIn("cache Gradle du serveur", e.exception.raison)
         finally:
-            tests_images.CACHE_GRADLE_PRET = False
+            tests_images.CACHE_GRADLE_PRET = True
 
     def test_route_refuse_seulement_la_commande_concernee(self):
         refus = "N2 : macOS ou iOS (Xcode)"
@@ -200,7 +195,8 @@ class TestEnveloppe(unittest.TestCase):
         # gradle-android : SDK de l'hôte en lecture seule, variables fermées ; durcissements gardés
         code, _l, run, t = self.lancer("10", "myiafactory/tests-android", "gradle-android")
         self.assertEqual(code, 0)
-        self.assertIn("$H/android-sdk:/opt/android-sdk:ro", run)
+        self.assertIn(f"type=volume,src=tests-sdk-{banc.ID},dst=/opt/android-sdk", run)   # copie sur écriture (14d)
+        self.assertNotIn("$H/android-sdk:/opt/android-sdk", run)
         self.assertEqual(run[-2], "myiafactory/tests-android")
         self.assertIn("ANDROID_HOME=/opt/android-sdk", run)
         self.assertTrue(any(a.startswith("GRADLE_OPTS=") for a in run))
@@ -215,11 +211,9 @@ class TestEnveloppe(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertNotIn("/opt/android-sdk", " ".join(run))
         self.assertTrue(any(a.startswith("GRADLE_OPTS=") for a in run))
-        code, _l, run, _t = self.lancer("10", "myiafactory/tests-android", "gradle-jvm", deps=banc.DEPS)   # cache monté en :ro
-        self.assertEqual(code, 0)
-        self.assertIn("GRADLE_RO_DEP_CACHE=/deps", run)
-        self.assertIn("GRADLE_USER_HOME=/tmp/gradle", run)
-        self.assertTrue(any(a.endswith("/.deps/projet-a/%s:/deps:ro" % banc.DEPS) for a in run))
+        code, lignes, run, _t = self.lancer("10", "myiafactory/tests-android", "gradle-jvm", deps=banc.DEPS)   # sans wrapper : 79
+        self.assertEqual((code, run), (79, None))
+        self.assertIn("#deps-echec wrapper-absent", lignes)
 
     @unittest.skipUnless(shutil.which("bash"), "bash absent")
     def test_etape_simulee(self):

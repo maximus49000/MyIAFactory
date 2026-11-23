@@ -21,6 +21,16 @@ Bibliothèque standard seulement (Python 3.9 et plus) ; aucune donnée lue ici n
 - `--couper <marque> <max>` : relaie l'entrée (mêmes séparateurs réécrits, sans préfixe), `<max>` octets écrits au plus, puis lit
   et jette le reste et crée `<marque>`. Une sortie fermée (poste parti) ne bloque jamais : l'entrée est vidée jusqu'au bout.
 - Messages (`texte_sur`) : contrôles et séparateurs d'un nom refusé écrits sous forme de texte, sur une seule ligne.
+Dépendances (conception § 5.13, tâche 14d) :
+- `--hors-ligne <clé>` : la commande (entrée standard, même règle que `--commande`) avec les drapeaux hors ligne de la table
+  fermée (`hors_ligne`) ; écrite sur la sortie standard.
+- `--wrapper <entree.tar>` : « <sha256 du gradle-wrapper.jar> <version de la distribution> », ou code 3 et la raison
+  (`wrapper-absent`, `distribution-hors-services-gradle`) ; l'enveloppe compare à la somme PUBLIÉE par Gradle.
+- `--echauffer <clé> <famille>` : DANS le conteneur deps-<id> (monté en lecture seule sur /opt/myiafactory/tests_hote.py) :
+  `plan_echauffement` puis les outils (aucune valeur du projet dans une commande), contenu dans /deps, verrou produit et
+  marques dans /deps-meta.
+- `--mandataire <port> <durée_s> <hôte>...` : DANS le conteneur mandataire-<id> : `CONNECT <hôte>:443` vers la liste fermée
+  seulement (`hote_permis`), tout le reste refusé (403).
 """
 import json
 import os
@@ -279,7 +289,350 @@ def texte_sur(texte):
     return _TEXTE_DOUTEUX.sub(lambda m: "\\u%04x" % ord(m.group()), texte)
 
 
+# =====================================================================================================================
+# Dépendances (conception § 5.13, tâche 14d). Les clés d'échauffement sont celles de la table fermée ECH de lancer_tests.sh.
+# =====================================================================================================================
+
+CLES = ("npm", "pnpm", "yarn", "pip", "pip-sources", "gradle", "maven", "dotnet", "cargo", "go", "unity")
+_MOTIF_CLE = re.compile(r"[a-z][a-z-]{1,11}")
+
+
+def _executable(x):
+    return x.replace("\\", "/").rsplit("/", 1)[-1].lower()
+
+
+def hors_ligne(commande, cle):
+    """La commande des tests avec les drapeaux hors ligne de la famille (table fermée : Gradle `--offline --no-daemon`,
+    Maven `-o`, Cargo `--offline`, .NET `--no-restore`), ajoutés seulement si l'exécutable est celui de la famille ; les
+    familles réglées par variables (Go, pip, npm) ne changent pas. Au-delà de 64 éléments : inchangée."""
+    c = list(commande)
+    if not c:
+        return c
+    exe = _executable(c[0])
+    if cle == "gradle" and exe in ("gradlew", "gradle"):
+        nouvelle = [c[0], "--offline", "--no-daemon"] + [x for x in c[1:] if x not in ("--offline", "--no-daemon")]
+    elif cle == "maven" and exe in ("mvn", "mvnw"):
+        nouvelle = c if "-o" in c[1:] or "--offline" in c[1:] else [c[0], "-o"] + c[1:]
+    elif cle == "cargo" and exe == "cargo":
+        nouvelle = c if "--offline" in c[1:] else [c[0], "--offline"] + c[1:]
+    elif cle == "dotnet" and exe == "dotnet" and len(c) > 1 and c[1] in ("test", "build", "run", "publish", "pack"):
+        nouvelle = c if "--no-restore" in c[2:] else c[:2] + ["--no-restore"] + c[2:]
+    else:
+        nouvelle = c
+    if len(nouvelle) > 64 or len(json.dumps(nouvelle, ensure_ascii=False).encode("utf-8")) > MAX_COMMANDE:
+        return c
+    return nouvelle
+
+
+_CONNECT = re.compile(r"CONNECT ([A-Za-z0-9.-]{1,253}):443 HTTP/1\.[01]")
+
+
+def hote_permis(ligne, hotes):
+    """L'hôte (en minuscules) d'une requête `CONNECT <hôte>:443` dont l'hôte est EXACTEMENT dans la liste fermée ; sinon None
+    (autre port, autre méthode, adresse IP, suffixe trompeur)."""
+    m = _CONNECT.fullmatch(ligne or "")
+    if not m:
+        return None
+    hote = m.group(1).lower()
+    return hote if hote in {h.lower() for h in hotes} else None
+
+
+def mandataire(port, duree_s, hotes):
+    """Mandataire éphémère (dans son conteneur, réseau bridge + réseau interne de l'échauffement) : seulement `CONNECT` vers
+    les hôtes de la liste, port 443 ; 64 connexions au plus ; s'arrête seul après `duree_s` (l'enveloppe le supprime avant)."""
+    import select
+    import socket
+    import threading
+    import time
+    fin = time.time() + duree_s
+    places = threading.BoundedSemaphore(64)
+    serveur = socket.create_server(("0.0.0.0", port))
+    serveur.settimeout(1.0)
+
+    def servir(client):
+        amont = None
+        try:
+            client.settimeout(30)
+            tete = b""
+            while b"\r\n\r\n" not in tete and len(tete) < 8192:
+                bloc = client.recv(4096)
+                if not bloc:
+                    return
+                tete += bloc
+            ligne = tete.split(b"\r\n", 1)[0].decode("ascii", "replace")
+            hote = hote_permis(ligne, hotes)
+            if hote is None:
+                client.sendall(b"HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\n\r\n")
+                return
+            amont = socket.create_connection((hote, 443), timeout=30)
+            client.sendall(b"HTTP/1.1 200 Connection established\r\n\r\n")
+            reste = tete.split(b"\r\n\r\n", 1)[1]
+            if reste:
+                amont.sendall(reste)
+            paires = {client: amont, amont: client}
+            while time.time() < fin:
+                lisibles, _, _ = select.select(list(paires), [], [], 300)
+                if not lisibles:
+                    return
+                for s in lisibles:
+                    donnees = s.recv(65536)
+                    if not donnees:
+                        return
+                    paires[s].sendall(donnees)
+        except OSError:
+            return
+        finally:
+            for s in (client, amont):
+                if s is not None:
+                    try:
+                        s.close()
+                    except OSError:
+                        pass
+            places.release()
+
+    while time.time() < fin:
+        try:
+            client, _ = serveur.accept()
+        except socket.timeout:
+            continue
+        except OSError:
+            break
+        if not places.acquire(blocking=False):
+            client.close()
+            continue
+        threading.Thread(target=servir, args=(client,), daemon=True).start()
+    return 0
+
+
+# Fichiers que voit l'échauffement d'une famille qui n'exécute pas de code du projet (les autres fichiers sont effacés de la
+# copie de travail du conteneur avant l'outil) ; Gradle, Maven, pip sans roue et Cargo gardent tout (l'outil l'exige).
+_MANIFESTES = {
+    "npm": re.compile(r"(.*/)?(package\.json|package-lock\.json|npm-shrinkwrap\.json)"),
+    "pnpm": re.compile(r"(.*/)?(package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml)"),
+    "yarn": re.compile(r"(.*/)?(package\.json|yarn\.lock|\.yarnrc\.yml)"),
+    "pip": re.compile(r"(.*/)?(requirements|constraints)[^/]*\.txt"),
+    "go": re.compile(r"(.*/)?(go\.mod|go\.sum|go\.work|go\.work\.sum)"),
+    "dotnet": re.compile(r"(.*/)?([^/]+\.(csproj|fsproj|vbproj|sln|props|targets)|global\.json|nuget\.config|"
+                         r"packages\.lock\.json)", re.I),
+}
+_INIT_GRADLE = """allprojects {
+  tasks.register("myiafactoryResoudre") {
+    doLast {
+      (project.configurations + project.buildscript.configurations).findAll { it.canBeResolved }.each { c ->
+        try { c.resolve() } catch (Exception e) { logger.warn("myiafactory : configuration " + c.name + " non resolue") }
+      }
+    }
+  }
+}
+"""
+_GRADLE_OPTS = ("-Dorg.gradle.daemon=false -Dorg.gradle.vfs.watch=false -Dkotlin.compiler.execution.strategy=in-process "
+                "-Dorg.gradle.project.android.builder.sdkDownload=false")
+
+
+def _garder_manifestes(travail, motif):
+    for dossier, _sous, fichiers in os.walk(travail, topdown=False):
+        for f in fichiers:
+            chemin = os.path.join(dossier, f)
+            rel = os.path.relpath(chemin, travail).replace(os.sep, "/")
+            if not motif.fullmatch(rel):
+                os.unlink(chemin)
+        if dossier != travail:
+            try:
+                os.rmdir(dossier)
+            except OSError:
+                pass
+
+
+def plan_echauffement(cle, famille, travail, deps="/deps"):
+    """Le plan de l'échauffement `cle` dans `travail` (copie de travail du conteneur) : `{"etapes": [{"commande", "env",
+    "obligatoire"}], "deplacer": [(source, destination)], "produit": verrou produit ou None, "verrouille": bool}`. Efface
+    d'abord de `travail` tout ce qui n'est pas un manifeste pour les familles qui n'exécutent pas de code du projet. Aucune
+    valeur du projet n'entre dans une commande (seulement des noms de fichiers trouvés par motif fermé). ValueError : clé
+    refusée ou rien à préparer."""
+    if cle not in CLES:
+        raise ValueError("clé d'échauffement refusée")
+    if cle == "unity":
+        raise ValueError("unity : échauffement par la tâche 14g (licence)")
+    motif = _MANIFESTES.get("pip" if cle == "pip" else cle)
+    if motif is not None:
+        _garder_manifestes(travail, motif)
+    existe = lambda n: os.path.isfile(os.path.join(travail, n))   # noqa: E731
+    etapes, deplacer, produit, verrouille = [], [], None, True
+
+    def etape(commande, env=None, obligatoire=True):
+        etapes.append({"commande": list(commande), "env": dict(env or {}), "obligatoire": obligatoire})
+
+    if cle in ("npm", "pnpm", "yarn"):
+        if not existe("package.json"):
+            raise ValueError("package.json absent")
+        verrou = {"npm": next((n for n in ("package-lock.json", "npm-shrinkwrap.json") if existe(n)), None),
+                  "pnpm": "pnpm-lock.yaml" if existe("pnpm-lock.yaml") else None,
+                  "yarn": "yarn.lock" if existe("yarn.lock") else None}[cle]
+        corepack = {"COREPACK_HOME": "/tmp/corepack", "COREPACK_ENABLE_DOWNLOAD_PROMPT": "0"}
+        if cle == "npm":
+            etape(["npm", "ci" if verrou else "install", "--ignore-scripts", "--no-audit", "--no-fund"])
+        elif cle == "pnpm":
+            etape(["corepack", "pnpm", "install", "--ignore-scripts"] + (["--frozen-lockfile"] if verrou else []), corepack)
+        elif existe(".yarnrc.yml"):
+            etape(["corepack", "yarn", "install", "--mode=skip-build"] + (["--immutable"] if verrou else []), corepack)
+        else:
+            etape(["corepack", "yarn", "install", "--ignore-scripts", "--non-interactive"]
+                  + (["--frozen-lockfile"] if verrou else []), corepack)
+        if not verrou:
+            produit, verrouille = {"npm": "package-lock.json", "pnpm": "pnpm-lock.yaml", "yarn": "yarn.lock"}[cle], False
+        deplacer.append(("node_modules", "node_modules"))
+    elif cle in ("pip", "pip-sources"):
+        exigences = sorted(n for n in os.listdir(travail) if re.fullmatch(r"requirements[^/]*\.txt", n) and existe(n))
+        if not exigences:
+            raise ValueError("requirements*.txt absent")
+        venv = f"{deps}/venv"
+        etape(["python3", "-m", "venv", venv])
+        commande = [f"{venv}/bin/python", "-m", "pip", "install", "--no-input", "--disable-pip-version-check"]
+        if cle == "pip":
+            commande.append("--only-binary=:all:")
+        for n in exigences:
+            commande += ["-r", n]
+        etape(commande)
+        for n in exigences:
+            with open(os.path.join(travail, n), encoding="utf-8", errors="replace") as f:
+                lignes = [x.strip() for x in f if x.strip() and not x.strip().startswith(("#", "-"))]
+            if any("==" not in x for x in lignes):
+                verrouille = False
+        if not verrouille:
+            etape([f"{venv}/bin/python", "-m", "pip", "freeze", "--disable-pip-version-check"])
+            produit = "pip-freeze"
+    elif cle == "gradle":
+        if not existe("gradlew"):
+            raise ValueError("gradlew absent")
+        env = {"GRADLE_USER_HOME": f"{deps}/gradle", "GRADLE_OPTS": _GRADLE_OPTS}
+        base = ["./gradlew", "--no-daemon", "--no-configuration-cache"]
+        etape(base + ["--init-script", "/tmp/myiafactory-resoudre.gradle", "myiafactoryResoudre"], env)
+        etape(base + ["compileDebugUnitTestSources" if famille == "gradle-android" else "testClasses"], env, obligatoire=False)
+        verrouille = existe("gradle.lockfile")
+    elif cle == "maven":
+        outil = "./mvnw" if existe("mvnw") else "mvn"
+        etape([outil, "-B", f"-Dmaven.repo.local={deps}/m2", "dependency:go-offline"], {"MAVEN_USER_HOME": f"{deps}/m2home"})
+        verrouille = False
+    elif cle == "dotnet":
+        etape(["dotnet", "restore"], {"NUGET_PACKAGES": f"{deps}/nuget", "DOTNET_CLI_HOME": "/tmp",
+                                      "DOTNET_CLI_TELEMETRY_OPTOUT": "1", "DOTNET_NOLOGO": "1"})
+        verrouille = existe("packages.lock.json")
+    elif cle == "cargo":
+        verrou = existe("Cargo.lock")
+        etape(["cargo", "fetch"], {"CARGO_HOME": f"{deps}/cargo"})
+        if not verrou:
+            produit, verrouille = "Cargo.lock", False
+    elif cle == "go":
+        verrou = existe("go.sum")
+        etape(["go", "mod", "download"], {"GOMODCACHE": f"{deps}/gomod", "GOPATH": "/tmp/go", "GOFLAGS": "-mod=mod",
+                                          "GOTOOLCHAIN": "local"})
+        if not verrou:
+            produit, verrouille = "go.sum", False
+    return {"etapes": etapes, "deplacer": deplacer, "produit": produit, "verrouille": verrouille}
+
+
+def echauffer(cle, famille, travail="/work", deps="/deps", meta="/deps-meta"):
+    """Dans le conteneur `deps-<id>` (entrée : /work = l'instantané extrait) : le plan, puis le contenu dans `deps`, le verrou
+    produit dans `meta/verrou-produit`, `meta/non-verrouille` le cas échéant, enfin `meta/ok`. Code 0, ou 1 (raison dite)."""
+    import shutil
+    import subprocess
+    try:
+        plan = plan_echauffement(cle, famille, travail, deps)
+    except (ValueError, OSError) as e:
+        sys.stderr.write("echauffement refusé : %s\n" % texte_sur(str(e)))
+        return 1
+    if cle == "gradle":
+        with open("/tmp/myiafactory-resoudre.gradle", "w", encoding="utf-8") as f:
+            f.write(_INIT_GRADLE)
+    gele = None
+    for e in plan["etapes"]:
+        env = dict(os.environ, **e["env"])
+        freeze = e["commande"][-2:] == ["freeze", "--disable-pip-version-check"]
+        r = subprocess.run(e["commande"], cwd=travail, env=env, stdin=subprocess.DEVNULL,
+                           stdout=subprocess.PIPE if freeze else None)
+        if freeze and r.returncode == 0:
+            gele = r.stdout
+        if r.returncode != 0 and e["obligatoire"]:
+            sys.stderr.write("echauffement : %s a rendu %d\n" % (e["commande"][0], r.returncode))
+            return 1
+        if r.returncode != 0:
+            sys.stderr.write("echauffement : étape facultative en échec (%s), le cache peut être incomplet\n" % e["commande"][-1])
+    for source, destination in plan["deplacer"]:
+        if os.path.isdir(os.path.join(travail, source)):
+            shutil.move(os.path.join(travail, source), os.path.join(deps, destination))
+    if plan["produit"] == "pip-freeze" and gele is not None:
+        with open(os.path.join(meta, "verrou-produit"), "wb") as f:
+            f.write(gele)
+    elif plan["produit"] and os.path.isfile(os.path.join(travail, plan["produit"])):
+        shutil.copyfile(os.path.join(travail, plan["produit"]), os.path.join(meta, "verrou-produit"))
+    if not plan["verrouille"]:
+        open(os.path.join(meta, "non-verrouille"), "w").close()
+    open(os.path.join(meta, "ok"), "w").close()
+    return 0
+
+
+_DISTRIBUTION = re.compile(r"distributionUrl=https\\?://services\.gradle\.org/distributions/gradle-"
+                           r"([0-9]{1,2}\.[0-9]{1,2}(?:\.[0-9]{1,2})?(?:-rc-[0-9]{1,2})?)-(?:bin|all)\.zip")
+
+
+def _membres(chemin, voulus):
+    """{nom: octets} des membres `voulus` de l'archive (déjà relue par `verifier_archive` : USTAR, fichiers ordinaires)."""
+    trouves = {}
+    with open(chemin, "rb") as f:
+        while True:
+            entete = f.read(BLOC)
+            if len(entete) < BLOC or entete == b"\0" * BLOC:
+                break
+            nom = _champ(entete, 0, 100).decode("utf-8", "replace")
+            prefixe = _champ(entete, 345, 155).decode("utf-8", "replace")
+            if prefixe:
+                nom = prefixe + "/" + nom
+            taille = _octal(_champ(entete, 124, 12)) or 0
+            blocs = (taille + BLOC - 1) // BLOC * BLOC
+            if nom in voulus and taille <= MAX_FICHIER:
+                trouves[nom] = f.read(taille)
+                f.seek(blocs - taille, 1)
+            else:
+                f.seek(blocs, 1)
+    return trouves
+
+
+def wrapper_gradle(chemin):
+    """`(sha256 du gradle-wrapper.jar, version de la distribution)` lus dans l'instantané ; ValueError : jar ou propriétés
+    absents, ou distributionUrl hors de services.gradle.org (une autre source servirait n'importe quel code)."""
+    import hashlib
+    jar, props = "gradle/wrapper/gradle-wrapper.jar", "gradle/wrapper/gradle-wrapper.properties"
+    m = _membres(chemin, {jar, props})
+    if jar not in m or props not in m:
+        raise ValueError("wrapper-absent")
+    for ligne in m[props].decode("utf-8", "replace").splitlines():
+        d = _DISTRIBUTION.fullmatch(ligne.strip())
+        if d:
+            return hashlib.sha256(m[jar]).hexdigest(), d.group(1)
+    raise ValueError("distribution-hors-services-gradle")
+
+
 def principal(argv):
+    if argv[:1] == ["--hors-ligne"] and len(argv) == 2 and argv[1] in CLES:
+        brut = sys.stdin.buffer.read(MAX_COMMANDE + 1)
+        if not commande_valide(brut):
+            return 2
+        sys.stdout.write(json.dumps(hors_ligne(json.loads(brut.decode("utf-8")), argv[1]), ensure_ascii=False))
+        return 0
+    if argv[:1] == ["--wrapper"] and len(argv) == 2:
+        try:
+            somme, version = wrapper_gradle(argv[1])
+        except (ValueError, OSError) as e:
+            sys.stderr.write("%s\n" % texte_sur(str(e)))
+            return 3
+        sys.stdout.write("%s %s\n" % (somme, version))
+        return 0
+    if argv[:1] == ["--echauffer"] and len(argv) == 3 and argv[1] in CLES and _MOTIF_CLE.fullmatch(argv[2]):
+        return echauffer(argv[1], argv[2])
+    if (argv[:1] == ["--mandataire"] and len(argv) >= 4 and re.fullmatch(r"[1-9][0-9]{0,4}", argv[1])
+            and re.fullmatch(r"[1-9][0-9]{0,4}", argv[2])
+            and all(re.fullmatch(r"[a-z0-9.-]{1,253}", h) for h in argv[3:])):
+        return mandataire(int(argv[1]), int(argv[2]), tuple(argv[3:]))
     if argv[:1] == ["--commande"] and len(argv) == 1:
         brut = sys.stdin.buffer.read(MAX_COMMANDE + 1)
         if commande_valide(brut):

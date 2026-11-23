@@ -1,14 +1,32 @@
 #!/usr/bin/env bash
 # Enveloppe HÔTE d'une campagne de tests : exécutée sur le serveur par UNE session SSH du poste, elle reste au premier plan
 # du début à la fin (place, conteneur, sortie en direct, nettoyage) ; l'entrée standard de la session sert de laisse.
-# Usage : lancer_tests.sh <id> <places> <cpus> <memoire_mo> <duree_s> <projet> <deps> [<travail_go> [<image> [<famille>]]]
+# Usage : lancer_tests.sh <id> <places> <cpus> <memoire_mo> <duree_s> <projet> <deps> [<travail_go> [<image> [<famille>
+#         [<echauffement> [<reseau_code> [<budget_caches_go>]]]]]]
 #   id t<AAAAMMJJ>-<HHMMSS>-<4 hexa> ; places 1..4 ; cpus 1..64 ; memoire_mo 256..65536 ; duree_s 1..3600 (nombres sans zéro
-#   initial) ; projet ^[a-z0-9][a-z0-9-]{0,39}$ ; deps 16 hexa (cache Node ~/tests/.deps/<projet>/<deps>) ou « - » ;
+#   initial) ; projet ^[a-z0-9][a-z0-9-]{0,39}$ ; deps 16 hexa (empreinte du cache, tests_profil.empreinte_deps) ou « - » ;
+#   echauffement (11e) : clé de la table FERMÉE ECH (npm, pip, gradle…), par défaut celle de la famille (ECH_DEFAUT) ;
+#   reseau_code (12e) accorde|refuse (défaut refuse) : l'accord du Directeur pour le réseau d'un échauffement qui exécute du
+#   code du projet (posé par la route d'après tests.adoption) ; budget_caches_go (13e) 1..1000, défaut 40 (Q5).
+# DÉPENDANCES (conception § 5.13, tâche 14d), quand deps ≠ « - » : cache ~/tests/.deps/<projet>/<clé>-<deps>/ (contenu/ = ce
+#   que l'outil a produit, .pret, .utilise, .verrou, .verrou-produit et .non-verrouille éventuels). Absent (ou « non
+#   verrouillé » et .pret de plus de 7 jours) : ÉCHAUFFEMENT avant la file, sous flock -x <projet>/.<clé>-<deps>.echauffement :
+#   conteneur deps-<id> (même image, mêmes durcissements que les tests, aucun secret, durée et plafond de la table ECH),
+#   réseau `bridge` pour une clé qui n'exécute pas de code du projet (Q2), sinon SEULEMENT avec reseau_code=accorde : réseau
+#   Docker --internal deps-<id> + mandataire éphémère mandataire-<id> (tests_hote.py --mandataire : CONNECT :443 vers la liste
+#   fermée ECH_HOTES), supprimés à la fin. Le contenu s'écrit dans <cache>.tmp, renommé et .pret posé après succès. Échec,
+#   durée, plafond, wrapper Gradle différent des sommes publiées, réseau non accordé : ligne `#deps-echec <raison>`, code 79
+#   (rien n'est prêt, <cache>.tmp effacé). Pendant les tests : flock -s <cache>/.verrou, volume `overlay` tests-deps-<id>
+#   (basse : contenu/ en lecture seule ; haute : ~/tests/<id>/deps-haut, effacée avec le dossier) monté sur /deps, variables
+#   et drapeaux hors ligne de la table fermée (tests_hote.py --hors-ligne). Éviction après chaque usage : deux caches au plus
+#   par projet et par clé, puis budget_caches_go, le moins récemment utilisé (.utilise) d'abord, jamais un cache tenu
+#   (flock -x -n) ni celui de la campagne. gradle-android : SDK de l'hôte en copie sur écriture (volume overlay tests-sdk-<id> :
+#   AGP peut y écrire .temp, licences… sans jamais toucher ~/android-sdk), à défaut monté en lecture seule.
 #   travail_go 1..200 (facultatif, 10 par défaut) : taille maximale de travail/ (l'arbre extrait et ce que les tests écrivent) ;
 #   image (facultatif, 9e argument) ^myiafactory/tests(-[a-z0-9]{1,24})?$, défaut myiafactory/tests : l'image du catalogue (§ 5.12) ;
 #   famille (facultatif, 10e) dans FAMILLES, défaut python : table FERMÉE de l'enveloppe qui ajoute montages et variables du
-#   conteneur (gradle-android : SDK de l'hôte ~/android-sdk monté en lecture seule sur /opt/android-sdk, ANDROID_HOME,
-#   GRADLE_OPTS, GRADLE_USER_HOME=/tmp/gradle, GRADLE_RO_DEP_CACHE=/deps si un cache est monté ; gradle-jvm : sans le SDK). Jamais une valeur venue du poste hors de ces motifs : image et famille ne sont
+#   conteneur (gradle-android : SDK de l'hôte ~/android-sdk en copie sur écriture sur /opt/android-sdk, ANDROID_HOME,
+#   GRADLE_OPTS, GRADLE_USER_HOME=/deps/gradle si un cache Gradle est monté, sinon /tmp/gradle ; gradle-jvm : sans le SDK). Jamais une valeur venue du poste hors de ces motifs : image et famille ne sont
 #   que des clés, les montages et variables sont écrits ici. Sans ces deux arguments : le conteneur d'avant, à l'identique.
 #   Chaque valeur est validée par un motif strict AVANT tout usage ; rien n'est jamais interprété par un shell (tableaux).
 # Entrée standard : 1re ligne = la commande, tableau JSON de chaînes (4 096 octets au plus, contrôlé par tests_hote.py
@@ -40,7 +58,9 @@
 #   travail/ au-delà de travail_go, échéance du surveillant (duree_s + 30 s), ou état final inattendu (running,
 #   restarting, paused, removing, created déjà démarré, docker inspect en panne : conteneur tué puis supprimé) ;
 #   76 disque libre < 5 Go ou inodes libres < 5 % AU DÉPART (rien n'a tourné) ; 77 image absente, python3 absent ou en
-#   panne, utilisateur du serveur autre que 1000 ; 78 cache Node absent (ou pas à nous) ; 124 durée dépassée
+#   panne, utilisateur du serveur autre que 1000 ; 78 cache des dépendances en lien ou pas à nous ; 79 échauffement des
+#   dépendances impossible (ligne `#deps-echec <raison>` avant : réseau non accordé, wrapper Gradle modifié, échec, durée,
+#   plafond, copie sur écriture refusée) ; 124 durée dépassée
 #   (`timeout`) ; code de docker run (125-127…) quand le conteneur n'a JAMAIS démarré (absent, ou « created » avec
 #   StartedAt à la date nulle) ; 130 laisse coupée ou signal ; 1 erreur de l'enveloppe. Après un refus 2, rien n'est
 #   effacé ; après tout autre départ, ~/tests/<id> est effacé (sans chmod -R si l'arrêt du conteneur n'est pas confirmé),
@@ -62,8 +82,8 @@
 #   travail/). Pas de --ulimit fsize : il casserait un gros artefact de construction légitime sans fermer la rafale
 #   (plusieurs fichiers) ; le plafond passe par du et df.
 # Conteneur : sans réseau, racine en lecture seule, aucune capacité, utilisateur 1000, pas de fichier core, journal Docker
-#   désactivé (la sortie ne remplit pas le disque), seulement travail/ (/work), entree/ (lecture seule) et le cache Node
-#   (lecture seule) montés ; /tmp tmpfs 4 Go exécutable (nosuid, nodev par défaut) ; aucun secret, aucune variable de
+#   désactivé (la sortie ne remplit pas le disque), seulement travail/ (/work), entree/ (lecture seule), le cache de
+#   dépendances (copie sur écriture, /deps) et, pour gradle-android, le SDK (copie sur écriture) montés ; /tmp tmpfs 4 Go exécutable (nosuid, nodev par défaut) ; aucun secret, aucune variable de
 #   l'appelant : -e HOME=/tmp et -e MYIAFACTORY_TESTS_CONTENEUR=1 seulement. Sans --rm : l'enveloppe lit l'état final
 #   (docker inspect) pour distinguer un code du conteneur d'une panne de docker, puis le supprime (docker rm -f).
 # Réservées aux tests : ENVELOPPE_SONDE_S (période de la file et du surveillant, 0,5 s par défaut), ENVELOPPE_SORTIE_MAX_OCTETS,
@@ -83,7 +103,29 @@ ICI="$(cd "$(dirname "$0")" && pwd)"
 AIDE="$ICI/tests_hote.py"
 IMAGE="myiafactory/tests"
 FAMILLES=" python node gradle-android gradle-jvm maven dotnet go rust godot unity ruby php make "   # miroir de tests_profil.FAMILLES
-GRADLE_OPTS_FERME="-Dorg.gradle.daemon=false -Dorg.gradle.vfs.watch=false -Dorg.gradle.offline=true -Dkotlin.compiler.execution.strategy=in-process"
+GRADLE_OPTS_FERME="-Dorg.gradle.daemon=false -Dorg.gradle.vfs.watch=false -Dorg.gradle.offline=true -Dkotlin.compiler.execution.strategy=in-process -Dorg.gradle.project.android.builder.sdkDownload=false"
+# Table FERMÉE des échauffements (miroir de outils/tests_profil.py:ECHAUFFEMENTS, vérifié par test) : "durée_s plafond_go
+# exécute_du_code". La commande elle-même est dans tests_hote.py (plan_echauffement), jamais venue du poste.
+declare -A ECH
+ECH[npm]="900 2 0"
+ECH[pnpm]="900 2 0"
+ECH[yarn]="900 2 0"
+ECH[pip]="900 2 0"
+ECH[pip-sources]="900 2 1"
+ECH[gradle]="1800 6 1"
+ECH[maven]="1800 6 1"
+ECH[dotnet]="1800 6 0"
+ECH[cargo]="1800 6 0"
+ECH[go]="900 2 0"
+ECH[unity]="3600 10 1"
+declare -A ECH_DEFAUT=([python]=pip [node]=npm [gradle-android]=gradle [gradle-jvm]=gradle [maven]=maven [dotnet]=dotnet
+                       [go]=go [rust]=cargo [unity]=unity)
+# Sortie du mandataire d'un échauffement qui exécute du code (liste fermée par clé, Q4) ; github.com n'y est jamais.
+declare -A ECH_HOTES
+ECH_HOTES[gradle]="services.gradle.org downloads.gradle.org plugins.gradle.org plugins-artifacts.gradle.org repo.maven.apache.org repo1.maven.org dl.google.com maven.google.com"
+ECH_HOTES[maven]="repo.maven.apache.org repo1.maven.org"
+ECH_HOTES[pip-sources]="pypi.org files.pythonhosted.org"
+SOMMES_GRADLE_URL="https://services.gradle.org/distributions"
 PLACES_MAX=4
 DUREE_MAX=3600
 DISQUE_MIN_KO=5242880                    # 5 Go libres au départ
@@ -100,7 +142,7 @@ if [[ ${ENVELOPPE_DU_S:-} =~ ^[0-9]{1,3}$ ]]; then DU_S="$ENVELOPPE_DU_S"; fi   
 
 # --- Arguments (rien n'est écrit avant la fin de ce bloc) ------------------
 
-[ $# -ge 7 ] && [ $# -le 10 ] || refuser "usage : <id> <places> <cpus> <memoire_mo> <duree_s> <projet> <deps> [<travail_go> [<image> [<famille>]]]"
+[ $# -ge 7 ] && [ $# -le 13 ] || refuser "usage : <id> <places> <cpus> <memoire_mo> <duree_s> <projet> <deps> [<travail_go> [<image> [<famille> [<echauffement> [<reseau_code> [<budget_caches_go>]]]]]]"
 for argument in "$@"; do
   [[ $argument == *[[:cntrl:]]* ]] && refuser "caractère de contrôle refusé dans un argument."
 done
@@ -115,10 +157,18 @@ ID="$1"; PLACES="$2"; CPUS="$3"; MEMOIRE="$4"; DUREE="$5"; PROJET="$6"; DEPS="$7
 [[ $TRAVAIL_GO =~ ^[1-9][0-9]{0,2}$ ]] && [ "$TRAVAIL_GO" -le 200 ] || refuser "travail_go refusé (1 à 200)."
 [[ $IMAGE_DEMANDEE =~ ^myiafactory/tests(-[a-z0-9]{1,24})?$ ]] || refuser "image refusée (myiafactory/tests ou myiafactory/tests-<nom>)."
 [[ $FAMILLE =~ ^[a-z][a-z-]{1,15}$ ]] && [[ $FAMILLES == *" $FAMILLE "* ]] || refuser "famille refusée."
+ECH_CLE="${11-${ECH_DEFAUT[$FAMILLE]-"-"}}"; RESEAU="${12-refuse}"; BUDGET="${13-40}"
+if [ "$ECH_CLE" != - ]; then
+  [[ $ECH_CLE =~ ^[a-z][a-z-]{1,11}$ ]] && [ -n "${ECH[$ECH_CLE]+x}" ] || refuser "échauffement refusé (clé hors de la table)."
+fi
+[[ $RESEAU =~ ^(accorde|refuse)$ ]] || refuser "reseau_code refusé (accorde ou refuse)."
+[[ $BUDGET =~ ^[1-9][0-9]{0,3}$ ]] && [ "$BUDGET" -le 1000 ] || refuser "budget_caches_go refusé (1 à 1000)."
+[ "$DEPS" = - ] || [ "$ECH_CLE" != - ] || refuser "deps sans échauffement connu pour la famille $FAMILLE."
 IMAGE="$IMAGE_DEMANDEE"
 TRAVAIL_MAX_KO=$((TRAVAIL_GO * 1048576))
 [[ ${HOME:-} == /* ]] || refuser "HOME absent ou relatif."
 case "$HOME" in *[:,]*) refuser "HOME non admis (deux-points ou virgule : montage impossible)." ;; esac
+case "$AIDE" in *[:,]*) refuser "chemin de l'enveloppe non admis (deux-points ou virgule : montage impossible)." ;; esac
 command -v python3 >/dev/null 2>&1 || { printf '%s\n' "lancer_tests : python3 absent du serveur." >&2; fin_simple 77; }
 
 # La commande : 1re ligne de l'entrée standard, lue octet par octet (read), jamais au-delà de 4 097 octets.
@@ -144,6 +194,12 @@ chmod 700 -- "$TESTS" "$DOSSIER" "$ENTREE" 2>/dev/null   # 0700 imposé (créés
 # --- À partir d'ici, toute fin passe par finir : nettoyage, #refus éventuel, puis #fin ------------------------------
 
 A_NOUS=1; TICKET=""; PID_LAISSE=""; PID_SURVEILLANT=""; CONTENEUR=0
+DEPS_CONTENEUR=0; MANDATAIRE=0; DEPS_RESEAU=""; VOLUMES=(); TMP_CACHE=""
+
+fermer_reseau() {   # le mandataire et le réseau interne d'un échauffement : jamais laissés derrière
+  if [ "$MANDATAIRE" = 1 ]; then dk 30 rm -f "mandataire-$ID" >/dev/null 2>&1; MANDATAIRE=0; fi
+  if [ -n "$DEPS_RESEAU" ]; then dk 30 network rm "$DEPS_RESEAU" >/dev/null 2>&1; DEPS_RESEAU=""; fi
+}
 
 conteneur_absent() {   # conteneur_absent [<id>] : 0 seulement si docker répond nettement « pas de tel conteneur »
   local e
@@ -164,13 +220,26 @@ finir() {   # finir <code> [conteneur] : « conteneur » = le code vient du cont
     dk 30 rm -f "tests-$ID" >/dev/null 2>&1
     conteneur_absent || sur=0                         # arrêt non confirmé : le conteneur peut encore écrire dans travail/
   fi
+  if [ "$DEPS_CONTENEUR" = 1 ]; then
+    dk 30 kill "deps-$ID" >/dev/null 2>&1
+    dk 30 rm -f "deps-$ID" >/dev/null 2>&1
+    DEPS_CONTENEUR=0
+  fi
+  fermer_reseau
+  for v in "${VOLUMES[@]}"; do dk 30 volume rm -f "$v" >/dev/null 2>&1; done   # les couches hautes partent avec le dossier
+  if [ -n "$TMP_CACHE" ] && [ -d "$TMP_CACHE" ] && [ ! -L "$TMP_CACHE" ]; then   # échauffement inachevé : rien n'est prêt
+    chmod -R u+rwX -- "$TMP_CACHE" 2>/dev/null; rm -rf -- "$TMP_CACHE"
+  fi
+  exec 5>&- 7>&-                                       # cache et préparation rendus
   [ -n "$TICKET" ] && rm -f -- "$TICKET"
   liberer_creneau
   if [ -e "$DOSSIER/sortie-coupee" ]; then printf '%s\n' "Sortie coupée à 50 Mo" >&2; fi
   if [ -e "$DOSSIER/erreur-coupee" ]; then printf '%s\n' "Sortie d'erreur coupée à 50 Mo" >&2; fi
   if [ "$A_NOUS" = 1 ]; then
-    if [ "$sur" = 1 ] && [ ! -L "$DOSSIER/travail" ]; then
-      chmod -R u+rwX -- "$DOSSIER/travail" 2>/dev/null   # un dossier sans droits laissé par les tests s'efface aussi
+    if [ "$sur" = 1 ]; then
+      for d in travail deps-travail deps-haut sdk-haut; do   # un dossier sans droits laissé par les tests s'efface aussi
+        [ -d "$DOSSIER/$d" ] && [ ! -L "$DOSSIER/$d" ] && chmod -R u+rwX -- "$DOSSIER/$d" 2>/dev/null
+      done
     fi
     rm -rf -- "$DOSSIER"
   fi
@@ -198,6 +267,7 @@ exec 6<&0 </dev/null
   : > "$DOSSIER/laisse-coupee"
   while :; do
     dk 30 kill "tests-$ID" >/dev/null 2>&1
+    dk 30 kill "deps-$ID" >/dev/null 2>&1
     enveloppe_vivante "$ID" || exit 0
     kill -TERM "$$" 2>/dev/null
     sleep 1
@@ -227,17 +297,27 @@ dk 20 image inspect "$IMAGE" >/dev/null 2>&1 || echouer 77 "image $IMAGE absente
 if [ "$FAMILLE" = gradle-android ]; then
   [ -d "$HOME/android-sdk" ] || echouer 77 "SDK Android de l'hôte absent (~/android-sdk) : installez la capacité android-build."
 fi
-DEPS_DOSSIER=""
+DEPS_RACINE=""; CACHE=""
 if [ "$DEPS" != - ]; then
-  DEPS_DOSSIER="$TESTS/.deps/$PROJET/$DEPS"
-  for d in "$TESTS/.deps" "$TESTS/.deps/$PROJET" "$DEPS_DOSSIER"; do
-    [ -d "$d" ] && [ ! -L "$d" ] || echouer 78 "cache des dépendances Node absent (~/tests/.deps/$PROJET/$DEPS)."
-    [ -O "$d" ] || echouer 78 "cache des dépendances Node à un autre propriétaire (~/tests/.deps/$PROJET/$DEPS)."
+  DEPS_RACINE="$TESTS/.deps/$PROJET"
+  CACHE="$DEPS_RACINE/$ECH_CLE-$DEPS"
+  for d in "$TESTS/.deps" "$DEPS_RACINE" "$CACHE" "$CACHE/contenu" "$CACHE.tmp"; do   # absent : préparé plus bas
+    if [ -e "$d" ] || [ -L "$d" ]; then
+      [ -d "$d" ] && [ ! -L "$d" ] && [ -O "$d" ] ||
+        echouer 78 "cache des dépendances ~/${d#"$HOME"/} : lien, fichier ou autre propriétaire."
+    fi
   done
 fi
 raison=$(python3 -I "$AIDE" --archive "$ENTREE/entree.tar" 2>&1 >/dev/null); r=$?
 if [ "$r" = 3 ]; then echouer 70 "$(printf '%s' "$raison" | une_ligne)"; fi   # 3 : refus explicite du vérificateur
 [ "$r" = 0 ] || echouer 77 "contrôle de l'instantané impossible (python3, code $r)."
+# Drapeaux hors ligne de la famille (table fermée de tests_hote.py --hors-ligne), ajoutés ICI, jamais par le poste.
+case "$ECH_CLE" in
+  gradle|maven|cargo|dotnet)
+    if hl=$(printf '%s' "$COMMANDE_JSON" | python3 -I "$AIDE" --hors-ligne "$ECH_CLE" 2>/dev/null) && [[ $hl == \[*\] ]]; then
+      COMMANDE_JSON="$hl"
+    fi ;;
+esac
 rm -f -- "$ENTREE/commande.json"                    # jamais écrit à travers un lien
 ( set -C; printf '%s' "$COMMANDE_JSON" > "$ENTREE/commande.json" ) 2>/dev/null || echouer 1 "commande.json non écrit."
 
@@ -261,6 +341,231 @@ while IFS= read -r -d '' d; do
   [ -L "$d/travail" ] || chmod -R u+rwX -- "$d/travail" 2>/dev/null   # chmod suit un lien nommé : jamais sur un lien
   rm -rf -- "$d"
 done < <(find "$TESTS" -mindepth 1 -maxdepth 1 -name 't*' -mmin +360 -print0 2>/dev/null)
+# Restes d'échauffement (conteneurs deps-/mandataire-, réseaux deps-, volumes tests-deps-/tests-sdk-) dont l'enveloppe ne vit
+# plus : les conteneurs d'abord, puis réseaux et volumes (un volume encore monté résiste : repris au balayage suivant).
+balayer() {   # balayer <motif du nom, identifiant en 2e groupe> <commande de suppression>... ; les noms viennent de la liste filtrée par l'étiquette
+  local motif="$1" n autre; shift
+  while IFS= read -r n; do
+    [[ $n =~ $motif ]] || continue
+    autre="${BASH_REMATCH[2]}"
+    [ "$autre" = "$ID" ] || enveloppe_vivante "$autre" || dk 30 "$@" "$n" >/dev/null 2>&1
+  done
+}
+balayer '^(deps|mandataire)-(t[0-9]{8}-[0-9]{6}-[0-9a-f]{4})$' rm -f \
+  < <(dk 20 ps -a --filter "label=myiafactory.genre=tests-deps" --format '{{.Names}}' 2>/dev/null)
+balayer '^(deps)-(t[0-9]{8}-[0-9]{6}-[0-9a-f]{4})$' network rm \
+  < <(dk 20 network ls --filter "label=myiafactory.genre=tests-deps" --format '{{.Name}}' 2>/dev/null)
+balayer '^tests-(deps|sdk)-(t[0-9]{8}-[0-9]{6}-[0-9a-f]{4})$' volume rm -f \
+  < <(dk 20 volume ls --filter "label=myiafactory.genre=tests-deps" --format '{{.Name}}' 2>/dev/null)
+
+# --- Dépendances : wrapper Gradle, échauffement, cache tenu, éviction (§ 5.13) ------------------------------------------
+
+deps_echec() {   # deps_echec <raison> : `#deps-echec <raison>` (mot fermé), puis 79 : la route repasse au poste
+  printf '#deps-echec %s\n' "$1" >&2
+  echouer 79 "échauffement des dépendances impossible ($1) : les tests ne partent pas au serveur."
+}
+cache_pret() { [ -f "$1/.pret" ] && [ -d "$1/contenu" ] && [ ! -L "$1" ] && [ ! -L "$1/contenu" ]; }
+cache_perime() { [ -f "$1/.non-verrouille" ] && [ -n "$(find "$1/.pret" -mmin +10080 2>/dev/null)" ]; }   # 7 jours
+du_ko() { local k; k=$(timeout 120 du -sk -- "$1" 2>/dev/null 8>&- | cut -f1); [[ $k =~ ^[0-9]{1,15}$ ]] && printf '%s' "$k"; }
+effacer_cache() {   # effacer_cache <cache> : seulement si personne ne le tient (flock -x -n) ; 0 si effacé
+  local c="$1"
+  [ -d "$c" ] && [ ! -L "$c" ] || return 1
+  exec 4>> "$c/.verrou" || return 1
+  if ! flock -x -n 4; then exec 4>&-; return 1; fi
+  chmod -R u+rwX -- "$c" 2>/dev/null                   # le cache de modules Go (entre autres) est en lecture seule
+  rm -rf -- "$c"
+  exec 4>&-
+  [ ! -e "$c" ]
+}
+lister_caches() {   # lister_caches <dossier de projet>... [-- <clé>] : « mtime chemin », du moins récemment utilisé au plus récent
+  local cle="" p d nom
+  local -a projets=()
+  while [ $# -gt 0 ]; do [ "$1" = -- ] && { cle="$2"; break; }; projets+=("$1"); shift; done
+  for p in "${projets[@]}"; do
+    [ -d "$p" ] && [ ! -L "$p" ] || continue
+    for d in "$p"/*; do
+      nom="${d##*/}"
+      [[ $nom =~ ^[a-z][a-z-]{1,11}-[0-9a-f]{16}$ ]] && [ -d "$d" ] && [ ! -L "$d" ] || continue
+      [ -z "$cle" ] || [ "${nom%-*}" = "$cle" ] || continue
+      printf '%s %s\n' "$(mtime "$d/.utilise")" "$d"
+    done
+  done | sort -n
+}
+evincer() {   # deux caches au plus par projet et par clé, puis le budget ; jamais $CACHE, jamais un cache tenu
+  local l c n
+  local -a caches=()
+  while IFS= read -r l; do caches+=("${l#* }"); done < <(lister_caches "$DEPS_RACINE" -- "$ECH_CLE")
+  n=${#caches[@]}
+  for c in "${caches[@]}"; do
+    [ "$n" -le 2 ] && break
+    [ "$c" = "$CACHE" ] && continue
+    effacer_cache "$c" && n=$((n - 1))
+  done
+  caches=()
+  while IFS= read -r l; do caches+=("${l#* }"); done < <(lister_caches "$TESTS/.deps"/*)
+  for c in "${caches[@]}"; do
+    n=$(du_ko "$TESTS/.deps") || break
+    [ "$n" -gt $((BUDGET * 1048576)) ] || break
+    [ "$c" = "$CACHE" ] || effacer_cache "$c"
+  done
+}
+
+verifier_wrapper() {   # gradle-wrapper.jar de l'instantané = la somme PUBLIÉE par Gradle pour la version du wrapper, sinon 79
+  local ligne r somme version fichier officielle sommes="$TESTS/.deps/.gradle-wrapper"
+  ligne=$(python3 -I "$AIDE" --wrapper "$ENTREE/entree.tar" 2>"$DOSSIER/.wrapper.err"); r=$?
+  raison=$(head -n 1 "$DOSSIER/.wrapper.err" 2>/dev/null | tr -cd 'a-z-' | head -c 60); rm -f -- "$DOSSIER/.wrapper.err"
+  [ "$r" = 3 ] && deps_echec "${raison:-wrapper-illisible}"
+  [ "$r" = 0 ] || deps_echec wrapper-illisible
+  [[ $ligne =~ ^([0-9a-f]{64})\ ([0-9]{1,2}\.[0-9]{1,2}(\.[0-9]{1,2})?(-rc-[0-9]{1,2})?)$ ]] || deps_echec wrapper-illisible
+  somme="${BASH_REMATCH[1]}"; version="${BASH_REMATCH[2]}"
+  mkdir -p -m 700 -- "$sommes" 2>/dev/null
+  [ -d "$sommes" ] && [ ! -L "$sommes" ] && [ -O "$sommes" ] || deps_echec sommes-gradle-inaccessibles
+  fichier="$sommes/$version.sha256"
+  if ! { [ -f "$fichier" ] && [ ! -L "$fichier" ]; }; then
+    # Source officielle (TLS vers services.gradle.org) ; la somme n'est jamais devinée ni écrite à la main.
+    command -v curl >/dev/null 2>&1 || deps_echec curl-absent
+    rm -f -- "$fichier.tmp"
+    timeout 60 curl -fsSL --proto =https --max-time 50 -o "$fichier.tmp" \
+      "$SOMMES_GRADLE_URL/gradle-$version-wrapper.jar.sha256" </dev/null >/dev/null 2>&1 8>&- || deps_echec somme-gradle-injoignable
+    officielle=$(head -c 200 -- "$fichier.tmp" 2>/dev/null | tr -d ' \r\n')
+    [[ $officielle =~ ^[0-9a-f]{64}$ ]] || { rm -f -- "$fichier.tmp"; deps_echec somme-gradle-illisible; }
+    printf '%s\n' "$officielle" > "$fichier.tmp" && mv -f -- "$fichier.tmp" "$fichier" || deps_echec ecriture
+  fi
+  officielle=$(head -c 64 -- "$fichier")
+  [ "$somme" = "$officielle" ] || deps_echec wrapper-modifie
+}
+
+# SDK Android de l'hôte en copie sur écriture : AGP peut écrire (.temp, licences, .knownPackages) dans la couche haute, effacée
+# avec le dossier ; ~/android-sdk n'est jamais inscriptible par un conteneur. Overlay refusé : lecture seule (comme avant).
+SDK_MONTAGE=()
+if [ "$FAMILLE" = gradle-android ]; then
+  SDK_MONTAGE=(-v "$HOME/android-sdk:/opt/android-sdk:ro")
+  if mkdir -m 700 -- "$DOSSIER/sdk-haut" "$DOSSIER/sdk-ov" 2>/dev/null; then
+    VOLUMES+=("tests-sdk-$ID")
+    if dk 30 volume create --driver local --label myiafactory.genre=tests-deps --opt type=overlay --opt device=overlay \
+         --opt "o=lowerdir=$HOME/android-sdk,upperdir=$DOSSIER/sdk-haut,workdir=$DOSSIER/sdk-ov" "tests-sdk-$ID" >/dev/null 2>&1; then
+      SDK_MONTAGE=(--mount "type=volume,src=tests-sdk-$ID,dst=/opt/android-sdk")
+    else
+      printf '%s\n' "lancer_tests : copie sur écriture du SDK indisponible : SDK monté en lecture seule." >&2
+    fi
+  fi
+  SDK_MONTAGE+=(-e ANDROID_HOME=/opt/android-sdk)
+fi
+
+echauffer() {
+  local duree plafond code r ko hotes p de="$DOSSIER/deps-entree" dt="$DOSSIER/deps-travail" tmp="$CACHE.tmp"
+  read -r duree plafond code <<< "${ECH[$ECH_CLE]}"
+  [ "$ECH_CLE" = unity ] && deps_echec unity-tache-14g
+  [ "$code" = 1 ] && [ "$RESEAU" != accorde ] && deps_echec reseau-non-accorde
+  mkdir -p -m 700 -- "$DEPS_RACINE" 2>/dev/null
+  for d in "$TESTS/.deps" "$DEPS_RACINE"; do
+    [ -d "$d" ] && [ ! -L "$d" ] && [ -O "$d" ] || deps_echec cache-inaccessible
+  done
+  exec 7>> "$DEPS_RACINE/.$ECH_CLE-$DEPS.echauffement" || deps_echec cache-inaccessible
+  flock -x -w $((duree + 300)) 7 || deps_echec echauffement-concurrent
+  if cache_pret "$CACHE" && ! cache_perime "$CACHE"; then exec 7>&-; return 0; fi   # préparé pendant l'attente
+  TMP_CACHE="$tmp"
+  if [ -d "$tmp" ] && [ ! -L "$tmp" ]; then chmod -R u+rwX -- "$tmp" 2>/dev/null; fi
+  rm -rf -- "$tmp"
+  mkdir -m 700 -- "$tmp" "$tmp/contenu" "$tmp/meta" "$de" "$dt" || deps_echec ecriture
+  ln -- "$ENTREE/entree.tar" "$de/entree.tar" 2>/dev/null || cp -- "$ENTREE/entree.tar" "$de/entree.tar" || deps_echec ecriture
+  printf '["python3","-I","/opt/myiafactory/tests_hote.py","--echauffer","%s","%s"]' "$ECH_CLE" "$FAMILLE" > "$de/commande.json" ||
+    deps_echec ecriture
+  local -a run=(run --pull never --init --name "deps-$ID" --label myiafactory.genre=tests-deps --log-driver none
+    --read-only --cap-drop ALL --security-opt no-new-privileges --user 1000:1000
+    --pids-limit 2048 --ulimit nofile=8192:8192 --ulimit core=0
+    --memory "${MEMOIRE}m" --memory-swap "${MEMOIRE}m" --cpus "$CPUS"
+    --tmpfs /tmp:size=4g,mode=1777,exec
+    -v "$dt:/work" -v "$de:/entree:ro" -v "$tmp/contenu:/deps" -v "$tmp/meta:/deps-meta"
+    -v "$AIDE:/opt/myiafactory/tests_hote.py:ro" "${SDK_MONTAGE[@]}")
+  if [ "$code" = 1 ]; then
+    # Code du projet : réseau interne seulement, sortie par le mandataire (liste fermée), jamais bridge.
+    read -r -a hotes <<< "${ECH_HOTES[$ECH_CLE]-}"
+    [ "${#hotes[@]}" -gt 0 ] || deps_echec reseau-sans-liste
+    DEPS_RESEAU="deps-$ID"
+    dk 30 network create --internal --label myiafactory.genre=tests-deps "deps-$ID" >/dev/null 2>&1 || deps_echec reseau-interne
+    MANDATAIRE=1
+    dk 60 run -d --pull never --init --name "mandataire-$ID" --label myiafactory.genre=tests-deps --log-driver none \
+      --network bridge --read-only --cap-drop ALL --security-opt no-new-privileges --user 1000:1000 \
+      --pids-limit 256 --memory 256m --memory-swap 256m --cpus 1 --tmpfs /tmp:size=16m \
+      -v "$AIDE:/opt/myiafactory/tests_hote.py:ro" --entrypoint python3 "$IMAGE" \
+      -I /opt/myiafactory/tests_hote.py --mandataire 3128 $((duree + 120)) "${hotes[@]}" >/dev/null 2>&1 || deps_echec mandataire
+    dk 30 network connect "deps-$ID" "mandataire-$ID" >/dev/null 2>&1 || deps_echec mandataire
+    p="http://mandataire-$ID:3128"
+    run+=(--network "deps-$ID" -e "HTTPS_PROXY=$p" -e "HTTP_PROXY=$p" -e "https_proxy=$p" -e "http_proxy=$p"
+      -e "NO_PROXY=localhost,127.0.0.1"
+      -e "JAVA_TOOL_OPTIONS=-Dhttps.proxyHost=mandataire-$ID -Dhttps.proxyPort=3128 -Dhttp.proxyHost=mandataire-$ID -Dhttp.proxyPort=3128")
+  else
+    run+=(--network bridge)                            # Q2 : aucun code du projet n'est exécuté
+  fi
+  run+=(-e HOME=/tmp -e MYIAFACTORY_TESTS_CONTENEUR=1 "$IMAGE")
+  printf '%s\n' "lancer_tests : échauffement des dépendances ($ECH_CLE, ${duree} s et ${plafond} Go au plus)." >&2
+  rm -f -- "$DOSSIER/deps-plafond" "$DOSSIER/deps-disque"
+  # Surveillant de l'échauffement : plafond du cache, disque ; la laisse tue deps-<id> elle aussi.
+  ( trap - TERM INT HUP PIPE
+    du_t=0
+    while sleep "$SONDE" 7>&-; do
+      enveloppe_vivante "$ID" || { dk 30 kill "deps-$ID" >/dev/null 2>&1; exit 0; }
+      l=$(disque_libre_ko)
+      if [[ $l =~ ^[0-9]{1,15}$ ]] && [ "$l" -lt "$DISQUE_ARRET_KO" ]; then : > "$DOSSIER/deps-disque"; dk 30 kill "deps-$ID" >/dev/null 2>&1; fi
+      maintenant=$(date +%s)
+      [ $((maintenant - du_t)) -ge "$DU_S" ] || continue
+      ko=$(du_ko "$tmp"); du_t=$(date +%s)              # la période repart à la FIN de du
+      if [[ $ko =~ ^[0-9]+$ ]] && [ "$ko" -gt $((plafond * 1048576)) ]; then
+        : > "$DOSSIER/deps-plafond"; dk 30 kill "deps-$ID" >/dev/null 2>&1
+      fi
+    done ) >/dev/null 2>&1 7>&- &
+  PID_SURVEILLANT=$!
+  DEPS_CONTENEUR=1
+  timeout "$duree" sudo -n docker "${run[@]}" </dev/null 2>&1 7>&- 8>&- |
+    python3 -I "$AIDE" --couper "$DOSSIER/deps-journal-coupe" 1048576 > "$DOSSIER/deps.log" 7>&- 8>&-
+  r=${PIPESTATUS[0]}
+  { kill "$PID_SURVEILLANT"; wait "$PID_SURVEILLANT"; } 2>/dev/null
+  PID_SURVEILLANT=""
+  dk 30 rm -f "deps-$ID" >/dev/null 2>&1 && DEPS_CONTENEUR=0
+  fermer_reseau
+  [ -e "$DOSSIER/laisse-coupee" ] && finir 130
+  [ -e "$DOSSIER/deps-disque" ] && deps_echec disque
+  ko=$(du_ko "$tmp") || ko=0
+  { [ -e "$DOSSIER/deps-plafond" ] || [ "$ko" -gt $((plafond * 1048576)) ]; } && deps_echec plafond
+  [ "$r" = 124 ] && deps_echec duree
+  if [ "$r" != 0 ] || [ ! -f "$tmp/meta/ok" ]; then
+    tail -n 20 -- "$DOSSIER/deps.log" 2>/dev/null | tr '\000-\011\013-\037\177' '?' |
+      sed -e 's/\xc2\x85/?/g' -e 's/\xe2\x80\xa8/?/g' -e 's/\xe2\x80\xa9/?/g' -e 's/^/| /' | head -c 4096 >&2
+    deps_echec echauffement
+  fi
+  if [ -f "$tmp/meta/verrou-produit" ] && [ ! -L "$tmp/meta/verrou-produit" ]; then
+    mv -f -- "$tmp/meta/verrou-produit" "$tmp/.verrou-produit"   # jamais réécrit dans le projet
+  fi
+  [ -f "$tmp/meta/non-verrouille" ] && : > "$tmp/.non-verrouille"
+  chmod -R u+rwX -- "$dt" 2>/dev/null
+  rm -rf -- "$tmp/meta" "$de" "$dt"
+  : > "$tmp/.verrou"; : > "$tmp/.utilise"
+  if [ -d "$CACHE" ] && ! effacer_cache "$CACHE"; then   # rafraîchissement d'un cache tenu par une autre campagne : gardé
+    chmod -R u+rwX -- "$tmp" 2>/dev/null; rm -rf -- "$tmp"; TMP_CACHE=""
+    printf '%s\n' "lancer_tests : cache tenu par une autre campagne : l'ancien est gardé." >&2
+    exec 7>&-; return 0
+  fi
+  mv -- "$tmp" "$CACHE" || deps_echec ecriture
+  TMP_CACHE=""
+  date +%s > "$CACHE/.pret" || deps_echec ecriture
+  exec 7>&-
+}
+
+if [ -n "$CACHE" ]; then
+  [ "$ECH_CLE" = gradle ] && verifier_wrapper            # avant TOUT lancement Gradle (échauffement et tests)
+  if ! cache_pret "$CACHE" || cache_perime "$CACHE"; then echauffer; fi
+  exec 5>> "$CACHE/.verrou" || deps_echec cache-inaccessible
+  flock -s 5 || deps_echec cache-verrou                  # tenu pendant toute la campagne : jamais évincé sous nos pieds
+  cache_pret "$CACHE" || deps_echec cache-disparu
+  touch -- "$CACHE/.utilise"
+  evincer
+  mkdir -m 700 -- "$DOSSIER/deps-haut" "$DOSSIER/deps-ov" || deps_echec ecriture
+  VOLUMES+=("tests-deps-$ID")
+  dk 30 volume create --driver local --label myiafactory.genre=tests-deps --opt type=overlay --opt device=overlay \
+    --opt "o=lowerdir=$CACHE/contenu,upperdir=$DOSSIER/deps-haut,workdir=$DOSSIER/deps-ov" "tests-deps-$ID" >/dev/null 2>&1 ||
+    deps_echec copie-sur-ecriture
+fi
 
 # --- File et place -------------------------------------------------------------
 
@@ -325,15 +630,28 @@ COMMANDE=(run --pull never --init --name "tests-$ID" --label myiafactory.genre=t
   --memory "${MEMOIRE}m" --memory-swap "${MEMOIRE}m" --cpus "$CPUS"
   --tmpfs /tmp:size=4g,mode=1777,exec
   -v "$DOSSIER/travail:/work" -v "$ENTREE:/entree:ro")
-if [ -n "$DEPS_DOSSIER" ]; then COMMANDE+=(-v "$DEPS_DOSSIER:/deps:ro"); fi
+# Cache de dépendances : copie sur écriture (volume overlay, basse = le cache figé), jamais le cache lui-même.
+if [ -n "$CACHE" ]; then
+  COMMANDE+=(--mount "type=volume,src=tests-deps-$ID,dst=/deps")
+  # Variables hors ligne par clé (table fermée, § 5.13), écrites ici, jamais lues du poste.
+  case "$ECH_CLE" in
+    npm|pnpm|yarn) COMMANDE+=(-e npm_config_offline=true) ;;
+    pip|pip-sources) COMMANDE+=(-e "PATH=/deps/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+                                -e VIRTUAL_ENV=/deps/venv -e PIP_NO_INDEX=1) ;;
+    maven) COMMANDE+=(-e "MAVEN_OPTS=-Dmaven.repo.local=/deps/m2" -e MAVEN_USER_HOME=/deps/m2home) ;;
+    dotnet) COMMANDE+=(-e NUGET_PACKAGES=/deps/nuget -e DOTNET_CLI_HOME=/tmp) ;;
+    cargo) COMMANDE+=(-e CARGO_HOME=/deps/cargo -e CARGO_NET_OFFLINE=true) ;;
+    go) COMMANDE+=(-e GOMODCACHE=/deps/gomod -e GOFLAGS=-mod=readonly -e GOPROXY=off -e GOPATH=/tmp/go) ;;
+  esac
+fi
 # Table fermée par famille : montages et variables écrits ici, jamais lus du poste.
-# Gradle : GRADLE_USER_HOME dans /tmp (tmpfs, seul endroit inscriptible : la racine est en lecture seule et /deps l'est aussi) ;
-# un cache de dépendances monté en :ro sous /deps n'est lu que par GRADLE_RO_DEP_CACHE.
+# Gradle : GRADLE_USER_HOME inscriptible : /deps/gradle (le cache d'échauffement, copie sur écriture : distribution du wrapper
+# et caches/modules-2 hors ligne), sinon /tmp/gradle (tmpfs).
 case "$FAMILLE" in
   gradle-android|gradle-jvm)
-    if [ "$FAMILLE" = gradle-android ]; then COMMANDE+=(-v "$HOME/android-sdk:/opt/android-sdk:ro" -e ANDROID_HOME=/opt/android-sdk); fi
-    COMMANDE+=(-e "GRADLE_OPTS=$GRADLE_OPTS_FERME" -e GRADLE_USER_HOME=/tmp/gradle)
-    if [ -n "$DEPS_DOSSIER" ]; then COMMANDE+=(-e GRADLE_RO_DEP_CACHE=/deps); fi ;;
+    COMMANDE+=("${SDK_MONTAGE[@]}" -e "GRADLE_OPTS=$GRADLE_OPTS_FERME")
+    if [ -n "$CACHE" ] && [ "$ECH_CLE" = gradle ]; then COMMANDE+=(-e GRADLE_USER_HOME=/deps/gradle)
+    else COMMANDE+=(-e GRADLE_USER_HOME=/tmp/gradle); fi ;;
 esac
 COMMANDE+=(-e HOME=/tmp -e MYIAFACTORY_TESTS_CONTENEUR=1 "$IMAGE")
 

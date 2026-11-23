@@ -4,9 +4,13 @@ réseau, sortie en direct, `#fin`) ; l'entrée standard de la session est la lai
 
 Repli au poste (sous le verrou du poste, `campagne.executer`), UNE fois, avec une ligne, dans ces cas seulement :
   R1 aucun serveur prêt pour `tests-image` (état local) ; R2 dépôt en échec de connexion (255/124) ; R3 l'enveloppe refuse
-  AVANT le départ du conteneur : disque (76), image (77), cache des dépendances (78), échauffement (79), docker qui n'a
-  pas démarré (125–127) ; R4 session perdue avant `#fin` SANS rien reçu du conteneur (connexion, ou seulement l'attente
-  d'une place) ; R5 instantané hors limites, projet hors git (et tout ce qui empêche l'envoi avant la moindre connexion).
+  AVANT le départ du conteneur : disque (76), image (77), cache des dépendances (78), échauffement (79 : réseau non
+  accordé, wrapper Gradle modifié, échec, plafond…), docker qui n'a pas démarré (125–127) ; R4 session perdue avant `#fin`
+  SANS rien reçu du conteneur (connexion, ou seulement l'attente d'une place) ; R5 instantané hors limites, projet hors git,
+  échauffement qui exécute du code du projet sans l'accord réseau du Directeur (et tout ce qui empêche l'envoi avant la
+  moindre connexion).
+Dépendances (§ 5.13) : `deps` = `tests_profil.empreinte_deps` de la famille lancée ; l'enveloppe prépare le cache s'il manque.
+Gradle Android : le SDK de l'hôte est sondé par SSH (`sonder_sdk`) avant l'envoi.
 Jamais de repli : test en échec (code de la commande), Ctrl-C (130, rien n'est relancé), `--serveur` (code 4), argument
 refusé par l'enveloppe (2), `--sans-attendre` sur places prises (3), campagne arrêtée au serveur après son départ (74 :
 disque, inodes, dossier de travail ; 124 délai ; 130 signal ; 1 enveloppe en échec), session perdue après que le conteneur
@@ -323,6 +327,87 @@ def _projet_par_defaut(dossier):
     return _tests_mesures().projet_enregistre(dossier)
 
 
+# --- dépendances : sonde du SDK, accord du réseau d'échauffement (§ 5.13, tâche 14d) ---------------------------------
+
+BUDGET_CACHES_GO = 40
+# Une commande courte et fixe, sans secret ni valeur du poste : les NOMS des dossiers du SDK de l'hôte (jamais un contenu).
+SONDE_SDK = ('for d in platforms build-tools ndk licenses; do printf \'#%s\\n\' "$d"; '
+             'ls -1 -- "$HOME/android-sdk/$d" 2>/dev/null | head -n 200; done')
+_MOTIFS_SDK = {"platforms": re.compile(r"android-[0-9]{1,3}", re.ASCII),
+               "build-tools": re.compile(r"[0-9]{1,3}(\.[0-9]{1,3}){1,3}(-rc[0-9]{1,2})?", re.ASCII),
+               "ndk": re.compile(r"[0-9]{1,3}(\.[0-9]{1,5}){1,3}", re.ASCII),
+               "licenses": re.compile(r"[a-z][a-z0-9-]{0,40}", re.ASCII)}
+_CLES_SDK = {"platforms": "platforms", "build-tools": "build_tools", "ndk": "ndk", "licenses": "licences"}
+
+
+def lire_sonde_sdk(sortie) -> dict:
+    """`{platforms, build_tools, ndk, licences}` lus dans la sortie de `SONDE_SDK` ; toute ligne hors motif fermé est ignorée."""
+    sdk = {v: [] for v in _CLES_SDK.values()}
+    section = None
+    texte = sortie.decode("utf-8", "replace") if isinstance(sortie, bytes) else str(sortie or "")
+    for ligne in texte.splitlines()[:1000]:
+        ligne = ligne.strip()
+        if ligne.startswith("#"):
+            section = ligne[1:] if ligne[1:] in _MOTIFS_SDK else None
+        elif section and _MOTIFS_SDK[section].fullmatch(ligne):
+            sdk[_CLES_SDK[section]].append(ligne)
+    return sdk
+
+
+def sonder_sdk(serveur, ssh) -> dict:
+    """Le SDK Android de l'hôte relevé par une session SSH courte ; `Repli` (injoignable) si la sonde échoue."""
+    try:
+        code, sortie, _erreur = ssh.executer_octets(serveur_etat.cible(serveur), SONDE_SDK, serveur.cle, entree=None,
+                                                    delai=60)
+    except Exception as e:  # noqa: BLE001
+        raise Repli(f"injoignable (sonde du SDK Android : {type(e).__name__})", injoignable=serveur.id) from None
+    if code != 0:
+        raise Repli(f"injoignable (sonde du SDK Android : code {code})",
+                    injoignable=serveur.id if code in INJOIGNABLES else None)
+    return lire_sonde_sdk(sortie)
+
+
+def _reseau_code_par_defaut(racine):
+    """Vrai seulement si TOUS les réglages que le bureau enregistre pour ce projet disent
+    `tests.adoption.reseau_echauffement == "accorde"` (décision d'adoption, § 5.15) ; toute erreur : faux."""
+    try:
+        try:
+            from bureau import deport_types
+        except ImportError:
+            sys.path.append(str(ICI.parent))
+            from bureau import deport_types
+        fichiers = deport_types.reglages_enregistres(racine)
+        if not fichiers:
+            return False
+        for fichier in fichiers:
+            x = deport_types._lire_json_sur(fichier)       # refuse un fichier en lien, comme l'accord de la route
+            tests = x.get("tests") if isinstance(x, dict) else None
+            adoption = tests.get("adoption") if isinstance(tests, dict) else None
+            if not isinstance(adoption, dict) or adoption.get("reseau_echauffement") != "accorde":
+                return False
+        return True
+    except Exception:  # noqa: BLE001 — jamais de réseau sur un doute
+        return False
+
+
+def _deps_de_la_campagne(profil, famille, commande, racine, empreinte):
+    """(clé d'échauffement, deps 16 hexa ou « - », famille des dépendances)."""
+    import tests_profil
+    cible = famille or tests_profil._famille_cible(commande_conteneur(commande), list(profil.familles))
+    cle = tests_profil.cle_echauffement(profil, cible) if cible else None
+    if cle is None:
+        return None, "-", cible
+    try:
+        deps = (empreinte or tests_profil.empreinte_deps)(profil, racine, famille=cible)
+    except Exception as e:  # noqa: BLE001
+        raise Repli(f"refusé (empreinte des dépendances impossible : {type(e).__name__})") from None
+    if deps is None:
+        return None, "-", cible
+    if not (isinstance(deps, str) and MOTIF_DEPS.fullmatch(deps)):
+        raise Repli("refusé (empreinte des dépendances invalide)")
+    return cle, deps, cible
+
+
 # --- la route --------------------------------------------------------------------------------------------------------
 
 def _premiere_ligne(commande):
@@ -471,11 +556,19 @@ def places_de(serveur):
 
 def _au_serveur(commande, racine, attendre, places, dossier_etat, ssh, noter, horloge, maintenant, dire, choisir,
                 instantane, projet_de, injoignable, attentes, sortie, sortie_erreur, nouvel_id, forcer, popen_base,
-                dormir, travail_go=None, analyse=None, sdk_android=None):
+                dormir, travail_go=None, analyse=None, sdk_android=None, empreinte=None, reseau_code=None):
     """La campagne au serveur ; rend son code, ou lève `Repli`. `KeyboardInterrupt` remonte telle quelle."""
     appel = horloge()
     profil = _profil_de_la_campagne(analyse or _analyse_par_defaut, racine, commande)
     image, famille, requises = _image_de_la_campagne(profil, sdk_android)
+    cle, deps, famille_deps = _deps_de_la_campagne(profil, famille, commande, racine, empreinte)
+    reseau = "refuse"
+    if cle is not None:
+        import tests_profil
+        if tests_profil.ECHAUFFEMENTS[cle]["execute_du_code"]:
+            if not (reseau_code or _reseau_code_par_defaut)(racine):
+                raise Repli("refusé (échauffement réseau non accordé : les dépendances exécutent du code du projet)")
+            reseau = "accorde"
     try:
         serveur = choisir(dossier_etat, requises=requises)
     except serveur_tache.RefusLancement as e:
@@ -486,6 +579,10 @@ def _au_serveur(commande, racine, attendre, places, dossier_etat, ssh, noter, ho
         serveur_etat.cible(serveur)
     except ValueError as e:
         raise Repli(f"mal déclaré ({e})") from None
+    if famille == "gradle-android" and sdk_android is None:
+        manque = tests_images._sdk_manquant(profil, sonder_sdk(serveur, ssh))
+        if manque:
+            raise Repli("indisponible (SDK Android du serveur incomplet : " + ", ".join(manque) + ")")
     if not MOTIF_DISTANT.fullmatch(ENVELOPPE_DISTANTE):
         raise Repli("refusé (chemin de l'enveloppe au serveur invalide)")
     trouve = projet_de(racine)
@@ -505,9 +602,6 @@ def _au_serveur(commande, racine, attendre, places, dossier_etat, ssh, noter, ho
     try:
         archive = os.path.join(prive, "entree.tar")
         _instantane(instantane, racine, archive, dire)
-        deps = instantane.empreinte_verrou_node(racine) or "-"
-        if deps != "-" and not (isinstance(deps, str) and MOTIF_DEPS.fullmatch(deps)):
-            raise Repli("refusé (empreinte du verrou Node invalide)")
         ident = None
         for _ in range(ESSAIS_ID):
             essai = nouvel_id()
@@ -523,10 +617,16 @@ def _au_serveur(commande, racine, attendre, places, dossier_etat, ssh, noter, ho
 
     distante = (f"\"{ENVELOPPE_DISTANTE}\" {ident} {places} {LIMITES['cpus']} {LIMITES['memoire_mo']} "
                 f"{LIMITES['duree_s']} {projet} {deps}")
-    if travail_go is not None or image is not None:
+    if travail_go is not None or image is not None or cle is not None:
         distante += f" {int(travail_go) if travail_go is not None else 10}"   # 8e argument (facultatif) : taille maximale de travail/, en Go
-    if image is not None:
-        distante += f" {image} {famille}"           # 9e et 10e (facultatifs) : image du catalogue et sa famille
+    if image is not None or cle is not None:
+        # 9e et 10e (facultatifs) : image du catalogue et sa famille (celle des dépendances pour l'image par défaut)
+        distante += f" {image or tests_images.IMAGE_DEFAUT} {famille or famille_deps}"
+    if cle is not None:
+        budget = getattr(serveur, "budget_caches_go", None)
+        if isinstance(budget, bool) or not isinstance(budget, int) or not 1 <= budget <= 1000:
+            budget = BUDGET_CACHES_GO
+        distante += f" {cle} {reseau} {budget}"     # 11e à 13e : échauffement, accord réseau (code du projet), budget Q5
     attente = _Attente(attentes, racine, attendre, dire, maintenant)
     erreur = _ErreurMontree(sortie_erreur if sortie_erreur is not None else _erreur_du_poste(), serveur.cle)
     depart = horloge()
@@ -556,6 +656,8 @@ def _au_serveur(commande, racine, attendre, places, dossier_etat, ssh, noter, ho
         return 1
     _oublier_injoignable(injoignable, serveur.id)       # ce serveur a mené la session jusqu'à #fin
     if refus is not None:
+        if refus == 79:
+            raise Repli("en refus (échauffement des dépendances impossible au serveur, tests non lancés)")
         if refus in REFUS_REPLI:
             raise Repli(f"en refus (code {refus} de l'enveloppe, tests non lancés)")
         if refus not in MESSAGES_ARRET:
@@ -582,7 +684,7 @@ def executer(commande, dossier=None, attendre=True, forcer=False, places=None, d
              maintenant=time.time, dire=print, *, choisir=None, instantane=tests_instantane, projet_de=None,
              injoignable=INJOIGNABLE, attentes=None, sortie=None, sortie_erreur=None,
              nouvel_id=serveur_tache.nouvel_id, _popen=subprocess.Popen, dormir=time.sleep, accord=None,
-             travail_go=None, analyse=None, sdk_android=None) -> int:
+             travail_go=None, analyse=None, sdk_android=None, empreinte=None, reseau_code=None) -> int:
     """Lance `commande` au serveur et rend son code ; sinon (règles R1–R5) au poste, une fois, sous son verrou. Avec
     `forcer` (`--serveur`) : jamais de repli, la raison est dite et le code est 4. `KeyboardInterrupt` remonte (le
     lanceur rend 130) : rien n'est relancé, rien n'est noté.
@@ -604,7 +706,8 @@ def executer(commande, dossier=None, attendre=True, forcer=False, places=None, d
         return _au_serveur(commande, racine, attendre, places, dossier_etat, ssh, noter, horloge, maintenant, dire,
                            choisir or serveur_tache.choisir_serveur, instantane, projet_de or _projet_par_defaut,
                            injoignable, attentes, sortie, sortie_erreur, nouvel_id, forcer, _popen, dormir,
-                           travail_go=travail_go, analyse=analyse, sdk_android=sdk_android)
+                           travail_go=travail_go, analyse=analyse, sdk_android=sdk_android, empreinte=empreinte,
+                           reseau_code=reseau_code)
     except _Rendu as e:
         return e.code
     except Repli as e:

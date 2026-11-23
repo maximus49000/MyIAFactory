@@ -88,20 +88,40 @@ case "$1" in
     exit "${FAUX_CODE:-0}" ;;
 esac
 exit 0'''
+# Exclusif (défaut, -x) : `<fichier>.tenu` ; partagé (-s) : `<fichier>.partage-<pid>` ; -n sans attente, sinon jusqu'à 10 s.
 FLOCK = r'''echo "flock $*" >> "$FAUX_JOURNAL"
-case "$1" in -n) mode=prendre ;; -u) mode=rendre ;; *) exit 64 ;; esac
-f=$(readlink "/proc/$$/fd/$2") || exit 1
-v="$f.tenu"
-p=""; [ -f "$v" ] && read -r p < "$v"
-if [ "$mode" = rendre ]; then
-  [ "$p" = "$PPID" ] && rm -f "$v"
+mode=x; nb=""; rendre=""
+while [ $# -gt 1 ]; do
+  case "$1" in -n) nb=1 ;; -u) rendre=1 ;; -s) mode=s ;; -x) mode=x ;; -w) shift ;; *) exit 64 ;; esac
+  shift
+done
+f=$(readlink "/proc/$$/fd/$1") || exit 1
+vivant() { [ -n "$1" ] && kill -0 "$1" 2>/dev/null; }
+if [ -n "$rendre" ]; then
+  p=""; [ -f "$f.tenu" ] && read -r p < "$f.tenu"
+  [ "$p" = "$PPID" ] && rm -f "$f.tenu"
+  rm -f "$f.partage-$PPID"
   exit 0
 fi
-[ "$p" = "$PPID" ] && exit 0
-if [ -n "$p" ] && kill -0 "$p" 2>/dev/null; then exit 1; fi
-[ -n "$p" ] && rm -f "$v"
-set -C
-echo "$PPID" 2>/dev/null > "$v"'''
+essai() {
+  p=""; [ -f "$f.tenu" ] && read -r p < "$f.tenu"
+  [ "$p" = "$PPID" ] && return 0
+  vivant "$p" && return 1
+  [ -n "$p" ] && rm -f "$f.tenu"
+  if [ "$mode" = s ]; then echo "$PPID" > "$f.partage-$PPID"; return 0; fi
+  for q in "$f".partage-*; do
+    [ -e "$q" ] || continue
+    r="${q##*.partage-}"
+    [ "$r" = "$PPID" ] && continue
+    vivant "$r" && return 1
+    rm -f "$q"
+  done
+  ( set -C; echo "$PPID" > "$f.tenu" ) 2>/dev/null
+}
+essai && exit 0
+[ -n "$nb" ] && exit 1
+i=0; while [ $i -lt 200 ]; do sleep 0.05; essai && exit 0; i=$((i + 1)); done
+exit 1'''
 FAUX = {
     "docker": DOCKER,
     "flock": FLOCK,
@@ -313,7 +333,9 @@ class TestEnveloppeTests(unittest.TestCase):
         self.assertNotIn("docker", self.journal)
 
     def test_drapeaux_du_conteneur(self):
-        (self.home / "tests" / ".deps" / "projet-a" / DEPS).mkdir(parents=True)
+        cache = self.home / "tests" / ".deps" / "projet-a" / f"pip-{DEPS}"         # prêt : aucun échauffement (tâche 14d)
+        (cache / "contenu").mkdir(parents=True)
+        (cache / ".pret").write_text("1", encoding="utf-8")
         (self.etat(ID) / "sortie").write_bytes(b"bonjour")
         code, out, err = self.lancer("2", "4", "8192", "1800", "projet-a", DEPS, env={"FAUX_CODE": "3"})
         self.assertEqual((code, out), (3, b"bonjour"), err)
@@ -330,15 +352,18 @@ class TestEnveloppeTests(unittest.TestCase):
         self.assertNotIn("--rm", args)                                # état final lu par inspect, puis docker rm -f
         self.assertEqual(args[-1], "myiafactory/tests")
         montages = [b for a, b in paires if a == "-v"]
-        self.assertEqual(len(montages), 3, montages)
+        self.assertEqual(len(montages), 2, montages)
         self.assertTrue(montages[0].endswith(f"/tests/{ID}/travail:/work"), montages)
         self.assertTrue(montages[1].endswith(f"/tests/{ID}/entree:/entree:ro"), montages)
-        self.assertTrue(montages[2].endswith(f"/tests/.deps/projet-a/{DEPS}:/deps:ro"), montages)
+        self.assertEqual([b for a, b in paires if a == "--mount"], [f"type=volume,src=tests-deps-{ID},dst=/deps"])   # copie sur écriture
         self.assertFalse(any("docker.sock" in a or a == "--privileged" or a.startswith("--network=") for a in args))
-        self.assertEqual(sorted(b for a, b in paires if a == "-e"), ["HOME=/tmp", "MYIAFACTORY_TESTS_CONTENEUR=1"])
+        self.assertEqual(sorted(b for a, b in paires if a == "-e"),
+                         ["HOME=/tmp", "MYIAFACTORY_TESTS_CONTENEUR=1", "PATH=/deps/venv/bin:/usr/local/sbin:/usr/local/bin:"
+                          "/usr/sbin:/usr/bin:/sbin:/bin", "PIP_NO_INDEX=1", "VIRTUAL_ENV=/deps/venv"])   # table fermée (pip)
         self.assertIn("timeout 1800 sudo -n docker run", self.journal)
         self.assertIn(f"docker rm -f tests-{ID}", self.journal)
         self.assertNotIn("docker kill", self.journal)                # conteneur fini de lui-même : rien à tuer
+        self.assertNotIn(f"deps-{ID}", self.journal.replace(f"tests-deps-{ID}", ""))   # cache prêt : aucun échauffement
         self.assertEqual(json.loads((self.etat(ID) / f"commande-tests-{ID}.json").read_text(encoding="utf-8")),
                          json.loads(COMMANDE))
         self.verifier_fin(err, 3, refus=False)
@@ -398,6 +423,8 @@ class TestEnveloppeTests(unittest.TestCase):
         self.verifier_fin(err_b, 0, refus=False, ident=ID_B)
 
     def test_disque_et_image(self):
+        (self.home / "tests" / ".deps" / "projet-a").mkdir(parents=True)          # 78 : le cache est un fichier, pas un dossier
+        (self.home / "tests" / ".deps" / "projet-a" / f"pip-{DEPS}").write_text("x", encoding="utf-8")
         lien = io.BytesIO()
         with tarfile.open(fileobj=lien, mode="w", format=tarfile.USTAR_FORMAT) as tar:
             info = tarfile.TarInfo("x\u2028#fin 0 1 2 0")

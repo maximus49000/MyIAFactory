@@ -15,11 +15,13 @@ from pathlib import Path
 from typing import Optional, Tuple
 
 IMAGE_DEFAUT = "myiafactory/tests"
-# Sans réseau, une campagne Gradle ne réussit qu'avec un cache de dépendances préchauffé (§ 5.13). TÂCHE 14d : passer à vrai quand
-# l'échauffement existe, ET traiter deux prérequis relevés à la relecture de 14b : (1) une sonde réelle du SDK de l'hôte, passée
-# en `sdk_android` à `choisir_image` (plateformes, build-tools et licences présentes dans ~/android-sdk) ; (2) AGP écrit dans le
-# SDK, monté en :ro par l'enveloppe (licences, composants manquants, cache de build) : à prévoir (copie, couche haute ou sonde).
-CACHE_GRADLE_PRET = False
+# Sans réseau, une campagne Gradle ne réussit qu'avec un cache de dépendances préchauffé (§ 5.13). Vrai depuis la tâche 14d : le
+# poste ne sait pas si le cache `.pret` existe au serveur, mais l'enveloppe le PRÉPARE quand il manque (échauffement, code 79 et
+# repli au poste s'il échoue) ; les conditions restantes sont vérifiées par la route avant tout envoi : accord du réseau
+# d'échauffement (code du projet, R5 sinon), sonde réelle du SDK de l'hôte (`tests_serveur.sonder_sdk` : plateformes,
+# build-tools, NDK, licences), et au serveur le wrapper Gradle contre les sommes publiées. Le SDK est monté en copie sur écriture
+# (AGP peut y écrire, ~/android-sdk jamais). Le garder comme interrupteur : faux renvoie tout Gradle au poste.
+CACHE_GRADLE_PRET = True
 # Motifs fermés (les mêmes que ceux de l'enveloppe hôte `taches/lancer_tests.sh`, qui ne croit jamais le poste).
 MOTIF_IMAGE = re.compile(r"myiafactory/tests(-[a-z0-9]{1,24})?", re.ASCII)
 
@@ -63,8 +65,9 @@ def _plateforme(x) -> str:
 
 
 def _sdk_manquant(profil, sdk_android: Optional[dict]) -> list:
-    """Ce que le profil exige du SDK de l'hôte et qu'il n'a pas ; `sdk_android` (relevé de la sonde `android-build` :
-    `{"platforms": [...], "build_tools": [...], "ndk": [...]}`) None = non relevé, rien n'est dit."""
+    """Ce que le profil exige du SDK de l'hôte et qu'il n'a pas ; `sdk_android` (relevé de `tests_serveur.sonder_sdk` :
+    `{"platforms": [...], "build_tools": [...], "ndk": [...], "licences": [...]}`) None = non relevé, rien n'est dit ; sans la
+    clé `licences`, les licences ne sont pas vérifiées."""
     info = profil.outils.get("android")
     if sdk_android is None or not isinstance(info, dict):
         return []
@@ -76,6 +79,9 @@ def _sdk_manquant(profil, sdk_android: Optional[dict]) -> list:
         manque.append(f"build-tools;{info['build_tools']}")
     if info.get("ndk") and str(info["ndk"]) not in {str(n) for n in sdk_android.get("ndk") or ()}:
         manque.append(f"ndk;{info['ndk']}")
+    # Sans la licence acceptée, AGP refuse d'utiliser le SDK (ou tente de l'installer : réseau et SDK en écriture).
+    if "licences" in sdk_android and "android-sdk-license" not in (sdk_android.get("licences") or ()):
+        manque.append("licenses;android-sdk-license")
     return manque
 
 

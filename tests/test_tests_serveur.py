@@ -508,16 +508,17 @@ class TestCorrectifs(Base):
                 self.assertEqual(self.lancer(ssh, **options), 0)
                 self.assertEqual(ssh.appels_octets + ssh.appels_flux, [])
                 self.assertEqual(len(self.poste.appels), n + 1)
-        for deps in ("zz", "0123456789abcdef; rm", "ABCDEF0123456789"):
+        import tests_profil
+        node = tests_profil.Profil(familles=("node",), deps={"node": {"gestionnaire": "npm"}})
+        for deps in ("zz", "0123456789abcdef; rm", "ABCDEF0123456789"):          # empreinte des dépendances (tâche 14d)
             with self.subTest(deps=deps):
-                self.instantane = FauxInstantane(deps=deps)
                 ssh = FauxSsh()
-                self.lancer(ssh)
+                self.lancer(ssh, analyse=lambda r, **kw: node, empreinte=lambda p, r, famille=None, d=deps: d)
                 self.assertEqual(ssh.appels_octets + ssh.appels_flux, [])
-        self.instantane = FauxInstantane(deps="0123456789abcdef")
         ssh = FauxSsh()
-        self.lancer(ssh)
-        self.assertTrue(ssh.appels_flux[0]["commande"].endswith(" projet-a 0123456789abcdef"))
+        self.lancer(ssh, analyse=lambda r, **kw: node, empreinte=lambda p, r, famille=None: "0123456789abcdef")
+        self.assertTrue(ssh.appels_flux[0]["commande"].endswith(
+            " projet-a 0123456789abcdef 10 myiafactory/tests node npm refuse 40"))
 
     def test_ecartes_dits_en_une_ligne(self):
         self.instantane = FauxInstantane(ecartes=[f"f{i} (lien)" for i in range(12)])

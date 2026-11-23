@@ -143,6 +143,78 @@ def empreinte_image(profil: Profil) -> str:
     return _hexa(profil.outils)
 
 
+# ---------------------------------------------------------------- dépendances (§ 5.13, tâche 14d)
+
+# Table FERMÉE des échauffements, miroir de `ECH` dans `serveur_ovh/taches/lancer_tests.sh` (qui fait foi au serveur ; la
+# concordance est vérifiée par test) et du plan de `taches/tests_hote.py` ; ici pour l'affichage et la route. `execute_du_code` :
+# l'outil exécute du code du projet ou de ses dépendances (réseau seulement avec l'accord du Directeur, sortie limitée).
+ECHAUFFEMENTS = {
+    "npm": {"commande": ["npm", "ci", "--ignore-scripts"], "duree_s": 900, "plafond_go": 2, "execute_du_code": False},
+    "pnpm": {"commande": ["pnpm", "install", "--frozen-lockfile", "--ignore-scripts"], "duree_s": 900, "plafond_go": 2,
+             "execute_du_code": False},
+    "yarn": {"commande": ["yarn", "install", "--frozen-lockfile", "--ignore-scripts"], "duree_s": 900, "plafond_go": 2,
+             "execute_du_code": False},
+    "pip": {"commande": ["pip", "install", "--only-binary=:all:", "-r", "requirements.txt"], "duree_s": 900,
+            "plafond_go": 2, "execute_du_code": False},
+    "pip-sources": {"commande": ["pip", "install", "-r", "requirements.txt"], "duree_s": 900, "plafond_go": 2,
+                    "execute_du_code": True},
+    "gradle": {"commande": ["./gradlew", "--no-daemon", "dependencies"], "duree_s": 1800, "plafond_go": 6,
+               "execute_du_code": True},
+    "maven": {"commande": ["mvn", "-B", "dependency:go-offline"], "duree_s": 1800, "plafond_go": 6, "execute_du_code": True},
+    "dotnet": {"commande": ["dotnet", "restore"], "duree_s": 1800, "plafond_go": 6, "execute_du_code": False},
+    "cargo": {"commande": ["cargo", "fetch"], "duree_s": 1800, "plafond_go": 6, "execute_du_code": False},
+    "go": {"commande": ["go", "mod", "download"], "duree_s": 900, "plafond_go": 2, "execute_du_code": False},
+    "unity": {"commande": ["unity-editor", "-batchmode", "-quit"], "duree_s": 3600, "plafond_go": 10, "execute_du_code": True},
+}
+_CLE_DE_FAMILLE = {"python": "pip", "node": "npm", "gradle-android": "gradle", "gradle-jvm": "gradle", "maven": "maven",
+                   "dotnet": "dotnet", "go": "go", "rust": "cargo", "unity": "unity"}
+# Manifestes hachés à défaut de verrou (« sans verrou » : le cache est dit non verrouillé, § 5.13).
+_MANIFESTES = {"npm": ("package.json",), "pnpm": ("package.json",), "yarn": ("package.json",), "cargo": ("Cargo.toml",),
+               "go": ("go.mod",)}
+
+
+def cle_echauffement(profil: Profil, famille: Optional[str] = None) -> Optional[str]:
+    """La clé d'échauffement (table `ECHAUFFEMENTS`) de `famille` (par défaut la première famille qui en a une) ; Node : le
+    gestionnaire du profil (npm, pnpm, yarn). None : aucune."""
+    familles = [famille] if famille else [f for f in profil.familles if f in _CLE_DE_FAMILLE]
+    if not familles or familles[0] not in _CLE_DE_FAMILLE:
+        return None
+    f = familles[0]
+    if f == "node":
+        g = (profil.deps.get("node") or {}).get("gestionnaire")
+        return g if g in ("npm", "pnpm", "yarn") else "npm"
+    return _CLE_DE_FAMILLE[f]
+
+
+def empreinte_deps(profil: Profil, racine: str, lire: Optional[Callable[[str], Optional[str]]] = None,
+                   famille: Optional[str] = None) -> Optional[str]:
+    """16 hexa du cache de dépendances de `famille` (par défaut la première qui a un échauffement) : SHA-256 de la clé, du
+    verrou (ou du verrou implicite Gradle/Maven, déjà dans `profil.deps`), à défaut du manifeste lu par `lire` (lecture
+    bornée de `LUS`), et de `empreinte_image`. None si aucune dépendance (pas d'échauffement, rien à hacher, ou un
+    `package.json` sans dépendances)."""
+    cle = cle_echauffement(profil, famille)
+    if cle is None or cle == "unity":
+        return None
+    f = famille or next(x for x in profil.familles if x in _CLE_DE_FAMILLE)
+    d = profil.deps.get(f) or {}
+    if cle == "pip" and not re.fullmatch(r"requirements[^/]*\.txt", str(d.get("verrou") or "")):
+        return None       # pip n'installe que des requirements*.txt (poetry/uv : pas d'échauffement, comme avant)
+    base = d.get("empreinte")
+    if not base:
+        lire = lire or _lecteur_defaut(str(racine))
+        textes = [(n, lire(n)) for n in _MANIFESTES.get(cle, ())]
+        textes = [(n, t) for n, t in textes if isinstance(t, str)]
+        if not textes:
+            return None
+        if cle in ("npm", "pnpm", "yarn"):
+            pj = _json(textes[0][1])
+            if not any(isinstance(pj.get(k), dict) and pj[k] for k in ("dependencies", "devDependencies",
+                                                                       "optionalDependencies")):
+                return None
+        base = hashlib.sha256("\n".join("%s\n%s" % x for x in textes).encode("utf-8")).hexdigest()
+    return hashlib.sha256(f"{cle}\n{base}\n{empreinte_image(profil)}".encode("utf-8")).hexdigest()[:16]
+
+
 # ---------------------------------------------------------------- ressources
 
 def _taille_mo(texte: str) -> Optional[int]:

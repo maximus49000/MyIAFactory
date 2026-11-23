@@ -473,18 +473,27 @@ class TestLancer(Base):
         self.assertIn("brouillon.txt", r["avertissement"])
         self.assertEqual(r["etat"], "en_cours")
 
-    def test_branche_agent_existante_non_ancetre_refusee_avant_envoi(self):
+    def test_branche_agent_existante_non_ancetre_renommee_puis_lancement(self):
         projet = Path(self.tmp.name) / "projet"
         base = depot(projet, commits=2)
         git(projet, "checkout", "-q", "-b", "agent/ajout-bouton", "HEAD~1")
         (projet / "x.txt").write_text("x")
         git(projet, "add", "x.txt")
         git(projet, "commit", "-q", "-m", "x")
+        ancienne_tete = git(projet, "rev-parse", "agent/ajout-bouton").decode().strip()
         git(projet, "checkout", "-q", "main")
-        with self.assertRaises(st.RefusLancement) as r:
-            self.lancer(self.demande(base=base), projet=projet)
-        self.assertIn("agent/ajout-bouton", str(r.exception))
-        self.assertEqual(self.srv.appels, [])
+        r = self.lancer(self.demande(base=base), projet=projet)
+        self.assertEqual(r["etat"], "en_cours")
+        # l'ancienne branche est sauvegardée sous un autre nom, au même commit ; le nom d'origine est libre
+        branches = git(projet, "branch", "--list", "--format=%(refname:short)").decode().split()
+        sauvegardes = [b for b in branches if b.startswith("agent/ajout-bouton-ancienne-")]
+        self.assertEqual(len(sauvegardes), 1)
+        self.assertEqual(git(projet, "rev-parse", sauvegardes[0]).decode().strip(), ancienne_tete)
+        self.assertNotIn("agent/ajout-bouton", branches)
+        # l'action est journalisée dans la fiche de la tâche
+        fiche = st.Index(self.dossier).lire()[ID1]
+        self.assertIn(sauvegardes[0], fiche["journal"][0])
+        self.assertEqual(fiche["branche_sauvegardee"], sauvegardes[0])
         # un ancêtre de la base (reprise d'un travail déjà fusionné) est accepté
         git(projet, "branch", "-f", "agent/ajout-bouton", "HEAD~1")
         self.assertEqual(self.lancer(self.demande(base=base), projet=projet)["etat"], "en_cours")

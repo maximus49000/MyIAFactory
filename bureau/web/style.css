@@ -122,6 +122,7 @@ body.panneau-ouvert #scene { right: var(--largeur-panneau); }
   --marge-barre: 16px;
   --largeur-menu-parametres: 250px;
   --retenue-min: 8em;
+  --choix-min: 6em;
   position: fixed;
   top: 0; left: 0; right: 0;
   height: var(--hauteur-barre);
@@ -174,9 +175,16 @@ body.panneau-ouvert #scene { right: var(--largeur-panneau); }
 #barre.barre-compacte .charge-etiquette, #barre.barre-compacte .charge-piste, #barre.barre-compacte .charge-max { display: none; }
 #barre.barre-compacte .charge-valeur { min-width: 0; }
 /* (4) tout est replié et la place manque encore : le nom du bureau (si le projet est connu) et la retenue (elle passe en
-   tête du menu de la roue) ; (5) le projet. Le rond de consommation n'est jamais caché. */
+   tête du menu de la roue) ; (5) le nom simple du projet. Ne sont jamais cachés : le rond de consommation, la roue et le
+   sélecteur de projets (.barre-choix, seul accès pour changer de projet ou en créer un), qui se resserre à la place. */
 #barre.barre-etroite .barre-titre:has(.barre-projet:not(:empty)) .barre-logo, #barre.barre-etroite .barre-retenue,
-#barre.barre-minimale .barre-titre { display: none; }
+#barre.barre-minimale .barre-projet { display: none; }
+/* Le titre rogne ce qui dépasse (un sélecteur serré ne gonfle plus la largeur mesurée de la barre) sans descendre sous
+   la place du sélecteur. */
+.mobile #barre > .barre-titre, #barre.barre-minimale > .barre-titre { flex: 0 1 auto; min-width: 0; overflow: hidden; }
+#barre > .barre-titre:has(> .barre-choix:not([hidden])) { min-width: var(--choix-min); }
+#barre .barre-choix { min-width: var(--choix-min); text-overflow: ellipsis; }
+#barre.barre-minimale .barre-choix { max-width: 10em; }
 #barre.barre-etroite .barre-projet::before { content: none; }
 .menu-parametres-retenue { margin-bottom: 4px; padding-bottom: 4px; border-bottom: 1px solid #efe8da; }
 .menu-parametres-retenu { padding: 6px 10px; border-radius: 6px; background: #fbf0d4; color: #7a5a0c; font-size: 13px; font-weight: 600;
@@ -1046,7 +1054,7 @@ div.cout-etape > .cout-etape-ligne { width: 100%; }
 .mobile #barre .barre-date, .mobile #barre .barre-logo, .mobile #barre .charge, .mobile #barre .barre-retenue,
 .mobile #barre .barre-actions, .mobile #barre .barre-livrable { display: none; }
 .mobile .barre-projet:not(:empty)::before { content: none; }
-.mobile #barre > .barre-titre, .mobile #barre > .voyant { flex: 0 1 auto; min-width: 0; }
+.mobile #barre > .voyant { flex: 0 1 auto; min-width: 0; }
 .mobile .barre-projet:not([hidden]) { display: block; max-width: none; }
 .mobile .barre-choix { max-width: 40vw; }
 .mobile .voyant-libelle { overflow: hidden; text-overflow: ellipsis; }

@@ -100,8 +100,8 @@ export function creerBarre(entete, bandeau) {
   raccourcir(boutonListe, "Tâches");
   raccourcir(boutonOptimiser, "Optim.");
 
-  // Maquette validée (2026-11-23) : l'heure à gauche, la consommation Claude (le rond seul, jamais caché), puis
-  // le titre et le projet, le voyant, la retenue, la charge, les boutons ; la roue crantée seule à droite. « Associer un
+  // Maquette validée (2026-11-23) : à gauche la consommation Claude (le rond seul, jamais caché), puis l'heure, un
+  // séparateur, le sélecteur ou le titre et le projet (le sélecteur n'est jamais caché), le voyant, la retenue, la charge, les boutons ; la roue crantée seule à droite. « Associer un
   // téléphone » est une entrée de son menu (le bouton reste hors de la barre).
   const horloge = creerHorloge();
   const separateur = el("span", "barre-separateur");
@@ -118,7 +118,7 @@ export function creerBarre(entete, bandeau) {
     retenue: () => (!retenue.hidden && (telephone() || entete.classList.contains(CLASSE_ETROITE))
       ? [...retenue.children].map((s) => s.textContent) : []),
   });
-  entete.append(horloge.racine, separateur, blocAbonnement, titre, leVoyant, retenue, charge, zoneActions, boutonNouvelle, boutonCorrection,
+  entete.append(blocAbonnement, horloge.racine, separateur, titre, leVoyant, retenue, charge, zoneActions, boutonNouvelle, boutonCorrection,
                 boutonQuestion, boutonFonctions, zoneLivrable, boutonListe, menu.racine);
 
   // Une seule ligne à toutes les largeurs : ce qui ne tient pas passe dans le menu de la roue, de droite à gauche

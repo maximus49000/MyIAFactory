@@ -232,9 +232,9 @@ test("la_retenue_repliee_ouvre_le_menu_en_lecture_seule", () => {
   assert.match(barre, /retenue: \(\) => \(!retenue\.hidden && \(telephone\(\) \|\| entete\.classList\.contains\(CLASSE_ETROITE\)\)/);
 });
 
-test("le_rond_de_consommation_suit_l_heure_et_n_est_jamais_cache", () => {
-  // Le bloc de consommation est le frère juste après le séparateur, et ne porte que le rond (creerConso).
-  assert.match(barre, /entete\.append\(horloge\.racine, separateur, blocAbonnement, titre,/);
+test("le_rond_de_consommation_precede_l_heure_et_n_est_jamais_cache", () => {
+  // Le bloc de consommation est le premier enfant de la barre, l'heure le suit, puis le séparateur ; il ne porte que le rond.
+  assert.match(barre, /entete\.append\(blocAbonnement, horloge\.racine, separateur, titre,/);
   assert.match(barre, /blocAbonnement\.append\(creerConso\(\)\);/);
   assert.doesNotMatch(barre, /jauges/);
   // Aucune règle ne cache le bloc, le rond ou son bouton, à aucune largeur (téléphone et barre étroite compris).
@@ -250,8 +250,23 @@ test("le_rond_de_consommation_suit_l_heure_et_n_est_jamais_cache", () => {
   assert.doesNotMatch(css, /barre-etroite[^{]*\.bloc-abonnement[^{]*\{/);
 });
 
-test("en_mode_telephone_la_barre_garde_le_rond_et_replie_les_actions", async () => {
-  // La vraie barre, montée dans le faux DOM : le rond reste un enfant de la barre, les actions passent dans le menu.
+test("le_selecteur_de_projets_n_est_jamais_cache_par_la_feuille", () => {
+  // Plusieurs projets : le sélecteur est le seul accès pour changer de projet ou en créer un ; il se resserre, jamais caché.
+  const regles = [...css.matchAll(/([^{}]+)\{([^}]*)\}/g)].map(([, sel, corps]) => ({sel: sel.trim(), corps}));
+  for (const r of regles) {
+    if (!/display:\s*none|visibility:\s*hidden/.test(r.corps)) continue;
+    for (const s of r.sel.split(",")) {
+      const dernier = s.trim().split(/\s+/).pop().replace(/::?[a-z-]+(\([^)]*\))?$/i, "");
+      assert.ok(!/^\.barre-(choix|titre)/.test(dernier) || /::before|::after/.test(s), `« ${s.trim()} » cache le sélecteur`);
+    }
+  }
+  assert.match(css, /#barre \.barre-choix \{ min-width: var\(--choix-min\); text-overflow: ellipsis; \}/);
+  assert.match(css, /\.mobile #barre > \.barre-titre, #barre\.barre-minimale > \.barre-titre \{[^}]*overflow: hidden/);
+});
+
+test("en_mode_telephone_la_barre_garde_le_rond_et_le_selecteur_et_replie_les_actions", async () => {
+  // La vraie barre, montée dans le faux DOM : le rond reste le premier enfant de la barre, le sélecteur de projets reste
+  // affiché même au dernier resserrement, les actions passent dans le menu.
   globalThis.window = {addEventListener() {}, matchMedia: () => ({matches: false}), confirm: () => true, dispatchEvent() {}};
   globalThis.fetch = () => new Promise(() => {});        // aucune réponse : la barre garde son état de départ
   globalThis.setInterval = () => 0;
@@ -271,17 +286,26 @@ test("en_mode_telephone_la_barre_garde_le_rond_et_replie_les_actions", async () 
   Noeud.prototype.closest = function () { return null; };
   const {creerBarre} = await import("../ui/barre.js");
   const entete = new Noeud("header");
-  Object.defineProperty(entete, "scrollWidth", {get: () => 300});
+  let contenu = 300;
+  Object.defineProperty(entete, "scrollWidth", {get: () => contenu});
   entete.clientWidth = 375;
   const b = creerBarre(entete, new Noeud("div"));
   const enfants = entete.enfants;
-  const separateur = enfants.findIndex((n) => n.classList.contains("barre-separateur"));
-  assert.ok(enfants[separateur + 1].classList.contains("bloc-abonnement"), "le rond juste après l'heure");
-  assert.ok(enfants[separateur + 1].tous((n) => n.classList.contains("conso-rond")).length === 1);
+  assert.ok(enfants[0].classList.contains("bloc-abonnement"), "le rond est le premier enfant de la barre");
+  assert.ok(enfants[1].classList.contains("barre-horloge"), "l'heure le suit");
+  assert.ok(enfants[2].classList.contains("barre-separateur"), "puis le séparateur");
+  assert.ok(enfants[0].tous((n) => n.classList.contains("conso-rond")).length === 1);
   assert.equal(entete.tous((n) => n.classList.contains("jauges")).length, 0, "pas de jauges dans la barre");
-  b.majEtat({projet: "Essai", version: 4, agir: true, factory: {etat: "en marche"}});
-  assert.ok(!enfants[separateur + 1].classList.contains("replie"));
+  b.majProjets(true, [{id: "a", nom: "Alpha"}, {id: "b", nom: "Bêta"}], "a");
+  contenu = 2000;   // la barre déborde à tous les niveaux : les cinq étapes sont posées
+  b.majEtat({projet: "Alpha", version: 4, agir: true, factory: {etat: "en marche"}});
+  assert.ok(entete.classList.contains("barre-minimale"), "dernier resserrement atteint");
+  assert.ok(!enfants[0].classList.contains("replie"));
   assert.ok(b.boutonNouvelle.classList.contains("replie"), "les actions passent dans le menu sur téléphone");
+  const choix = entete.tous((n) => n.tagName === "SELECT")[0];
+  assert.ok(choix && choix.hidden === false && !choix.classList.contains("replie"), "le sélecteur reste dans la barre");
+  assert.ok(!choix.parent.hidden && !choix.parent.classList.contains("replie"));
+  assert.deepEqual(choix.enfants.map((o) => o.textContent), ["Alpha", "Bêta", "Nouveau projet…"]);
 });
 
 test("panneaux_branche_le_menu_de_la_roue", () => {

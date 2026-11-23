@@ -58,13 +58,23 @@ def _lieux_valides(lieux):
     return {a: v for a, v in _dict(lieux).items() if isinstance(v, str) and v in deport.LIEUX}
 
 
+def lieux_du_type(bureau, genre):
+    """Les lieux posés au niveau type dans le fichier du bureau tel qu'il est écrit (`types.<genre>.deport.lieux`),
+    `{action: lieu}` ; tout ce qui est abîmé (objet manquant, valeur qui n'est pas un lieu) est ignoré. `{}` sans genre
+    ou pour le genre « generique » (pas de niveau type). Pour les outils qui lancent les actions (`deporter`, la
+    consigne de départ) : la même lecture que la page Réglages."""
+    if not genre or genre == "generique":
+        return {}
+    return _lieux_valides(_dict(_dict(_niveau_type(bureau, genre).get("deport"))).get("lieux"))
+
+
 def lieux_effectifs(catalogue, projet, bureau, genre):
     """Pour chaque action du catalogue, `(lieu, origine)`. L'action au seul serveur (recette sur émulateur) ne prend
     que le niveau projet (sinon `(None, "defaut")`). `bureau["deport"]["lieux"]` est le niveau global tel qu'écrit
     (lieux explicites seulement) ; une action absente n'y est pas réglée."""
     projet, bureau = _dict(projet), _dict(bureau)
     du_projet = _lieux_valides(_dict(projet.get("deport")).get("lieux"))
-    du_type = _lieux_valides(_dict(_dict(_niveau_type(bureau, genre).get("deport"))).get("lieux"))
+    du_type = lieux_du_type(bureau, genre)
     global_ = _lieux_valides(_dict(bureau.get("deport")).get("lieux"))
     resultat = {}
     for action, entree in catalogue.items():

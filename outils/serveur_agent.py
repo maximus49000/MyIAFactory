@@ -34,7 +34,10 @@ LIMITES_AGENT = {"duree_s": 2400, "tours": 200, "memoire_mo": 4096, "cpus": 2, "
 MODES_AGENT = ("seul", "pilote")
 PLACES_DEFAUT = 2
 CLES_DEMANDE_AGENT = frozenset({"id", "projet", "tache", "mode", "modele", "branche", "base", "limites", "reprend", "places",
-                                "genre", "flutter"})
+                                "genre", "flutter", "signature"})
+# Signature des APK (tâche 15e, réglage `signature_apk` du projet) : `debug_serveur` monte la clé de debug du serveur en lecture seule
+# dans le conteneur de l'agent ; `aucune` et `poste_signe` ne montent aucune clé (la clé de release reste au poste).
+SIGNATURES = ("aucune", "debug_serveur", "poste_signe")
 # `tache` : l'agent de la tâche ; `reponse` : sa réponse aux questions de l'utilisateur (même tâche, jamais confondues)
 GENRES_AGENT = ("tache", "reponse")
 # Mêmes motifs que serveur_ovh/images/agent/entree-agent.py (qui les revérifie sur le serveur).
@@ -62,6 +65,7 @@ class DemandeAgent:
     genre: str = "tache"
     # projet Flutter (vu sur le poste, `projet_flutter`) : le serveur doit avoir flutter-sdk, monté en lecture seule
     flutter: bool = False
+    signature: str = "aucune"
 
 
 class RefusRecuperation(ValueError):
@@ -249,6 +253,9 @@ def valider_demande_agent(brut, git=_git):
     flutter = brut.get("flutter", False)
     if flutter is not True and flutter is not False:
         raise ValueError("« flutter » vaut true ou false.")
+    signature = brut.get("signature", "aucune")
+    if not isinstance(signature, str) or signature not in SIGNATURES:
+        raise ValueError("« signature » vaut aucune, debug_serveur ou poste_signe.")
     limites_brutes = brut.get("limites")
     if limites_brutes is not None and not isinstance(limites_brutes, dict):
         raise ValueError("Les limites doivent être un dictionnaire.")
@@ -259,7 +266,7 @@ def valider_demande_agent(brut, git=_git):
         limites[cle] = _entier_limite(cle, v)
     return DemandeAgent(id=ident, projet=projet, tache=tache, mode=mode, modele=modele, branche=branche, base=base,
                         limites=MappingProxyType(limites), reprend=reprend, places=places, genre=genre,
-                        flutter=flutter)
+                        flutter=flutter, signature=signature)
 
 
 def capacites_requises(d):
@@ -275,8 +282,11 @@ def _demande_dict(d):
     """Contenu de entree/demande.json. `projet` et `reprend` n'y figurent qu'une fois (l'enveloppe les relit par motif) ;
     `limites.duree_s` est la valeur même passée à l'enveloppe (une seule source) ; `flutter` (true ou false, une seule
     fois) est relu par l'enveloppe par motif strict."""
-    return {"id": d.id, "type": "agent", "projet": d.projet, "tache": d.tache, "mode": d.mode, "modele": d.modele,
+    brut = {"id": d.id, "type": "agent", "projet": d.projet, "tache": d.tache, "mode": d.mode, "modele": d.modele,
             "branche": d.branche, "base": d.base, "limites": dict(d.limites), "reprend": d.reprend, "flutter": d.flutter}
+    if d.signature != "aucune":      # une seule fois, relue par l'enveloppe par motif strict ; absente = aucune
+        brut["signature"] = d.signature
+    return brut
 
 
 def _demande_sure(demande):
@@ -284,7 +294,7 @@ def _demande_sure(demande):
         brut = {"id": demande.id, "projet": demande.projet, "tache": demande.tache, "mode": demande.mode,
                 "modele": demande.modele, "branche": demande.branche, "base": demande.base,
                 "limites": dict(demande.limites), "reprend": demande.reprend, "places": demande.places,
-                "genre": demande.genre, "flutter": demande.flutter}
+                "genre": demande.genre, "flutter": demande.flutter, "signature": demande.signature}
     elif isinstance(demande, dict):
         brut = demande
     else:

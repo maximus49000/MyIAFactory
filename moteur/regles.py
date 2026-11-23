@@ -223,6 +223,7 @@ class Projet:
         self.analyse_blocages = False     # réglage `analyse_blocages` (vrai par défaut à l'ouverture) : le Chef analyse
         self.livraison_sur_demande = False   # réglage `livraison_sur_demande` : la livraison attend « Livrer maintenant »
         self.livraison_github = False        # réglage `livraison_github` : les livrables terminés partent en release GitHub
+        self.signature_apk = "aucune"        # réglage `signature_apk` : qui signe les APK construits au serveur (15e)
         self.une_session_moyenne = False     # réglage `une_session_moyenne` : code, tests et revue d'une évolution moyenne
         self.ligne_a_dire = None     # dite une seule fois au bureau, dans la réponse de la première demande traitée
         base = self.factory.resolve().parent

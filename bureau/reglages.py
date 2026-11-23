@@ -10,7 +10,7 @@ from pathlib import Path
 
 from .deport import LIEUX_PAR_DEFAUT, valider_lieux
 from .deport_types import catalogue_du_projet, catalogue_union
-from .registre import REGISTRE, valeur_effective, verifier_valeur
+from .registre import REGISTRE, SIGNATURES_APK, valeur_effective, verifier_valeur
 from .releve import MOTIF_GENRE  # un id de projet suit le même motif qu'un genre
 # Le verrou d'écriture d'un fichier partagé vit dans `verrou_fichier` (compatible Python 3.9 : le lanceur des agents
 # l'importe aussi pour le sceau des tests) ; ses réglages d'attente s'y trouvent (`VERROU_ATTENTE_S`, `VERROU_PERIME_S`).
@@ -36,6 +36,8 @@ DEFAUTS = {"port": 8770, "charge_max": 75, "fraicheur_min": 30, "releve": {}, "p
            # programmation relit et teste elle-même (essai de coûts du 2026-11-19 : 0,12 à 0,17 € et 3 à 7 min de moins,
            # mais plus de regard neuf). Faux : comme avant.
            "une_session_moyenne": False,
+           # Qui signe les APK construits au serveur (15e) : la valeur la plus sûre.
+           "signature_apk": "aucune",
            # Exécution déportée : lieu de chaque action (poste, github, serveur), commande de remplacement éventuelle
            # par action, heure de la campagne de charge. Les clés absentes valent ces défauts.
            "deport": {"lieux": dict(LIEUX_PAR_DEFAUT), "commandes": {}, "charge_heure": "03:00"}}
@@ -88,7 +90,7 @@ def charger_effectif(chemin_projet, fichier_bureau=None):
     genre = None if genre == "generique" else genre      # comme la page Réglages : pas de niveau type sans genre
     for reglage in REGISTRE:
         valeur, _ = valeur_effective(reglage, brut, niveaux, genre)
-        if type(valeur) is bool:     # les niveaux du bureau sont filtrés par `lire_bureau` ; garde de plus
+        if type(valeur) is bool or (reglage.forme == "choix" and valeur in reglage.options):     # les niveaux du bureau sont filtrés par `lire_bureau` ; garde de plus
             r[reglage.cle] = valeur
     return r
 
@@ -180,6 +182,9 @@ def _verifier_moteur(r):
         raise ReglagesInvalides("Réglages : « livraison_github » doit valoir true ou false.")
     if type(r.get("une_session_moyenne")) is not bool:
         raise ReglagesInvalides("Réglages : « une_session_moyenne » doit valoir true ou false.")
+    for reglage in REGISTRE:
+        if reglage.forme == "choix" and r.get(reglage.cle) not in reglage.options:
+            raise ReglagesInvalides("Réglages : « %s » doit valoir l'un de : %s." % (reglage.cle, ", ".join(reglage.options)))
     r["deport"] = normaliser_deport(r.get("deport"), "Réglages")
 
 
@@ -543,6 +548,13 @@ def fixer_une_session_moyenne(chemin, valeur):
     if type(valeur) is not bool:
         raise ValueError("« une_session_moyenne » doit valoir true ou false.")
     return _ecrire_cle(chemin, "une_session_moyenne", valeur)
+
+
+def fixer_signature_apk(chemin, valeur):
+    """Note qui signe les APK construits au serveur (`aucune`, `debug_serveur` ou `poste_signe`)."""
+    if valeur not in SIGNATURES_APK:
+        raise ValueError("« signature_apk » doit valoir l'un de : %s." % ", ".join(SIGNATURES_APK))
+    return _ecrire_cle(chemin, "signature_apk", valeur)
 
 
 def fixer_cloud_dossier_approuve(chemin, valeur):

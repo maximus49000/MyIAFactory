@@ -90,6 +90,7 @@ MOTIF_PROJET='"projet"[[:space:]]*:[[:space:]]*"([^"\\]{1,200})"'
 MOTIF_TYPE_EMULATION='"type"[[:space:]]*:[[:space:]]*"emulation"'
 MOTIF_ECHEANCE='"echeance"[[:space:]]*:[[:space:]]*true'
 MOTIF_FLUTTER='"flutter":[[:space:]]*(true|false)[[:space:]]*[,}]'
+MOTIF_SIGNATURE='"signature":[[:space:]]*"(aucune|debug_serveur|poste_signe)"[[:space:]]*[,}]'
 PTRACE_SCOPE=/proc/sys/kernel/yama/ptrace_scope    # lu seulement (jamais modifié ici)
 if [ -n "${ENVELOPPE_PTRACE_SCOPE:-}" ]; then PTRACE_SCOPE="$ENVELOPPE_PTRACE_SCOPE"; fi                           # tests
 
@@ -465,6 +466,26 @@ if [ "$FLUTTER" = 1 ]; then
     fin_erreur "Flutter absent du serveur (~/flutter-sdk incomplet) : installez la capacité flutter-sdk (lancer.py plateforme serveurs installer <id> agent-flutter --accord)."
 fi
 
+# Signature des APK (tâche 15e) : « "signature": "aucune|debug_serveur|poste_signe" » de demande.json (écrit par le poste d'après
+# le réglage `signature_apk` du projet) ; clé en double ou autre valeur refusée ; absente : aucune. Seul `debug_serveur` monte une
+# clé : ~/android-signature/debug.keystore (fichier ordinaire, non lien), en LECTURE SEULE, jamais la clé de release.
+SIGNATURE=aucune
+CLE_DEBUG="$HOME/android-signature/debug.keystore"
+reste="${demande//\"signature\":/}"
+occurrences=$(( (${#demande} - ${#reste}) / 12 ))
+if [ "$occurrences" -gt 1 ]; then fin_erreur "demande.json : clé signature en double."; fi
+if [ "$occurrences" = 1 ]; then
+  if [[ $demande =~ $MOTIF_SIGNATURE ]]; then
+    SIGNATURE="${BASH_REMATCH[1]}"
+  else
+    fin_erreur "demande.json : signature mal formée (aucune, debug_serveur ou poste_signe)."
+  fi
+fi
+if [ "$SIGNATURE" = debug_serveur ]; then
+  [ -f "$CLE_DEBUG" ] && [ ! -L "$CLE_DEBUG" ] && [ -s "$CLE_DEBUG" ] ||
+    fin_erreur "Clé de debug absente du serveur (~/android-signature/debug.keystore) : copiez-la, ou changez le réglage « Signature des APK »."
+fi
+
 # Places : les PLACES_MAX verrous sont tous essayés. Un verrou tenu = un agent qui tourne ; la place prise est le premier
 # verrou libre de rang <= places, et seulement si moins de <places> agents tournent (places abaissé pendant que des agents
 # tiennent les places 3 et 4 : jamais dépassé). Un verrou libre essayé est relâché aussitôt (descripteur 9).
@@ -533,6 +554,9 @@ if [ "$FLUTTER" = 1 ]; then                        # --mount : une source absent
   if [ -d "$SDK_ANDROID" ] && [ ! -L "$SDK_ANDROID" ]; then
     COMMANDE+=(--mount "type=bind,src=$SDK_ANDROID,dst=/opt/android-sdk,readonly")
   fi
+fi
+if [ "$SIGNATURE" = debug_serveur ]; then      # seulement avec ce choix du projet ; lecture seule
+  COMMANDE+=(--mount "type=bind,src=$CLE_DEBUG,dst=/opt/android-signature/debug.keystore,readonly" -e AGENT_DEBUG_KEYSTORE=/opt/android-signature/debug.keystore)
 fi
 COMMANDE+=("$IMAGE" entree-agent)
 if ! dk 120 "${COMMANDE[@]}" >/dev/null 2>"$DOSSIER/docker-run.log"; then

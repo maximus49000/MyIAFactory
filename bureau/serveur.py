@@ -351,9 +351,13 @@ class Projet:
                 valeurs[niveau] = d[r.id]
         if "projet" in r.niveaux and r.cle in brut:
             valeurs["projet"] = brut[r.cle]
-        return {"id": r.id, "section": r.section, "libelle": r.libelle, "aide": r.aide, "forme": r.forme,
-                "niveaux": list(r.niveaux), "valeur": valeur, "origine": origine, "valeurs": valeurs,
-                "applicable": True, "defaut": r.defaut}
+        ligne = {"id": r.id, "section": r.section, "libelle": r.libelle, "aide": r.aide, "forme": r.forme,
+                 "niveaux": list(r.niveaux), "valeur": valeur, "origine": origine, "valeurs": valeurs,
+                 "applicable": True, "defaut": r.defaut}
+        if r.forme == "choix":      # les valeurs admises et leurs libellés (la page ne devine rien)
+            ligne["choix"] = list(r.options)
+            ligne["libelles_choix"] = dict(zip(r.options, r.libelles_options))
+        return ligne
 
     def reglages_page(self):
         """L'état de la page Réglages : une ligne `deport.<action>` par action du catalogue du projet, puis les

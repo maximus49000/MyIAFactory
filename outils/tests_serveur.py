@@ -110,7 +110,8 @@ class _Rendu(Exception):
 
 def commande_conteneur(commande: List[str]) -> List[str]:
     """La commande du poste telle que le conteneur Linux la lance : `py`, `py -3.12`, `python`, `python.exe` en tête →
-    `python3` ; `npx.cmd`/`npm.cmd` → `npx`/`npm` ; le reste tel quel."""
+    `python3` ; `npx.cmd`/`npm.cmd` → `npx`/`npm` ; `gradlew.bat`/`mvnw.cmd` → `./gradlew`/`./mvnw` ; `dotnet.exe` → `dotnet` ;
+    `godot*.exe` → `godot` ; le reste tel quel."""
     commande = [str(x) for x in commande]
     if not commande:
         return commande
@@ -124,6 +125,15 @@ def commande_conteneur(commande: List[str]) -> List[str]:
         return ["python3", *commande[1:]]
     if tete in ("npx.cmd", "npm.cmd"):
         return [tete[:-4], *commande[1:]]
+    nu = tete.replace("\\", "/")
+    if nu.startswith("./"):
+        nu = nu[2:]
+    if nu in ("gradlew.bat", "mvnw.cmd"):
+        return ["./" + nu.rsplit(".", 1)[0], *commande[1:]]
+    if tete == "dotnet.exe":
+        return ["dotnet", *commande[1:]]
+    if re.fullmatch(r"godot[a-z0-9_.-]*\.exe", tete):
+        return ["godot", *commande[1:]]
     return commande
 
 

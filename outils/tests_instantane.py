@@ -40,7 +40,7 @@ MAX_TOTAL = 200 * 1024 * 1024
 MAX_FICHIERS = 50000
 
 EXCLUS = (".git/", ".factory/", "node_modules/", ".env*", "*.pem", "*.key", "*.p12", "*.jks", "*.keystore", "id_rsa*",
-          "id_ed25519*", "bureau.json", "*.local.json", "tests-sceau.json")
+          "id_ed25519*", "bureau.json", "*.local.json", "tests-sceau.json", "local.properties")
 # Ajouts de l'implémentation (secrets courants hors de la liste de la conception) : autres clés SSH, magasins de
 # certificats et de clés, jetons de gestionnaires de paquets, identifiants git/netrc/cloud/bases, propriétés de signature
 # Android, états Terraform, comptes de service, secrets d'outils (Streamlit, Wrangler, Azure, MCP). Même règle : n'importe
@@ -51,9 +51,17 @@ EXCLUS_EN_PLUS = (".ssh/", ".aws/", ".azure/", ".gnupg/", ".docker/", ".kube/", 
                   "*.publishsettings", ".npmrc", ".yarnrc.yml", ".pypirc", ".netrc", "_netrc", ".pgpass",
                   ".git-credentials", ".gitconfig", ".dev.vars", ".mcp.json", "credentials.json",
                   "client_secret*.json", "service-account*.json", "*-firebase-adminsdk-*.json", "token.json",
-                  "local.properties", "keystore.properties", "signing.properties", "secrets.properties",
+                  "keystore.properties", "signing.properties", "secrets.properties",
                   "secrets.toml", "*.tfstate", "*.tfstate.*", "*.tfvars", ".htpasswd")
 AJOUTS = (".durees-tests.json",)
+# Instantané maximal par famille (conception § 5.14) : 200 Mo, 1 Go pour les moteurs de jeu (ressources lourdes).
+MAX_TOTAL_FAMILLE = {"godot": 1024 * 1024 * 1024, "unity": 1024 * 1024 * 1024}
+
+
+def limites_pour(famille: Optional[str]) -> Dict[str, int]:
+    """Les limites de l'instantané d'une famille de projet : `max_fichier`, `max_total`, `max_fichiers`."""
+    return {"max_fichier": MAX_FICHIER, "max_total": MAX_TOTAL_FAMILLE.get(famille or "", MAX_TOTAL),
+            "max_fichiers": MAX_FICHIERS}
 
 DELAI_GIT_S = 60
 LIMITE_USTAR_NOM, LIMITE_USTAR_PREFIXE = 100, 155

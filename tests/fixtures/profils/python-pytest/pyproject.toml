@@ -1,0 +1,5 @@
+[project]
+name = "x"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

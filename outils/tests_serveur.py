@@ -44,6 +44,7 @@ import plateforme_acces  # noqa: E402
 import plateforme_ssh  # noqa: E402
 import serveur_etat  # noqa: E402
 import serveur_tache  # noqa: E402
+import tests_images  # noqa: E402
 import tests_instantane  # noqa: E402
 from plateforme import DOSSIER_DISTANT  # noqa: E402
 
@@ -278,6 +279,43 @@ def _refus_par_defaut(racine):
         return f"accord illisible ({type(e).__name__})"
 
 
+def _analyse_par_defaut(racine, **options):
+    """`tests_profil.analyser` (importé à l'appel : il lit le projet, ce que les routes refusées n'ont pas à payer)."""
+    import tests_profil
+    return tests_profil.analyser(racine, **options)
+
+
+def _profil_de_la_campagne(analyse, racine, commande):
+    """Le profil du projet pour la commande lancée ; `Repli` (R5, avant toute connexion) s'il est non déportable POUR CETTE
+    COMMANDE (un projet React Native avec ios/ reste déportable pour jest) ou si l'analyse échoue (jamais de route sur un doute)."""
+    try:
+        profil = analyse(racine, lancee=list(commande))
+    except Exception as e:  # noqa: BLE001
+        raise Repli(f"refusé (analyse du projet impossible : {type(e).__name__})") from None
+    if profil.non_deportable:
+        raise Repli(f"refusé (non déportable : {profil.non_deportable})")
+    return profil
+
+
+def _image_de_la_campagne(profil, sdk_android):
+    """(image, famille, capacités requises) d'après le catalogue ; `image` est None pour l'image par défaut (l'enveloppe la
+    prend seule : la ligne de commande reste celle d'avant). `Repli` si aucune image du catalogue ne convient (les images
+    dérivées ne sont pas encore construites) ou si le SDK Android du serveur ne couvre pas le projet."""
+    choix = tests_images.choisir_image(profil, sdk_android)
+    if choix["derivee"]:
+        raise Repli("indisponible (aucune image du catalogue ne convient à ce projet : image dérivée à construire)")
+    if choix["manque"]:
+        raise Repli("indisponible (SDK Android du serveur incomplet : " + ", ".join(choix["manque"]) + ")")
+    image = choix["image"]
+    requises = tuple(choix["capacites"])
+    if image == tests_images.IMAGE_DEFAUT:
+        return None, None, requises
+    famille = next((f for f in profil.familles if f in tests_images.CATALOGUE_IMAGES[image]["familles"]), None)
+    if not tests_images.MOTIF_IMAGE.fullmatch(image) or famille is None:
+        raise Repli("refusé (image ou famille hors catalogue)")
+    return image, famille, requises
+
+
 def _projet_par_defaut(dossier):
     return _tests_mesures().projet_enregistre(dossier)
 
@@ -430,11 +468,13 @@ def places_de(serveur):
 
 def _au_serveur(commande, racine, attendre, places, dossier_etat, ssh, noter, horloge, maintenant, dire, choisir,
                 instantane, projet_de, injoignable, attentes, sortie, sortie_erreur, nouvel_id, forcer, popen_base,
-                dormir, travail_go=None):
+                dormir, travail_go=None, analyse=None, sdk_android=None):
     """La campagne au serveur ; rend son code, ou lève `Repli`. `KeyboardInterrupt` remonte telle quelle."""
     appel = horloge()
+    profil = _profil_de_la_campagne(analyse or _analyse_par_defaut, racine, commande)
+    image, famille, requises = _image_de_la_campagne(profil, sdk_android)
     try:
-        serveur = choisir(dossier_etat, requises=REQUISES)
+        serveur = choisir(dossier_etat, requises=requises)
     except serveur_tache.RefusLancement as e:
         raise Repli(f"indisponible ({e})") from None
     if not forcer and _injoignable_actif(injoignable, serveur.id, maintenant()):
@@ -480,8 +520,10 @@ def _au_serveur(commande, racine, attendre, places, dossier_etat, ssh, noter, ho
 
     distante = (f"\"{ENVELOPPE_DISTANTE}\" {ident} {places} {LIMITES['cpus']} {LIMITES['memoire_mo']} "
                 f"{LIMITES['duree_s']} {projet} {deps}")
-    if travail_go is not None:
-        distante += f" {int(travail_go)}"         # 8e argument (facultatif) : taille maximale de travail/, en Go
+    if travail_go is not None or image is not None:
+        distante += f" {int(travail_go) if travail_go is not None else 10}"   # 8e argument (facultatif) : taille maximale de travail/, en Go
+    if image is not None:
+        distante += f" {image} {famille}"           # 9e et 10e (facultatifs) : image du catalogue et sa famille
     attente = _Attente(attentes, racine, attendre, dire, maintenant)
     erreur = _ErreurMontree(sortie_erreur if sortie_erreur is not None else _erreur_du_poste(), serveur.cle)
     depart = horloge()
@@ -537,7 +579,7 @@ def executer(commande, dossier=None, attendre=True, forcer=False, places=None, d
              maintenant=time.time, dire=print, *, choisir=None, instantane=tests_instantane, projet_de=None,
              injoignable=INJOIGNABLE, attentes=None, sortie=None, sortie_erreur=None,
              nouvel_id=serveur_tache.nouvel_id, _popen=subprocess.Popen, dormir=time.sleep, accord=None,
-             travail_go=None) -> int:
+             travail_go=None, analyse=None, sdk_android=None) -> int:
     """Lance `commande` au serveur et rend son code ; sinon (règles R1–R5) au poste, une fois, sous son verrou. Avec
     `forcer` (`--serveur`) : jamais de repli, la raison est dite et le code est 4. `KeyboardInterrupt` remonte (le
     lanceur rend 130) : rien n'est relancé, rien n'est noté.
@@ -559,7 +601,7 @@ def executer(commande, dossier=None, attendre=True, forcer=False, places=None, d
         return _au_serveur(commande, racine, attendre, places, dossier_etat, ssh, noter, horloge, maintenant, dire,
                            choisir or serveur_tache.choisir_serveur, instantane, projet_de or _projet_par_defaut,
                            injoignable, attentes, sortie, sortie_erreur, nouvel_id, forcer, _popen, dormir,
-                           travail_go=travail_go)
+                           travail_go=travail_go, analyse=analyse, sdk_android=sdk_android)
     except _Rendu as e:
         return e.code
     except Repli as e:

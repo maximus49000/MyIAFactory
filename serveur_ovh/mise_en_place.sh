@@ -4,8 +4,8 @@
 # Contrat d'entrée standard : SEULES les étapes licence (la licence) et bureau_distant (UNE ligne : le mot de passe de la
 # session graphique) lisent stdin. Pour toutes les autres, stdin est fermé (/dev/null) afin qu'aucune commande
 # (ssh, apt, docker...) ne puisse consommer ce que l'appelant envoie.
-# Les étapes android_build, android_emulateur, emulateur_image, agent_image, tests_image et unity_cli (capacités du serveur) ne lisent pas non plus stdin : aucun secret.
-# Usage : mise_en_place.sh --etape <durcissement|docker|images|licence|bureau_distant|android_build|android_emulateur|emulateur_image|agent_image|tests_image|unity_cli|etat> [--simuler]
+# Les étapes android_build, android_emulateur, emulateur_image, agent_image, tests_image, tests_android_image et unity_cli (capacités du serveur) ne lisent pas non plus stdin : aucun secret.
+# Usage : mise_en_place.sh --etape <durcissement|docker|images|licence|bureau_distant|android_build|android_emulateur|emulateur_image|agent_image|tests_image|tests_android_image|unity_cli|etat> [--simuler]
 # Réservées aux tests (valeurs par défaut en production) : JVM_RACINE, KVM_PERIPH, SDK_DELAI_S.
 # Sortie standard : UN SEUL objet JSON {"etape","statut","detail","versions","disque_libre_go"}.
 # Idempotent : chaque étape constate l'état avant d'agir. --simuler n'exécute aucune commande apt/docker/ufw/systemctl.
@@ -51,14 +51,14 @@ SIMULER=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --etape)
-      [ $# -ge 2 ] || { echo "L'option --etape attend une valeur (durcissement, docker, images, licence, bureau_distant, android_build, android_emulateur, emulateur_image, agent_image, tests_image, unity_cli ou etat)." >&2; exit 2; }
+      [ $# -ge 2 ] || { echo "L'option --etape attend une valeur (durcissement, docker, images, licence, bureau_distant, android_build, android_emulateur, emulateur_image, agent_image, tests_image, tests_android_image, unity_cli ou etat)." >&2; exit 2; }
       ETAPE="$2"; shift 2 ;;
     --simuler) SIMULER=1; shift ;;
     *) echo "Argument inconnu : $1" >&2; exit 2 ;;
   esac
 done
 case "$ETAPE" in
-  durcissement|docker|images|licence|bureau_distant|android_build|android_emulateur|emulateur_image|agent_image|tests_image|unity_cli|etat) ;;
+  durcissement|docker|images|licence|bureau_distant|android_build|android_emulateur|emulateur_image|agent_image|tests_image|tests_android_image|unity_cli|etat) ;;
   *) echo "Étape inconnue ou absente : '$ETAPE'" >&2; exit 2 ;;
 esac
 
@@ -467,6 +467,7 @@ SEUIL_EMULATEUR_IMAGE_GO=3
 SEUIL_UNITY_CLI_GO=2
 SEUIL_AGENT_IMAGE_GO=3
 SEUIL_TESTS_IMAGE_GO=3
+SEUIL_TESTS_ANDROID_GO=2
 RESEAU_AGENTS="myiafactory-agents"
 
 # Les étapes de capacités s'installent pour l'utilisateur SSH ordinaire, jamais pour root (comme bureau_distant).
@@ -906,6 +907,57 @@ etape_tests_image() {
   repondre fait "Image myiafactory/tests déjà à jour (${empreinte})."
 }
 
+# --- Image des campagnes de tests Gradle/Android ----------------------------
+
+# Étape tests_android_image : construit myiafactory/tests-android (FROM myiafactory/tests + JDK 17 et 21 de la distribution) depuis
+# images/tests-android/Dockerfile seul (contexte temporaire à un fichier), puis écrit ~/.myiafactory/tests-android-image.version
+# (contenu = l'étiquette « versions » : étiquette de l'image de base + JDK + 16 hexa du SHA-256 du Dockerfile, même forme que
+# serveur_installation.empreinte_etape). Le SDK Android n'entre PAS dans l'image : c'est celui de l'hôte (~/android-sdk,
+# capacité android-build), monté en lecture seule par taches/lancer_tests.sh. Idempotente comme tests_image : reconstruite
+# seulement si l'étiquette diffère (donc aussi quand l'image de base change) ; marqueur retiré avant, réécrit en dernier.
+etape_tests_android_image() {
+  local racine="${SERVEUR_OVH_DIR:-$HOME/myiafactory/serveur_ovh}" ctx base empreinte actuelle marqueur="$HOME/.myiafactory/tests-android-image.version" journal fin code fichiers_h
+  if [ "$SIMULER" = 1 ]; then
+    repondre a_faire "Simulation : construirait l'image myiafactory/tests-android (myiafactory/tests + JDK 17 et 21 de la distribution, SDK Android de l'hôte monté en lecture seule, sans curl ni wget) depuis ${racine} puis écrirait ${marqueur}."
+  fi
+  refuser_root
+  exiger_disque "$SEUIL_TESTS_ANDROID_GO"
+  command -v docker >/dev/null 2>&1 || repondre a_faire "Docker absent : installez d'abord la capacité base (étape docker), puis refaites celle-ci."
+  [ -f "$racine/images/tests-android/Dockerfile" ] || repondre bloque "Fichier de l'image introuvable : $racine/images/tests-android/Dockerfile. Relancez l'installation (elle redépose les fichiers)."
+  base=$(sudo -n docker image inspect -f '{{ index .Config.Labels "versions" }}' myiafactory/tests 2>/dev/null)
+  [ -n "$base" ] || repondre a_faire "Image myiafactory/tests absente : installez d'abord la capacité tests-image, puis refaites celle-ci."
+  fichiers_h=$(sha256sum < "$racine/images/tests-android/Dockerfile" | cut -c1-16)
+  [[ $fichiers_h =~ ^[0-9a-f]{16}$ ]] || repondre bloque "Empreinte du Dockerfile incalculable (sha256sum) : rien n'a été construit ni écrit."
+  empreinte="base=${base};jdk=17,21;fichiers=${fichiers_h}"
+  actuelle=$(sudo -n docker image inspect -f '{{ index .Config.Labels "versions" }}' myiafactory/tests-android 2>/dev/null)
+  if [ "$actuelle" != "$empreinte" ]; then
+    rm -f "$marqueur"
+    ctx=$(mktemp -d) || repondre bloque "Dossier temporaire non créable pour construire l'image."
+    if ! cp "$racine/images/tests-android/Dockerfile" "$ctx/"; then
+      rm -rf "$ctx"
+      repondre bloque "Contexte de construction de l'image non préparable."
+    fi
+    journal=$(sudo -n docker build --label "versions=$empreinte" -t myiafactory/tests-android "$ctx" 2>&1)
+    code=$?
+    rm -rf "$ctx"
+    if [ "$code" != 0 ]; then
+      fin=$(printf '%s\n' "$journal" | tail -n 20 | tr -d '\000-\010\013-\037' | cut -c1-200)
+      fin="${fin//$HOME/\~}"
+      repondre bloque "Construction de l'image myiafactory/tests-android impossible (contexte ${racine}). Fin du journal de construction : ${fin}"
+    fi
+    actuelle=""
+  fi
+  mkdir -p "$HOME/.myiafactory" || repondre bloque "Dossier $HOME/.myiafactory non créable."
+  if [ "$(cat "$marqueur" 2>/dev/null)" != "$empreinte" ]; then
+    if ! { printf '%s\n' "$empreinte" > "$marqueur.tmp.$$" && mv -f "$marqueur.tmp.$$" "$marqueur"; }; then
+      rm -f "$marqueur.tmp.$$"
+      repondre bloque "Marqueur $marqueur non écrit."
+    fi
+  fi
+  if [ -z "$actuelle" ]; then repondre fait "Image myiafactory/tests-android construite (${empreinte}) ; marqueur écrit."; fi
+  repondre fait "Image myiafactory/tests-android déjà à jour (${empreinte})."
+}
+
 # --- Unity CLI -------------------------------------------------------------
 
 # Étape unity_cli : l'outil officiel Unity CLI seulement, installé pour l'utilisateur dans ~/.local/bin/unity. Le script
@@ -973,6 +1025,7 @@ case "$ETAPE" in
   emulateur_image) etape_emulateur_image ;;
   agent_image) etape_agent_image ;;
   tests_image) etape_tests_image ;;
+  tests_android_image) etape_tests_android_image ;;
   unity_cli) etape_unity_cli ;;
   etat) etape_etat ;;
 esac

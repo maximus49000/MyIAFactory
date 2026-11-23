@@ -1,10 +1,15 @@
 #!/usr/bin/env bash
 # Enveloppe HÔTE d'une campagne de tests : exécutée sur le serveur par UNE session SSH du poste, elle reste au premier plan
 # du début à la fin (place, conteneur, sortie en direct, nettoyage) ; l'entrée standard de la session sert de laisse.
-# Usage : lancer_tests.sh <id> <places> <cpus> <memoire_mo> <duree_s> <projet> <deps> [<travail_go>]
+# Usage : lancer_tests.sh <id> <places> <cpus> <memoire_mo> <duree_s> <projet> <deps> [<travail_go> [<image> [<famille>]]]
 #   id t<AAAAMMJJ>-<HHMMSS>-<4 hexa> ; places 1..4 ; cpus 1..64 ; memoire_mo 256..65536 ; duree_s 1..3600 (nombres sans zéro
 #   initial) ; projet ^[a-z0-9][a-z0-9-]{0,39}$ ; deps 16 hexa (cache Node ~/tests/.deps/<projet>/<deps>) ou « - » ;
-#   travail_go 1..200 (facultatif, 10 par défaut) : taille maximale de travail/ (l'arbre extrait et ce que les tests écrivent).
+#   travail_go 1..200 (facultatif, 10 par défaut) : taille maximale de travail/ (l'arbre extrait et ce que les tests écrivent) ;
+#   image (facultatif, 9e argument) ^myiafactory/tests(-[a-z0-9]{1,24})?$, défaut myiafactory/tests : l'image du catalogue (§ 5.12) ;
+#   famille (facultatif, 10e) dans FAMILLES, défaut python : table FERMÉE de l'enveloppe qui ajoute montages et variables du
+#   conteneur (gradle-android : SDK de l'hôte ~/android-sdk monté en lecture seule sur /opt/android-sdk, ANDROID_HOME,
+#   GRADLE_OPTS ; gradle-jvm : GRADLE_OPTS). Jamais une valeur venue du poste hors de ces motifs : image et famille ne sont
+#   que des clés, les montages et variables sont écrits ici. Sans ces deux arguments : le conteneur d'avant, à l'identique.
 #   Chaque valeur est validée par un motif strict AVANT tout usage ; rien n'est jamais interprété par un shell (tableaux).
 # Entrée standard : 1re ligne = la commande, tableau JSON de chaînes (4 096 octets au plus, contrôlé par tests_hote.py
 #   --commande, la règle de entree-tests.sh) ; le reste = la laisse : un fils la lit jusqu'à la fin de fichier (session SSH
@@ -77,6 +82,8 @@ ICI="$(cd "$(dirname "$0")" && pwd)"
 . "$ICI/commun.sh" || refuser "commun.sh introuvable à côté de l'enveloppe."
 AIDE="$ICI/tests_hote.py"
 IMAGE="myiafactory/tests"
+FAMILLES=" python node gradle-android gradle-jvm maven dotnet go rust godot unity ruby php make "   # miroir de tests_profil.FAMILLES
+GRADLE_OPTS_FERME="-Dorg.gradle.daemon=false -Dorg.gradle.vfs.watch=false -Dorg.gradle.offline=true -Dkotlin.compiler.execution.strategy=in-process"
 PLACES_MAX=4
 DUREE_MAX=3600
 DISQUE_MIN_KO=5242880                    # 5 Go libres au départ
@@ -93,11 +100,11 @@ if [[ ${ENVELOPPE_DU_S:-} =~ ^[0-9]{1,3}$ ]]; then DU_S="$ENVELOPPE_DU_S"; fi   
 
 # --- Arguments (rien n'est écrit avant la fin de ce bloc) ------------------
 
-[ $# -eq 7 ] || [ $# -eq 8 ] || refuser "usage : <id> <places> <cpus> <memoire_mo> <duree_s> <projet> <deps> [<travail_go>]"
+[ $# -ge 7 ] && [ $# -le 10 ] || refuser "usage : <id> <places> <cpus> <memoire_mo> <duree_s> <projet> <deps> [<travail_go> [<image> [<famille>]]]"
 for argument in "$@"; do
   [[ $argument == *[[:cntrl:]]* ]] && refuser "caractère de contrôle refusé dans un argument."
 done
-ID="$1"; PLACES="$2"; CPUS="$3"; MEMOIRE="$4"; DUREE="$5"; PROJET="$6"; DEPS="$7"; TRAVAIL_GO="${8-10}"
+ID="$1"; PLACES="$2"; CPUS="$3"; MEMOIRE="$4"; DUREE="$5"; PROJET="$6"; DEPS="$7"; TRAVAIL_GO="${8-10}"; IMAGE_DEMANDEE="${9-myiafactory/tests}"; FAMILLE="${10-python}"
 [[ $ID =~ $MOTIF_ID ]] || refuser "identifiant refusé."
 [[ $PLACES =~ ^[1-4]$ ]] || refuser "places refusées (1 à $PLACES_MAX)."
 [[ $CPUS =~ $MOTIF_CPUS ]] && [ "$CPUS" -le 64 ] || refuser "cpus refusés (1 à 64)."
@@ -106,6 +113,9 @@ ID="$1"; PLACES="$2"; CPUS="$3"; MEMOIRE="$4"; DUREE="$5"; PROJET="$6"; DEPS="$7
 [[ $PROJET =~ ^[a-z0-9][a-z0-9-]{0,39}$ ]] || refuser "projet refusé."
 [[ $DEPS =~ ^([0-9a-f]{16}|-)$ ]] || refuser "deps refusé (16 hexa ou -)."
 [[ $TRAVAIL_GO =~ ^[1-9][0-9]{0,2}$ ]] && [ "$TRAVAIL_GO" -le 200 ] || refuser "travail_go refusé (1 à 200)."
+[[ $IMAGE_DEMANDEE =~ ^myiafactory/tests(-[a-z0-9]{1,24})?$ ]] || refuser "image refusée (myiafactory/tests ou myiafactory/tests-<nom>)."
+[[ $FAMILLE =~ ^[a-z][a-z-]{1,15}$ ]] && [[ $FAMILLES == *" $FAMILLE "* ]] || refuser "famille refusée."
+IMAGE="$IMAGE_DEMANDEE"
 TRAVAIL_MAX_KO=$((TRAVAIL_GO * 1048576))
 [[ ${HOME:-} == /* ]] || refuser "HOME absent ou relatif."
 case "$HOME" in *[:,]*) refuser "HOME non admis (deux-points ou virgule : montage impossible)." ;; esac
@@ -213,7 +223,10 @@ libre=$(disque_libre_ko)
 [ "$libre" -ge "$DISQUE_MIN_KO" ] || echouer 76 "disque presque plein : $((libre / 1024)) Mo libres, 5 Go au moins."
 inodes_bas && echouer 76 "inodes presque épuisés : moins de ${INODES_MIN_PC} % libres."
 [ "$(id -u)" = 1000 ] || echouer 77 "l'utilisateur du serveur doit être 1000 (celui du conteneur de tests)."
-dk 20 image inspect "$IMAGE" >/dev/null 2>&1 || echouer 77 "image $IMAGE absente : installez la capacité tests-image."
+dk 20 image inspect "$IMAGE" >/dev/null 2>&1 || echouer 77 "image $IMAGE absente : installez la capacité qui la fournit (tests-image, tests-android)."
+if [ "$FAMILLE" = gradle-android ]; then
+  [ -d "$HOME/android-sdk" ] || echouer 77 "SDK Android de l'hôte absent (~/android-sdk) : installez la capacité android-build."
+fi
 DEPS_DOSSIER=""
 if [ "$DEPS" != - ]; then
   DEPS_DOSSIER="$TESTS/.deps/$PROJET/$DEPS"
@@ -313,6 +326,11 @@ COMMANDE=(run --pull never --init --name "tests-$ID" --label myiafactory.genre=t
   --tmpfs /tmp:size=4g,mode=1777,exec
   -v "$DOSSIER/travail:/work" -v "$ENTREE:/entree:ro")
 if [ -n "$DEPS_DOSSIER" ]; then COMMANDE+=(-v "$DEPS_DOSSIER:/deps:ro"); fi
+# Table fermée par famille : montages et variables écrits ici, jamais lus du poste.
+case "$FAMILLE" in
+  gradle-android) COMMANDE+=(-v "$HOME/android-sdk:/opt/android-sdk:ro" -e ANDROID_HOME=/opt/android-sdk -e "GRADLE_OPTS=$GRADLE_OPTS_FERME") ;;
+  gradle-jvm) COMMANDE+=(-e "GRADLE_OPTS=$GRADLE_OPTS_FERME") ;;
+esac
 COMMANDE+=(-e HOME=/tmp -e MYIAFACTORY_TESTS_CONTENEUR=1 "$IMAGE")
 
 # Surveillant : garde la place (descripteur 8) tant qu'il vit ; tue le conteneur (marque d'abord) si le disque, les inodes

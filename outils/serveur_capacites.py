@@ -79,6 +79,10 @@ _CATALOGUE = {
     "tests-image": Capacite(
         "tests-image", "Image des campagnes de tests (conteneur sans réseau ni secret)", ("base",), "tests_image",
         "test -s ~/.myiafactory/tests-image.version", 1.0, 6),
+    # Image des campagnes Gradle/Android : myiafactory/tests + JDK 17 et 21 ; le SDK de l'hôte (android-build) est monté en lecture seule.
+    "tests-android": Capacite(
+        "tests-android", "Image des tests Gradle/Android (SDK de l'hôte en lecture seule)", ("tests-image", "android-build"),
+        "tests_android_image", "test -s ~/.myiafactory/tests-android-image.version", 0.5, 4),
     # Étape humaine : le jeton de l'abonnement est enregistré UNE fois par le Directeur ; la sonde ne lit jamais son contenu
     # (droits du dossier et du fichier, fichier non vide).
     "agent-abonnement": Capacite(
@@ -106,6 +110,7 @@ _BESOINS = {
     "agent-pilote": ("agent", "agent-abonnement", "emulateur-image"),
     # les campagnes de tests d'un projet routées au serveur (`lancer.py tests …`) tournent dans l'image de tests
     "tests-serveur": ("tests-image",),
+    "tests-serveur-android": ("tests-android",),
 }
 
 CATALOGUE = MappingProxyType(_CATALOGUE)

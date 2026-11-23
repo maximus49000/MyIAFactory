@@ -31,7 +31,7 @@ ETAT = "serveurs-etat.json"
 VERROU = "serveurs-installation.lock"
 VERROU_JEUNE_S = 30
 DELAI_DEFAUT_S = 600
-DELAIS_ETAPE_S = {"docker": 1200, "durcissement": 900, "android_build": 1800, "android_emulateur": 1800, "emulateur_image": 900, "agent_image": 900, "tests_image": 900, "unity_cli": 300}
+DELAIS_ETAPE_S = {"docker": 1200, "durcissement": 900, "android_build": 1800, "android_emulateur": 1800, "emulateur_image": 900, "agent_image": 900, "tests_image": 900, "tests_android_image": 900, "unity_cli": 300}
 LONGUEUR_MAX = 200
 STATUTS_ETAPE = ("fait", "a_faire", "bloque")
 
@@ -305,7 +305,8 @@ FICHIERS_ETAPE = {"emulateur_image": ("images/emulateur/Dockerfile", "images/emu
                   # l'enveloppe hôte des campagnes (lancer_tests.sh), commun.sh qu'elle source et ses aides python3 :
                   # déposés avec l'étape, hors de l'image et de son empreinte
                   "tests_image": ("images/tests/Dockerfile", "images/tests/entree-tests.sh", "taches/lancer_tests.sh",
-                                  "taches/commun.sh", "taches/tests_hote.py")}
+                                  "taches/commun.sh", "taches/tests_hote.py"),
+                  "tests_android_image": ("images/tests-android/Dockerfile",)}
 # Fichiers du contexte de construction de l'image, dans l'ordre de l'empreinte (par défaut : tous ceux de l'étape).
 EMPREINTE_FICHIERS = {**FICHIERS_ETAPE,
                       "agent_image": ("images/agent/Dockerfile", "images/agent/entree-agent.py", "images/agent/pont"),
@@ -343,6 +344,8 @@ def empreinte_etape(etape):
         versions_image = f"ubuntu={versions['base_ubuntu']};node={versions['node']};claude_code={versions['claude_code']}"
     elif etape == "tests_image":                     # mêmes champs, même ordre que EMPREINTE_TESTS du script
         versions_image = f"ubuntu={versions['base_ubuntu']};python=3.12;node={versions['node']}"
+    elif etape == "tests_android_image":             # mêmes champs, même ordre que EMPREINTE_TESTS_ANDROID du script
+        versions_image = f"base={empreinte_etape('tests_image')};jdk=17,21"   # l'étiquette de l'image de base
     else:
         versions_image = f"ubuntu={versions['base_ubuntu']};jdk=17"
     return f"{versions_image};fichiers={h.hexdigest()[:16]}"
@@ -354,7 +357,8 @@ def empreinte_etape(etape):
 # péremption est une lecture de plus, faite par le moteur seulement pour les capacités demandées.
 MARQUEURS = {"emulateur-image": ("emulateur_image", '$HOME/.myiafactory/emulateur-image.version'),
              "agent": ("agent_image", '$HOME/.myiafactory/agent-image.version'),
-             "tests-image": ("tests_image", '$HOME/.myiafactory/tests-image.version')}
+             "tests-image": ("tests_image", '$HOME/.myiafactory/tests-image.version'),
+             "tests-android": ("tests_android_image", '$HOME/.myiafactory/tests-android-image.version')}
 
 
 def _perimees(serveur, ssh, presentes, requises):

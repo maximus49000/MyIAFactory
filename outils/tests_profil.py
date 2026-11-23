@@ -718,11 +718,40 @@ def _famille_cible(donnee: Optional[List[str]], familles: List[str]) -> Optional
     return familles[0]
 
 
-def analyser(racine: str, commande: Optional[List[str]] = None, catalogue=None, lire=None) -> Profil:
+# Familles que chaque raison de non_deportable concerne : N1 (.NET Framework, WPF, C++ MSBuild), N2 (Xcode : aucune de nos
+# familles de tests ne l'utilise), N6 (cible Cargo ou RuntimeIdentifier hors x86_64).
+_CONCERNEES = {"N1": ("dotnet",), "N2": (), "N6": ("rust", "dotnet")}
+
+
+def _famille_lancee(lancee: List[str]) -> Optional[str]:
+    """La famille de l'exécutable de la commande lancée (npx → node, ./gradlew → gradle…), ou None si inconnue."""
+    if not lancee:
+        return None
+    return _FAMILLE_DE_COMMANDE.get(re.sub(r"\.(exe|cmd|bat)$", "", os.path.basename(str(lancee[0]).replace("\\", "/")).lower()))
+
+
+def _non_deportable_de(raison: Optional[str], lancee: Optional[List[str]]) -> Optional[str]:
+    """`raison` (celle du projet entier) ne vaut que pour la commande lancée si sa famille est concernée ; une commande dont la
+    famille est inconnue garde la raison du projet (jamais de route sur un doute)."""
+    if raison is None or not lancee:
+        return raison
+    famille = _famille_lancee(lancee)
+    if famille is None:
+        return raison
+    concernees = _CONCERNEES.get(raison.split(" ", 1)[0], None)
+    if concernees is None or famille in concernees:
+        return raison
+    return None
+
+
+def analyser(racine: str, commande: Optional[List[str]] = None, catalogue=None, lire=None,
+             lancee: Optional[List[str]] = None) -> Profil:
     """Le profil d'exécution du projet `racine`. Pur : ne lit que `LUS` (par `lire`, `(chemin relatif) -> Optional[str]`,
     par défaut une lecture bornée qui refuse liens et exclus), hache les `VERROUS`, n'exécute rien. `commande` (la commande
     enregistrée de l'action `tests`) puis la commande du catalogue (celui du genre du projet à défaut de `catalogue`)
-    priment sur la CI, qui prime sur la déduction ; elles s'appliquent à la famille de leur exécutable."""
+    priment sur la CI, qui prime sur la déduction ; elles s'appliquent à la famille de leur exécutable. `lancee` (facultatif) :
+    la commande réellement lancée ; `non_deportable` ne dit alors que ce qui concerne sa famille (un projet React Native avec
+    ios/ reste déportable pour jest), et reste celui du projet entier si la famille de la commande est inconnue."""
     racine = str(racine)
     if catalogue is None:
         catalogue = _catalogue_borne(racine)
@@ -794,5 +823,5 @@ def analyser(racine: str, commande: Optional[List[str]] = None, catalogue=None, 
         res = ressources_par_defaut("python")
     profil = Profil(familles=tuple(familles), outils=outils, commandes=commandes, deps=deps, caches=caches,
                     ressources=res, isolement="licence" if "unity" in familles else "standard",
-                    non_deportable=_non_deportable(c), confiance=confiance, raisons=tuple(raisons))
+                    non_deportable=_non_deportable_de(_non_deportable(c), lancee), confiance=confiance, raisons=tuple(raisons))
     return replace(profil, empreinte=empreinte_profil(profil))

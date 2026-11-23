@@ -165,7 +165,7 @@ class TestRoute(Base):
         self.assertEqual(depot["delai"], 120)
         flux = ssh.appels_flux[0]
         self.assertEqual(flux["commande"],
-                         f"\"{tests_serveur.ENVELOPPE_DISTANTE}\" {ID} 2 4 8192 1800 projet-a -")
+                         f"\"{tests_serveur.ENVELOPPE_DISTANTE}\" {ID} {tests_serveur.PLACES_DEFAUT} 4 8192 1800 projet-a -")
         self.assertTrue(tests_serveur.ENVELOPPE_DISTANTE.startswith("$HOME/"))
         self.assertEqual(json.loads(flux["premiere_ligne"]), ["python3", "outils/x.py", "a b;rm -rf ~"])
         self.assertIsNone(flux["delai_total"])

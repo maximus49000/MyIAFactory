@@ -48,7 +48,7 @@ import tests_instantane  # noqa: E402
 from plateforme import DOSSIER_DISTANT  # noqa: E402
 
 LIMITES = {"cpus": 4, "memoire_mo": 8192, "duree_s": 1800}
-PLACES_DEFAUT = 2
+PLACES_DEFAUT = 3      # mesuré (J3) : 3 campagnes complètes simultanées = 179 s chacune, comme une seule (165 s) ; 4 : 207 s
 PLACES_MAX = 4
 INJOIGNABLE_S = 300
 INJOIGNABLE = Path("~/MyIAFactory/tests-serveur-injoignable.json").expanduser()
@@ -410,6 +410,14 @@ class _Attente:
             campagne._oublier_l_attente(self.attentes)
 
 
+def places_de(serveur):
+    """Campagnes simultanées voulues pour ce serveur : son réglage `places_tests` (1 à 4), sinon `PLACES_DEFAUT`."""
+    voulues = getattr(serveur, "places_tests", None)
+    if isinstance(voulues, bool) or not isinstance(voulues, int) or not 1 <= voulues <= PLACES_MAX:
+        return PLACES_DEFAUT
+    return voulues
+
+
 def _au_serveur(commande, racine, attendre, places, dossier_etat, ssh, noter, horloge, maintenant, dire, choisir,
                 instantane, projet_de, injoignable, attentes, sortie, sortie_erreur, nouvel_id, forcer, popen_base,
                 dormir, travail_go=None):
@@ -432,7 +440,7 @@ def _au_serveur(commande, racine, attendre, places, dossier_etat, ssh, noter, ho
     if not isinstance(projet, str) or not MOTIF_PROJET.fullmatch(projet):
         raise Repli("refusé (projet non enregistré au bureau)")
     if places is None:
-        places = PLACES_DEFAUT
+        places = places_de(serveur)
     if isinstance(places, bool) or not isinstance(places, int) or not 1 <= places <= PLACES_MAX:
         raise Repli(f"refusé (places {places!r} : 1 à {PLACES_MAX})")
     if travail_go is not None and (isinstance(travail_go, bool) or not isinstance(travail_go, int)

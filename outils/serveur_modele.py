@@ -35,6 +35,18 @@ class Serveur:
     cle: str
     fournisseur: "str | None" = None
     reglages_fournisseur: dict = field(default_factory=dict)
+    places_tests: "int | None" = None      # campagnes de tests simultanées voulues (1 à 4) ; None : le défaut de la route
+
+
+PLACES_TESTS_MAX = 4
+
+
+def _en_dict(serveur):
+    """Forme écrite dans `serveurs.json` : `places_tests` n'y figure que s'il est réglé."""
+    d = asdict(serveur)
+    if d.get("places_tests") is None:
+        del d["places_tests"]
+    return d
 
 
 def _identifiant(nom):
@@ -112,7 +124,10 @@ def valider(serveur):
             raise ValueError("Identifiant invalide : il doit contenir au moins une lettre ou un chiffre.")
     if ident == IDENTIFIANT_RESERVE:
         raise ValueError("Ce nom est réservé (il se confondrait avec l'adresse /api/serveurs/migration) : choisissez-en un autre.")
-    return Serveur(ident, nom, hote, utilisateur, cle, fournisseur, dict(reglages))
+    places = serveur.get("places_tests")
+    if isinstance(places, bool) or not isinstance(places, int) or not 1 <= places <= PLACES_TESTS_MAX:
+        places = None       # hors bornes : on retombe sur le défaut de la route (le bureau le dit, voir `rejets_places`)
+    return Serveur(ident, nom, hote, utilisateur, cle, fournisseur, dict(reglages), places)
 
 
 def lire_avec_rejets(dossier=DOSSIER):
@@ -181,7 +196,7 @@ def ecrire(serveurs, dossier=DOSSIER):
     """Enregistre la liste (atomique, droits restreints). Chaque entrée est revalidée : aucun secret ni valeur piégée.
 
     Refuse (ValueError, fichier intact) si le fichier existant est abîmé ou a des entrées refusées."""
-    contenu = [asdict(valider(asdict(s) if isinstance(s, Serveur) else s)) for s in serveurs]
+    contenu = [_en_dict(valider(asdict(s) if isinstance(s, Serveur) else s)) for s in serveurs]
     _exiger_fichier_sain(dossier)
     Path(dossier).mkdir(parents=True, exist_ok=True)
     _ecrire_atomique(Path(dossier) / FICHIER, json.dumps(contenu, ensure_ascii=False, indent=2) + "\n")

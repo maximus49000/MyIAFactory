@@ -75,12 +75,16 @@ REFUS_REPLI = (76, 77, 78, 79, 125, 126, 127)   # l'enveloppe n'a pas lancé le 
 ARRET_SERVEUR = 74                       # campagne arrêtée au serveur après son départ (disque, inodes, travail/)
 CODES_CTRL_C = (130, 0xC000013A, -2)     # ssh tué par le Ctrl-C (console Windows : STATUS_CONTROL_C_EXIT ; POSIX : SIGINT)
 FIN_GARDEE = 4096
+TRAVAIL_GO_MIN, TRAVAIL_GO_MAX = 1, 200     # absent : l'enveloppe prend 10 Go
 MOTIF_PROJET = re.compile(r"[a-z0-9][a-z0-9-]{0,39}", re.ASCII)
 MOTIF_DEPS = re.compile(r"[0-9a-f]{16}", re.ASCII)
 MOTIF_DISTANT = re.compile(r"\$HOME(/[A-Za-z0-9_.-]+)+", re.ASCII)
 OPTIONS_DEPOT = ("-o", "LogLevel=ERROR", "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=4")
 MESSAGES_ARRET = {
-    ARRET_SERVEUR: "campagne arrêtée au serveur : manque de place (disque, inodes ou taille du dossier de travail)",
+    # 74 : TOUT arrêt de l'enveloppe en cours de campagne (disque < 2 Go, inodes, travail/ au-delà de travail_go, échéance
+    # du surveillant, conteneur dans un état inattendu après docker run).
+    ARRET_SERVEUR: ("campagne arrêtée au serveur par l'enveloppe (disque, inodes, taille du dossier de travail, échéance ou "
+                    "état inattendu du conteneur) : le résultat est inconnu"),
     124: "délai dépassé au serveur (durée maximale de la campagne)",
     130: "campagne arrêtée au serveur (signal)",
     1: "l'enveloppe a échoué au serveur",
@@ -408,7 +412,7 @@ class _Attente:
 
 def _au_serveur(commande, racine, attendre, places, dossier_etat, ssh, noter, horloge, maintenant, dire, choisir,
                 instantane, projet_de, injoignable, attentes, sortie, sortie_erreur, nouvel_id, forcer, popen_base,
-                dormir):
+                dormir, travail_go=None):
     """La campagne au serveur ; rend son code, ou lève `Repli`. `KeyboardInterrupt` remonte telle quelle."""
     appel = horloge()
     try:
@@ -431,6 +435,9 @@ def _au_serveur(commande, racine, attendre, places, dossier_etat, ssh, noter, ho
         places = PLACES_DEFAUT
     if isinstance(places, bool) or not isinstance(places, int) or not 1 <= places <= PLACES_MAX:
         raise Repli(f"refusé (places {places!r} : 1 à {PLACES_MAX})")
+    if travail_go is not None and (isinstance(travail_go, bool) or not isinstance(travail_go, int)
+                                   or not TRAVAIL_GO_MIN <= travail_go <= TRAVAIL_GO_MAX):
+        raise Repli(f"refusé (travail_go {travail_go!r} : {TRAVAIL_GO_MIN} à {TRAVAIL_GO_MAX} Go)")
     ligne = _premiere_ligne(commande)
 
     prive = tempfile.mkdtemp(prefix="myiafactory-tests-")      # 0700 ; jamais dans le projet
@@ -455,6 +462,8 @@ def _au_serveur(commande, racine, attendre, places, dossier_etat, ssh, noter, ho
 
     distante = (f"\"{ENVELOPPE_DISTANTE}\" {ident} {places} {LIMITES['cpus']} {LIMITES['memoire_mo']} "
                 f"{LIMITES['duree_s']} {projet} {deps}")
+    if travail_go is not None:
+        distante += f" {int(travail_go)}"         # 8e argument (facultatif) : taille maximale de travail/, en Go
     attente = _Attente(attentes, racine, attendre, dire, maintenant)
     erreur = _ErreurMontree(sortie_erreur if sortie_erreur is not None else _erreur_du_poste(), serveur.cle)
     depart = horloge()
@@ -491,7 +500,7 @@ def _au_serveur(commande, racine, attendre, places, dossier_etat, ssh, noter, ho
                 _nettoyer(serveur, ssh, ident)
             dire(f"Serveur : l'enveloppe a refusé la campagne (code {refus}) ; rien n'est relancé.")
             return refus
-        dire(f"Serveur : {MESSAGES_ARRET[refus]} ; rien n'est relancé.")
+        dire(f"Serveur : {MESSAGES_ARRET[refus]}, rien n'est relancé.")
         code = refus
     try:
         _code, debut, fin, attente_s = fin_serveur
@@ -509,7 +518,8 @@ def executer(commande, dossier=None, attendre=True, forcer=False, places=None, d
              ssh=plateforme_ssh, executer_poste=campagne.executer, noter=None, horloge=time.monotonic,
              maintenant=time.time, dire=print, *, choisir=None, instantane=tests_instantane, projet_de=None,
              injoignable=INJOIGNABLE, attentes=None, sortie=None, sortie_erreur=None,
-             nouvel_id=serveur_tache.nouvel_id, _popen=subprocess.Popen, dormir=time.sleep, accord=None) -> int:
+             nouvel_id=serveur_tache.nouvel_id, _popen=subprocess.Popen, dormir=time.sleep, accord=None,
+             travail_go=None) -> int:
     """Lance `commande` au serveur et rend son code ; sinon (règles R1–R5) au poste, une fois, sous son verrou. Avec
     `forcer` (`--serveur`) : jamais de repli, la raison est dite et le code est 4. `KeyboardInterrupt` remonte (le
     lanceur rend 130) : rien n'est relancé, rien n'est noté.
@@ -530,7 +540,8 @@ def executer(commande, dossier=None, attendre=True, forcer=False, places=None, d
     try:
         return _au_serveur(commande, racine, attendre, places, dossier_etat, ssh, noter, horloge, maintenant, dire,
                            choisir or serveur_tache.choisir_serveur, instantane, projet_de or _projet_par_defaut,
-                           injoignable, attentes, sortie, sortie_erreur, nouvel_id, forcer, _popen, dormir)
+                           injoignable, attentes, sortie, sortie_erreur, nouvel_id, forcer, _popen, dormir,
+                           travail_go=travail_go)
     except _Rendu as e:
         return e.code
     except Repli as e:

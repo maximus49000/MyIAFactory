@@ -19,19 +19,7 @@ import tests_instantane  # noqa: E402
 import tests_serveur  # noqa: E402
 
 
-def garder_le_poste(test, autres=(tests_serveur.ATTENTES_SERVEUR,)):
-    """Aucun test ne touche la vraie file ni le vrai verrou du poste (un test qui oubliait `attentes=` attendait derrière
-    les vraies campagnes, sans fin) : les fonctions de `campagne` qui les lisent ou les écrivent refusent ces chemins."""
-    reels = {Path(p).resolve() for p in (campagne.ATTENTES, campagne.VERROU, *autres)}
-    for nom in ("_file", "_noter_l_attente", "_oublier_l_attente", "prendre", "liberer"):
-        vrai = getattr(campagne, nom)
-
-        def garde(chemin, *a, _vrai=vrai, _nom=nom, **k):
-            if Path(chemin).resolve() in reels:
-                raise AssertionError(f"campagne.{_nom} touche le vrai {chemin}")
-            return _vrai(chemin, *a, **k)
-        setattr(campagne, nom, garde)
-        test.addCleanup(setattr, campagne, nom, vrai)
+from tests.test_campagne import garder_le_poste  # noqa: E402 — la garde partagée (jamais la vraie file ni le vrai verrou)
 
 SERVEUR = SimpleNamespace(id="ovh-1", nom="OVH", hote="203.0.113.7", utilisateur="ubuntu",
                           cle="C:/Users/x/.ssh/id_ed25519_myiafactory")
@@ -131,7 +119,7 @@ class Base(unittest.TestCase):
         self.dits = []
         self.mur = [1_000_000.0]
         self.instantane = FauxInstantane()
-        garder_le_poste(self)
+        garder_le_poste(self, (tests_serveur.ATTENTES_SERVEUR,))
 
     def lancer(self, ssh, commande=("py", "-3.12", "-m", "unittest"), choisir=None, **k):
         def choisir_defaut(dossier, requises):
@@ -420,7 +408,8 @@ class TestCorrectifs(Base):
         self.assertEqual(self.notes, [])
 
     def test_arrets_au_serveur_sans_repli_et_notes(self):
-        attendus = {74: "disque, inodes ou taille du dossier de travail", 130: "arrêtée au serveur (signal)",
+        attendus = {74: "campagne arrêtée au serveur par l'enveloppe (disque, inodes, taille du dossier de travail, "
+                        "échéance ou état inattendu du conteneur) : le résultat est inconnu, rien n'est relancé", 130: "arrêtée au serveur (signal)",
                     124: "délai dépassé au serveur", 1: "l'enveloppe a échoué"}
         for code, texte in attendus.items():
             with self.subTest(code=code):
@@ -489,6 +478,24 @@ class TestCorrectifs(Base):
             self.lancer(FauxSsh(depots=[KeyboardInterrupt()]))
         self.assertFalse(os.path.exists(os.path.dirname(self.instantane.destinations[0])))
         self.assertEqual(self.poste.appels, [])
+
+    def test_travail_go_passe_en_huitieme_argument(self):
+        ssh = FauxSsh()
+        self.lancer(ssh)
+        self.assertTrue(ssh.appels_flux[0]["commande"].endswith(" projet-a -"))      # absent : défaut de l'enveloppe
+        ssh = FauxSsh()
+        self.lancer(ssh, travail_go=25)
+        self.assertTrue(ssh.appels_flux[0]["commande"].endswith(" projet-a - 25"))
+        for valeur in (0, 201, -1, True, "10", 10.0, "10; rm -rf ~"):
+            with self.subTest(valeur=valeur):
+                ssh = FauxSsh()
+                n = len(self.poste.appels)
+                self.assertEqual(self.lancer(ssh, travail_go=valeur), 0)
+                self.assertEqual(ssh.appels_octets + ssh.appels_flux, [])
+                self.assertEqual(len(self.poste.appels), n + 1)
+        ssh = FauxSsh()
+        self.assertEqual(self.lancer(ssh, travail_go=0, forcer=True), 4)
+        self.assertEqual(ssh.appels_octets + ssh.appels_flux, [])
 
     def test_validations_avant_tout_envoi(self):
         cas = [dict(places=5), dict(places=0), dict(places=True), dict(places="2"),

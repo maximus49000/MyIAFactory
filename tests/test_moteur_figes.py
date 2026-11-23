@@ -373,6 +373,8 @@ class VraisProcessus(unittest.TestCase):
             p.wait(10)
         except OSError:
             pass
+        if p.stdout is not None:
+            p.stdout.close()
 
     def faux_agent(self, code):
         """Le faux agent (un script Python qui lance son enfant puis dort) et son état, qui attend sa commande."""

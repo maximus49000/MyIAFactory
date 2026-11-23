@@ -41,8 +41,11 @@ class TestCapaciteTestsImage(unittest.TestCase):
         self.assertEqual(sc.BESOINS["tests-serveur"], ("tests-image",))
         self.assertEqual(sc.manquantes_pour(["tests-serveur"], {"base"}), ["tests-image"])
         self.assertEqual(sc.manquantes_pour(["tests-serveur"], set()), ["base", "tests-image"])
-        self.assertEqual(inst.FICHIERS_ETAPE["tests_image"], ("images/tests/Dockerfile", "images/tests/entree-tests.sh"))
-        self.assertEqual(inst.EMPREINTE_FICHIERS["tests_image"], inst.FICHIERS_ETAPE["tests_image"])
+        self.assertEqual(inst.FICHIERS_ETAPE["tests_image"], ("images/tests/Dockerfile", "images/tests/entree-tests.sh",
+                                                              "taches/lancer_tests.sh", "taches/commun.sh",
+                                                              "taches/tests_hote.py"))
+        self.assertEqual(inst.EMPREINTE_FICHIERS["tests_image"],                 # l'enveloppe hors de l'empreinte de l'image
+                         ("images/tests/Dockerfile", "images/tests/entree-tests.sh"))
         self.assertEqual(inst.MARQUEURS["tests-image"], ("tests_image", "$HOME/.myiafactory/tests-image.version"))
         self.assertEqual(inst.DELAIS_ETAPE_S["tests_image"], 900)
         texte = SCRIPT.read_text(encoding="utf-8")

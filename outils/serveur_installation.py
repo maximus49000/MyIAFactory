@@ -302,10 +302,14 @@ FICHIERS_ETAPE = {"emulateur_image": ("images/emulateur/Dockerfile", "images/emu
                   # sur l'hôte) : déposés avec l'étape, hors de l'empreinte de l'image (ils n'y entrent pas)
                   "agent_image": ("images/agent/Dockerfile", "images/agent/entree-agent.py", "images/agent/pont",
                                   "taches/enregistrer_jeton.sh", "taches/pont_hote.py"),
-                  "tests_image": ("images/tests/Dockerfile", "images/tests/entree-tests.sh")}
+                  # l'enveloppe hôte des campagnes (lancer_tests.sh), commun.sh qu'elle source et ses aides python3 :
+                  # déposés avec l'étape, hors de l'image et de son empreinte
+                  "tests_image": ("images/tests/Dockerfile", "images/tests/entree-tests.sh", "taches/lancer_tests.sh",
+                                  "taches/commun.sh", "taches/tests_hote.py")}
 # Fichiers du contexte de construction de l'image, dans l'ordre de l'empreinte (par défaut : tous ceux de l'étape).
 EMPREINTE_FICHIERS = {**FICHIERS_ETAPE,
-                      "agent_image": ("images/agent/Dockerfile", "images/agent/entree-agent.py", "images/agent/pont")}
+                      "agent_image": ("images/agent/Dockerfile", "images/agent/entree-agent.py", "images/agent/pont"),
+                      "tests_image": ("images/tests/Dockerfile", "images/tests/entree-tests.sh")}
 
 
 # Dépôt par une archive tar lue sur l'entrée standard : extraite dans un dossier temporaire privé (umask 077, mktemp -d) ;

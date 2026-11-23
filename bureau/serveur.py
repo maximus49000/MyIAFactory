@@ -84,8 +84,13 @@ TYPES = {".js": "text/javascript; charset=utf-8", ".mjs": "text/javascript; char
          ".webmanifest": "application/manifest+json; charset=utf-8", ".png": "image/png"}
 IMAGES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg"}
 IMAGE_MAX_OCTETS = 20 * 1024 * 1024
+MAQUETTE_MAX_OCTETS = 2 * 1024 * 1024
+# Une maquette HTML vient d'un agent : jamais servie sans cette politique (bac à sable sans origine, aucun réseau).
+MAQUETTE_CSP = ("sandbox allow-scripts; default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; "
+                "img-src data: blob:; font-src data:; media-src data: blob:; connect-src 'none'; form-action 'none'; "
+                "base-uri 'none'; frame-ancestors 'self'")
 LANCEMENT = Path("~/MyIAFactory/lancement.json")  # le drapeau du premier lancement, hors de tout dépôt
-ROUTES_PROJET = ("/api/couts", "/api/document", "/api/methode", "/api/etat", "/api/charge", "/api/conseil", "/api/facturation", "/api/kpi", "/api/image",
+ROUTES_PROJET = ("/api/couts", "/api/document", "/api/methode", "/api/etat", "/api/charge", "/api/conseil", "/api/facturation", "/api/kpi", "/api/image", "/api/maquette",
                  "/api/catalogue", "/api/livrable", "/api/telecharger", "/api/deport/apercu")
 # La fenêtre de validation : le téléchargement d'un livrable (toujours en pièce jointe) et le relais vers le site en cours.
 # Les décisions qui n'ont qu'une réponse (valider une étape, élargir un genre) : une deuxième réponse est refusée (409)
@@ -1593,6 +1598,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(404, {"erreur": "Projet inconnu."})
         if chemin == "/api/image":
             return self._image(projet, morceaux.query)
+        if chemin == "/api/maquette":
+            return self._maquette(projet, morceaux.query)
         if chemin == "/api/telecharger":
             return self._telecharger(projet, morceaux.query)
         if chemin == "/api/deport/apercu":
@@ -1678,6 +1685,66 @@ class Handler(BaseHTTPRequestHandler):
         except (OSError, ValueError):
             pass
         return introuvable()
+
+    def _maquette(self, projet, requete):
+        """Sert une maquette `.html` du projet (racines `images.racines`, ou racine du projet hors `.factory`/`.git`),
+        toujours avec la CSP stricte : bac à sable sans origine, sans réseau, sans cookie du bureau."""
+        def introuvable():
+            self._envoyer(404, json.dumps({"erreur": "Introuvable."}).encode("utf-8"), cache="no-store")
+
+        valeurs = parse_qs(requete, keep_blank_values=True).get("chemin", [])
+        if len(valeurs) != 1:
+            return introuvable()
+        brut = valeurs[0]
+        if (not brut or chr(0) in brut or Path(brut).is_absolute() or brut[0] in "/\\"
+                or ".." in Path(brut.replace("\\", "/")).parts or Path(brut).suffix.lower() != ".html"):
+            return introuvable()
+        regl, _ = projet.reglages()
+        base = Path(regl["dossier"])
+        conf = regl.get("images")
+        racines = conf.get("racines") if isinstance(conf, dict) else None
+        try:
+            cible = (base / brut).resolve()
+            permises = [(base / r).resolve() for r in (racines if isinstance(racines, list) else [])
+                        if isinstance(r, str) and r]
+            if base.name == ".factory":
+                projet_racine = base.parent.resolve()
+                try:
+                    interne = (projet_racine / brut).resolve().relative_to(projet_racine).parts
+                    if interne and interne[0].lower() not in (".factory", ".git"):
+                        permises.append(projet_racine)
+                        cible_projet = (projet_racine / brut).resolve()
+                    else:
+                        cible_projet = None
+                except ValueError:
+                    cible_projet = None
+            else:
+                cible_projet = None
+            for racine in permises:
+                for c in (cible, cible_projet):
+                    if c is None or c.suffix.lower() != ".html":
+                        continue
+                    try:
+                        c.relative_to(racine)
+                    except ValueError:
+                        continue
+                    if c.is_file() and c.stat().st_size <= MAQUETTE_MAX_OCTETS:
+                        return self._envoyer_maquette(c.read_bytes())
+        except (OSError, ValueError):
+            pass
+        return introuvable()
+
+    def _envoyer_maquette(self, corps):
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(corps)))
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Content-Security-Policy", MAQUETTE_CSP)
+        self.send_header("Referrer-Policy", "no-referrer")
+        self.end_headers()
+        if self.command != "HEAD":
+            self.wfile.write(corps)
 
     @staticmethod
     def _image_du_projet(base, brut):

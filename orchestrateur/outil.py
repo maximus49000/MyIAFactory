@@ -222,10 +222,19 @@ def chemins_d_images(images):
     return [rel.chemin_d_image(x) for x in images or []]
 
 
+MAQUETTES_HTML = (".html",)   # `cahier.maquette` seul : une page autonome, montrée dans un bac à sable (sans réseau)
+
+
 def images_montrables(chemins, cle):
-    """Refuse tout de suite une image que le bureau ne montrerait pas (SVG, WebP…), avec la marche à suivre."""
+    """Refuse tout de suite une image que le bureau ne montrerait pas (SVG, WebP…), avec la marche à suivre.
+    `cahier.maquette` accepte en plus une page `.html` autonome."""
+    acceptees = IMAGES_MONTREES + (MAQUETTES_HTML if cle == "cahier.maquette" else ())
     for c in chemins:
-        if Path(c).suffix.lower() not in IMAGES_MONTREES:
+        if Path(c).suffix.lower() not in acceptees:
+            if cle == "cahier.maquette":
+                raise Refus(f"« {cle} » : « {c} » n'est ni une image PNG ou JPEG, ni une page HTML, et le bureau ne montre que "
+                            "celles-là. Convertissez-la en PNG (par exemple une capture de son rendu) ou donnez une page HTML "
+                            "autonome (un seul fichier, styles et scripts en ligne, sans ressource externe).")
             raise Refus(f"« {cle} » : « {c} » n'est pas une image PNG ou JPEG, et le bureau ne montre que celles-là. "
                         "Convertissez-la en PNG (par exemple une capture de son rendu), puis donnez ce chemin.")
     return chemins

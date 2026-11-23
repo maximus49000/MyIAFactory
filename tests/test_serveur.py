@@ -403,6 +403,74 @@ class TestServeur(AvecServeur):
             return
         self.assertEqual(self.image("assets/lien.png")[0].status, 404)    # un lien qui sort du projet
 
+    # -- les maquettes HTML ------------------------------------------------
+    CSP_MAQUETTE = ("sandbox allow-scripts; default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; "
+                    "img-src data: blob:; font-src data:; media-src data: blob:; connect-src 'none'; form-action 'none'; "
+                    "base-uri 'none'; frame-ancestors 'self'")
+
+    def maquettes(self):
+        self.images()
+        dossier = self.tmp / "demo"
+        (dossier / "images" / "m.html").write_text("<script>1</script><p>maquette</p>", encoding="utf-8")
+        (dossier / "images" / "gros.html").write_bytes(b"x" * (2 * 1024 * 1024 + 1))
+        (dossier / "images" / "juste.html").write_bytes(b"x" * (2 * 1024 * 1024))
+        (dossier / "images" / "m.svg").write_text("<svg/>", encoding="utf-8")
+        (dossier / "dehors.html").write_text("secret", encoding="utf-8")
+        (self.tmp / "secret.html").write_text("secret", encoding="utf-8")
+
+    def maquette(self, chemin):
+        return self.req("GET", "/api/maquette?chemin=" + chemin)
+
+    def test_maquette_servie_avec_csp_stricte(self):
+        self.maquettes()
+        r, data = self.maquette("images/m.html")
+        self.assertEqual(r.status, 200)
+        self.assertEqual(data, b"<script>1</script><p>maquette</p>")
+        self.assertEqual(r.getheader("Content-Type"), "text/html; charset=utf-8")
+        self.assertEqual(r.getheader("X-Content-Type-Options"), "nosniff")
+        self.assertEqual(r.getheader("Cache-Control"), "no-store")
+        self.assertEqual(r.getheader("Content-Security-Policy"), self.CSP_MAQUETTE)
+        self.assertEqual(r.getheader("Referrer-Policy"), "no-referrer")
+        self.assertEqual(self.maquette("images/juste.html")[0].status, 200)
+
+    def test_maquette_refus(self):
+        self.maquettes()
+        absolu = str(self.tmp / "demo" / "dehors.html").replace("\\", "/")
+        for chemin in ("images/gros.html", "images/m.svg", "images/notes.txt", "images/a%20b%26c%23d.png", "../secret.html",
+                       "images/../../secret.html", "images/%2e%2e/%2e%2e/secret.html", "..%2Fsecret.html", "dehors.html",
+                       absolu, "/etc/passwd", "", "images/m.html%00.png", "images/absente.html", "images"):
+            r, data = self.maquette(chemin)
+            self.assertEqual(r.status, 404, chemin)
+            self.assertNotIn(b"secret", data, chemin)
+            self.assertIsNone(r.getheader("Content-Security-Policy") if r.status == 200 else None)
+
+    def test_maquette_lien_symbolique_sortant(self):
+        self.maquettes()
+        try:
+            os.symlink(self.tmp / "secret.html", self.tmp / "demo" / "images" / "lien.html")
+        except (OSError, NotImplementedError):
+            self.skipTest("création de lien symbolique non permise")
+        r, data = self.maquette("images/lien.html")
+        self.assertEqual(r.status, 404)
+        self.assertNotIn(b"secret", data)
+
+    def test_maquette_du_projet_hors_des_racines(self):
+        jeu = self.tmp / "jeu"
+        (jeu / ".factory").mkdir(parents=True)
+        (jeu / "pieces" / "f1").mkdir(parents=True)
+        (jeu / ".git").mkdir()
+        (jeu / "pieces" / "f1" / "m.html").write_text("<p>ok</p>", encoding="utf-8")
+        (jeu / ".factory" / "x.html").write_text("secret", encoding="utf-8")
+        (jeu / ".git" / "x.html").write_text("secret", encoding="utf-8")
+        (jeu / ".factory" / "reglages.json").write_text(json.dumps({"images": {"racines": ["autre"]}}), encoding="utf-8")
+        self.regl = jeu / ".factory" / "reglages.json"
+        self.redemarrer()
+        r, data = self.maquette("pieces/f1/m.html")
+        self.assertEqual((r.status, data), (200, b"<p>ok</p>"))
+        self.assertEqual(r.getheader("Content-Security-Policy"), self.CSP_MAQUETTE)
+        for chemin in (".factory/x.html", ".git/x.html", "../x.html"):
+            self.assertEqual(self.maquette(chemin)[0].status, 404, chemin)
+
     def test_image_lien_vers_non_image(self):
         self.images()
         try:

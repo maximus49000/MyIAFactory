@@ -1702,7 +1702,6 @@ class TestScriptsReels(BaseLanceur):
         tout = b"".join(p.read_bytes() for p in self.dest.rglob("*") if p.is_file())
         self.assertNotIn(b"SECRET DU SERVEUR", tout)
 
-    @plateforme_tests.pas_encore_linux("script réel sous bash avec faux sudo/docker : échoue au conteneur Linux, cause à préciser")
     def test_etat_reel_veilleur_mort_nettoie(self):
         self.fiche()
         self.ecrire_etat(etat="en_cours", statut=None, fin=None)
@@ -1744,7 +1743,6 @@ class TestScriptsReels(BaseLanceur):
         self.assertEqual(r["etat"], "arretee")
         self.assertEqual(sorted(p.name for p in (self.tache / "entree").iterdir()), ["argv.json"])
 
-    @plateforme_tests.pas_encore_linux("script réel sous bash avec faux sudo/docker : échoue au conteneur Linux, cause à préciser")
     def test_arreter_reel_d_un_agent_laisse_l_arret_au_veilleur(self):
         """Tâche d'agent : jamais de docker stop -t 10 (le veilleur arrête avec -t 60, le temps que l'entrée conclue) ;
         une tâche d'émulation garde le sien."""
@@ -1758,7 +1756,6 @@ class TestScriptsReels(BaseLanceur):
         st.arreter(ID1, dossier=self.dossier, ssh=self.ssh)
         self.assertIn(f"docker stop -t 10 tache-{ID1}", self.ssh.docker())
 
-    @plateforme_tests.pas_encore_linux("script réel sous bash avec faux sudo/docker : échoue au conteneur Linux, cause à préciser")
     def test_etat_reel_absent_et_arreter_reel_idempotent(self):
         self.fiche()
         self.assertEqual(st.etat(ID1, dossier=self.dossier, ssh=self.ssh)["etat"], "inconnu")
@@ -1835,7 +1832,6 @@ class TestScriptsReels(BaseLanceur):
         self.assertEqual(m["statut"], "ok")
         self.assertFalse((self.dest / "captures").exists())
 
-    @plateforme_tests.pas_encore_linux("script réel sous bash avec faux sudo/docker : échoue au conteneur Linux, cause à préciser")
     def test_capture_reelle_unique_par_le_relais(self):
         self.fiche(limites={"captures": 5})
         self.ecrire_etat(etat="en_cours", statut=None, fin=None)
@@ -1904,7 +1900,6 @@ printf '{"id": "%s", "etat": "%s", "statut": "ok", "debut": "2026-11-19T10:15:00
         v.wait(30)
         self.assertEqual((code, erreur), (0, ""))
 
-    @plateforme_tests.pas_encore_linux("script réel sous bash avec faux sudo/docker : échoue au conteneur Linux, cause à préciser")
     def test_chaque_modele_passe_bash_n_et_s_execute(self):
         """Tous les scripts distants du module : syntaxe (bash -n) puis exécution réelle, sans bruit sur stderr."""
         modeles = {n for n, v in vars(st).items() if isinstance(v, str) and v.startswith("# tache:")}

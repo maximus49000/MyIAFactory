@@ -271,7 +271,7 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat: etatBr
       // est toujours atteignable. Elle lit elle-même son état au cache du bureau ; le POST est refusé à distance.
       if (e.agir === true && typeof fetch === "function") monterCarteServeur(contenu);
       // Les serveurs de travail déclarés (génériques) : sous la carte « Serveur », même condition ; lecture seule au chargement.
-      if (e.agir === true && typeof fetch === "function") monterEcranServeurs(contenu).catch(() => {});
+      if (e.agir === true && typeof fetch === "function") monterEcranServeurs(contenu, {ouvrirReglages: () => ouvrirPanneau("reglages", null)}).catch(() => {});
       avecReglage = !(e.services || []).some((s) => s.id === "facturation");
     }
     if (avecReglage) contenu.append(blocReglage());

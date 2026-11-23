@@ -85,7 +85,7 @@ TYPES_DEMANDE = ("bouton", "deplacer", "retour", "lecon", "challenge", "solution
                  "organisation", "genre_fonctionnalite", "environnement", "elargir_genre", "valider_etape", "partenaire_regle", "partenaire_inscrit", "faire_chez_partenaire", "partenaires_actualiser",
                  "partenaires_maj", "installer_outil", "parallelisme", "recruter", "depot_git", "outil_agent", "accord_agent", "regle_projet",
                  "serie_arretee", "fin_vue", "fable_tache", "passer_polyvalent", "proposer_decoupage", "decoupage_lieux",
-                 "lieu_etape", "regroupement_etape", "blocage_analyse", "anomalie", "livrer_maintenant",
+                 "lieu_etape", "regroupement_etape", "blocage_analyse", "anomalie", "livrer_maintenant", "publier_livrable",
                  "question", "question_approfondir")
 AGENT_ORCHESTRATEUR = "orchestrateur"   # les appels de jugement du moteur : connu de chaque projet, sans fiche
 MODELES_INTERDITS = ("Fable",)   # un outil ne choisit jamais Fable
@@ -3589,6 +3589,56 @@ def cmd_recruter(ctx, e):
     return {"ok": True, "agents": [{k: x[k] for k in ("cle", "prenom", "role", "modele", "lieu")} for x in nouvelles]}
 
 
+def _fichier_livrable(ctx, chemin):
+    """Le fichier d'un livrable : son chemin compté depuis le dossier du projet, sinon depuis la factory."""
+    c = Path(chemin)
+    for base in (_projet(ctx), Path(ctx.f["base"])):
+        p = c if c.is_absolute() else base / c
+        if p.is_file():
+            return p
+    return c if c.is_absolute() else _projet(ctx) / c
+
+
+def cmd_publier(ctx, e):
+    """`{fonctionnalite?: id, relancer?: bool}` : publie en releases GitHub privées les livrables téléchargeables (apk, zip…)
+    de l'avis de fin des fonctionnalités terminées (`installation.publication`). Sans `fonctionnalite`, toutes celles dont
+    la fin n'est pas encore publiée ; `relancer` refait celles qui avaient échoué. L'envoi se fait hors du verrou du
+    suivi ; le résultat est noté dans `fin.publication` et le lien de chaque release dans `fin.livrables[].lien`. Un
+    échec est dit en clair (jamais une erreur) : la livraison locale n'en dépend pas. Rend `{fonctionnalites: [...]}`."""
+    from installation import publication
+    cible = e.get("fonctionnalite")
+    if cible is not None and not isinstance(cible, str):
+        raise Refus("« fonctionnalite » est un identifiant.")
+    s = ctx.suivi.lire()
+    a_faire = []
+    for f in s["fonctionnalites"]:
+        fin = f.get("fin")
+        if not isinstance(fin, dict) or (cible and f["id"] != cible):
+            continue
+        pub = fin.get("publication")
+        if isinstance(pub, dict) and (pub.get("fait") or not e.get("relancer")) and not cible:
+            continue
+        if any(publication.publiable(x.get("chemin")) for x in fin.get("livrables") or []):
+            a_faire.append((f["id"], [dict(x) for x in fin.get("livrables") or []]))
+    projet = _projet(ctx)
+    rendu = []
+    for fid, livrables in a_faire:
+        r = publication.publier_livrables(projet, livrables, lambda c: _fichier_livrable(ctx, c), GIT,
+                                          GH or publication.executer_gh, GH or publication.executer_gh_long)
+        with ctx.suivi.transaction() as s2:
+            f = _fonc(s2, fid)
+            if isinstance(f.get("fin"), dict):
+                liens = {x["chemin"]: x.get("url") for x in r["releases"] if x.get("url")}
+                for x in f["fin"].get("livrables") or []:
+                    if liens.get(x.get("chemin")):
+                        x["lien"] = liens[x["chemin"]]
+                f["fin"]["publication"] = {"t": su.maintenant(), "fait": r["fait"], "texte": r["texte"][:600],
+                                           "releases": [{k: x[k] for k in ("tag", "url", "fait") if k in x}
+                                                        for x in r["releases"]]}
+        rendu.append({"id": fid, "fait": r["fait"], "texte": r["texte"]})
+    return {"fonctionnalites": rendu}
+
+
 def cmd_depot(ctx, e):
     """`{action: creer, confirme: true, allegement?: true}` : le clic « Créer le dépôt Git » du Directeur (jamais sans lui) ;
     `allegement` : son accord aux exclusions proposées pour un dossier trop lourd. Dépôt git
@@ -4121,7 +4171,7 @@ COMMANDES = {
     "organisation": (cmd_organisation, "obligatoire"), "lots": (cmd_lots, "obligatoire"), "detail": (cmd_detail, "obligatoire"), "document": (cmd_document, "obligatoire"), "ecrire": (cmd_ecrire, "obligatoire"), "usage": (cmd_usage, "obligatoire"),
     "partenaires": (cmd_partenaires, "obligatoire"), "parallelisme": (cmd_parallelisme, "obligatoire"),
     "recruter": (cmd_recruter, "obligatoire"), "equipe": (cmd_equipe, "aucune"),
-    "polyvalents": (cmd_polyvalents, "obligatoire"), "depot": (cmd_depot, "obligatoire"), "regles": (cmd_regles, "obligatoire"), "anomalies": (cmd_anomalies, "facultative"), "questions": (cmd_questions, "facultative"),
+    "polyvalents": (cmd_polyvalents, "obligatoire"), "depot": (cmd_depot, "obligatoire"), "publier": (cmd_publier, "obligatoire"), "regles": (cmd_regles, "obligatoire"), "anomalies": (cmd_anomalies, "facultative"), "questions": (cmd_questions, "facultative"),
     "lieux": (cmd_lieux, "obligatoire"),
 }
 

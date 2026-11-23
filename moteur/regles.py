@@ -219,6 +219,7 @@ class Projet:
         self.lecons_auto = False          # réglage `lecons_auto` : les leçons proposées sont validées d'elles-mêmes
         self.analyse_blocages = False     # réglage `analyse_blocages` (vrai par défaut à l'ouverture) : le Chef analyse
         self.livraison_sur_demande = False   # réglage `livraison_sur_demande` : la livraison attend « Livrer maintenant »
+        self.livraison_github = False        # réglage `livraison_github` : les livrables terminés partent en release GitHub
         self.une_session_moyenne = False     # réglage `une_session_moyenne` : code, tests et revue d'une évolution moyenne
         self.ligne_a_dire = None     # dite une seule fois au bureau, dans la réponse de la première demande traitée
         base = self.factory.resolve().parent
@@ -5835,6 +5836,7 @@ def avancer(projet, etat):
             lancer(projet, "decision", {"action": "lever", "id": d["id"]})
     _liberer_les_lots_orphelins(projet, etat, _etat(projet))
     livrer_si_calme(projet, etat, force=bool(etat.pop("livrer_maintenant", False)))
+    _publier_les_livrables(projet)
     actions += _demarrer_en_attente(projet, etat, None)
     if not projet.pause_globale:
         _noter_les_places_libres(projet, etat)
@@ -6215,6 +6217,18 @@ def _sur_livrer_maintenant(projet, demande, etat):
 _SUR["livrer_maintenant"] = _sur_livrer_maintenant
 
 
+def _sur_publier_livrable(projet, demande, etat):
+    """Le clic « Publier maintenant » : les livrables terminés partent en releases GitHub, ceux qui avaient échoué aussi
+    (`lancer publier`, avec `relancer`), même si la livraison automatique est désactivée."""
+    r = lancer(projet, "publier", {"relancer": True})
+    textes = [x["texte"] for x in r.get("fonctionnalites") or []]
+    _terminer(projet, {"demande": demande["id"]}, " ".join(textes) or "Aucun livrable téléchargeable à publier.")
+    return []
+
+
+_SUR["publier_livrable"] = _sur_publier_livrable
+
+
 # --- Les jugements : leur décision revient ici.
 
 # --- L'analyse d'un blocage par le Chef (jugement `analyser_blocage`).
@@ -6249,6 +6263,28 @@ def _une_session_active(projet):
         except reglages_du_bureau.ReglagesInvalides:
             pass
     return getattr(projet, "une_session_moyenne", False) is True
+
+
+def _livraison_github(projet):
+    """Le réglage `livraison_github` (faux si absent), relu à chaque passage."""
+    if getattr(projet, "fichier_reglages", None) is not None:
+        try:
+            return reglages_du_bureau.charger(projet.fichier_reglages)["livraison_github"] is True
+        except reglages_du_bureau.ReglagesInvalides:
+            pass
+    return getattr(projet, "livraison_github", False) is True
+
+
+def _publier_les_livrables(projet):
+    """Réglage « Livrer automatiquement sur GitHub » : les livrables des fonctionnalités terminées pas encore publiés
+    partent en releases (`lancer publier`). Un échec est noté dans l'avis de fin (jamais refait seul : « Publier
+    maintenant » le relance) ; il ne bloque jamais le passage."""
+    if not _livraison_github(projet):
+        return
+    try:
+        lancer(projet, "publier", {})
+    except (Refus, ErreurMoteur):
+        pass
 
 
 def _livraison_sur_demande(projet):

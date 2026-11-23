@@ -544,6 +544,25 @@ n'est pas encore commité), puis le dépôt GitHub **privé** avec `gh repo crea
 Une origine existante n'est jamais remplacée. Rend `{"fait", "url", "texte"}` (le lien, ou la raison : gh absent, gh
 non connecté — « gh auth login » —, git absent, commit refusé) ; noté dans `depot-git.json` (relevé : `recrutement.depot.essai`).
 
+Un dossier trop lourd pour GitHub (un fichier de plus de 50 Mo, ou plus de 1 Go à ajouter) n'est jamais ajouté à
+l'aveugle : sans `allegement`, rien n'est ajouté et le résultat porte `allegement` `{regles, avant_mo, apres_mo, gros}`
+(les règles `.gitignore` proposées : dossiers de build, artefacts, sauvegardes, gros fichiers) ; avec `"allegement":
+true` (le clic « Accepter l'allègement et créer le dépôt »), les règles sont écrites au `.gitignore` puis le dépôt est créé.
+
+### `publier`
+
+Entrée : `{"fonctionnalite"?: id, "relancer"?: bool}`. Le suivi des livrables sur GitHub (`installation/publication.py`) :
+les livrables téléchargeables (apk, aab, zip, exe, msi, dmg, ipa) de l'avis de fin (`fin.livrables`) des
+fonctionnalités terminées sont attachés à une **release GitHub privée** du projet, `v<numéro du fichier>`
+(`FM_Stats_121.apk` → `v121`, sinon `v<date>`), jamais dans l'historique git (2 Go au plus par fichier). Une release qui
+existe déjà n'est pas refaite. Sans `fonctionnalite`, toutes celles dont la fin n'est pas encore publiée ; `relancer`
+refait celles qui avaient échoué. L'envoi se fait hors du verrou du suivi ; le résultat est noté dans `fin.publication`
+`{t, fait, texte, releases: [{tag, url, fait}]}` et le lien de chaque release dans `fin.livrables[].lien`. Un échec (projet
+pas sur GitHub, gh absent ou déconnecté, fichier trop gros) est dit en clair et ne bloque jamais la livraison locale.
+Rend `{fonctionnalites: [{id, fait, texte}]}`. Le réglage `livraison_github` (« Livrer automatiquement sur GitHub », décoché
+par défaut, dans la configuration git du bureau) fait lancer cette commande par le moteur à chaque passage ; la demande
+`publier_livrable` (« Publier maintenant », `confirme`) la lance sur un clic, avec `relancer`.
+
 ### `regles`
 
 Entrée : `{"action": "lister" | "ajouter" | "modifier" | "supprimer", …}`. Les règles du projet

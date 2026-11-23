@@ -262,6 +262,16 @@ export function creerPlan(services, colonnes, options = {}) {
     batiment: {largeur: W, profondeur: H},
     poste, cafe, chemin, pieceDe, postit,
     aService: (id) => parService.has(id),
+    // Service où poser un agent qui travaille sans service connu : « développement » s'il existe, sinon le premier.
+    serviceParDefaut() {
+      const norme = (s) => String(s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+      const ids = [...parService.keys()];
+      const dev = ids.find((id) => {
+        const nom = norme(services.find((s) => s.id === id)?.nom);
+        return /^dev(eloppement)?$/.test(norme(id)) || nom.includes("developpement") || nom === "dev";
+      });
+      return dev ?? ids[0] ?? null;
+    },
     // Le nombre de colonnes a changé : elles se partagent la largeur du tableau tel qu'il est construit.
     adapterColonnes(n) {
       kanban.colonnes = Math.max(1, n);

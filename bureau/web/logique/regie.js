@@ -201,7 +201,7 @@ export class Regie {
     }
     if (a.chef) return {...this.plan.chef, action: "debout"};
     if (this._postes.has(a.id)) {
-      const p = this.plan.poste(this._service(a), this._postes.get(a.id).i);
+      const p = this.plan.poste(this._postes.get(a.id).service, this._postes.get(a.id).i);
       return {...p, action: p.assis ? "assis" : "debout"};
     }
     return {...this.plan.cafe(this._cafe.get(a.id) ?? 0), action: "cafe"};
@@ -219,8 +219,11 @@ export class Regie {
   }
 
   _placer(a) {
-    const service = this._service(a);
-    const travaille = !a.chef && (a.statut === "travail" || a.statut === "sans_nouvelles") && this.plan.aService(service);
+    const actif = !a.chef && (a.statut === "travail" || a.statut === "sans_nouvelles");
+    // Un agent qui travaille est toujours à un poste : sans service connu, celui par défaut du plan.
+    let service = this._service(a);
+    if (actif && !this.plan.aService(service)) service = this.plan.serviceParDefaut();
+    const travaille = actif && this.plan.aService(service);
     if (travaille) {
       this._cafe.delete(a.id);
       // Changement de service : la place gardée était celle de l'ancien service.

@@ -211,3 +211,39 @@ test("un ancien agent (retiré de l'équipe) reste au café, jamais au travail",
   assert.equal(a.agent.retire, true);
   avancerJusqua(r, () => a.action === "cafe", 60);
 });
+
+test("un agent qui travaille sans service connu est à un poste, jamais au café", () => {
+  const r = new Regie(plan);
+  const base = copie(E1);
+  const dev1 = base.agents.find((a) => a.id === "dev1");
+  Object.assign(dev1, {polyvalent: true, modele: "?", service: null, taches: ["t1"], bulle: "Demande : construire"});
+  Object.assign(base.taches.find((t) => t.id === "t1"), {etape: "demande", role: null});
+  r.appliquer(base, []);
+  const a = r.acteurs.get("dev1");
+  assert.ok(a.action === "assis" || a.action === "debout", `action ${a.action}`);
+  assert.ok(pres(a, plan.poste("dev", 0)), "au service par défaut du plan (dev)");
+  // libre : retour au café
+  const e2 = statut(copie(base), "dev1", "libre");
+  r.appliquer(e2, changements(base, e2));
+  avancerJusqua(r, () => r.acteurs.get("dev1").action === "cafe", 30);
+});
+
+test("un agent libre sans service reste au café, un agent avec service garde son poste", () => {
+  const r = new Regie(plan);
+  const e = copie(E1);
+  e.agents.push({...e.agents.find((a) => a.id === "qa1"), id: "x1", prenom: "x1", service: null, polyvalent: true, statut: "libre"});
+  r.appliquer(e, []);
+  assert.equal(r.acteurs.get("x1").action, "cafe");
+  assert.ok(pres(r.acteurs.get("dev1"), plan.poste("dev", 0)));
+});
+
+test("deux agents qui travaillent sans service ont deux postes différents", () => {
+  const r = new Regie(plan);
+  const e = copie(E1);
+  for (const id of ["dev1", "qa1"]) Object.assign(e.agents.find((a) => a.id === id), {service: null, polyvalent: true, statut: "travail", taches: []});
+  r.appliquer(e, []);
+  const a = r.acteurs.get("dev1"), b = r.acteurs.get("qa1");
+  assert.notEqual(a.action, "cafe");
+  assert.notEqual(b.action, "cafe");
+  assert.ok(a.x !== b.x || a.z !== b.z, "deux postes distincts");
+});

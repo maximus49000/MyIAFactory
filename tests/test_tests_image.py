@@ -92,6 +92,12 @@ class TestDockerfileTests(unittest.TestCase):
         self.assertIn("COPY entree-tests.sh /usr/local/bin/entree-tests.sh", self.code)
         self.assertIn("chmod 0555 /usr/local/bin/entree-tests.sh", self.code)
 
+    def test_venv_pour_l_echauffement_pip(self):
+        # J5 (2026-11-24) : l'échauffement pip (`tests_hote.py --echauffer pip`) crée `python3 -m venv` ; sans python3-venv
+        # (ensurepip), Ubuntu refuse et l'échauffement échoue : vérifié aussi à la construction.
+        self.assertRegex(self.code, r"(?<![\w-])python3-venv(?![\w-])")
+        self.assertIn("python3 -m venv /tmp/essai-venv", self.code)
+
     def test_sans_outil_reseau_ni_secret(self):
         self.assertIn("apt-get purge -y curl", self.code)                          # curl ne sert qu'à la construction
         installes = " ".join(re.findall(r"apt-get install ([^&\\]*)", self.code))

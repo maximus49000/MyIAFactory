@@ -635,6 +635,9 @@ if [ "$FLUTTER" = 1 ]; then                        # aucun SDK de l'hôte en bin
       echec "Dossier Flutter non écrit (~/taches/$ID/dossier-flutter)."
     COMMANDE+=(--mount "type=bind,src=$DOSSIER/dossier-flutter,dst=/opt/outils/dossier-flutter,readonly")
   fi
+  # Le choix de signature du projet (tâche 15d), lu par `construire-apk` : poste_signe -> release NON signée.
+  printf '%s\n' "$SIGNATURE" > "$DOSSIER/signature" || echec "Choix de signature non écrit (~/taches/$ID/signature)."
+  COMMANDE+=(--mount "type=bind,src=$DOSSIER/signature,dst=/opt/outils/signature,readonly")
   COMMANDE+=(-e AGENT_FLUTTER=1 -e "PATH=/opt/outils:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin")
 fi
 if [ "$SIGNATURE" = debug_serveur ]; then      # seulement avec ce choix du projet ; lecture seule

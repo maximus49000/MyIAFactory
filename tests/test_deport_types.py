@@ -27,7 +27,8 @@ class TestCatalogues(unittest.TestCase):
         self.assertEqual(GENERIQUE["apk"]["produit"], "apk")
 
     def test_android_valeurs_du_catalogue(self):
-        self.assertEqual(list(ANDROID), ["apk", "tests", "lint", "emulateur", "release", "recette-emulateur"])
+        self.assertEqual(list(ANDROID), ["apk", "tests", "lint", "emulateur", "release", "release-signe",
+                                         "recette-emulateur"])
         self.assertNotIn("charge", ANDROID)
         self.assertEqual(ANDROID["apk"]["commande"], "./gradlew assembleDebug")
         self.assertEqual(ANDROID["apk"]["artefact"], "app/build/outputs/apk/debug/*.apk")

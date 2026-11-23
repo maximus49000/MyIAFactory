@@ -3,7 +3,8 @@
 Reste compatible Python 3.9 : le code déporté est aussi lancé par les agents.
 """
 
-from .deport_types import GENERIQUE, ROUTEES_AU_SERVEUR, SERVIES_AU_SERVEUR, catalogue_union, sans_poste
+from .deport_types import (GENERIQUE, ROUTEES_AU_SERVEUR, SERVIES_AU_SERVEUR, SIGNEES_AU_POSTE, catalogue_union,
+                           sans_poste)
 
 # Vue d'ensemble du catalogue générique (compatibilité) : ce que chaque action produit et consomme.
 ACTIONS = {nom: {"produit": e["produit"], "consomme": list(e["consomme"])} for nom, e in GENERIQUE.items()}
@@ -35,7 +36,8 @@ def valider_lieux(lieux, etape_serveur=False, catalogue=GENERIQUE):
         if lieu not in entree["lieux"]:
             raison = entree["bientot"] or "ce lieu n'est pas prévu pour ce type de projet"
             raise ValueError("« %s » ne tourne pas au lieu « %s » : %s." % (action, _NOMS_LIEUX[lieu], raison))
-        if lieu not in permis and not (lieu == "serveur" and action in SERVIES_AU_SERVEUR + ROUTEES_AU_SERVEUR):
+        if lieu not in permis and not (lieu == "serveur"
+                                       and action in SERVIES_AU_SERVEUR + ROUTEES_AU_SERVEUR + SIGNEES_AU_POSTE):
             raise ValueError("Le lieu « %s » n'est pas encore disponible pour « %s »." % (lieu, action))
     return dict(lieux)
 

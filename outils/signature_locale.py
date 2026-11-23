@@ -7,6 +7,8 @@ d'un fichier ou de l'environnement de l'appelant, jamais journalisé ni stocké 
 de signature (jamais sur sa ligne de commande). Une signature n'est jamais lancée par un agent : sans terminal interactif, refus.
 
     py -3.12 lancer.py signer-release --artefact <apk non signé ou aab> --keystore <coffre> --alias <alias> --sortie <fichier> [--sdk <dossier du SDK>]
+    py -3.12 lancer.py signer-release --dossier <projet> --keystore … --alias … --sortie …   (la plus récente release non
+        signée rapatriée dans le projet : `construire-apk` au serveur la range sous build/app/outputs/flutter-apk/)
 """
 import getpass
 import os
@@ -117,20 +119,23 @@ def signer(artefact, keystore, alias, sortie, mot_de_passe, sdk=None, outils=Non
 
 
 def main(argv=None, saisir=getpass.getpass, interactif=None, executer=subprocess.run, outils=None) -> int:
-    """`signer-release --artefact A --keystore K --alias L --sortie S [--sdk D]` ; code 0 fait, 1 refusé, 2 appel invalide.
-    Le mot de passe est demandé au poste (`saisir`) ; sans terminal interactif, refus."""
+    """`signer-release (--artefact A | --dossier P) --keystore K --alias L --sortie S [--sdk D]` ; code 0 fait, 1 refusé,
+    2 appel invalide. `--dossier` : la plus récente release non signée sous le projet (`chercher_artefact`). Le mot de passe
+    est demandé au poste (`saisir`) ; sans terminal interactif, refus."""
     argv = list(sys.argv[1:] if argv is None else argv)
+    usage = ("Usage : signer-release (--artefact <apk non signé ou aab> | --dossier <projet>) --keystore <coffre> "
+             "--alias <alias> --sortie <fichier> [--sdk <SDK>]")
     valeurs, i = {}, 0
     while i < len(argv):
         nom = argv[i]
-        if nom not in ("--artefact", "--keystore", "--alias", "--sortie", "--sdk") or i + 1 >= len(argv):
-            print("Usage : signer-release --artefact <apk non signé ou aab> --keystore <coffre> --alias <alias> "
-                  "--sortie <fichier> [--sdk <SDK>]", file=sys.stderr)
+        if nom not in ("--artefact", "--dossier", "--keystore", "--alias", "--sortie", "--sdk") or i + 1 >= len(argv) \
+                or nom[2:] in valeurs:
+            print(usage, file=sys.stderr)
             return 2
         valeurs[nom[2:]] = argv[i + 1]
         i += 2
-    if not all(k in valeurs for k in ("artefact", "keystore", "alias", "sortie")):
-        print("Usage : signer-release --artefact … --keystore … --alias … --sortie … [--sdk …]", file=sys.stderr)
+    if not all(k in valeurs for k in ("keystore", "alias", "sortie")) or ("artefact" in valeurs) == ("dossier" in valeurs):
+        print(usage, file=sys.stderr)
         return 2
     if interactif is None:
         interactif = bool(sys.stdin and sys.stdin.isatty())
@@ -139,6 +144,9 @@ def main(argv=None, saisir=getpass.getpass, interactif=None, executer=subprocess
               file=sys.stderr)
         return 1
     try:
+        if "dossier" in valeurs:
+            valeurs["artefact"] = str(chercher_artefact(valeurs["dossier"]))
+            print("Release à signer : " + valeurs["artefact"])
         mot_de_passe = saisir("Mot de passe du coffre de clés (non enregistré) : ")
         signer(valeurs["artefact"], valeurs["keystore"], valeurs["alias"], valeurs["sortie"], mot_de_passe,
                sdk=valeurs.get("sdk"), outils=outils, executer=executer)

@@ -65,7 +65,8 @@ import github_actions  # noqa: E402
 from bureau import deport_conso  # noqa: E402
 from bureau.deport import a_attendre, lieu_effectif  # noqa: E402
 from bureau.registre import lieux_du_type  # noqa: E402
-from bureau.deport_types import (MSG_REGLEZ_SERVEUR, SERVIES_AU_SERVEUR, catalogue_du_projet,  # noqa: E402
+from bureau.deport_types import (MSG_RELEASE_SIGNE, MSG_REGLEZ_SERVEUR, SERVIES_AU_SERVEUR,  # noqa: E402
+                                 SIGNEES_AU_POSTE, catalogue_du_projet,
                                  racine_du_projet, refus_accord, refus_route, routee_au_serveur, servie_au_serveur)
 
 BUREAU = Path("~/MyIAFactory/bureau.json").expanduser()
@@ -583,6 +584,9 @@ def main(argv=None, executer_poste=campagne.executer, gh=github_actions, git=_gi
     if action not in catalogue:
         print("Action inconnue pour ce projet : « %s » (attendu : %s)." % (action, ", ".join(catalogue)),
               file=sys.stderr)
+        return 2
+    if action in SIGNEES_AU_POSTE:      # jamais lancée ici : aucun agent ne signe ; la marche à suivre
+        print(MSG_RELEASE_SIGNE, file=sys.stderr)
         return 2
     au_serveur = servie_au_serveur(action, catalogue)
     if not au_serveur and any(opt[k] is not None for k in OPTIONS_RECETTE):

@@ -169,6 +169,13 @@ Exigences (maquette validée) :
 
 ## PHASE 2 — les autres réglages et le moteur
 
+**Acquis de la phase 1 que la phase 2 utilise (branche `page-reglages`, tête c56c6d2) :** `bureau/registre.py` (`NIVEAUX`, `Reglage`, `REGISTRE = ()`, `valeur_effective`, `lieux_effectifs`, `lieux_du_type`) ; `bureau/reglages.py` (`lire_bureau` rend `reglages`, `types`, `deport_lieux_explicites`, `ignores` — lecture **tolérante** des clés `reglages`/`types` ; `fixer_niveau_bureau(chemin_bureau, chemin_cle, valeur|None)` qui **ne valide pas** ; `effacer_cle`) ; `bureau/serveur.py` (`Projet.reglages_page()`, `poser_reglage(niveau, id_, valeur)` piloté par la table `_ecrivains()` et `_poser_reglage_declare` pour les entrées du REGISTRE, route `POST /api/reglages/niveau` avec 500 JSON en cas d'`OSError`, lignes publiées avec `defaut`, `servie_au_serveur`, `applicable`, `global_disponible`, `type_disponible`) ; `bureau/web/ui/reglages.js` (lignes `forme: "booleen"` déjà rendues en case à cocher avec `defaut`, cadenas « Projet seulement », « hérité ») ; docs `docs/reglages.md`.
+
+**Décisions de la revue finale de la phase 1 à reprendre ici :**
+- Task 7 : `fixer_niveau_bureau` doit **valider** ses entrées (id connu du `REGISTRE`, niveau permis pour la ligne, valeur de la bonne forme) avant d'écrire, sinon un id inconnu écrit rendrait le fichier suspect ; `_poser_reglage_declare` valide **toutes** les formes (pas seulement `booleen`) ; l'`AttributeError` d'un `fixer_<cle>` manquant échoue **tôt**, au démarrage (table construite au chargement du module), pas à la première écriture ; `test_global_inapplicable_accepte_et_ignore` relit le fichier avec `lire_bureau`.
+- Task 8 : `charger_effectif` vit dans `bureau/reglages.py` (et non `registre.py` : `reglages` importe déjà `registre`, pas d'import circulaire).
+- Task 9 : retirer aussi « Partage des connaissances » de Direction (`directeur.js`, `sectionPartage`) : il reste atteignable dans la page au niveau Global ; `livraison_github` : chercher son interrupteur actuel (`grep -rn livraison_github bureau/web`) et, s'il existe hors de la page, le déplacer dans la page (un réglage, un seul endroit).
+
 ### Task 7: Déclarer les réglages à cases dans le registre
 
 **Files:** Modify `bureau/registre.py`, `bureau/serveur.py` (`reglages_page`, `poser_reglage`), `tests/test_registre.py`, `tests/test_bureau_reglages_page.py`.
@@ -181,7 +188,7 @@ Exigences (maquette validée) :
 
 ### Task 8: Le moteur et l'état lisent les valeurs effectives
 
-**Files:** Modify `bureau/registre.py` (nouvelle `charger_effectif`), `moteur/boucle.py` (l.112-142, 557, 1465), `moteur/regles.py` (`_livraison_github` l.6268, `_livraison_sur_demande` l.6290 et les autres lectures de ces six clés — repérer par `grep "reglages_du_bureau.charger\|reglages_bureau.charger" moteur/`), `bureau/serveur.py` (l.334-345), tests `tests/test_moteur_boucle.py`, `tests/test_moteur_regles.py`, `tests/test_moteur_analyse_blocage.py`, `tests/test_publication.py`.
+**Files:** Modify `bureau/reglages.py` (nouvelle `charger_effectif`, voir « Décisions » plus haut), `moteur/boucle.py` (l.112-142, 557, 1465), `moteur/regles.py` (`_livraison_github` l.6268, `_livraison_sur_demande` l.6290 et les autres lectures de ces six clés — repérer par `grep "reglages_du_bureau.charger\|reglages_bureau.charger" moteur/`), `bureau/serveur.py` (l.334-345), tests `tests/test_moteur_boucle.py`, `tests/test_moteur_regles.py`, `tests/test_moteur_analyse_blocage.py`, `tests/test_publication.py`.
 
 **Interfaces:**
 - Produces : `charger_effectif(chemin_projet: Path, fichier_bureau: Path | None) -> dict` = `reglages.charger(chemin_projet)` avec, pour chaque `Reglage` du registre, la valeur effective ; `fichier_bureau=None` → comportement actuel exact. Le projet du moteur porte `projet.fichier_bureau` (renseigné par `ouvrir_projets(bureau)`, `None` pour `ouvrir_projet` seul).

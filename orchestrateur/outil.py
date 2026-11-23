@@ -67,6 +67,7 @@ rp = _a_la_demande("orchestrateur.regles_projet")
 anomalies_logiciel = _a_la_demande("orchestrateur.anomalies")
 questions_projet = _a_la_demande("orchestrateur.questions")
 wf = _a_la_demande("orchestrateur.workflows")
+adoption_tests = _a_la_demande("orchestrateur.adoption_tests")
 pcat = _a_la_demande("partenaires.catalogue")
 pchoix = _a_la_demande("partenaires.choix")
 pdet = _a_la_demande("partenaires.detection")
@@ -86,7 +87,7 @@ TYPES_DEMANDE = ("bouton", "deplacer", "retour", "lecon", "challenge", "solution
                  "partenaires_maj", "installer_outil", "parallelisme", "recruter", "depot_git", "outil_agent", "accord_agent", "regle_projet",
                  "serie_arretee", "fin_vue", "fable_tache", "passer_polyvalent", "proposer_decoupage", "decoupage_lieux",
                  "lieu_etape", "regroupement_etape", "blocage_analyse", "anomalie", "livrer_maintenant", "publier_livrable",
-                 "question", "question_approfondir")
+                 "question", "question_approfondir", "tests_serveur")
 AGENT_ORCHESTRATEUR = "orchestrateur"   # les appels de jugement du moteur : connu de chaque projet, sans fiche
 MODELES_INTERDITS = ("Fable",)   # un outil ne choisit jamais Fable
 
@@ -1065,6 +1066,12 @@ def cmd_decision(ctx, e):
                 if su.tache(s, e.get("tache")) is None:
                     raise Refus(f"« fable_tache » : tâche inconnue « {e.get('tache')} ».")
                 d.update(tache=e["tache"], raison=texte(e, "raison")[:300])
+            elif genre in adoption_tests.GENRES:    # l'adoption des tests au serveur (§ 5.15) : la charge et les réponses
+                charge = e.get("charge")
+                erreur = adoption_tests.verifier_charge(genre, contenu, charge)
+                if erreur:
+                    raise Refus(f"« {genre} » : {erreur}")
+                d.update(charge=charge, reponses=list(adoption_tests.reponses_de(genre, charge)))
             elif genre == "decoupage_lieux":    # « Découper les étapes selon le poste » : l'avant/après, vérifié
                 avant = lx.flux_de_reference(ctx.f)
                 erreur = lx.verifier_proposition(avant, e.get("apres"))
@@ -3412,6 +3419,19 @@ def retirer_l_agent(fiche, a_des_taches):
     fi.ecrire_fiche(dict(fiche, retire=True, retrait_prevu=False))
 
 
+def programmes_des_agents_serveur(ctx):
+    """Les programmes du profil d'outils « agents du serveur » du projet (réglage `outils_agents_serveur`, projet puis type puis
+    global ; page Réglages) : `()` par défaut ou au moindre doute (réglages ou bureau illisibles)."""
+    if ctx.f["reglages"] is None:
+        return ()
+    try:
+        from bureau import deport_types, registre, reglages
+        nom = reglages.charger_effectif(Path(ctx.f["reglages"]), deport_types.BUREAU)["outils_agents_serveur"]
+        return tuple(registre.PROFILS_OUTILS.get(nom, ()))
+    except Exception:  # noqa: BLE001 — un doute n'ouvre aucun outil
+        return ()
+
+
 def synchroniser_equipe(ctx, creer=True, cloud_aussi=True):
     """Ramène l'équipe d'un projet polyvalent aux places (voir `recrutement.ajuster_equipe`) : crée des fiches polyvalentes
     (prénom et clé libres), retire les agents libres en trop, marque (`Retrait : prévu`) ceux qui travaillent encore.
@@ -3448,6 +3468,9 @@ def synchroniser_equipe(ctx, creer=True, cloud_aussi=True):
                 cle = rc.cle_d_agent_libre(prises, ctx.f["fiches"])
                 nouvelle = fi.nouvelle_fiche(cle, rc.prenom_libre(existantes), lieu)
                 nouvelle["chemin"] = Path(ctx.f["fiches"]) / f"{cle}.md"
+                if lieu == "serveur":      # le profil d'outils du type de projet (Réglages) : jamais d'ouverture fiche par fiche
+                    for programme in programmes_des_agents_serveur(ctx):
+                        fi.ouvrir_outil(nouvelle, fi.regle_bash(programme))
                 fi.ecrire_fiche(nouvelle)
                 prises.add(cle)
                 existantes.append(nouvelle)
@@ -3918,7 +3941,7 @@ def _depart_d_un_lot(ctx, e):
                                           contexte=" ".join(depart.contexte_de_tache(
                                               t, su.fonctionnalite(s, t["fonctionnalite"]) if t.get("fonctionnalite")
                                               else None) for t in taches),
-                                          deport=_deport_du_depart(ctx))}
+                                          deport=_deport_du_depart(ctx), route=_route_du_depart(ctx))}
 
 
 BUREAU_DEPORT = "~/MyIAFactory/bureau.json"   # remplacé par les tests
@@ -3961,6 +3984,16 @@ def _deport_du_depart(ctx, bureau=None):
         return ""
 
 
+def _route_du_depart(ctx):
+    """Vrai si les tests de ce projet partent au serveur (`deport_types.refus_route` ne refuse pas) : la consigne de
+    l'agent local le dit alors. Faux au moindre souci (une consigne du poste vaut mieux qu'un départ cassé)."""
+    try:
+        from bureau import deport_types
+        return deport_types.refus_route(_projet(ctx), "tests") is None
+    except Exception:
+        return False
+
+
 def cmd_depart(ctx, e):
     if not isinstance(e.get("moteur", False), bool):
         raise Refus("« moteur » est vrai ou faux.")
@@ -3991,7 +4024,7 @@ def cmd_depart(ctx, e):
                                       (fonc or {}).get("glossaire") or [], partenaires[0],
                                       regles_projet=rp.lire(ctx.f), inscrits=partenaires[1], ecartes=partenaires[2],
                                       metiers_=metiers_, contexte=depart.contexte_de_tache(tache_suivie, fonc),
-                                      deport=_deport_du_depart(ctx))}
+                                      deport=_deport_du_depart(ctx), route=_route_du_depart(ctx))}
 
 
 def cmd_lieux(ctx, e):
@@ -4203,7 +4236,70 @@ def cmd_fiche(ctx, e):
     return {"ok": True, "deja": not change, "outils": fi.outils(fiche)}
 
 
+def _chemin_tests_serveur(ctx):
+    if ctx.f["reglages"] is None:
+        raise Refus("Le fichier de factory n'indique pas les réglages du bureau (« reglages »).")
+    return Path(ctx.f["reglages"]), Path(ctx.f["base"]).parent
+
+
+def _poser_adoption(ctx, resultat):
+    """La décision de Direction qui suit un verdict d'évaluation (`None` quand il n'y a rien à décider)."""
+    proposee = adoption_tests.decision_pour(resultat)
+    if not proposee:
+        return None
+    return cmd_decision(ctx, {"action": "poser", "portee": "projet", "genre": proposee["genre"],
+                              "texte": proposee["texte"], "charge": proposee["charge"]})["id"]
+
+
+def cmd_evaluer_tests_serveur(ctx, e):
+    """`{"confirme": true}` : évalue les tests du projet au serveur (une campagne, sans repli), écrit `tests.adoption` dans les
+    réglages du projet et pose la décision qui convient (jamais d'activation automatique). `{"decision": id, "verdict": …}` :
+    applique la réponse du Directeur (demande `tests_serveur`) et lève la décision ; `suite` dit ce qui vient ensuite
+    (`evaluer` : relancer cette commande ; `construire` : le contrôleur ou le bureau construisent l'image, jamais un agent).
+    Sans `confirme` aucune campagne ne part : le code du projet n'est envoyé qu'à la demande du Directeur."""
+    fichier, racine = _chemin_tests_serveur(ctx)
+    if e.get("decision") is not None:
+        i = texte(e, "decision")
+        with ctx.suivi.transaction() as s:
+            d = next((x for x in s["decisions_projet"] if x["id"] == i and x.get("genre") in adoption_tests.GENRES), None)
+            if d is None:
+                raise Refus(f"Décision inconnue : {i}")
+            genre, charge = d["genre"], d.get("charge") or {}
+        verdict = texte(e, "verdict")
+        if verdict not in adoption_tests.reponses_de(genre, charge):
+            raise Refus(f"Réponse inconnue pour « {genre} » ({', '.join(adoption_tests.reponses_de(genre, charge))}).")
+        try:
+            rendu = adoption_tests.reponse(genre, verdict, charge, fichier, racine)
+        except (ValueError, OSError, RuntimeError) as ex:
+            raise Refus(str(ex)[:300])
+        cmd_decision(ctx, {"action": "lever", "id": i})
+        return rendu
+    if e.get("confirme") is not True:
+        raise Refus("« confirme » vaut true : le code du projet n'est envoyé au serveur que sur demande du Directeur.")
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "outils"))
+    import tests_adoption
+    resultat = tests_adoption.evaluer(racine, accord=lambda _racine: None, serveur_id=_serveur_des_tests())
+    anterieure = (tests_adoption.adoption_lue(racine) or {}).get("reseau_echauffement")
+    try:
+        tests_adoption.noter_adoption(fichier, resultat, reseau_echauffement=anterieure)
+    except (ValueError, OSError) as ex:
+        raise Refus(f"tests.adoption n'a pas pu être écrit : {ex}"[:300])
+    resultat.pop("profil", None)
+    return {**resultat, "decision": _poser_adoption(ctx, resultat)}
+
+
+def _serveur_des_tests():
+    """L'identifiant du serveur qui porterait les tests (registre des images dérivées), chaîne vide si aucun ne se présente."""
+    try:
+        import plateforme_acces
+        import serveur_tache
+        return serveur_tache.choisir_serveur(plateforme_acces.DOSSIER, requises=("tests-image",)).id
+    except Exception:  # noqa: BLE001
+        return ""
+
+
 COMMANDES = {
+    "evaluer-tests-serveur": (cmd_evaluer_tests_serveur, "obligatoire"),
     "fiche": (cmd_fiche, "obligatoire"), "releve": (cmd_releve, "aucune"), "charge": (cmd_charge, "aucune"), "actions": (cmd_actions, "obligatoire"),
     "reveil": (cmd_reveil, "aucune"), "demandes": (cmd_demandes, "aucune"), "guetter": (cmd_guetter, "aucune"),
     "demande-traitee": (cmd_demande_traitee, "obligatoire"), "demande-suivi": (cmd_demande_suivi, "obligatoire"),

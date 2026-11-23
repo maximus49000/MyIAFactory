@@ -6,4 +6,5 @@ serveur_ovh/images/*/*.sh text eol=lf
 serveur_ovh/images/*/*.py text eol=lf
 serveur_ovh/images/agent/pont text eol=lf
 serveur_ovh/taches/*.py text eol=lf
+serveur_ovh/images/*/Dockerfile.gabarit text eol=lf
 serveur_ovh/agent-outils/*.sh text eol=lf

@@ -608,3 +608,19 @@ test("une règle proposée par le moteur reste telle quelle", () => {
   const d = {quoi: "adb install", regle_proposee: "Pas de test sur appareil : émulateur."};
   assert.equal(regleSelonLaReponse(d, "Pas de test sur appareil : émulateur.", "accepter"), "Pas de test sur appareil : émulateur.");
 });
+
+const TESTS_ADOPTION = {id: "d8", genre: "tests_serveur_adoption", texte: "Des tests échouent au serveur.",
+  charge: {statut: "echoue", duree_s: 42, nb_tests: 12, marqueur: "plateforme_tests.windows_seulement",
+           echecs: [{nom: "test_chemin", classe: "windows"}]}, reponses: ["marquer", "garder_poste", "plus_tard"]};
+
+test("tests au serveur : le verdict, les échecs classés, puis un bouton par réponse", async () => {
+  const {contenu, demandes} = rendre({...ETAT, fonctionnalites: [], decisions_projet: [TESTS_ADOPTION]});
+  assert.match(contenu.textContent, /Tests au serveur/);
+  assert.match(contenu.textContent, /windows : test_chemin/);
+  assert.match(contenu.textContent, /windows_seulement/);
+  await bouton(contenu, "Marquer ces tests").auteurs.click[0]();
+  await bouton(contenu, "Garder sur le poste").auteurs.click[0]();
+  assert.deepEqual(demandes, [{type: "tests_serveur", decision: "d8", verdict: "marquer"},
+    {type: "tests_serveur", decision: "d8", verdict: "garder_poste"}]);
+  assert.equal(boutons(rendre({...ETAT, agir: false, fonctionnalites: [], decisions_projet: [TESTS_ADOPTION]}).contenu).length, 0);
+});

@@ -31,8 +31,7 @@ ETAT = "serveurs-etat.json"
 VERROU = "serveurs-installation.lock"
 VERROU_JEUNE_S = 30
 DELAI_DEFAUT_S = 600
-DELAIS_ETAPE_S = {"docker": 1200, "durcissement": 900, "android_build": 1800, "android_emulateur": 1800, "emulateur_image": 900, "agent_image": 900, "tests_image": 900, "unity_cli": 300,
-                  "flutter_sdk": 3600}
+DELAIS_ETAPE_S = {"docker": 1200, "durcissement": 900, "android_build": 1800, "android_emulateur": 1800, "emulateur_image": 900, "agent_image": 900, "tests_image": 900, "tests_android_image": 900, "unity_cli": 300, "flutter_sdk": 3600}
 LONGUEUR_MAX = 200
 STATUTS_ETAPE = ("fait", "a_faire", "bloque")
 
@@ -136,6 +135,9 @@ def _ecrire_etat(dossier, serveur_id, capacites, en_cours, debut, charge=_GARDER
     ancienne = tout.get(serveur_id, {}).get("charge") if charge is _GARDER else charge
     if ancienne is not None:
         entree["charge"] = ancienne
+    etats = tout.get(serveur_id, {}).get("etats")
+    if isinstance(etats, dict):
+        entree["etats"] = etats          # les états relevés (licence Unity…) ne sont jamais perdus par une sonde
     tout[serveur_id] = entree
     Path(dossier).mkdir(parents=True, exist_ok=True)
     ecrire_atomique(Path(dossier) / ETAT, json.dumps(tout, ensure_ascii=False, indent=2) + "\n")
@@ -150,7 +152,7 @@ _DETAIL_SONDE = {"presente": "Constatée par la sonde.", "absente": "Absente (co
 
 
 def enregistrer_sonde(dossier, serveur, etat, vivant=pid_vivant, charge=None, horloge=time.time, sous_verrou=None,
-                      sur_echec=None):
+                      sur_echec=None, mots=None):
     """Écrit le résultat d'une sonde (`{capacité: statut}`) dans l'état, sous les mêmes verrous qu'une installation.
 
     `ErreurInstallation` (« déjà en cours ») si une installation tient le verrou. Une capacité non installable restée
@@ -173,7 +175,7 @@ def enregistrer_sonde(dossier, serveur, etat, vivant=pid_vivant, charge=None, ho
             try:
                 if sous_verrou is not None:
                     sous_verrou()       # exécuté verrou pris : aucune installation ne peut démarrer entre cette action et l'écriture
-                _enregistrer(dossier, serveur, etat, charge, horloge)
+                _enregistrer(dossier, serveur, etat, charge, horloge, mots)
             except BaseException:
                 if sur_echec is not None:
                     sur_echec()         # encore sous le verrou : personne ne peut écrire entre l'échec et le retour arrière
@@ -187,7 +189,7 @@ def enregistrer_sonde(dossier, serveur, etat, vivant=pid_vivant, charge=None, ho
         _VERROU_PROCESSUS.release()
 
 
-def _enregistrer(dossier, serveur, etat, charge, horloge):
+def _enregistrer(dossier, serveur, etat, charge, horloge, mots=None):
     """Écrit l'état constaté par une sonde (appelé verrou pris)."""
     avant = lire_etat(dossier).get(serveur.id, {})
     anciennes = avant.get("capacites") if isinstance(avant.get("capacites"), dict) else {}
@@ -199,12 +201,53 @@ def _enregistrer(dossier, serveur, etat, charge, horloge):
             caps[i] = ancienne
         else:
             caps[i] = _entree(s, _DETAIL_SONDE.get(s, ""))
+            if isinstance(mots, dict) and isinstance(mots.get(i), str):
+                caps[i]["mot"] = mots[i][:16]           # le mot d'une capacité à états (serveur_etat.MOTS), déjà filtré
     inst = avant.get("installation")
     debut = inst.get("debut", "") if isinstance(inst, dict) and isinstance(inst.get("debut"), str) else ""
     valide = _charge_valide(charge)
     if valide is not None:
         valide["maj"] = horloge()           # secondes epoch : une charge trop vieille est ignorée à la lecture
     _ecrire_etat(dossier, serveur.id, caps, False, debut, charge=valide, fusionner=False)
+
+
+def lire_etat_capacite(dossier, serveur_id, capacite):
+    """L'état relevé d'une capacité à états (`etats[capacite]` de l'entrée du serveur) : un dict, vide s'il manque."""
+    e = (lire_etat(dossier).get(serveur_id) or {}).get("etats")
+    v = e.get(capacite) if isinstance(e, dict) else None
+    return dict(v) if isinstance(v, dict) else {}
+
+
+def modifier_etat_capacite(dossier, serveur_id, capacite, modifier, vivant=pid_vivant):
+    """Réécrit `etats[capacite]` de l'entrée du serveur par `modifier(ancien: dict) -> dict` (`maj` posé ici), sous les mêmes
+    verrous qu'une installation ; rend le nouvel état. `ErreurInstallation` si une installation tient le verrou : rien n'est
+    écrit. Les capacités constatées, l'installation et la charge ne sont pas touchées."""
+    deja = ErreurInstallation("Une installation est en cours sur ce poste : état non noté.", "Réessayez à sa fin.")
+    if not _VERROU_PROCESSUS.acquire(blocking=False):
+        raise deja
+    try:
+        verrou = _prendre_verrou(dossier, vivant)
+        if verrou is None:
+            raise deja
+        try:
+            tout = lire_etat(dossier)
+            entree = dict(tout.get(serveur_id) or {})
+            etats = entree.get("etats") if isinstance(entree.get("etats"), dict) else {}
+            ancien = etats.get(capacite) if isinstance(etats.get(capacite), dict) else {}
+            neuf = dict(modifier(dict(ancien)))
+            neuf["maj"] = _maintenant()
+            entree["etats"] = {**etats, capacite: neuf}
+            tout[serveur_id] = entree
+            Path(dossier).mkdir(parents=True, exist_ok=True)
+            ecrire_atomique(Path(dossier) / ETAT, json.dumps(tout, ensure_ascii=False, indent=2) + "\n")
+            return neuf
+        finally:
+            try:
+                verrou.unlink()
+            except OSError:
+                pass
+    finally:
+        _VERROU_PROCESSUS.release()
 
 
 # ---------------------------------------------------------------- aperçu
@@ -303,10 +346,17 @@ FICHIERS_ETAPE = {"emulateur_image": ("images/emulateur/Dockerfile", "images/emu
                   # sur l'hôte) : déposés avec l'étape, hors de l'empreinte de l'image (ils n'y entrent pas)
                   "agent_image": ("images/agent/Dockerfile", "images/agent/entree-agent.py", "images/agent/pont",
                                   "taches/enregistrer_jeton.sh", "taches/pont_hote.py"),
-                  # l'enveloppe hôte des campagnes (lancer_tests.sh), commun.sh qu'elle source et ses aides python3 :
-                  # déposés avec l'étape, hors de l'image et de son empreinte
+                  # l'enveloppe hôte des campagnes (lancer_tests.sh), commun.sh qu'elle source et ses aides python3, l'entrée
+                  # Unity et la construction des images dérivées (tâche 14g, lues par construire_image_tests.sh dans ce
+                  # dossier) : déposés avec l'étape, hors de l'image et de son empreinte
                   "tests_image": ("images/tests/Dockerfile", "images/tests/entree-tests.sh", "taches/lancer_tests.sh",
-                                  "taches/commun.sh", "taches/tests_hote.py")}
+                                  "taches/commun.sh", "taches/tests_hote.py", "images/tests/entree-unity.sh",
+                                  "taches/construire_image_tests.sh"),
+                  "tests_android_image": ("images/tests-android/Dockerfile",),
+                  # bac à sable Unity de l'hôte (option A, tâche 14h) : installés par l'étape dans /usr/local/lib/myiafactory
+                  # (root, 0755) ; l'empreinte du marqueur (écrit par l'audit J14 seulement) les couvre tous
+                  "unity_bac_a_sable": ("unity-bac-a-sable.sh", "sonde-bac-a-sable.sh", "images/tests/entree-tests.sh",
+                                        "images/tests/entree-unity.sh")}
 # Fichiers du contexte de construction de l'image, dans l'ordre de l'empreinte (par défaut : tous ceux de l'étape).
 EMPREINTE_FICHIERS = {**FICHIERS_ETAPE,
                       "agent_image": ("images/agent/Dockerfile", "images/agent/entree-agent.py", "images/agent/pont"),
@@ -346,6 +396,10 @@ def empreinte_etape(etape):
         versions_image = f"ubuntu={versions['base_ubuntu']};node={versions['node']};claude_code={versions['claude_code']}"
     elif etape == "tests_image":                     # mêmes champs, même ordre que EMPREINTE_TESTS du script
         versions_image = f"ubuntu={versions['base_ubuntu']};python=3.12;node={versions['node']}"
+    elif etape == "tests_android_image":             # mêmes champs, même ordre que EMPREINTE_TESTS_ANDROID du script
+        versions_image = f"base={empreinte_etape('tests_image')};jdk=17,21"   # l'étiquette de l'image de base
+    elif etape == "unity_bac_a_sable":               # pas d'image : le contenu du marqueur que l'audit J14 écrit
+        versions_image = "bac_a_sable=A;utilisateur=unity-tests"
     else:
         versions_image = f"ubuntu={versions['base_ubuntu']};jdk=17"
     return f"{versions_image};fichiers={h.hexdigest()[:16]}"
@@ -358,6 +412,9 @@ def empreinte_etape(etape):
 MARQUEURS = {"emulateur-image": ("emulateur_image", '$HOME/.myiafactory/emulateur-image.version'),
              "agent": ("agent_image", '$HOME/.myiafactory/agent-image.version'),
              "tests-image": ("tests_image", '$HOME/.myiafactory/tests-image.version'),
+             "tests-android": ("tests_android_image", '$HOME/.myiafactory/tests-android-image.version'),
+             # écrit par l'audit J14 seulement (jamais par l'étape) ; la capacité entrera au catalogue avec J14
+             "unity-bac-a-sable": ("unity_bac_a_sable", '$HOME/.myiafactory/unity-bac-a-sable.version'),
              # le SDK Flutter de l'hôte : le marqueur porte la version épinglée ; une autre version le rend périmé (refait)
              "flutter-sdk": ("flutter_sdk", '$HOME/.myiafactory/flutter-sdk.version')}
 

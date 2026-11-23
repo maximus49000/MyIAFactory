@@ -134,6 +134,7 @@ def ouvrir_projet(fichier_reglages, environ=None, fichier_bureau=None):
         projet.livraison_sur_demande = lus["livraison_sur_demande"]
         projet.livraison_github = lus["livraison_github"]
         projet.une_session_moyenne = lus["une_session_moyenne"]
+        projet.signature_apk = lus["signature_apk"]
     except reglages_bureau.ReglagesInvalides:
         pass
     return projet
@@ -955,6 +956,9 @@ class Moteur:
             (mode, apk), base = self._mode_serveur(projet), {"projet": projet.nom}
             depart = (depart.rstrip() + "\n\n"       # projet Flutter (vu sur le poste) : les commandes simples
                       + dp.consigne_serveur(mode, nom, flutter=executeur_serveur._projet_flutter(projet.dossier)) + "\n")
+        signature = regles.reglage_effectif(projet, "signature_apk")
+        if signature in ("debug_serveur", "poste_signe"):     # défaut « aucune » : rien n'est dit au serveur
+            base["signature"] = signature
         places = self._places_serveur(projet)
         if places:                          # les places serveur du projet ; sans réglage, le défaut du serveur (2)
             base["places"] = places

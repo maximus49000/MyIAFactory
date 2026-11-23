@@ -43,7 +43,8 @@ class TestCapaciteTestsImage(unittest.TestCase):
         self.assertEqual(sc.manquantes_pour(["tests-serveur"], set()), ["base", "tests-image"])
         self.assertEqual(inst.FICHIERS_ETAPE["tests_image"], ("images/tests/Dockerfile", "images/tests/entree-tests.sh",
                                                               "taches/lancer_tests.sh", "taches/commun.sh",
-                                                              "taches/tests_hote.py"))
+                                                              "taches/tests_hote.py", "images/tests/entree-unity.sh",
+                                                              "taches/construire_image_tests.sh"))   # 14g, déposés en 14h
         self.assertEqual(inst.EMPREINTE_FICHIERS["tests_image"],                 # l'enveloppe hors de l'empreinte de l'image
                          ("images/tests/Dockerfile", "images/tests/entree-tests.sh"))
         self.assertEqual(inst.MARQUEURS["tests-image"], ("tests_image", "$HOME/.myiafactory/tests-image.version"))
@@ -78,12 +79,13 @@ class TestDockerfileTests(unittest.TestCase):
         self.assertIn(f"ARG UBUNTU_TAG={VERSIONS['base_ubuntu'].split(':')[1]}\n", self.code)
         self.assertIn("FROM ubuntu:${UBUNTU_TAG}\n", self.code)
         self.assertIn(f"ARG NODE_MAJEUR={VERSIONS['node']}\n", self.code)
-        self.assertIn("setup_${NODE_MAJEUR}.x", self.code)
+        self.assertIn("latest-v${NODE_MAJEUR}.x/SHASUMS256.txt", self.code)      # archive officielle, plus de script d'installation
         self.assertNotRegex(self.texte.lower(), r"[:=\"' ]latest\b")
 
     def test_paquets_utilisateur_et_entree(self):
-        for paquet in ("python3", "nodejs", "git", "bash", "util-linux", "tar", "build-essential", "ca-certificates"):
+        for paquet in ("python3", "git", "bash", "util-linux", "tar", "build-essential", "ca-certificates"):
             self.assertRegex(self.code, rf"(?<![\w-]){re.escape(paquet)}(?![\w-])", paquet)
+        self.assertIn("test -x /usr/local/bin/node", self.code)                    # Node vient de l'archive, plus d'un paquet nodejs
         self.assertIn("--no-install-recommends", self.code)
         self.assertIn("\nUSER 1000:1000\n", self.code)
         self.assertIn('\nENTRYPOINT ["/usr/local/bin/entree-tests.sh"]', self.code)

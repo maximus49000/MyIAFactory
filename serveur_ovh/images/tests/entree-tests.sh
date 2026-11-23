@@ -6,7 +6,8 @@
 # - /entree/entree.tar : l'instantané (monté en lecture seule), extrait dans /work sous l'utilisateur du conteneur
 #   (tar -x --no-same-owner --no-same-permissions) : un nom piégé n'écrit que dans le conteneur jetable.
 # - /deps/node_modules, s'il est monté (cache des dépendances Node préparé par l'enveloppe hôte), est lié en /work/node_modules.
-# Puis `cd /work` et `exec` de la commande : le code de sortie du conteneur est celui de la commande.
+# Puis `cd /work` et `exec` de la commande : le code de sortie du conteneur est celui de la commande. Famille unity
+# (MYIAFACTORY_TESTS_FAMILLE=unity, posée par l'enveloppe) : `exec entree-unity.sh <commande>` (voir ce script).
 # Codes propres : 2 commande absente ou invalide (rien n'est extrait) ; 70 instantané absent ou extraction impossible.
 # La durée maximale, l'absence de réseau et les limites sont posées par l'enveloppe hôte (`docker run`), pas ici.
 # Réservée aux tests : ENTREE_TESTS_RACINE (préfixe de /entree, /work et /deps ; vide en production).
@@ -58,4 +59,11 @@ if [ -d "$DEPS/node_modules" ]; then
 fi
 
 cd "$WORK" || echec 70 "dossier de travail $WORK inaccessible."
+# Famille unity (variable posée par l'enveloppe hôte, table fermée) : entree-unity.sh, voisine de ce script dans l'image
+# myiafactory/tests-unity-<version>, copie la licence montée, lance l'éditeur et ne relaie qu'un résumé filtré.
+if [ "${MYIAFACTORY_TESTS_FAMILLE:-}" = unity ]; then
+  unity="$(dirname -- "$0")/entree-unity.sh"
+  [ -f "$unity" ] || echec 2 "entrée Unity absente de l'image ($unity)."
+  exec bash "$unity" "${args[@]}"
+fi
 exec "${args[@]}"

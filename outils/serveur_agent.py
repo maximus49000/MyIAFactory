@@ -38,7 +38,10 @@ LIMITES_AGENT_FLUTTER = {**LIMITES_AGENT, "memoire_mo": 12288, "cpus": 4}
 MODES_AGENT = ("seul", "pilote")
 PLACES_DEFAUT = 2
 CLES_DEMANDE_AGENT = frozenset({"id", "projet", "tache", "mode", "modele", "branche", "base", "limites", "reprend", "places",
-                                "genre", "flutter", "flutter_dossier"})
+                                "genre", "flutter", "flutter_dossier", "signature"})
+# Signature des APK (tâche 15e, réglage `signature_apk` du projet) : `debug_serveur` monte la clé de debug du serveur en lecture seule
+# dans le conteneur de l'agent ; `aucune` et `poste_signe` ne montent aucune clé (la clé de release reste au poste).
+SIGNATURES = ("aucune", "debug_serveur", "poste_signe")
 # `tache` : l'agent de la tâche ; `reponse` : sa réponse aux questions de l'utilisateur (même tâche, jamais confondues)
 GENRES_AGENT = ("tache", "reponse")
 # Mêmes motifs que serveur_ovh/images/agent/entree-agent.py (qui les revérifie sur le serveur).
@@ -70,6 +73,7 @@ class DemandeAgent:
     # projet Flutter (vu sur le poste, `projet_flutter`) : le serveur doit avoir flutter-sdk, monté en lecture seule
     flutter: bool = False
     flutter_dossier: object = None     # le sous-dossier Flutter du projet (« . » pour la racine), ou None
+    signature: str = "aucune"
 
 
 class RefusRecuperation(ValueError):
@@ -263,6 +267,9 @@ def valider_demande_agent(brut, git=_git):
                                         or not MOTIF_DOSSIER_FLUTTER.fullmatch(flutter_dossier) or flutter_dossier == ".."):
         raise ValueError("Dossier Flutter invalide : « . » ou un nom de sous-dossier direct (lettres, chiffres, _ . -), "
                          "pour un projet Flutter seulement.")
+    signature = brut.get("signature", "aucune")
+    if not isinstance(signature, str) or signature not in SIGNATURES:
+        raise ValueError("« signature » vaut aucune, debug_serveur ou poste_signe.")
     limites_brutes = brut.get("limites")
     if limites_brutes is not None and not isinstance(limites_brutes, dict):
         raise ValueError("Les limites doivent être un dictionnaire.")
@@ -274,7 +281,7 @@ def valider_demande_agent(brut, git=_git):
         limites[cle] = _entier_limite(cle, v, plafonds)
     return DemandeAgent(id=ident, projet=projet, tache=tache, mode=mode, modele=modele, branche=branche, base=base,
                         limites=MappingProxyType(limites), reprend=reprend, places=places, genre=genre,
-                        flutter=flutter, flutter_dossier=flutter_dossier)
+                        flutter=flutter, flutter_dossier=flutter_dossier, signature=signature)
 
 
 def capacites_requises(d):
@@ -290,9 +297,12 @@ def _demande_dict(d):
     """Contenu de entree/demande.json. `projet` et `reprend` n'y figurent qu'une fois (l'enveloppe les relit par motif) ;
     `limites.duree_s` est la valeur même passée à l'enveloppe (une seule source) ; `flutter` (true ou false, une seule
     fois) est relu par l'enveloppe par motif strict."""
-    return {"id": d.id, "type": "agent", "projet": d.projet, "tache": d.tache, "mode": d.mode, "modele": d.modele,
+    brut = {"id": d.id, "type": "agent", "projet": d.projet, "tache": d.tache, "mode": d.mode, "modele": d.modele,
             "branche": d.branche, "base": d.base, "limites": dict(d.limites), "reprend": d.reprend, "flutter": d.flutter,
             "flutter_dossier": d.flutter_dossier}
+    if d.signature != "aucune":      # une seule fois, relue par l'enveloppe par motif strict ; absente = aucune
+        brut["signature"] = d.signature
+    return brut
 
 
 def _demande_sure(demande):
@@ -300,7 +310,8 @@ def _demande_sure(demande):
         brut = {"id": demande.id, "projet": demande.projet, "tache": demande.tache, "mode": demande.mode,
                 "modele": demande.modele, "branche": demande.branche, "base": demande.base,
                 "limites": dict(demande.limites), "reprend": demande.reprend, "places": demande.places,
-                "genre": demande.genre, "flutter": demande.flutter, "flutter_dossier": demande.flutter_dossier}
+                "genre": demande.genre, "flutter": demande.flutter, "flutter_dossier": demande.flutter_dossier,
+                "signature": demande.signature}
     elif isinstance(demande, dict):
         brut = demande
     else:

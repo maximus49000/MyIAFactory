@@ -509,7 +509,7 @@ class TestEnveloppeFlutter(unittest.TestCase):
         with Banc() as b:
             self.sdk(b)
             self.cle(b)
-            b.ecrire_entree(flutter=True)
+            b.ecrire_entree(flutter=True, signature="debug_serveur")     # réglage « Signature des APK » du projet
             r = b.lancer("seul", "30", "2048", "2", "2")
             self.assertEqual(r.returncode, 0, r.stderr + r.stdout)
             a, h = b.run_args(), b.h()
@@ -521,6 +521,19 @@ class TestEnveloppeFlutter(unittest.TestCase):
             self.assertNotIn("android-signature", "".join(p.name for p in (b.dossier / "sortie").iterdir()))
             b.arreter()
             b.attendre_final()
+
+    def test_cle_de_debug_presente_non_montee_sans_le_choix_du_projet(self):
+        for valeur in (None, "aucune", "poste_signe"):
+            with self.subTest(valeur=valeur), Banc() as b:
+                self.sdk(b)
+                self.cle(b)
+                b.ecrire_entree(flutter=True, **({"signature": valeur} if valeur else {}))
+                r = b.lancer("seul", "30", "2048", "2", "2")
+                self.assertEqual(r.returncode, 0, r.stderr + r.stdout)
+                self.assertNotIn("debug.keystore", " ".join(b.run_args()))
+                self.assertFalse((b.dossier / "maison" / ".android" / "debug.keystore").exists())
+                b.arreter()
+                b.attendre_final()
 
     def test_sans_cle_de_debug_pas_de_montage_ni_d_echec(self):
         with Banc() as b:
@@ -538,12 +551,13 @@ class TestEnveloppeFlutter(unittest.TestCase):
         with Banc() as b:
             self.sdk(b)
             self.cle(b, lien=True)
-            b.ecrire_entree(flutter=True)
+            b.ecrire_entree(flutter=True, signature="debug_serveur")
             r = b.lancer("seul", "30", "2048", "2", "2")
             self.assertEqual(r.returncode, 1, r.stderr + r.stdout)
             self.assertFalse([x for x in b.appels("docker run") if x.startswith("docker run --pull never -d ")], b.journal)
-            self.assertIn("clé de debug", b.etat()["raison"])
-            self.assertTrue([x for x in b.appels("docker volume rm") if f"flutter-{ID}" in x], b.journal)
+            self.assertIn("clé de debug refusée", b.etat()["raison"].lower())
+            # refusée avant toute copie sur écriture : aucun volume créé
+            self.assertFalse([x for x in b.appels("docker volume create") if f"flutter-{ID}" in x], b.journal)
 
     def test_projet_non_flutter_inchange(self):
         for valeur in (None, False):

@@ -844,6 +844,40 @@ N1–N6) ou par choix du Directeur, toujours dit.
 - [ ] **Step 5: Commit** : chemins ci-dessus ; « Tests au serveur : adoption par projet, tout type de projet ». Code
   sensible : relecture (elle décide quels projets envoient leur code au serveur et quand le réseau est demandé).
 
+### Task 15c (ajoutée le 2026-11-23, demande du Directeur) : le serveur comme poste de développement — build et test pilotés par un agent du serveur
+
+Objectif : qu'un agent qui travaille AU SERVEUR (tranche B) puisse compiler, lancer les tests et bâtir un APK/une build avec le même moteur
+que la route des tests (profils 14a, images 14b/14c, caches 14d, jetons 14e, Unity 14g–14i), sans retomber au poste. Limites assumées :
+pas de GPU (rendu PlayMode, captures) ni de macOS/iOS : ces cas restent au poste, raison dite.
+**Files (à préciser à l'écriture du brief, après 14g–15b) :** outils de l'agent serveur (`outils/serveur_agent.py`, consigne de départ),
+`serveur_ovh/taches/pont_hote.py` (verbes `construire`/`tester` côté hôte), `moteur/executeur_serveur.py`.
+**Produces :** verbes du pont `tester <commande>` et `construire <cible>` qui réutilisent `tests_serveur`/`lancer_tests.sh` depuis le
+serveur (sans repasser par le poste), profil + image + cache + jetons identiques ; sortie en flux à l'agent ; APK/artefacts rapatriés
+par le chemin existant ; mêmes durcissements et même consentement par projet.
+**Tests :** faux pont/faux docker ; essai réel J15 (build Android depuis un agent du serveur) puis J16 (Unity, après 14g–14i).
+
+### Task 15d (ajoutée le 2026-11-23, demande du Directeur) : « Release signé » — le serveur compile, le poste signe
+
+Option 1 retenue (la clé de signature ne quitte jamais le poste ; l'option 2, clé déposée au serveur, reste possible plus tard si le projet utilise
+Play App Signing). Légère par construction : elle réutilise 14d–15c.
+**Produces :** (1) le serveur construit la release NON signée (`assembleRelease`/`bundleRelease` sans `signingConfig` ; le projet n'a pas à changer :
+l'enveloppe passe une propriété qui désactive la signature, ou lit l'APK `*-release-unsigned.apk`) ; (2) rapatriement de l'artefact par le chemin
+existant (octets, pas de chemin) ; (3) étape locale `zipalign` + `apksigner sign` (AAB : `jarsigner`) avec les outils du SDK du poste, mot de passe saisi
+par le Directeur au poste (jamais lu, stocké ni journalisé par l'outil) ; (4) action « Release signé » du bureau : build au serveur puis signature locale,
+lieu `serveur` ; la signature n'est jamais exécutée par un agent. **Tests :** faux serveur/faux `apksigner` ; essai réel J15b sur FM_Stats.
+
+### Task 15e (ajoutée le 2026-11-23, demande du Directeur) : réglage « signature des APK » par projet
+
+Pour un projet Android/Flutter, le choix de la signature appartient à l'utilisateur : nouveau champ dans les paramètres « projet » (page Réglages à trois niveaux : global / type / projet ; valeur par défaut = la plus sûre) : (a) **le serveur signe avec la clé de debug copiée** (`~/android-signature/debug.keystore`, montée en lecture seule dans le conteneur de l'agent : c'est ce qui est codé pour FM_Stats sur la branche `flutter-build-apk` en attendant) ; (b) **le serveur construit, le poste signe** (tâche 15d) ; (c) **aucune clé ne quitte le poste**, build non signée ou clé jetable. Le montage de la clé de debug n'a lieu que si le réglage du projet choisit (a). **Files :** réglages (`bureau/reglages*.py`, page Réglages), `moteur/executeur_serveur.py` (demande : `signature`), `serveur_ovh/taches/lancer_agent.sh`. **Tests :** faux serveur ; défaut sans montage.
+
+### Task 15f (ajoutée le 2026-11-23, demande du Directeur « faciliter cela ») : commandes uniques pour les étapes standard des agents du serveur
+
+Au serveur personne n'approuve une commande : toute commande composée/préfixée (`cd … && flutter …`, `timeout …`, `VAR=… flutter …`) est refusée et l'agent s'arrête. Fournir des commandes COURTES et FIXES qui font l'étape complète (placement dans le dossier du projet, programme et arguments figés) : pour Flutter `analyser-flutter`, `tester-flutter`, `construire-apk` (arguments énumérés : `release`|`debug`), scripts du dépôt (`serveur_ovh/agent-outils/`), déposés par le poste à chaque lancement et montés en lecture seule sur `/opt/outils` (aucune reconstruction d'image), `PATH` du conteneur ; une règle `Bash(<commande>:*)` par commande (jamais `Bash` seul ; `ouvrir_outil` existant). Aucun shell libre, aucun argument libre. **Tests :** faux docker, motifs d'arguments refusés. Essai réel : Lucas, `construire-apk`.
+
+### Task 15g (ajoutée le 2026-11-23) : profil d'outils par type de projet (Réglages, niveau « type »)
+
+Les programmes ouverts aux agents d'un type de projet (Flutter : `analyser-flutter`, `tester-flutter`, `construire-apk` et `flutter` ; Gradle : …) se règlent une fois dans la page Réglages (niveau « type », valeur par défaut sûre) ; tout agent du serveur créé (`parallelisme`/`synchroniser_equipe`) reçoit ce profil : plus de décision « ouvrez-lui l'outil » fiche par fiche. Même famille que le réglage « signature des APK » (15e).
+
 ### Task 16: Documentation, CLAUDE.md et suite complète (contrôleur)
 
 **Files:**

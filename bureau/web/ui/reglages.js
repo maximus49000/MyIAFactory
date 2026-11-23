@@ -18,7 +18,8 @@ export const niveauEditeActuel = () => niveauEdite;
 let dernierMessage = "";
 
 const LIEUX = {poste: "Poste", github: "GitHub", serveur: "Serveur"};
-const SECTIONS = [["actions", "Où tournent les actions"], ["automatisations", "Automatisations"]];
+const SECTIONS = [["actions", "Où tournent les actions"], ["automatisations", "Automatisations"],
+  ["serveur", "Agents et builds du serveur"]];
 
 // POST d'une valeur à un niveau (`valeur: null` : retour à l'hérité). {ok, message, ligne?}, sans jamais lever.
 export async function enregistrerNiveau(niveau, id, valeur, fetchFn = fetch) {
@@ -106,10 +107,27 @@ function ligneReglage(ctx, l, niveau, message, groupe, fetchFn) {
     groupe.push(c);
     label.append(c);
     rang.append(label);
+  } else if (l.forme === "choix") {
+    // un choix fermé (signature des APK, profil d'outils) : un bouton radio par valeur, libellés donnés par le serveur
+    for (const valeurChoix of Array.isArray(l.choix) ? l.choix : []) {
+      const label = el("label", "lecons-auto-label deport-choix");
+      const r = document.createElement("input");
+      r.type = "radio";
+      r.name = "reglage-" + l.id;
+      r.value = valeurChoix;
+      r.checked = valeur === valeurChoix;
+      r.disabled = verrou;
+      r.grise = verrou;
+      r.addEventListener("change", () => ecrire(valeurChoix));
+      controles.push(r);
+      groupe.push(r);
+      label.append(r, el("span", "", " " + (l.libelles_choix?.[valeurChoix] || valeurChoix)));
+      rang.append(label);
+    }
   } else {
     // « Serveur » : seulement pour une action que `deporter` y sert, et une fois un serveur déclaré (comme l'ancien bloc)
     const serveurDeclare = ctx.etat?.deport?.serveur_declare === true;
-    const raisonServeur = l.servie_au_serveur === true ? (serveurDeclare ? "" : MSG_SANS_SERVEUR) : MSG_SERVEUR;
+    const raisonServeur = (l.servie_au_serveur === true || l.routee_au_serveur === true) ? (serveurDeclare ? "" : MSG_SANS_SERVEUR) : MSG_SERVEUR;
     for (const lieu of Array.isArray(l.choix) ? l.choix : []) {
       const label = el("label", "lecons-auto-label deport-choix");
       const r = document.createElement("input");

@@ -111,12 +111,15 @@ export function resumeEnvoi(resultats) {
 
 // --- Le Directeur enrichi (relevé version 4) : décisions des fonctionnalités et du projet.
 
+// Les genres de décision de l'adoption des tests au serveur (conception § 5.15) : une carte, les réponses de `reponses`.
+export const TESTS_SERVEUR = ["tests_serveur_adoption", "tests_image_derivee", "tests_reseau_echauffement", "tests_profil"];
+
 // Les décisions qui attendent le Directeur, rangées par genre ; chaque décision d'une fonctionnalité garde
 // l'identifiant et le nom de sa fonctionnalité.
 export function decisionsDirecteur(etat) {
   const sortie = {cahiers: [], methodes: [], revoir: [], genres: [], sessions: [], organisations: [], reponses: [],
                   genresDemandes: [], environnements: [], elargissements: [], validations: [], outils: [], accords: [],
-                  series: [], terminees: [], chezPartenaires: [], fables: [], blocages: []};
+                  series: [], terminees: [], chezPartenaires: [], fables: [], blocages: [], testsServeur: []};
   const rang = {valider_cahier: "cahiers", valider_methode: "methodes", methode_a_revoir: "revoir",
                 genre_fonctionnalite: "genresDemandes", environnement: "environnements"};
   for (const f of Array.isArray(etat?.fonctionnalites) ? etat.fonctionnalites : []) {
@@ -142,6 +145,7 @@ export function decisionsDirecteur(etat) {
     else if (d?.genre === "elargir_genre") sortie.elargissements.push({...d});
     else if (d?.genre === "outil_agent") sortie.outils.push({...d});
     else if (d?.genre === "accord_agent") sortie.accords.push({...d});
+    else if (TESTS_SERVEUR.includes(d?.genre)) sortie.testsServeur.push({...d});   // l'adoption des tests au serveur
     else if (d?.genre === "fable_tache") sortie.fables.push({...d});   // une tâche demande Fable : l'autoriser ?
     else if (d?.genre === "blocage_analyse") sortie.blocages.push({...d});   // un blocage analysé par le Chef
     else if (d?.genre === "faire_chez_partenaire") sortie.chezPartenaires.push({...d});   // « À faire chez <partenaire> »
@@ -319,6 +323,11 @@ export function demandeFinVue(fonctionnalite) {
 // Une tâche demande Fable : « autoriser » (elle part sur Fable, accord pour elle seule) ou « refuser » (elle part sur Opus).
 export function demandeFableTache(decision, verdict) {
   return {type: "fable_tache", decision: decision.id, verdict};
+}
+
+// Une réponse à une décision d'adoption des tests au serveur (activer, construire, accorder, marquer, garder_poste…).
+export function demandeTestsServeur(decision, verdict) {
+  return {type: "tests_serveur", decision: decision.id, verdict};
 }
 
 export function demandeOutilAgent(decision, verdict) {

@@ -7,7 +7,7 @@ import {nomAgent} from "./detail.js";
 import {decisionsDirecteur, demandeGenre, demandeSession, lireSession, issuesGenreFonctionnalite, demandeGenreFonctionnalite,
   demandeEnvironnement, demandeElargirGenre, demandeInstallerOutil, demandeOutilAgent, demandeAccordAgent,
   demandeRegleProjet, regleProposee, regleSelonLaReponse, MAX_REGLE_PROJET, demandeSerieArretee, demandeFinVue, demandeFableTache,
-  demandeBlocageAnalyse, demandeRelancerSession, enregistrerCloudDossierApprouve} from "./actions.js";
+  demandeBlocageAnalyse, demandeTestsServeur, demandeRelancerSession, enregistrerCloudDossierApprouve} from "./actions.js";
 import {blocOutil} from "./outils.js";
 import {decoupageEnAttente, carteDecoupage} from "./lieux.js";
 import {decisionChezPartenaire} from "./chez-partenaire.js";
@@ -471,6 +471,32 @@ function decisionFableTache(ctx, d) {
   return li;
 }
 
+const LIBELLES_TESTS = {activer: "Activer sur le serveur", plus_tard: "Plus tard", marquer: "Marquer ces tests",
+  garder_poste: "Garder sur le poste", reessayer: "Réessayer", construire: "Construire l'image", accorder: "Accorder le réseau",
+  refuser: "Refuser", reevaluer: "Évaluer de nouveau"};
+
+// « Tests au serveur » : le verdict d'une évaluation, ou ce qu'elle attend (image à construire, réseau d'échauffement) ; le
+// Dockerfile et les échecs sont montrés en texte brut (jamais interprétés), puis un bouton par réponse de la décision.
+function decisionTestsServeur(ctx, d) {
+  const li = el("li", "decision-tests-serveur");
+  li.append(el("div", "decision-texte", d.texte));
+  const c = d.charge && typeof d.charge === "object" ? d.charge : {};
+  const mesures = [c.image && "image : " + c.image, Number.isFinite(c.duree_s) && "durée : " + c.duree_s + " s",
+    Number.isFinite(c.nb_tests) && c.nb_tests + " tests", plein(c.raison) && c.raison].filter(Boolean).join(" · ");
+  if (mesures) li.append(el("div", "lecon-meta", mesures));
+  for (const x of Array.isArray(c.echecs) ? c.echecs.slice(0, 20) : []) {
+    li.append(el("div", "lecon-meta", `${String(x?.classe ?? "autre")} : ${String(x?.nom ?? "")}`));
+  }
+  if (plein(c.marqueur)) li.append(el("div", "lecon-meta", "Marqueur conseillé : " + c.marqueur));
+  if (plein(c.dockerfile)) li.append(el("pre", "decision-dockerfile", c.dockerfile));
+  if (!ctx.etat.agir) return li;
+  const rangee = el("div", "lecon-boutons");
+  (Array.isArray(d.reponses) ? d.reponses : []).forEach((r, i) => rangee.append(
+    boutonDemande(ctx, LIBELLES_TESTS[r] || r, i === 0 ? "bouton" : "bouton secondaire", () => demandeTestsServeur(d, r))));
+  li.append(rangee);
+  return li;
+}
+
 // « Demandes d'accord des agents » : l'agent, ce qu'il veut faire et pourquoi, ce que ça implique (fenêtres, branchement,
 // coût), le rappel de la règle quand il vise un appareil physique ; « J'accepte », « Je refuse » et une consigne facultative.
 function decisionAccordAgent(ctx, d) {
@@ -741,6 +767,9 @@ export function contenuDecisionsV4(ctx, contenu) {
     d.environnements.map((x) => decisionEnvironnement(ctx, x))));
   if (d.fables.length) {     // seulement quand il y en a : une tâche attend l'accord pour Fable
     contenu.append(partie("Tâches qui demandent Fable", "", d.fables.map((x) => decisionFableTache(ctx, x))));
+  }
+  if (d.testsServeur.length) {     // seulement quand une évaluation attend votre réponse
+    contenu.append(partie("Tests au serveur", "", d.testsServeur.map((x) => decisionTestsServeur(ctx, x))));
   }
   contenu.append(partie("Demandes d'accord des agents", "Aucun agent n'attend votre accord",
     d.accords.map((x) => decisionAccordAgent(ctx, x))));

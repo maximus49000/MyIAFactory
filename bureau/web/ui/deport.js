@@ -90,7 +90,7 @@ function rangee(ctx, def, lieuxActuels, groupe, message, fetchFn) {
     r.checked = (lieuxActuels[action] ?? "") === lieu;
     const permis = lieu === "" || (Array.isArray(def.lieux) ? def.lieux.includes(lieu) : true);
     // le serveur n'est réglable que pour une action que `deporter` y sert, et seulement si un serveur est déclaré
-    const msgServeur = def.servie_au_serveur === true ? (serveurDeclare ? "" : MSG_SANS_SERVEUR) : MSG_SERVEUR;
+    const msgServeur = (def.servie_au_serveur === true || def.routee_au_serveur === true) ? (serveurDeclare ? "" : MSG_SANS_SERVEUR) : MSG_SERVEUR;
     const grise = lieu === "serveur" ? msgServeur : (permis ? "" : (def.bientot || "indisponible pour ce type de projet"));
     r.disabled = grise !== "";
     label.append(r, el("span", "", " " + libelle + (grise ? " (" + grise + ")" : "")));

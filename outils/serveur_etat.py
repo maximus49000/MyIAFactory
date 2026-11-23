@@ -56,13 +56,27 @@ def _lignes_cle_valeur(sortie):
     return trouvees
 
 
+# Capacités à états (tâche 14i) : leur sonde imprime UN mot (table fermée) que la ligne `<id>.mot=<mot>` rapporte, filtré
+# (lettres minuscules, 16 au plus) ; rien d'autre de leur sortie n'est relayé.
+MOTS = {"unity-licence": ("conteneur", "hote", "absente")}
+
+
+def _ligne_sonde(c):
+    if c.id in MOTS:
+        # le même sous-shell que les autres (stdin fermé) ; seul le mot filtré en sort, avant le code de la sonde
+        return (f'( m=$( ( {c.sonde} ) </dev/null 2>/dev/null ); r=$?; '
+                f'echo "{c.id}.mot=$(printf %s "$m" | head -n 1 | tr -cd a-z | head -c 16)"; [ "$r" = 0 ] ) </dev/null 2>/dev/null '
+                f'&& echo "{c.id}=0" || echo "{c.id}=1"')
+    return f'( {c.sonde} ) </dev/null >/dev/null 2>&1 && echo "{c.id}=0" || echo "{c.id}=1"'
+
+
 def _script_sondes():
-    return "\n".join(f'( {c.sonde} ) </dev/null >/dev/null 2>&1 && echo "{c.id}=0" || echo "{c.id}=1"'
-                     for c in CATALOGUE.values()) + "\n"
+    return "\n".join(_ligne_sonde(c) for c in CATALOGUE.values()) + "\n"
 
 
-def sonder(serveur, ssh=plateforme_ssh, runner=None):
-    """{capacité: "presente" | "absente" | "inconnue"} pour TOUTES les capacités du catalogue (une seule connexion)."""
+def sonder(serveur, ssh=plateforme_ssh, runner=None, mots=None):
+    """{capacité: "presente" | "absente" | "inconnue"} pour TOUTES les capacités du catalogue (une seule connexion).
+    `mots` (dict, facultatif) reçoit le mot des capacités à états (`MOTS`), seulement s'il est dans leur table."""
     tout_inconnu = {i: INCONNUE for i in CATALOGUE}
     try:
         code, sortie, _ = _executer(serveur, _script_sondes(), ssh, runner)
@@ -74,6 +88,10 @@ def sonder(serveur, ssh=plateforme_ssh, runner=None):
     etat = {}
     for i in CATALOGUE:
         etat[i] = {"0": PRESENTE, "1": ABSENTE}.get(lues.get(i), INCONNUE)
+    if isinstance(mots, dict):
+        for i, table in MOTS.items():
+            if lues.get(f"{i}.mot") in table and etat.get(i) != INCONNUE:
+                mots[i] = lues[f"{i}.mot"]
     return etat
 
 

@@ -600,6 +600,22 @@ est ignorée. Sans entrée, ou `{"action": "lister"}` : rend `{questions}`. `{"a
 `repondre_question`, puis l'agent lecteur limité à Read, Grep, Glob) ; la conversation orchestratrice ne répond jamais
 d'elle-même. Le relevé publie les 50 derniers fils (`questions`).
 
+### `evaluer-tests-serveur`
+
+Entrée : `{"confirme": true}` (évaluation) ou `{"decision", "verdict"}` (réponse du Directeur). L'évaluation (conception § 5.15)
+analyse le projet, vérifie l'image et le réseau d'échauffement, lance UNE campagne d'évaluation par la route (sans repli ni
+nouvelle tentative), écrit `tests.adoption` (`date`, `statut`, `empreinte_profil`, `image`, `reseau_echauffement`, `duree_s`,
+`nb_tests`) dans les réglages du projet, et pose la décision de projet qui suit le verdict : `tests_serveur_adoption`
+(`passe` : `activer` / `plus_tard` ; `echoue` : `marquer` / `garder_poste` / `plus_tard`, avec les 20 premiers échecs classés
+`windows`, `reseau`, `secret` ou `autre` et le marqueur conseillé ; `non_deportable` : la raison N1 à N6 et `garder_poste` ;
+`injoignable` et `trop_long` : `reessayer` / `garder_poste`), `tests_image_derivee` (le Dockerfile, sa somme, l'estimation ;
+`construire` / `plus_tard` / `garder_poste`) ou `tests_reseau_echauffement` (`accorder` / `refuser`) ; `tests_profil` : profil
+changé (`reevaluer` / `plus_tard`). Toutes portent `charge` (un objet) et `reponses`. Sans `confirme` rien ne part au
+serveur. La réponse (demande `tests_serveur`) est appliquée par la même commande et rend `{fait, suite}` : `suite` vaut
+`evaluer` (relancer avec `confirme`), `construire` (le contrôleur ou le bureau construisent l'image, jamais un agent),
+`marquer` (la tâche de marquage est proposée, jamais créée seule) ou null. Seule la réponse `activer` règle l'action « tests »
+du projet sur le serveur.
+
 ### `lieux`
 
 Entrée : `{"action": "reference" | "decouper" | "regler" | "regrouper", …}`. Le `lieu` des étapes d'agent (`local` : elle exige le

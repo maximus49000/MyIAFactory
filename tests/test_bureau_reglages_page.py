@@ -61,7 +61,7 @@ class TestReglagesPage(AvecFichierDuBureau):
         self.assertEqual(list(lignes), ["deport.apk", "deport.tests", "deport.emulateur", "deport.charge",
                                         "deport.recette-emulateur", "lecons_auto", "analyse_blocages",
                                         "une_session_moyenne", "livraison_sur_demande", "cloud_dossier_approuve",
-                                        "livraison_github"])
+                                        "livraison_github", "signature_apk", "outils_agents_serveur"])
         apk = lignes["deport.apk"]
         self.assertEqual((apk["valeur"], apk["origine"], apk["valeurs"]), ("github", "global", {"global": "github"}))
         self.assertEqual((apk["section"], apk["forme"], apk["applicable"]), ("actions", "lieu", True))
@@ -349,8 +349,11 @@ class TestReglagesACases(AvecFichierDuBureau):
         return next(r for r in registre.REGISTRE if r.id == id_).defaut
 
     def test_le_registre_declare_les_six(self):
-        self.assertEqual({r.id for r in registre.REGISTRE}, set(TROIS + PROJET_SEUL))
-        for r in registre.REGISTRE:
+        self.assertEqual({r.id for r in registre.REGISTRE if r.forme == "booleen"}, set(TROIS + PROJET_SEUL))
+        # les réglages à choix fermé (signature des APK, profil d'outils des agents du serveur) : section serveur, trois niveaux
+        self.assertEqual({r.id: (r.section, r.niveaux) for r in registre.REGISTRE if r.forme == "choix"},
+                         {"signature_apk": ("serveur", registre.NIVEAUX), "outils_agents_serveur": ("serveur", registre.NIVEAUX)})
+        for r in (x for x in registre.REGISTRE if x.forme == "booleen"):
             self.assertEqual((r.cle, r.section, r.forme), (r.id, "automatisations", "booleen"))
             self.assertEqual(r.niveaux, ("projet",) if r.id in PROJET_SEUL else registre.NIVEAUX)
 

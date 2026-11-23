@@ -97,7 +97,7 @@ ROUTES_PROJET = ("/api/couts", "/api/document", "/api/methode", "/api/etat", "/a
 # Les décisions qui n'ont qu'une réponse (valider une étape, élargir un genre) : une deuxième réponse est refusée (409)
 # pendant ce délai, le temps que le moteur traite la première et que le relevé la retire.
 REPONSES_UNE_FOIS = ("valider_etape", "elargir_genre", "outil_agent", "accord_agent", "serie_arretee", "faire_chez_partenaire",
-                     "fable_tache", "decoupage_lieux", "blocage_analyse")
+                     "fable_tache", "decoupage_lieux", "blocage_analyse", "tests_serveur")
 GARDE_REPONSE_S = 600
 TELECHARGEMENT_MAX_OCTETS =500 * 1024 * 1024   # un apk ou un installeur ; au-delà : 413
 LECTURE_TEXTE = (".md", ".txt")           # lus dans la page (`/api/telecharger?lecture=1`), en texte brut isolé
@@ -325,13 +325,17 @@ class Projet:
                if genre else None,
                "projet": ctx["lieux_projet"].get(action)}
         valeurs = {n: v for n, v in lus.items() if n in niveaux and v is not None}
-        servie = deport_types.servie_au_serveur(action, catalogue if applicable else deport_types.catalogue_union())
+        cat = catalogue if applicable else deport_types.catalogue_union()
+        servie = deport_types.servie_au_serveur(action, cat)
+        routee = deport_types.routee_au_serveur(action, cat)
         return {"id": "deport." + action, "section": "actions", "libelle": entree["libelle"],
                 "aide": entree["bientot"] or "", "forme": "lieu", "choix": list(entree["lieux"]), "niveaux": niveaux,
                 "valeur": lieu, "origine": origine, "valeurs": valeurs, "applicable": applicable,
                 "defaut": None if deport_types.sans_poste(entree) else "poste",
                 # « Serveur » n'est réglable que pour une action que `deporter` y sert (sinon : « bientôt »)
-                "servie_au_serveur": servie}
+                "servie_au_serveur": servie,
+                # les tests : « Serveur » réglable aussi (`lancer.py tests` les route ; l'accord se vérifie au lancement)
+                "routee_au_serveur": routee}
 
     def _ligne_reglage(self, r, ctx):
         """La ligne d'un réglage déclaré au registre (booléen) : valeur, origine et valeur posée à chaque niveau."""
@@ -347,9 +351,13 @@ class Projet:
                 valeurs[niveau] = d[r.id]
         if "projet" in r.niveaux and r.cle in brut:
             valeurs["projet"] = brut[r.cle]
-        return {"id": r.id, "section": r.section, "libelle": r.libelle, "aide": r.aide, "forme": r.forme,
-                "niveaux": list(r.niveaux), "valeur": valeur, "origine": origine, "valeurs": valeurs,
-                "applicable": True, "defaut": r.defaut}
+        ligne = {"id": r.id, "section": r.section, "libelle": r.libelle, "aide": r.aide, "forme": r.forme,
+                 "niveaux": list(r.niveaux), "valeur": valeur, "origine": origine, "valeurs": valeurs,
+                 "applicable": True, "defaut": r.defaut}
+        if r.forme == "choix":      # les valeurs admises et leurs libellés (la page ne devine rien)
+            ligne["choix"] = list(r.options)
+            ligne["libelles_choix"] = dict(zip(r.options, r.libelles_options))
+        return ligne
 
     def reglages_page(self):
         """L'état de la page Réglages : une ligne `deport.<action>` par action du catalogue du projet, puis les
@@ -414,7 +422,8 @@ class Projet:
                 raise ValueError("« %s » ne tourne pas au lieu « %s » (choix : %s)."
                                  % (entree["libelle"], valeur, ", ".join(entree["lieux"])))
             if valeur == "serveur":   # les mêmes garde-fous que les cases grisées de la page
-                if not deport_types.servie_au_serveur(action, catalogue if applicable else union):
+                cat = catalogue if applicable else union
+                if not (deport_types.servie_au_serveur(action, cat) or deport_types.routee_au_serveur(action, cat)):
                     raise ValueError("« %s » : le lieu « serveur » n'est pas encore disponible (bientôt)."
                                      % entree["libelle"])
                 if not modserveurs.declare():

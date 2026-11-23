@@ -99,6 +99,7 @@ MOTIF_PROJET='"projet"[[:space:]]*:[[:space:]]*"([^"\\]{1,200})"'
 MOTIF_TYPE_EMULATION='"type"[[:space:]]*:[[:space:]]*"emulation"'
 MOTIF_ECHEANCE='"echeance"[[:space:]]*:[[:space:]]*true'
 MOTIF_FLUTTER='"flutter":[[:space:]]*(true|false)[[:space:]]*[,}]'
+MOTIF_SIGNATURE='"signature":[[:space:]]*"(aucune|debug_serveur|poste_signe)"[[:space:]]*[,}]'
 MOTIF_FLUTTER_DOSSIER='"flutter_dossier":[[:space:]]*(null|"([^"\\]{0,200})")[[:space:]]*[,}]'
 PTRACE_SCOPE=/proc/sys/kernel/yama/ptrace_scope    # lu seulement (jamais modifié ici)
 if [ -n "${ENVELOPPE_PTRACE_SCOPE:-}" ]; then PTRACE_SCOPE="$ENVELOPPE_PTRACE_SCOPE"; fi                           # tests
@@ -530,6 +531,29 @@ if [ "$FLUTTER" = 1 ]; then
   case "$OUTIL_FLUTTER" in *[,]*) fin_erreur "Chemin des commandes uniques non admis (virgule)." ;; esac
 fi
 
+# Signature des APK (tâche 15e) : « "signature": "aucune|debug_serveur|poste_signe" » de demande.json (écrit par le poste d'après
+# le réglage `signature_apk` du projet) ; clé en double ou autre valeur refusée ; absente : aucune. Seul `debug_serveur` monte une
+# clé : ~/android-signature/debug.keystore (fichier ordinaire, non lien), en LECTURE SEULE, jamais la clé de release.
+SIGNATURE=aucune
+CLE_DEBUG="$HOME/android-signature/debug.keystore"
+reste="${demande//\"signature\":/}"
+occurrences=$(( (${#demande} - ${#reste}) / 12 ))
+if [ "$occurrences" -gt 1 ]; then fin_erreur "demande.json : clé signature en double."; fi
+if [ "$occurrences" = 1 ]; then
+  if [[ $demande =~ $MOTIF_SIGNATURE ]]; then
+    SIGNATURE="${BASH_REMATCH[1]}"
+  else
+    fin_erreur "demande.json : signature mal formée (aucune, debug_serveur ou poste_signe)."
+  fi
+fi
+if [ "$SIGNATURE" = debug_serveur ]; then
+  if [ -L "$CLE_DEBUG" ] || { [ -e "$CLE_DEBUG" ] && [ ! -f "$CLE_DEBUG" ]; }; then
+    fin_erreur "Clé de debug refusée : ~/android-signature/debug.keystore n'est pas un fichier ordinaire (lien ou autre)."
+  fi
+  [ -f "$CLE_DEBUG" ] && [ -s "$CLE_DEBUG" ] ||
+    fin_erreur "Clé de debug absente du serveur (~/android-signature/debug.keystore) : copiez-la, ou changez le réglage « Signature des APK »."
+fi
+
 # Places : les PLACES_MAX verrous sont tous essayés. Un verrou tenu = un agent qui tourne ; la place prise est le premier
 # verrou libre de rang <= places, et seulement si moins de <places> agents tournent (places abaissé pendant que des agents
 # tiennent les places 3 et 4 : jamais dépassé). Un verrou libre essayé est relâché aussitôt (descripteur 9).
@@ -586,14 +610,14 @@ if [ "$FLUTTER" = 1 ]; then                        # aucun SDK de l'hôte en bin
       -d /opt/android-sdk/platforms -a -d /opt/android-sdk/build-tools
   fi
   # Clé de DEBUG du poste du Directeur (copiée par lui : ~/android-signature/debug.keystore) : l'APK construit ici se met à
-  # jour sur son appareil sans conflit de signature. Absente : rien de monté (AGP crée une clé jetable dans /maison).
-  # Présente mais pas un fichier ordinaire (lien, dossier…) : refusée. Jamais lue ici. Montée en LECTURE SEULE sur
-  # /maison/.android/debug.keystore, dont la cible (fichier vide) est créée d'abord par l'enveloppe, sous l'uid de l'hôte.
+  # jour sur son appareil sans conflit de signature. Montée SEULEMENT si le projet a choisi `debug_serveur` (réglage
+  # « Signature des APK », vérifiée plus haut : fichier ordinaire non vide) ; sinon rien de monté (AGP crée une clé
+  # jetable dans /maison). Jamais lue ici. Montée en LECTURE SEULE sur /maison/.android/debug.keystore, dont la cible
+  # (fichier vide) est créée d'abord par l'enveloppe, sous l'uid de l'hôte.
   # /maison/.android : ANDROID_USER_HOME de l'agent (posé par l'entrée), créé ici sous l'uid de l'hôte, clé ou non.
   [ ! -L "$DOSSIER/maison/.android" ] && mkdir -p -- "$DOSSIER/maison/.android" && chmod 700 "$DOSSIER/maison/.android" ||
     echec "Android : ~/taches/$ID/maison/.android non créable (ou lien refusé)."
-  CLE_DEBUG="$HOME/android-signature/debug.keystore"
-  if [ -e "$CLE_DEBUG" ] || [ -L "$CLE_DEBUG" ]; then
+  if [ "$SIGNATURE" = debug_serveur ]; then
     [ -f "$CLE_DEBUG" ] && [ ! -L "$CLE_DEBUG" ] ||
       echec "clé de debug refusée : ~/android-signature/debug.keystore n'est pas un fichier ordinaire (lien ou autre)."
     cible="$DOSSIER/maison/.android/debug.keystore"
@@ -612,6 +636,9 @@ if [ "$FLUTTER" = 1 ]; then                        # aucun SDK de l'hôte en bin
     COMMANDE+=(--mount "type=bind,src=$DOSSIER/dossier-flutter,dst=/opt/outils/dossier-flutter,readonly")
   fi
   COMMANDE+=(-e AGENT_FLUTTER=1 -e "PATH=/opt/outils:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin")
+fi
+if [ "$SIGNATURE" = debug_serveur ]; then      # seulement avec ce choix du projet ; lecture seule
+  COMMANDE+=(--mount "type=bind,src=$CLE_DEBUG,dst=/opt/android-signature/debug.keystore,readonly" -e AGENT_DEBUG_KEYSTORE=/opt/android-signature/debug.keystore)
 fi
 COMMANDE+=("$IMAGE" entree-agent)
 if ! dk 120 "${COMMANDE[@]}" >/dev/null 2>"$DOSSIER/docker-run.log"; then

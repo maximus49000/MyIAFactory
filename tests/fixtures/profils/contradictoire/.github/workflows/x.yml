@@ -1,0 +1,6 @@
+jobs:
+  t:
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'

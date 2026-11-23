@@ -52,7 +52,7 @@ GENERIQUE = {
 ANDROID = {
     "apk": _entree("Générer l'APK", "./gradlew assembleDebug", produit="apk",
                    artefact="app/build/outputs/apk/debug/*.apk", lieux=("poste", "github")),
-    "tests": _entree("Tests unitaires", "./gradlew testDebugUnitTest", lieux=("poste", "github")),
+    "tests": _entree("Tests unitaires", "./gradlew testDebugUnitTest", lieux=("poste", "github", "serveur")),
     "lint": _entree("Analyse lint", "./gradlew lintDebug", lieux=("poste", "github")),
     "emulateur": _entree("Tests sur émulateur", "./gradlew connectedDebugAndroidTest", lieux=("poste",),
                          bientot=_PEU_FIABLE),
@@ -349,7 +349,8 @@ def sans_poste(entree):
 
 
 def actions_exposees(catalogue):
-    """La liste `[{id, libelle, lieux, bientot, servie_au_serveur}]` que le bureau affiche pour ce catalogue."""
+    """La liste `[{id, libelle, lieux, bientot, servie_au_serveur, routee_au_serveur}]` que le bureau affiche pour ce catalogue."""
     return [{"id": nom, "libelle": e["libelle"], "lieux": list(e["lieux"]), "bientot": e["bientot"],
-             "servie_au_serveur": servie_au_serveur(nom, catalogue)}
+             "servie_au_serveur": servie_au_serveur(nom, catalogue),
+             "routee_au_serveur": routee_au_serveur(nom, catalogue)}
             for nom, e in catalogue.items()]

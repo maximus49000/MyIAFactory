@@ -167,7 +167,7 @@ class TestRecetteEmulateurAuBureau(AvecServeur):
         for lieu in ("poste", "github"):
             r, _ = self.poster({"deport": {"lieux": {self.RECETTE: lieu}}})
             self.assertEqual(r.status, 400, lieu)
-        r, _ = self.poster({"deport": {"lieux": {"tests": "serveur"}}})
+        r, _ = self.poster({"deport": {"lieux": {"apk": "serveur"}}})        # ni servie ni routée au serveur
         self.assertEqual(r.status, 400)
         self.assertIsNone(self.etat()["lieux"][self.RECETTE])
 

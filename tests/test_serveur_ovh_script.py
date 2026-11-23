@@ -1597,7 +1597,11 @@ class TestTexteDuScript(unittest.TestCase):
         self.assertIn("|| repondre bloque", code[verif:activer])
 
     def test_stdin_lu_uniquement_par_la_licence_et_le_bureau_distant(self):
-        self.assertIn('if [ "$ETAPE" != "licence" ] && [ "$ETAPE" != "bureau_distant" ]; then\n  exec </dev/null', self.texte)
+        self.assertIn('if [ "$ETAPE" != "licence" ] && [ "$ETAPE" != "bureau_distant" ] && [ "$ETAPE" != "unity_licence_etat" ]; then'
+                      '\n  exec </dev/null', self.texte)
+        # l'état de la licence Unity (tâche 14i) : UNE ligne bornée, aucun secret, puis stdin fermé
+        etat_licence = self.texte[self.texte.index("etape_unity_licence_etat()"):]
+        self.assertLess(etat_licence.index("read -r -n 64 ligne"), etat_licence.index("exec </dev/null"))
         self.assertIn("ssh -n ", self.texte)
         self.assertEqual(self.texte.count("$(cat)"), 1)
         self.assertLess(self.texte.index("etape_licence()"), self.texte.index("$(cat)"))

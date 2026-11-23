@@ -565,7 +565,10 @@ def _deposer_agent(serveur, ssh, avec_pont, avec_flutter=False):
         source = RACINE_SERVEUR / rel
         if source.is_symlink() or not source.is_file():
             return f"Fichier du dépôt introuvable : serveur_ovh/{rel}."
-        fichiers.append((rel, source.read_bytes(), mode))
+        donnees = source.read_bytes()
+        if rel.endswith('.sh'):                         # un script depose au serveur est TOUJOURS en LF (un CRLF casse son shebang)
+            donnees = donnees.replace(bytes([13, 10]), bytes([10]))
+        fichiers.append((rel, donnees, mode))
     code, _o, erreur = st._octets(serveur, ssh, _DEPOSER_AGENT, st._archive(fichiers), delai=120, silencieux=True)
     if code != 0:
         return f"Dépôt de l'enveloppe d'agent sur le serveur impossible (code {code}) : {st._court(erreur, 200)}"

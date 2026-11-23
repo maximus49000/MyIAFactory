@@ -188,7 +188,10 @@ class TestDemandeEtDepot(Base):
         texte = self.srv.entrees[ID1]["entree/demande.json"].decode("utf-8")
         self.assertEqual(json.loads(texte)["flutter_dossier"], "android_app")
         self.assertEqual(texte.count('"flutter_dossier":'), 1)
-        self.assertEqual(self.srv.deposes["agent-outils/outil-flutter.sh"], OUTIL.read_bytes())
+        # un script depose au serveur est toujours en LF, meme si la copie de travail (Windows) est en CRLF
+        self.assertEqual(self.srv.deposes["agent-outils/outil-flutter.sh"],
+                         OUTIL.read_bytes().replace(bytes([13, 10]), bytes([10])))
+        self.assertNotIn(bytes([13]), self.srv.deposes["agent-outils/outil-flutter.sh"])
 
     def test_projet_ordinaire_sans_outils_deposes(self):
         self.lancer()

@@ -987,6 +987,14 @@ class Moteur:
             e.serveur = True
             if not getattr(e, "erreur", None):      # l'agent est revenu sans erreur : le serveur répond, sonde à refaire
                 self._sonde_demandee = True
+            rapatrier = getattr(executeur, "rapatrier_livrables", None)
+            if reponse is None and rapatrier is not None and getattr(e, "rapport", None) is not None:
+                # ses livrables déclarés (apk…), ignorés par git donc absents du paquet : rapatriés en octets, dits au
+                # journal de la tâche ; jamais un échec de la tâche (`ExecuteurServeur.rapatrier_livrables`)
+                try:
+                    e.livrables = rapatrier(e.rapport)
+                except Exception as ex:      # noqa: BLE001
+                    e.livrables = [f"Livrables non rapatriés : {type(ex).__name__} : {ex}"[:300]]
             if reponse is not None:
                 e.reponse = reponse
             elif getattr(executeur, "branche", None):
@@ -1606,12 +1614,25 @@ class Moteur:
             except (regles.Refus, regles.ErreurMoteur, OSError) as ex:
                 self._noter(projet, f"questions pour {e.agent} : {ex}")
             self._executer(projet, actions)
+            self._dire_les_livrables(projet, e)
             if e.rapport is not None:
                 self.commit(projet.dossier, "Factory : " + self._produit(e))
                 if getattr(e, "branche", None) and e.rapport["statut"] == "fait":
                     self._fusionner(projet, etat, e)    # après le commit : l'arbre est propre
         for x in garde:
             self.retours.put(x)
+
+    def _dire_les_livrables(self, projet, e):
+        """Les livrables rapatriés d'un agent serveur (ou la raison d'un refus) : une ligne chacun au journal de la tâche ;
+        à défaut, au journal du moteur."""
+        lignes = [x for x in getattr(e, "livrables", None) or [] if isinstance(x, str) and x]
+        if not lignes:
+            return
+        try:
+            regles.lancer(projet, "tache", {"id": e.tache, "journal": lignes})
+        except Exception:              # noqa: BLE001 — jamais perdu : gardé au journal du moteur
+            for x in lignes:
+                self._noter(projet, f"{e.tache} : {x}")
 
     def _noter_estimation(self, projet, e):
         modele = appel.MODELES_API.get(e.modele or "", e.modele or "inconnu")

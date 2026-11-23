@@ -722,6 +722,11 @@ class FauxExecuteurServeur:
         self.autres_noms = kw.get("autres_noms", ())
         self.branche, self.arrets = None, 0
         self.arret = __import__("threading").Event()
+        self.livrables, self.rapports = [], []      # les lignes rendues par `rapatrier_livrables`, les rapports reçus
+
+    def rapatrier_livrables(self, rapport):
+        self.rapports.append(rapport)
+        return list(self.livrables)
 
     def arreter(self):
         self.arrets += 1
@@ -821,6 +826,24 @@ class Serveur(Base):
         self.moteur.tour()
         self.assertEqual(self.tache_suivie()["colonne"], "fait")
         self.assertEqual(self.cloud.fusions, [])          # sans commit rapatrié : rien à fusionner
+
+    def test_livrables_rapatries_dits_au_journal_de_la_tache(self):
+        from moteur import executeur_serveur
+        ligne = "Livrable rapatrié : android_app/build/app.apk (2,0 Ko, cccccccccccccccc)"
+
+        def fabrique(*a, **kw):
+            ex = FauxExecuteurServeur(*a, **kw)
+            ex.livrables = [ligne, "Livrable non rapatrié : ../x.apk : chemin avec « .. » : refusé"]
+            self.executeurs.append(ex)
+            return ex
+        with mock.patch.object(executeur_serveur, "ExecuteurServeur", fabrique):
+            self.partir()
+        (ex,) = self.executeurs
+        self.assertEqual(ex.rapports[0]["statut"], "fait")
+        self.moteur.tour()
+        self.assertEqual(self.tache_suivie()["colonne"], "fait")
+        self.assertIn(ligne, self.journal())
+        self.assertTrue(any(j.startswith("Livrable non rapatrié : ../x.apk") for j in self.journal()))
 
     def test_mode_pilote_seulement_avec_accord_et_apk(self):
         sorties = self.dossier / "app" / "build" / "outputs" / "apk"

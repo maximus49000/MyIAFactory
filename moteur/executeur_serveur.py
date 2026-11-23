@@ -226,6 +226,7 @@ class ExecuteurServeur:
         self.ident = None
         self.branche = None
         self.flux = b""
+        self._ident_garde = None         # la tâche serveur dont le travail a été rapatrié par le dernier appel
         self.avertissement = None
         self._arret = False              # arrêt demandé (bouton du bureau) : vaut pour l'appel en cours ou le suivant
         self._arret_lu = None            # la réponse de serveur_tache.arreter à cette demande
@@ -363,6 +364,7 @@ class ExecuteurServeur:
 
     def _appeler(self, sa, st, argv, entree, delai_s):
         self.ident = None
+        self._ident_garde = None
         try:
             distant, chemin_consigne = argv_distant(argv)
         except ValueError as e:
@@ -584,6 +586,7 @@ class ExecuteurServeur:
 
     def _garder(self, st, ident, r):
         """Garde la branche et le flux rapatriés, note la session ; rend les usages lisibles du flux."""
+        self._ident_garde = ident
         if r.get("branche"):
             self.branche = r["branche"]
         self.flux = r.get("flux") or b""
@@ -625,6 +628,30 @@ class ExecuteurServeur:
         if not self.flux:
             return code or 1, (raison or "Aucun flux rapatrié de l'agent serveur.").encode("utf-8")
         return code, self.flux
+
+    # ------------------------------------------------------------------ livrables
+    def rapatrier_livrables(self, rapport):
+        """Après le rapport de l'agent : rapatrie au poste les fichiers qu'il déclare livrables (`fichiers` avec
+        `livrable: true`), ignorés par git donc absents du paquet (`outils/serveur_livrables.py`). Rend les lignes du
+        journal de la tâche (une par fichier : rapatrié, ou refusé avec sa raison) ; jamais d'exception, jamais un échec
+        de la tâche ; les commits rapatriés ne sont pas touchés."""
+        if _OUTILS not in sys.path:
+            sys.path.append(_OUTILS)
+        try:
+            import serveur_livrables as sl
+            chemins = sl.declares(rapport)
+            if not chemins:
+                return []
+            ident = self._ident_garde
+            if not ident:
+                return ["Livrables non rapatriés : aucune tâche serveur rapatriée pour ce rapport."]
+            _sa, st = _modules()
+            fiche = st.Index(self.dossier).lire().get(ident) or {}
+            debut = st._epoch(fiche.get("cree")) or st._epoch(fiche.get("debut"))
+            resultats = sl.rapatrier(ident, self.projet, chemins, debut=debut, dossier=self.dossier, ssh=self.ssh)
+            return [sl.ligne(r) for r in resultats]
+        except Exception as e:  # noqa: BLE001 - le rapatriement des livrables ne fait jamais échouer la tâche
+            return [f"Livrables non rapatriés : {type(e).__name__} : {e}"[:300]]
 
     # ------------------------------------------------------------------ arrêt
     def arreter(self):

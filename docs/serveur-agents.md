@@ -118,6 +118,33 @@ La branche **est gardée, non fusionnée** quand : l'agent a été **arrêté** 
 autre limite du serveur l'a arrêté ; le rapport n'est pas « fait » ; ou la branche touche des **chemins réservés** (voir « La fusion
 locale protégée »). Elle reste alors dans le projet, à la disposition du Directeur.
 
+## Livrables rapatriés
+
+Un livrable construit au serveur (l'APK de `construire-apk`, sous `android_app/build/…`) est **ignoré par git** : il n'est pas dans le
+paquet. Après le rapport de l'agent, le moteur rapatrie donc **en octets**, au poste, à leur chemin relatif dans le projet, les fichiers
+que le rapport déclare livrables (`fichiers` avec `livrable: true`) ; le bureau peut alors les proposer au téléchargement
+(`outils/serveur_livrables.py`, appelé par `ExecuteurServeur.rapatrier_livrables`).
+
+- **Quels fichiers.** Seulement ceux du rapport, chacun revalidé au poste : chemin relatif au projet, sans `..`, sans lecteur ni `/`
+  initial, segments au motif strict (lettres, chiffres, `_ . + -`, jamais un segment qui commence par « . » : ni `.git` ni `.android`) ;
+  extension dans la liste fermée des livrables téléchargeables du bureau (`releve.TELECHARGEABLES`) ; **jamais** une clé ou un certificat
+  (`.keystore`, `.jks`, `.pem`, `.key`, `.p12`, `.pfx`…) ni rien sous `maison/`, `android-signature/` ou `agent-identifiants/` ;
+  **8 fichiers** au plus, **500 Mo** chacun, **1 Go** en tout.
+- **Pourquoi côté poste.** La liste n'est connue que du rapport, lu par le moteur sur le poste ; l'enveloppe du serveur n'est pas
+  modifiée. Le poste envoie chaque chemin validé comme une **valeur** insérée dans deux scripts figés (aucun espace, guillemet ni
+  caractère de motif possible) : le **manifeste** (taille et SHA-256 de chaque fichier, calculés au serveur), puis l'**envoi** d'un
+  fichier. Au serveur, le fichier doit être ordinaire (ni lien symbolique, ni lien dur, ni dossier lié sur le chemin : chemin physique
+  égal au chemin demandé) sous `~/taches/<id>/travail/projet/` ; un fichier qui contient le jeton de l'abonnement est refusé (même
+  contrôle `grep -F` que la sortie ; un contenu compressé n'y est pas lisible, comme pour la sortie).
+- **Au poste.** Les octets arrivent dans un fichier temporaire du **même dossier**, la taille et le SHA-256 sont vérifiés contre le
+  manifeste, puis le fichier est **renommé** (atomique) ; un écart jette le temporaire. La destination doit rester dans le projet (aucun
+  lien suivi, dossiers créés un par un) et être **ignorée par git** (un livrable n'entre jamais dans l'historique ni dans le commit
+  « Factory : … »). Un fichier déjà là n'est remplacé que s'il est **plus ancien que la tâche** (date `cree` de l'index) **et** sous un
+  dossier de build (`build`, `dist`, `out`, `outputs`, `release`, `target`…) ; sinon il est gardé et la raison est dite.
+- **Résultat dit.** Une ligne par fichier dans le journal de la tâche : « Livrable rapatrié : `<chemin>` (`<taille>`, `<sha16>`) », ou
+  « Livrable non rapatrié : `<chemin>` : `<raison>` ». Un refus ou une panne ne fait **jamais** échouer la tâche et ne touche pas aux
+  commits rapatriés (la branche `agent/<tâche>` revient comme avant).
+
 ## Les limites par défaut
 
 Valeurs lues dans le code (`LIMITES_AGENT` de `outils/serveur_agent.py`, `lancer_agent.sh`, `entree-agent.py`). Une limite ne dépasse jamais son défaut.
@@ -503,4 +530,7 @@ Tout ce qui précède est vérifié par des tests simulés. À prouver sur le se
   minimal) ; le nom exact de l'archive et la présence de la 3.47.1 dans `releases_linux.json`.
 - **APK au serveur** : `flutter build apk --debug` dans l'agent (téléchargement de Gradle et des dépendances par le
   réseau de l'agent, durée, mémoire sous 4 Go, taille de `/maison/.gradle` et de `android-up`, chemin réel du JDK dans
-  l'image, overlay du SDK Android) ; la récupération de l'APK produit (hors commits aujourd'hui).
+  l'image, overlay du SDK Android).
+- **Livrables rapatriés** (voir cette section) : le manifeste et l'envoi au vrai serveur (`stat`, `sha256sum`, `find -links`),
+  la durée d'un APK de 50 à 150 Mo par `executer_vers_fichier`, le chemin réellement déclaré par l'agent dans son rapport, et le
+  bouton « Télécharger » du bureau sur le fichier rapatrié.

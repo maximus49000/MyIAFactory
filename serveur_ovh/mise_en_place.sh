@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Mise en place du serveur dédié (Ubuntu LTS). Le contrôleur dépose d'abord ce script dans un fichier du serveur, puis lance
 # `bash <fichier> --etape X`.
-# Contrat d'entrée standard : SEULES les étapes licence (la licence) et bureau_distant (UNE ligne : le mot de passe de la
-# session graphique) lisent stdin. Pour toutes les autres, stdin est fermé (/dev/null) afin qu'aucune commande
+# Contrat d'entrée standard : SEULES les étapes licence (la licence), bureau_distant (UNE ligne : le mot de passe de la
+# session graphique) et unity_licence_etat (UNE ligne : l'état de la licence Unity, aucun secret) lisent stdin. Pour toutes les autres, stdin est fermé (/dev/null) afin qu'aucune commande
 # (ssh, apt, docker...) ne puisse consommer ce que l'appelant envoie.
 # Les étapes android_build, android_emulateur, emulateur_image, agent_image, tests_image, tests_android_image, unity_cli et unity_bac_a_sable (capacités du serveur) ne lisent pas non plus stdin : aucun secret.
-# Usage : mise_en_place.sh --etape <durcissement|docker|images|licence|bureau_distant|android_build|android_emulateur|emulateur_image|agent_image|tests_image|tests_android_image|unity_cli|unity_bac_a_sable|etat> [--simuler]
+# Usage : mise_en_place.sh --etape <durcissement|docker|images|licence|bureau_distant|android_build|android_emulateur|emulateur_image|agent_image|tests_image|tests_android_image|unity_cli|unity_bac_a_sable|unity_licence_etat|etat> [--simuler]
 # Réservées aux tests (valeurs par défaut en production) : JVM_RACINE, KVM_PERIPH, SDK_DELAI_S.
 # Sortie standard : UN SEUL objet JSON {"etape","statut","detail","versions","disque_libre_go"}.
 # Idempotent : chaque étape constate l'état avant d'agir. --simuler n'exécute aucune commande apt/docker/ufw/systemctl.
@@ -51,19 +51,19 @@ SIMULER=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --etape)
-      [ $# -ge 2 ] || { echo "L'option --etape attend une valeur (durcissement, docker, images, licence, bureau_distant, android_build, android_emulateur, emulateur_image, agent_image, tests_image, tests_android_image, unity_cli, unity_bac_a_sable ou etat)." >&2; exit 2; }
+      [ $# -ge 2 ] || { echo "L'option --etape attend une valeur (durcissement, docker, images, licence, bureau_distant, android_build, android_emulateur, emulateur_image, agent_image, tests_image, tests_android_image, unity_cli, unity_bac_a_sable, unity_licence_etat ou etat)." >&2; exit 2; }
       ETAPE="$2"; shift 2 ;;
     --simuler) SIMULER=1; shift ;;
     *) echo "Argument inconnu : $1" >&2; exit 2 ;;
   esac
 done
 case "$ETAPE" in
-  durcissement|docker|images|licence|bureau_distant|android_build|android_emulateur|emulateur_image|agent_image|tests_image|tests_android_image|unity_cli|unity_bac_a_sable|etat) ;;
+  durcissement|docker|images|licence|bureau_distant|android_build|android_emulateur|emulateur_image|agent_image|tests_image|tests_android_image|unity_cli|unity_bac_a_sable|unity_licence_etat|etat) ;;
   *) echo "Étape inconnue ou absente : '$ETAPE'" >&2; exit 2 ;;
 esac
 
-# Seules les étapes licence et bureau_distant lisent stdin ; ailleurs il est fermé.
-if [ "$ETAPE" != "licence" ] && [ "$ETAPE" != "bureau_distant" ]; then
+# Seules les étapes licence, bureau_distant et unity_licence_etat lisent stdin ; ailleurs il est fermé.
+if [ "$ETAPE" != "licence" ] && [ "$ETAPE" != "bureau_distant" ] && [ "$ETAPE" != "unity_licence_etat" ]; then
   exec </dev/null
 fi
 
@@ -1089,6 +1089,41 @@ etape_unity_bac_a_sable() {
   repondre fait "Bac à sable Unity installé : utilisateur ${BAC_UTILISATEUR}, ${BAC_VAR}, ${BAC_SCRIPT}, règle ${BAC_SUDOERS} vérifiée, ACL de lecture sur ${n} fichier(s) de licence. Le marqueur ~/.myiafactory/unity-bac-a-sable.version sera écrit par l'audit J14 seulement."
 }
 
+# --- État de la licence Unity (capacité unity-licence, § 5.16, tâche 14i) --------
+
+# Étape unity_licence_etat : lit UNE ligne sur l'entrée standard (« conteneur B1|B2|B3 », « hote » ou « absente » ; aucun
+# secret), la valide par un motif ANCRÉ et l'écrit dans ~/.myiafactory/unity-licence.etat (0600, remplacement atomique), le
+# marqueur que lit la sonde de unity-licence. Écrite par l'outil de l'expérience J13 (tests_unity_essai.py), par une campagne
+# Unity qui rend 81 (« absente ») et par le bouton « Vérifier la licence » du bureau. « conteneur » et « hote » exigent que les
+# fichiers de licence existent (test -s sur leurs NOMS, jamais leur contenu) : sinon a_faire et rien n'est écrit.
+ETAT_LICENCE_UNITY="$HOME/.myiafactory/unity-licence.etat"
+licence_unity_presente() {
+  local f
+  [ -s "$HOME/.local/share/unity3d/Unity/Unity_lic.ulf" ] && return 0
+  for f in "$HOME/.config/unity3d/Unity/licenses"/*; do [ -s "$f" ] && return 0; done
+  return 1
+}
+etape_unity_licence_etat() {
+  local ligne="" tmp
+  read -r -n 64 ligne || true
+  exec </dev/null
+  ligne="${ligne%$'\r'}"
+  [[ $ligne =~ ^(conteneur\ (B1|B2|B3)|hote|absente)$ ]] ||
+    repondre bloque "État de licence Unity refusé : « conteneur B1|B2|B3 », « hote » ou « absente » attendu. Rien n'a été écrit."
+  if [ "$ligne" != absente ] && ! licence_unity_presente; then
+    repondre a_faire "Aucun fichier de licence Unity sur l'hôte : reconnectez Unity Hub (session graphique), puis vérifiez la licence. Rien n'a été écrit."
+  fi
+  if [ "$SIMULER" = 1 ]; then
+    repondre a_faire "Simulation : écrirait « ${ligne} » dans ~/.myiafactory/unity-licence.etat."
+  fi
+  refuser_root
+  install -d -m 700 "$HOME/.myiafactory" || repondre bloque "Dossier ~/.myiafactory non créable."
+  tmp=$(mktemp "$HOME/.myiafactory/.unity-licence.XXXXXX") || repondre bloque "Fichier temporaire non créable dans ~/.myiafactory."
+  printf '%s\n' "$ligne" > "$tmp" && chmod 600 "$tmp" && mv -f "$tmp" "$ETAT_LICENCE_UNITY" ||
+    { rm -f "$tmp"; repondre bloque "Écriture de ~/.myiafactory/unity-licence.etat impossible."; }
+  repondre fait "Licence Unity notée : ${ligne}."
+}
+
 # --- État ------------------------------------------------------------------
 
 etape_etat() {
@@ -1125,5 +1160,6 @@ case "$ETAPE" in
   tests_android_image) etape_tests_android_image ;;
   unity_cli) etape_unity_cli ;;
   unity_bac_a_sable) etape_unity_bac_a_sable ;;
+  unity_licence_etat) etape_unity_licence_etat ;;
   etat) etape_etat ;;
 esac

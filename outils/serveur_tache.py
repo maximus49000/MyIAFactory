@@ -579,7 +579,19 @@ def choisir_serveur(dossier=plateforme_acces.DOSSIER, requises=CAPACITES_REQUISE
     for s in serveurs:
         caps = (connu.get(s.id) or {}).get("capacites")
         caps = caps if isinstance(caps, dict) else {}
-        statuts = {c: caps[c].get("statut") if isinstance(caps.get(c), dict) else None for c in requises}
+        etats = (connu.get(s.id) or {}).get("etats")
+        etats = etats if isinstance(etats, dict) else {}
+        statuts = {}
+        for exigence in requises:
+            # « nom=etat » (capacité à états, ex. unity-licence=conteneur) : présente à la sonde ET cet état relevé ;
+            # sans « = », le sens d'avant (présente)
+            c, egal, voulu = str(exigence).partition("=")
+            v = caps[c].get("statut") if isinstance(caps.get(c), dict) else None
+            if egal and v in STATUTS_PRETS:
+                releve = etats.get(c).get("etat") if isinstance(etats.get(c), dict) else None
+                if releve != voulu:
+                    v = f"etat_{releve or 'inconnu'}"
+            statuts[exigence] = v
         if all(v in STATUTS_PRETS for v in statuts.values()):
             return s
         if not caps:
@@ -592,7 +604,8 @@ def choisir_serveur(dossier=plateforme_acces.DOSSIER, requises=CAPACITES_REQUISE
                 detail = detail if isinstance(detail, str) else ""
                 return f"{c} périmée (à mettre à jour)" if ("mettre à jour" in detail or "périm" in detail) else c
             raisons.append(f"{s.id} : capacité(s) absente(s) ou périmée(s) : "
-                           + ", ".join(libelle(c) for c, v in statuts.items() if v not in STATUTS_PRETS))
+                           + ", ".join(f"{c} (relevé : {v[5:]})" if isinstance(v, str) and v.startswith("etat_")
+                                       else libelle(c) for c, v in statuts.items() if v not in STATUTS_PRETS))
     usage = "l'émulation" if tuple(requises) == CAPACITES_REQUISES else "un agent (" + ", ".join(requises) + ")"
     raise RefusLancement(f"Aucun serveur prêt pour {usage} (" + " ; ".join(raisons) + ").")
 

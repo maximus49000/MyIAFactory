@@ -24,7 +24,57 @@ const STATUTS = {presente: "présente", absente: "absente", inconnue: "inconnue"
   a_faire: "à faire", en_cours: "en cours"};
 const LIBELLES_CAPACITES = {base: "Base du serveur", durcissement: "Durcissement SSH", "android-build": "Construction Android",
   "android-emulateur": "Émulateur Android", "emulateur-image": "Image de l'émulateur", "unity-cli": "Unity CLI", "unity-editeur": "Éditeur Unity",
-  "session-graphique": "Session graphique distante", agent: "Agent de développement", "agent-abonnement": "Connexion à l'abonnement"};
+  "session-graphique": "Session graphique distante", agent: "Agent de développement", "agent-abonnement": "Connexion à l'abonnement",
+  "unity-licence": "Licence Unity", "unity-bac-a-sable": "Bac à sable Unity"};
+
+// Licence et bac à sable Unity (§ 5.16, tâche 14i) : textes fixes, la raison et les étapes viennent du bureau (textContent seulement).
+const VARIANTES_LICENCE = new Set(["B1", "B2", "B3"]);
+export function texteLicenceUnity(u) {
+  const l = objet(objet(u).licence);
+  if (l.etat === "conteneur") return `Licence Unity : dans le conteneur${VARIANTES_LICENCE.has(l.variante) ? ` (${l.variante})` : ""}`;
+  if (l.etat === "hote") return "Licence Unity : sur l'hôte, bac à sable";
+  return `Licence Unity : absente${texte(l.raison) ? ` — ${texte(l.raison)}` : ""}`;
+}
+export function texteBacASable(u) {
+  return `Bac à sable Unity : ${objet(u).bac_a_sable === "pret" ? "prêt" : "absent"}`;
+}
+
+// « Vérifier la licence » : rétablit l'état d'avant d'une licence refusée si ses fichiers sont là, puis sonde. {ok, occupe, message}.
+export async function verifierLicence(id, fetchFn = globalThis.fetch) {
+  const r = await appeler(`${chemin(id)}/verifier-licence`, "POST", {}, fetchFn);
+  if (r.injoignable) return {ok: false, message: INJOIGNABLE};
+  if (r.status === 409) return {ok: false, occupe: true, message: texte(r.d.erreur) || "Une opération est déjà en cours."};
+  if (!r.ok) return {ok: false, message: refus(r)};
+  return {ok: true, message: "Vérification lancée : l'état se met à jour tout seul."};
+}
+
+// La zone Unity d'une carte : deux lignes d'état et les étapes humaines guidées (lien https seulement, mode opératoire, bouton).
+export function zoneUnity(u, surBouton) {
+  const z = [];
+  if (!u || typeof u !== "object") return z;
+  z.push(el("p", "ligne-detail serveurs-unity-licence", texteLicenceUnity(u)), el("p", "ligne-detail serveurs-unity-bac", texteBacASable(u)));
+  for (const e of tableau(u.etapes).slice(0, 4)) {
+    if (!e || typeof e !== "object" || !texte(e.texte)) continue;
+    const bloc = el("div", "serveurs-unity-etape");
+    bloc.append(el("strong", "", `Étape à faire par vous : ${texte(e.texte)}`));
+    if (texte(e.lien).startsWith("https://")) {
+      const a = el("a", "serveurs-unity-lien", "Documentation de Unity Hub");
+      a.href = e.lien; a.target = "_blank"; a.rel = "noopener noreferrer";
+      bloc.append(el("span", "", " "), a);
+    }
+    const liste = el("ol", "serveurs-unity-mode");
+    for (const pas of tableau(e.mode_operatoire).slice(0, 10)) if (texte(pas)) liste.append(el("li", "", texte(pas)));
+    bloc.append(liste);
+    if (texte(e.bouton)) {
+      const b = el("button", "bouton serveurs-unity-verifier", texte(e.bouton));
+      b.type = "button";
+      b.addEventListener("click", () => surBouton(b, e));
+      bloc.append(b);
+    }
+    z.push(bloc);
+  }
+  return z;
+}
 
 // La procédure de connexion à l'abonnement (faite une fois par le Directeur sur le serveur) : une adresse fixe du dépôt public.
 export const LIEN_CONNEXION_ABONNEMENT = "https://github.com/maximus49000/MyIAFactory/blob/main/docs/serveur-agents.md#connexion-a-l-abonnement";
@@ -418,7 +468,8 @@ export function ecranServeurs(etat, options = {}) {
     const msg = el("p", "reglage-message serveurs-message-serveur");
     msg.setAttribute("aria-live", "polite");
     const zone = el("div", "serveurs-installation-zone");
-    const refs = {encours, erreur, abonnement, tester, verifier, installer, capacites, msg, zone};
+    const unity = el("div", "serveurs-unity");
+    const refs = {encours, erreur, abonnement, tester, verifier, installer, capacites, msg, zone, unity};
     cartes.set(serveur.id, refs);
     majServeur(serveur);
     const sonde = async (b) => {
@@ -430,12 +481,22 @@ export function ecranServeurs(etat, options = {}) {
       majServeur(entreeCourante(serveur));     // l'entrée du dernier relevé, pas celle de la création de la carte
       planifier();
     };
+    refs.surUnity = async (b, etape) => {
+      if (b.disabled) return;
+      if (texte(etape.bouton) !== "Vérifier la licence") return sonde(b);     // « Vérifier l'éditeur » : la sonde seule
+      i.message = "Envoi…"; msg.textContent = i.message;
+      const r = await verifierLicence(serveur.id, fetchFn);
+      i.message = r.message;
+      if (r.ok || r.occupe) { lance = "sonder"; sansTravail = 0; lectures = 0; }
+      majServeur(entreeCourante(serveur));
+      planifier();
+    };
     tester.addEventListener("click", () => sonde(tester));
     verifier.addEventListener("click", () => sonde(verifier));
     installer.addEventListener("click", () => { if (installer.disabled) return; i.ouvert = !i.ouvert; i.apercu = null; dessiner(); });
     const barre = el("div", "serveurs-boutons");
     barre.append(tester, verifier, installer);
-    c.append(capacites, barre, msg, zone);
+    c.append(capacites, unity, barre, msg, zone);
     reconstruireInstallation(serveur);
     return c;
   }
@@ -484,6 +545,7 @@ export function ecranServeurs(etat, options = {}) {
     r.installer.disabled = occupe || lance === "installer";
     const ecarte = perimer(serveur);
     remplirCapacites(r.capacites, serveur, i);
+    r.unity.replaceChildren(...zoneUnity(serveur.unity, (b, e) => r.surUnity && r.surUnity(b, e)));
     if (ecarte) { i.message = "L'état du serveur a changé : refaites l'aperçu avant d'installer."; reconstruireInstallation(serveur); }
     if (i.lancer) i.lancer.disabled = occupe || i.envoi === true;
     r.msg.textContent = i.message;

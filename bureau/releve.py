@@ -374,6 +374,66 @@ def mode_operatoire_propre(m):
     return [" ".join(x.split()) for x in m]
 
 
+# Étapes humaines guidées d'un SERVEUR (§ 5.16, tâche 14i) : décisions `environnement` non autonomes (personne d'autre que le
+# Directeur ne saisit les identifiants de son compte Unity), posées une fois dans l'état local du serveur
+# (`serveurs-etat.json` > `etats`) et montrées par la carte du serveur avec leur bouton de vérification (autonome : une sonde).
+# Liens vérifiés le 2026-11-23 (documentation de Unity Hub : « Managing licenses », « Download and manage Editor installations »).
+LIEN_LICENCES_HUB = "https://docs.unity.com/en-us/hub/manage-license"
+LIEN_EDITEURS_HUB = "https://docs.unity.com/en-us/hub/install-editors"
+_MODE_LICENCE_UNITY = [
+    "Ouvrez la session graphique du serveur (si elle manque : lancer.py plateforme installer --bureau-distant).",
+    "Ouvrez Unity Hub.",
+    "Connectez-vous à votre compte Unity (vous seul : jamais un agent ne saisit ces identifiants).",
+    "Paramètres (roue dentée) > Licences > Ajouter une licence > Obtenir une licence Personal gratuite.",
+    "Fermez Unity Hub, puis cliquez « Vérifier la licence » sur la carte du serveur.",
+]
+_MODE_EDITEUR_UNITY = [
+    "Ouvrez la session graphique du serveur (si elle manque : lancer.py plateforme installer --bureau-distant).",
+    "Dans Unity Hub, Paramètres > Installations : choisissez /opt/unity/editors comme dossier d'installation.",
+    "Installations > Installer un éditeur > Archive : installez 6000.6.7f1 (révision b22767f04f04), sans module.",
+    "Attendez la fin du téléchargement, puis fermez Unity Hub.",
+    "Cliquez « Vérifier l'éditeur » sur la carte du serveur.",
+]
+
+
+def _etape_serveur(ident, texte, outil, objectif, lien, mode, bouton):
+    return {"genre": "environnement", "id": ident, "texte": texte, "autonome": False, "lien": lien,
+            "mode_operatoire": list(mode), "bouton": bouton, "verification": "sonde",
+            "environnement": [{"outil": outil, "objectif": objectif, "telechargement": None, "etapes": list(mode),
+                               "autonome": False}]}
+
+
+ETAPES_HUMAINES_SERVEUR = {
+    "unity-licence": _etape_serveur(
+        "unity-licence", "Reconnecter Unity Hub sur le serveur", "Licence Unity (Unity Hub)",
+        "Les tests Unity au serveur ont besoin de la licence Personal de votre Unity Hub.", LIEN_LICENCES_HUB,
+        _MODE_LICENCE_UNITY, "Vérifier la licence"),
+    "unity-editeur-6000.6.7f1": _etape_serveur(
+        "unity-editeur-6000.6.7f1", "Installer 6000.6.7f1 par Hub", "Éditeur Unity 6000.6.7f1",
+        "Le bac à sable de l'hôte lance la version exacte du projet, lisible par l'utilisateur unity-tests.", LIEN_EDITEURS_HUB,
+        _MODE_EDITEUR_UNITY, "Vérifier l'éditeur"),
+}
+
+
+def etape_humaine_serveur(cle):
+    """Une copie de l'étape humaine guidée `cle` (KeyError si inconnue)."""
+    return copy.deepcopy(ETAPES_HUMAINES_SERVEUR[cle])
+
+
+def etape_humaine_ok(d):
+    """Une étape humaine d'un serveur bien formée : décision `environnement` non autonome, `lien` https, `mode_operatoire` de 2 à
+    10 étapes, un `bouton`, des outils valides."""
+    if not isinstance(d, dict) or d.get("genre") != "environnement" or d.get("autonome") is not False:
+        return False
+    if not (isinstance(d.get("lien"), str) and d["lien"].startswith("https://") and len(d["lien"]) <= 500):
+        return False
+    if not mode_operatoire_ok(d.get("mode_operatoire")) or not _texte_plein(d.get("bouton")) or not _texte_plein(d.get("texte")):
+        return False
+    erreurs = []
+    _verifier_outils_a_installer(d, "étape", erreurs)
+    return not erreurs
+
+
 def est_document(chemin):
     """Un document explicatif (md, pdf, docx…) : ce qui se lit."""
     return extension(chemin) in EXTENSIONS_DOCUMENTS
@@ -771,6 +831,12 @@ def _verifier_outils_a_installer(d, ici, erreurs):
                            "version_demandee, version_trouvee}}.")
     if d.get("verifie_le") is not None and not isinstance(d["verifie_le"], str):
         erreurs.append(f"{ici} : « verifie_le » doit être une date.")
+    # l'étape humaine guidée (facultative) : son lien et son mode opératoire
+    if d.get("lien") is not None and not (isinstance(d["lien"], str) and d["lien"].startswith("https://")):
+        erreurs.append(f"{ici} : « lien » est une adresse https.")
+    if d.get("mode_operatoire") is not None and not mode_operatoire_ok(d["mode_operatoire"]):
+        erreurs.append(f"{ici} : « mode_operatoire » : {MIN_ETAPES_MODE} à {MAX_ETAPES_MODE} étapes de "
+                       f"{MAX_ETAPE_MODE} caractères au plus.")
 
 
 def _verifier_validation(d, nom, erreurs):

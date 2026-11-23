@@ -37,7 +37,7 @@ import threading
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import List
+from typing import List, Optional, Tuple
 
 ICI = Path(__file__).resolve().parent
 if str(ICI) not in sys.path:
@@ -309,7 +309,18 @@ def _profil_de_la_campagne(analyse, racine, commande):
 def _image_de_la_campagne(profil, sdk_android):
     """(image, famille, capacités requises) d'après le catalogue ; `image` est None pour l'image par défaut (l'enveloppe la
     prend seule : la ligne de commande reste celle d'avant). `Repli` si aucune image du catalogue ne convient (les images
-    dérivées ne sont pas encore construites) ou si le SDK Android du serveur ne couvre pas le projet."""
+    dérivées ne sont pas encore construites) ou si le SDK Android du serveur ne couvre pas le projet.
+    Unity (tâche 14i) : `myiafactory/tests-unity-<version exacte du projet>` (construite par construire_image_tests.sh ; absente,
+    l'enveloppe refuse en 77 et la campagne revient au poste) ; l'exécuteur est choisi ensuite (`executeur_pour`)."""
+    if tuple(profil.familles) == ("unity",):
+        try:
+            version = tests_images._version("unity", (profil.outils or {}).get("unity"))
+        except ValueError:
+            raise Repli("refusé (version Unity du projet illisible)") from None
+        image = f"myiafactory/tests-unity-{version}"
+        if not MOTIF_IMAGE_UNITY.fullmatch(image):
+            raise Repli("refusé (image Unity hors motif)")
+        return image, "unity", (tests_images.CATALOGUE_IMAGES[tests_images.IMAGE_DEFAUT]["capacite"],)
     choix = tests_images.choisir_image(profil, sdk_android)
     if choix["derivee"]:
         raise Repli("indisponible (aucune image du catalogue ne convient à ce projet : image dérivée à construire)")
@@ -422,10 +433,17 @@ def _hote_de_licence(h):
             and any(h == s or h.endswith("." + s) for s in SUFFIXES_LICENCE))
 
 
-def _arguments_executeur(executeur, licence, hotes_licence, reseau_licence, racine):
+def _arguments_executeur(executeur, licence, hotes_licence, reseau_licence, racine, version_hote=None):
     """Le suffixe de la ligne de l'enveloppe (« » sans exécuteur ni licence : la ligne d'avant ; sinon « <executeur> <licence>
-    [<hôtes>] ») ; `Repli` (avant toute connexion) pour une valeur hors table, une liste d'hôtes hors motif ou sans B3, et pour
-    B3 sans l'accord du Directeur (`tests.adoption.reseau_licence`, QU1) : B3 ouvre le réseau des tests vers les hôtes de licence."""
+    [<hôtes>] », et « <hôtes ou -> <version_hote> » avec une version de repli de l'éditeur de l'hôte, 18e argument) ; `Repli`
+    (avant toute connexion) pour une valeur hors table, une liste d'hôtes hors motif ou sans B3, une version de l'hôte hors motif
+    ou sans l'exécuteur hôte, et pour B3 sans l'accord du Directeur (`tests.adoption.reseau_licence`, QU1) : B3 ouvre le réseau
+    des tests vers les hôtes de licence."""
+    if version_hote is not None:
+        if executeur != "hote_bac_a_sable":
+            raise Repli("refusé (version de l'éditeur de l'hôte sans l'exécuteur hote_bac_a_sable)")
+        if not (isinstance(version_hote, str) and MOTIF_IMAGE_UNITY.fullmatch(f"myiafactory/tests-unity-{version_hote}")):
+            raise Repli("refusé (version de l'éditeur de l'hôte hors motif)")
     if executeur is None and licence is None and not hotes_licence:
         return ""
     if executeur is not None and executeur not in EXECUTEURS:
@@ -445,7 +463,213 @@ def _arguments_executeur(executeur, licence, hotes_licence, reseau_licence, raci
     if len(",".join(hotes)) > HOTES_LICENCE_OCTETS:
         raise Repli(f"refusé (hôtes de licence : {HOTES_LICENCE_OCTETS} caractères au plus)")
     suffixe = f" {executeur or 'conteneur'} {licence or '-'}"
+    if version_hote is not None:
+        return suffixe + f" {','.join(hotes) or '-'} {version_hote}"
     return suffixe + (f" {','.join(hotes)}" if hotes else "")
+
+
+# --- choix de l'exécuteur Unity (§ 5.16, tâche 14i ; CODE SENSIBLE : il décide où du code de projet tourne) ---------------
+
+MOTIF_IMAGE_UNITY = re.compile(r"myiafactory/tests-unity-[0-9]{1,4}\.[0-9]{1,2}\.[0-9]{1,3}[abfp][0-9]{1,3}", re.ASCII)  # miroir de l'enveloppe
+CAP_LICENCE = "unity-licence"
+CAP_BAC_A_SABLE = "unity-bac-a-sable"
+ETATS_LICENCE = ("conteneur", "hote", "absente")
+STATUTS_PRETS = serveur_tache.STATUTS_PRETS
+CODE_LICENCE_REFUSEE = 81
+CODE_AUCUN_TEST = 82
+RAISON_ABSENTE = "licence Unity absente"
+RAISON_BAC_ABSENT = "bac à sable Unity absent : rien ne tourne sur l'hôte sans lui"
+RAISON_DEPART = "expérience B non faite"
+RISQUE_A = ("Risque résiduel de l'option A : le code des tests tourne sur l'hôte (utilisateur unity-tests, unité confinée), "
+            "moins isolé qu'un conteneur ; il peut lire la licence et tout fichier lisible par tous sur l'hôte.")
+
+
+class RepliUnity(Repli):
+    """`Repli` du choix de l'exécuteur Unity ; `.etape` : l'étape humaine guidée à poser (une fois), ou None."""
+
+    def __init__(self, raison, etape=None):
+        Repli.__init__(self, raison)
+        self.etape = etape
+
+
+def _statut(etat_serveur, capacite):
+    caps = etat_serveur.get("capacites") if isinstance(etat_serveur, dict) else None
+    c = caps.get(capacite) if isinstance(caps, dict) else None
+    return c.get("statut") if isinstance(c, dict) else None
+
+
+def licence_relevee(etat_serveur) -> dict:
+    """`{"etat", "variante", "raison", "hotes"}` de la licence Unity d'après l'état local d'UN serveur (son entrée de
+    `serveurs-etat.json`) : `conteneur`/`hote` seulement si la sonde la constate présente ET que l'état relevé le dit ; sinon
+    `absente` avec sa raison (« expérience B non faite » au départ). Pur ; ne lève jamais."""
+    etats = etat_serveur.get("etats") if isinstance(etat_serveur, dict) else None
+    e = etats.get(CAP_LICENCE) if isinstance(etats, dict) else None
+    e = e if isinstance(e, dict) else {}
+    releve = e.get("etat") if e.get("etat") in ETATS_LICENCE else None
+    variante = e.get("variante") if e.get("variante") in LICENCES else None
+    hotes = [h for h in e.get("hotes") or [] if _hote_de_licence(h)] if isinstance(e.get("hotes"), list) else []
+    raison = e.get("raison") if isinstance(e.get("raison"), str) else ""
+    if releve in ("conteneur", "hote") and _statut(etat_serveur, CAP_LICENCE) in STATUTS_PRETS:
+        return {"etat": releve, "variante": variante, "raison": "", "hotes": hotes}
+    if releve in ("conteneur", "hote"):
+        raison = "fichiers de licence ou marqueur absents à la dernière sonde"
+    return {"etat": "absente", "variante": None, "raison": raison[:200] or RAISON_DEPART, "hotes": []}
+
+
+def executeur_pour(profil, etat_serveur) -> Tuple[str, Optional[str]]:
+    """(exécuteur, variante de licence) pour une campagne au serveur ; PUR. Règle EXACTE du § 5.16 pour un profil `unity` :
+    `unity-licence = conteneur` → (`conteneur`, B1|B2|B3 retenue) ; `unity-licence = hote` ET `unity-bac-a-sable` présente →
+    (`hote_bac_a_sable`, variante retenue ou B1) ; sinon RIEN n'est lancé au serveur : `RepliUnity` (« licence Unity absente »,
+    étape humaine « unity-licence » ; « bac à sable Unity absent : rien ne tourne sur l'hôte sans lui »). Hors Unity :
+    (`conteneur`, None), la licence n'est jamais demandée."""
+    if "unity" not in tuple(getattr(profil, "familles", ()) or ()):
+        return "conteneur", None
+    lic = licence_relevee(etat_serveur)
+    if lic["etat"] == "conteneur":
+        return "conteneur", lic["variante"] or "B1"
+    if lic["etat"] == "hote":
+        if _statut(etat_serveur, CAP_BAC_A_SABLE) in STATUTS_PRETS:
+            return "hote_bac_a_sable", lic["variante"] or "B1"
+        raise RepliUnity(f"refusé ({RAISON_BAC_ABSENT})")
+    raise RepliUnity(f"refusé ({RAISON_ABSENTE} : {lic['raison']})", etape="unity-licence")
+
+
+def verdict_unity(code, executeur, nb_tests=None) -> dict:
+    """Le verdict d'une campagne d'évaluation Unity (adoption, 15b) : `{"statut", "raison", "executeur", "risque"}`. 0 → passe ;
+    82 (ou 0 test) → echoue « aucun test découvert », jamais une réussite ; 81 → echoue « licence Unity refusée ». L'exécuteur
+    est toujours nommé ; pour l'option A, le risque résiduel en une ligne. Pur."""
+    libelle = {"conteneur": "dans le conteneur", "hote_bac_a_sable": "sur l'hôte, bac à sable"}.get(executeur, "inconnu")
+    risque = RISQUE_A if executeur == "hote_bac_a_sable" else None
+    if code == CODE_AUCUN_TEST or (code == 0 and nb_tests == 0):
+        statut, raison = "echoue", "aucun test découvert"
+    elif code == CODE_LICENCE_REFUSEE:
+        statut, raison = "echoue", "licence Unity refusée"
+    elif code == 0:
+        statut, raison = "passe", ""
+    else:
+        statut, raison = "echoue", f"code {code}"
+    return {"statut": statut, "raison": raison, "executeur": libelle, "risque": risque}
+
+
+def _bureau(nom):
+    try:
+        return __import__(f"bureau.{nom}", fromlist=[nom])
+    except ImportError:
+        sys.path.append(str(ICI.parent))
+        return __import__(f"bureau.{nom}", fromlist=[nom])
+
+
+def _etat_serveurs_par_defaut(dossier_etat):
+    import serveur_installation
+    return serveur_installation.lire_etat_vivant(dossier_etat)
+
+
+def poser_etape_humaine(dossier_etat, serveur_id, cle, modifier=None) -> bool:
+    """Pose UNE fois l'étape humaine guidée `cle` (bureau/releve.py) dans l'état local du serveur (`etats[unity-licence]
+    .etapes`) ; vrai si elle vient d'être posée, faux si elle l'était déjà (ou si l'état n'a pas pu être écrit)."""
+    import serveur_installation
+    etape = _bureau("releve").etape_humaine_serveur(cle)
+    pose = []
+
+    def ajouter(ancien):
+        etapes = ancien.get("etapes") if isinstance(ancien.get("etapes"), dict) else {}
+        if cle in etapes:
+            return ancien
+        pose.append(cle)
+        return {**ancien, "etapes": {**etapes, cle: etape}}
+    try:
+        (modifier or serveur_installation.modifier_etat_capacite)(dossier_etat, serveur_id, CAP_LICENCE, ajouter)
+    except Exception:  # noqa: BLE001 — l'étape sera posée à la prochaine campagne
+        return False
+    return bool(pose)
+
+
+def _etape_licence(serveur, ssh, ligne):
+    """(statut, détail) de l'étape `unity_licence_etat` au serveur (la ligne sur l'entrée standard) ; jamais d'exception."""
+    import serveur_installation
+    from plateforme import SCRIPT_DISTANT
+    if not re.fullmatch(r"conteneur (B1|B2|B3)|hote|absente", ligne, re.ASCII):
+        return "bloque", "état de licence hors motif"
+    try:
+        code, sortie, erreur = ssh.executer(serveur_etat.cible(serveur), f'bash "{SCRIPT_DISTANT}" --etape unity_licence_etat',
+                                            serveur.cle, stdin=ligne + "\n", delai=60)
+    except Exception as e:  # noqa: BLE001
+        return "inconnue", type(e).__name__
+    d = serveur_installation._analyser(sortie if isinstance(sortie, str) else "")
+    if not d or d.get("statut") not in serveur_installation.STATUTS_ETAPE:
+        return ("inconnue" if code in INJOIGNABLES else "bloque"), f"réponse illisible (code {code})"
+    return d["statut"], str(d.get("detail") or "")[:200]
+
+
+def noter_licence_unity(dossier_etat, serveur, etat, variante=None, raison="", hotes=None, ssh=None, modifier=None):
+    """Note l'état de la licence Unity : au serveur (étape `unity_licence_etat`, marqueur de la sonde) PUIS dans l'état local
+    (`etats[unity-licence]` : état, variante, raison, hôtes de B3). `absente` garde l'état d'avant (`precedent`, pour « Vérifier
+    la licence ») et pose l'étape humaine une fois ; `conteneur`/`hote` retirent l'étape. Rend (statut de l'étape, détail).
+    L'état local n'est écrit que si l'étape a répondu `fait` (« absente » : toujours, rien ne tourne sans licence)."""
+    import serveur_installation
+    if etat not in ETATS_LICENCE or (etat == "conteneur") != (variante in LICENCES):
+        raise ValueError("état de licence Unity invalide")
+    ligne = f"conteneur {variante}" if etat == "conteneur" else etat
+    statut, detail = _etape_licence(serveur, ssh or plateforme_ssh, ligne)
+    if statut != "fait" and etat != "absente":
+        return statut, detail
+    etape = _bureau("releve").etape_humaine_serveur("unity-licence") if etat == "absente" else None
+
+    def ecrire(ancien):
+        etapes = dict(ancien.get("etapes")) if isinstance(ancien.get("etapes"), dict) else {}
+        neuf = {"etat": etat, "variante": variante, "raison": str(raison or "")[:200],
+                "hotes": [h for h in hotes or [] if _hote_de_licence(h)], "etapes": etapes}
+        if etat == "absente":
+            avant = ancien if ancien.get("etat") in ("conteneur", "hote") else ancien.get("precedent")
+            if isinstance(avant, dict) and avant.get("etat") in ("conteneur", "hote"):
+                neuf["precedent"] = {k: avant.get(k) for k in ("etat", "variante", "hotes")}
+            etapes.setdefault("unity-licence", etape)
+        else:
+            etapes.pop("unity-licence", None)
+        return neuf
+    (modifier or serveur_installation.modifier_etat_capacite)(dossier_etat, serveur.id, CAP_LICENCE, ecrire)
+    return statut, detail
+
+
+def verifier_licence_unity(dossier_etat, serveur, ssh=None, lire=None, modifier=None):
+    """Le bouton « Vérifier la licence » du bureau (autonome) : si l'état local est `absente` avec un état d'avant
+    (`precedent`, licence refusée par une campagne), ce dernier est réécrit au serveur (l'étape exige que les fichiers de licence
+    existent : sinon `a_faire`, rien n'est écrit) puis dans l'état local. L'appelant relance ensuite la sonde. Rend un message."""
+    import serveur_installation
+    e = (lire or serveur_installation.lire_etat_capacite)(dossier_etat, serveur.id, CAP_LICENCE)
+    p = e.get("precedent") if isinstance(e.get("precedent"), dict) else None
+    if e.get("etat") != "absente" or p is None or p.get("etat") not in ("conteneur", "hote"):
+        return "Sonde relancée." if e.get("etat") in ("conteneur", "hote") else \
+            "Sonde relancée ; aucun état de licence à rétablir (expérience J13 : tests_unity_essai.py)."
+    variante = p.get("variante") if p.get("etat") == "conteneur" else None
+    if p.get("etat") == "conteneur" and variante not in LICENCES:
+        return "État d'avant illisible : refaites l'expérience J13."
+    statut, detail = noter_licence_unity(dossier_etat, serveur, p["etat"], variante, hotes=p.get("hotes"), ssh=ssh,
+                                         modifier=modifier)
+    if statut == "fait":
+        return "Licence Unity rétablie : " + ("dans le conteneur" if p["etat"] == "conteneur" else "sur l'hôte, bac à sable") + "."
+    return f"Licence Unity non rétablie ({statut}) : {detail}"
+
+
+def _version_hote_par_defaut(racine):
+    """`tests.profil_force.unity_version_hote` des réglages du projet (écrit par le bureau seul, décision du Directeur) : une
+    version de repli de l'éditeur de l'hôte (résultats indicatifs), sinon None. Toute erreur, deux valeurs différentes : None."""
+    vues = set()
+    try:
+        deport_types = _bureau("deport_types")
+        for fichier in deport_types.reglages_enregistres(racine) or []:
+            x = deport_types._lire_json_sur(fichier)
+            tests = x.get("tests") if isinstance(x, dict) else None
+            force = tests.get("profil_force") if isinstance(tests, dict) else None
+            v = force.get("unity_version_hote") if isinstance(force, dict) else None
+            if v is not None:
+                vues.add(v)
+    except Exception:  # noqa: BLE001
+        return None
+    if len(vues) != 1:
+        return None
+    v = vues.pop()
+    return v if isinstance(v, str) and MOTIF_IMAGE_UNITY.fullmatch(f"myiafactory/tests-unity-{v}") else None
 
 
 def _deps_de_la_campagne(profil, famille, commande, racine, empreinte):
@@ -670,15 +894,20 @@ def places_de(serveur):
 def _au_serveur(commande, racine, attendre, places, dossier_etat, ssh, noter, horloge, maintenant, dire, choisir,
                 instantane, projet_de, injoignable, attentes, sortie, sortie_erreur, nouvel_id, forcer, popen_base,
                 dormir, travail_go=None, analyse=None, sdk_android=None, empreinte=None, reseau_code=None,
-                ressources_forcees=None, executeur=None, licence=None, hotes_licence=None, reseau_licence=None):
+                ressources_forcees=None, executeur=None, licence=None, hotes_licence=None, reseau_licence=None,
+                version_hote=None, evaluation=False, etat_serveurs=None, noter_licence=None, poser_etape=None,
+                version_hote_de=None):
     """La campagne au serveur ; rend son code, ou lève `Repli`. `KeyboardInterrupt` remonte telle quelle."""
     appel = horloge()
-    suffixe = _arguments_executeur(executeur, licence, hotes_licence, reseau_licence, racine)   # avant tout (B3 : accord)
+    # avant tout : les valeurs données (B3 : accord) ; le choix automatique de l'exécuteur Unity vient après celui du serveur
+    suffixe = _arguments_executeur(executeur, licence, hotes_licence, reseau_licence, racine, version_hote)
     profil = _profil_de_la_campagne(analyse or _analyse_par_defaut, racine, commande)
     limites = limites_de(profil, (ressources_forcees or _limites_forcees_par_defaut)(racine))
     image, famille, requises = _image_de_la_campagne(profil, sdk_android)
     if licence is not None and famille != "unity":
         raise Repli("refusé (licence Unity hors de la famille unity)")
+    if executeur == "hote_bac_a_sable" and famille != "unity":
+        raise Repli("refusé (exécuteur hote_bac_a_sable hors de la famille unity)")
     cle, deps, famille_deps = _deps_de_la_campagne(profil, famille, commande, racine, empreinte)
     reseau = "refuse"
     if cle is not None:
@@ -697,6 +926,36 @@ def _au_serveur(commande, racine, attendre, places, dossier_etat, ssh, noter, ho
         serveur_etat.cible(serveur)
     except ValueError as e:
         raise Repli(f"mal déclaré ({e})") from None
+    if famille == "unity":
+        # Choix de l'exécuteur (§ 5.16) d'après l'état LOCAL du serveur choisi, avant toute connexion. Jamais l'hôte sans
+        # unity-licence=hote ET unity-bac-a-sable présente, même demandé explicitement (outil J14).
+        try:
+            etat_srv = (etat_serveurs or _etat_serveurs_par_defaut)(dossier_etat).get(serveur.id) or {}
+        except Exception:  # noqa: BLE001 — état illisible : la licence est absente
+            etat_srv = {}
+        if executeur is None and licence is None:
+            try:
+                executeur, licence = executeur_pour(profil, etat_srv)
+            except RepliUnity as e:
+                if e.etape and (poser_etape or poser_etape_humaine)(dossier_etat, serveur.id, e.etape):
+                    dire("Étape humaine posée au bureau (carte du serveur) : « Reconnecter Unity Hub sur le serveur ».")
+                raise
+            if licence == "B3":
+                hotes_licence = licence_relevee(etat_srv)["hotes"]
+        elif executeur == "hote_bac_a_sable":
+            try:
+                permis = executeur_pour(profil, etat_srv)[0] == "hote_bac_a_sable"
+            except RepliUnity:
+                permis = False
+            if not permis:
+                raise Repli("refusé (exécuteur hote_bac_a_sable sans unity-licence=hote et unity-bac-a-sable présente)")
+        elif executeur is None:
+            executeur = "conteneur"
+        if executeur == "hote_bac_a_sable" and version_hote is None:
+            version_hote = (version_hote_de or _version_hote_par_defaut)(racine)
+        suffixe = _arguments_executeur(executeur, licence, hotes_licence, reseau_licence, racine, version_hote)
+        if version_hote is not None and image != f"myiafactory/tests-unity-{version_hote}":
+            dire(f"Éditeur de l'hôte {version_hote} au lieu de la version du projet : résultats indicatifs.")
     if famille == "gradle-android" and sdk_android is None:
         manque = tests_images._sdk_manquant(profil, sonder_sdk(serveur, ssh))
         if manque:
@@ -794,6 +1053,17 @@ def _au_serveur(commande, racine, attendre, places, dossier_etat, ssh, noter, ho
             return refus
         dire(f"Serveur : {MESSAGES_ARRET[refus]}, rien n'est relancé.")
         code = refus
+    if famille == "unity" and refus is None and code == CODE_LICENCE_REFUSEE and not evaluation:
+        # 81 : la licence est notée absente (étape unity_licence_etat, puis l'état local) et l'étape humaine posée, une fois ;
+        # pendant une évaluation (expérience J13), 81 est un résultat attendu : rien n'est noté
+        try:
+            (noter_licence or noter_licence_unity)(dossier_etat, serveur, "absente",
+                                                   raison="licence refusée à la dernière campagne", ssh=ssh)
+            dire("Serveur : licence Unity refusée ; notée absente, étape « Reconnecter Unity Hub » posée au bureau.")
+        except Exception:  # noqa: BLE001
+            dire("Serveur : licence Unity refusée ; l'état n'a pas pu être noté (il le sera à la prochaine campagne).")
+    if evaluation:
+        return code          # une évaluation n'écrit aucune ligne de mesure ordinaire
     try:
         _code, debut, fin, attente_s = fin_serveur
         (noter or _noter_par_defaut)(
@@ -812,13 +1082,17 @@ def executer(commande, dossier=None, attendre=True, forcer=False, places=None, d
              injoignable=INJOIGNABLE, attentes=None, sortie=None, sortie_erreur=None,
              nouvel_id=serveur_tache.nouvel_id, _popen=subprocess.Popen, dormir=time.sleep, accord=None,
              travail_go=None, analyse=None, sdk_android=None, empreinte=None, reseau_code=None,
-             ressources_forcees=None, executeur=None, licence=None, hotes_licence=None, reseau_licence=None) -> int:
+             ressources_forcees=None, executeur=None, licence=None, hotes_licence=None, reseau_licence=None,
+             version_hote=None, evaluation=False, etat_serveurs=None, noter_licence=None, poser_etape=None,
+             version_hote_de=None) -> int:
     """Lance `commande` au serveur et rend son code ; sinon (règles R1–R5) au poste, une fois, sous son verrou. Avec
     `forcer` (`--serveur`) : jamais de repli, la raison est dite et le code est 4. `KeyboardInterrupt` remonte (le
     lanceur rend 130) : rien n'est relancé, rien n'est noté.
     L'accord du Directeur (`deport_types.refus_route(racine, "tests")`, `accord(racine) -> refus | None`) est revérifié
     ici à chaque appel, sur le dossier résolu, avant toute connexion : sans lui, le poste avec une ligne, ou code 2 avec
-    `forcer` (`--serveur` force la route, jamais l'accord)."""
+    `forcer` (`--serveur` force la route, jamais l'accord).
+    Unity (tâche 14i) : sans `executeur` ni `licence`, l'exécuteur est choisi par `executeur_pour` (état local du serveur) ;
+    un 81 note la licence absente (sauf `evaluation`). `evaluation` : aucune ligne de mesure ordinaire (expérience, adoption)."""
     commande = [str(x) for x in commande]
     if attentes is None:
         attentes = attentes_serveur_par_defaut()
@@ -836,7 +1110,9 @@ def executer(commande, dossier=None, attendre=True, forcer=False, places=None, d
                            injoignable, attentes, sortie, sortie_erreur, nouvel_id, forcer, _popen, dormir,
                            travail_go=travail_go, analyse=analyse, sdk_android=sdk_android, empreinte=empreinte,
                            reseau_code=reseau_code, ressources_forcees=ressources_forcees, executeur=executeur,
-                           licence=licence, hotes_licence=hotes_licence, reseau_licence=reseau_licence)
+                           licence=licence, hotes_licence=hotes_licence, reseau_licence=reseau_licence,
+                           version_hote=version_hote, evaluation=evaluation, etat_serveurs=etat_serveurs,
+                           noter_licence=noter_licence, poser_etape=poser_etape, version_hote_de=version_hote_de)
     except _Rendu as e:
         return e.code
     except Repli as e:

@@ -495,3 +495,33 @@ test("la recette sur emulateur est proposee a l installation et demandee aux lie
   const {ACTIONS} = await import("../ui/serveurs.js");
   assert.ok(ACTIONS.includes("recette-emulateur"));
 });
+
+test("licence et bac a sable Unity : textes fixes, raison et etapes en textContent, bouton Verifier la licence", async () => {
+  const {texteLicenceUnity, texteBacASable} = await import("../ui/serveurs.js");
+  assert.equal(texteLicenceUnity({licence: {etat: "conteneur", variante: "B1"}}), "Licence Unity : dans le conteneur (B1)");
+  assert.equal(texteLicenceUnity({licence: {etat: "conteneur", variante: "<b>"}}), "Licence Unity : dans le conteneur");
+  assert.equal(texteLicenceUnity({licence: {etat: "hote"}}), "Licence Unity : sur l'hôte, bac à sable");
+  assert.equal(texteLicenceUnity({licence: {etat: "absente", raison: "expérience B non faite"}}), "Licence Unity : absente — expérience B non faite");
+  assert.equal(texteBacASable({bac_a_sable: "pret"}), "Bac à sable Unity : prêt");
+  assert.equal(texteBacASable({}), "Bac à sable Unity : absent");
+  const hostile = "<img src=x onerror=alert(1)>";
+  const etape = {genre: "environnement", texte: "Reconnecter Unity Hub sur le serveur", lien: "https://docs.unity.com/en-us/hub/manage-license",
+    mode_operatoire: ["Ouvrez la session graphique.", hostile], bouton: "Vérifier la licence"};
+  const piege = {...etape, texte: "Autre", lien: "javascript:alert(1)", mode_operatoire: ["a", "b"], bouton: "Vérifier l'éditeur"};
+  const serveur = {...SERVEUR, unity: {licence: {etat: "absente", raison: hostile}, bac_a_sable: "absent", etapes: [etape, piege]}};
+  const f = reseau({"POST /api/serveurs/s1/verifier-licence": reponse(202, {demarre: true}), "POST /api/serveurs/s1/sonder": reponse(202, {demarre: true}),
+    "GET /api/serveurs": reponse(200, {serveurs: [serveur], rejets: []})});
+  const c = ecranServeurs({serveurs: [serveur], rejets: []}, {fetchFn: f, planifier: minuterie(), lieux: LIEUX});
+  assert.ok(c.textContent.includes(`Licence Unity : absente — ${hostile}`));
+  assert.ok(c.textContent.includes("Bac à sable Unity : absent"));
+  assert.ok(c.textContent.includes("Étape à faire par vous : Reconnecter Unity Hub sur le serveur"));
+  const liens = c.tous((n) => n.tagName === "a" && n.className.includes("serveurs-unity-lien"));
+  assert.deepEqual(liens.map((a) => a.href), ["https://docs.unity.com/en-us/hub/manage-license"]);   // jamais un lien non https
+  assert.equal(c.tous((n) => n.tagName === "li" && n.textContent === hostile).length, 1);
+  await clic(boutons(c, "Vérifier la licence")[0]);
+  assert.ok(f.appels.some((a) => a.methode === "POST" && a.chemin === "/api/serveurs/s1/verifier-licence"));
+  await clic(boutons(c, "Vérifier l'éditeur")[0]);
+  assert.ok(f.appels.some((a) => a.methode === "POST" && a.chemin === "/api/serveurs/s1/sonder"));
+  const sans = ecranServeurs(ETAT, {fetchFn: reseau({}), planifier: minuterie(), lieux: LIEUX});
+  assert.ok(!sans.textContent.includes("Licence Unity"));
+});

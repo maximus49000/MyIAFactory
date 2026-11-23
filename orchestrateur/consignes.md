@@ -133,6 +133,8 @@ chemins. L'effet d'une demande n'apparaît au bureau qu'au relevé suivant : fai
 | `challenge` sur une leçon (`cible.type` = `lecon`) | L'utilisateur conteste une leçon avant son verdict : l'outil a ouvert une tâche « Challenge de la leçon … » (son `id` est dans `tache` de la demande). Confie-la à l'agent de la leçon (contexte neuf, avec la leçon et le texte de l'utilisateur), réponds par `lancer demande-traitee` (`reponse`) : elle s'affiche dans la tâche, où l'utilisateur peut répondre (demandes `retour`). Si la discussion change la leçon, note la leçon corrigée (`lancer lecon`, `action: noter`) et dis-le : l'utilisateur invalidera l'ancienne. Close la tâche (`colonne: fait`) quand la discussion est finie. |
 | `challenge`, `solution`, `verdict_solution` (autres cibles) | Les challenges des services (relevé version 3) : ce que disent les consignes propres du projet. Sans règle du projet, réponds que ce projet ne gère pas les challenges. |
 
+**Unity au serveur (étapes humaines)** : Les étapes humaines « Reconnecter Unity Hub sur le serveur » et « Installer 6000.6.7f1 par Hub » (décisions `environnement` non autonomes, avec lien et mode opératoire) sont posées par la route des tests au serveur et l'outil de l'expérience J13 sur la **carte du serveur**, jamais par toi : seul le Directeur se connecte à son compte Unity. Une campagne Unity revenue au poste avec « licence Unity absente » ou « bac à sable Unity absent » n'est pas un échec du projet : ne la relance pas au serveur, ne touche à aucun fichier de licence ; dis-le dans ton rapport.
+
 ## Le parcours d'une fonctionnalité
 
 Une fonctionnalité (par exemple une partie d'une application) a un cahier des charges, puis un découpage en

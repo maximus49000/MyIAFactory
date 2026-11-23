@@ -20,7 +20,7 @@ MAX_ACTIONS = 20
 STATUTS_PRESENTS = ("presente", "fait")
 LIBELLES_STATUTS = {"presente": "présente", "fait": "faite", "absente": "absente", "inconnue": "inconnue", "bloque": "bloquée",
                     "a_faire": "à faire", "en_cours": "en cours"}
-_ROUTE = re.compile(r"/api/serveurs(?:/([^/]+)/(sonder|apercu|installer))?")
+_ROUTE = re.compile(r"/api/serveurs(?:/([^/]+)/(sonder|apercu|installer|verifier-licence))?")
 DELAI_APERCU_S = 150
 MAX_APERCUS = 2
 AGE_MAX_CHARGE_S = 900   # une charge sondée il y a plus longtemps est ignorée
@@ -156,6 +156,29 @@ def _ligne_cle_existante(d, serveur):
         with open(publique, "rb") as f:
             return f.read(LIGNE_CLE_MAX).decode("utf-8", "replace").strip() or None
     except OSError:
+        return None
+
+
+def _fiche_unity(etat_serveur):
+    """La licence et le bac à sable Unity d'un serveur (§ 5.16, tâche 14i), d'après l'état LOCAL : `{"licence": {etat,
+    variante, raison}, "bac_a_sable": "pret"|"absent", "etapes": [étapes humaines bien formées]}` ; None si le serveur n'a
+    jamais eu affaire à Unity (ni état relevé, ni capacité présente). Les textes sont rendus par le navigateur en textContent."""
+    try:
+        modplateforme._modules()
+        import tests_serveur
+        from . import releve
+        e = etat_serveur if isinstance(etat_serveur, dict) else {}
+        etats = e.get("etats") if isinstance(e.get("etats"), dict) else {}
+        brut = etats.get(tests_serveur.CAP_LICENCE) if isinstance(etats.get(tests_serveur.CAP_LICENCE), dict) else None
+        statuts = {c: tests_serveur._statut(e, c) for c in (tests_serveur.CAP_LICENCE, tests_serveur.CAP_BAC_A_SABLE)}
+        if brut is None and not any(s in STATUTS_PRESENTS for s in statuts.values()):
+            return None
+        lic = tests_serveur.licence_relevee(e)
+        etapes = (brut or {}).get("etapes") if isinstance((brut or {}).get("etapes"), dict) else {}
+        return {"licence": {"etat": lic["etat"], "variante": lic["variante"], "raison": lic["raison"]},
+                "bac_a_sable": "pret" if statuts[tests_serveur.CAP_BAC_A_SABLE] in STATUTS_PRESENTS else "absent",
+                "etapes": [x for x in etapes.values() if releve.etape_humaine_ok(x)][:4]}
+    except Exception:       # noqa: BLE001 — la carte s'affiche sans la partie Unity
         return None
 
 
@@ -297,6 +320,21 @@ class Travaux:
                 return "Serveur injoignable : l'état de ses capacités est inconnu."
             return None
         return self.lancer("sonder", serveur, travail)
+
+    def verifier_licence(self, serveur, d):
+        """« Vérifier la licence » (autonome) : rétablit au serveur l'état d'avant d'une licence refusée si ses fichiers sont là
+        (`tests_serveur.verifier_licence_unity`), puis la sonde. Le message est rendu comme une erreur de la carte s'il échoue."""
+        _, _, etat_mod, inst, _ = _modules()[:5]
+
+        def travail():
+            import tests_serveur
+            message = tests_serveur.verifier_licence_unity(d, serveur, **self._options_ssh())
+            etat = etat_mod.sonder(serveur, **self._options_ssh())
+            inst.enregistrer_sonde(d, serveur, etat)
+            if all(s == "inconnue" for s in etat.values()):
+                return "Serveur injoignable : l'état de ses capacités est inconnu."
+            return None if message.startswith(("Licence Unity rétablie", "Sonde relancée")) else message
+        return self.lancer("verifier-licence", serveur, travail)
 
     def installer(self, serveur, actions, d):
         installer = self._installer or _modules()[3].installer
@@ -455,7 +493,10 @@ def lire(travaux, d=None):
         inst = e.get("installation") if isinstance(e, dict) else None
         en_cours = (isinstance(inst, dict) and inst.get("en_cours") is True) or travaux.en_cours("installer", s.id)
         fiche = _decrire(s, _fiches_capacites(e), bool(en_cours), _ligne_cle_existante(d, s))
-        fiche["sonde_en_cours"] = bool(travaux.en_cours("sonder", s.id))
+        fiche["sonde_en_cours"] = bool(travaux.en_cours("sonder", s.id) or travaux.en_cours("verifier-licence", s.id))
+        unity = _fiche_unity(e)
+        if unity is not None:
+            fiche["unity"] = unity
         if travaux.erreurs.get(s.id):
             fiche["erreur"] = _masquer(travaux.erreurs[s.id], secrets)
         sortie.append(fiche)
@@ -710,10 +751,10 @@ def poster(travaux, cible, corps, d=None, projets=None):
     serveur = next((s for s in serveurs if s.id == ident), None)    # l'identifiant ne sert qu'à retrouver un serveur connu
     if serveur is None:
         return 404, {"erreur": "Serveur inconnu."}
-    if genre == "sonder":
+    if genre in ("sonder", "verifier-licence"):
         if travaux.en_cours() or installation.installation_en_cours(d):
             return occupe("Une opération est déjà en cours.")
-        if not travaux.sonder(serveur, d):
+        if not (travaux.sonder if genre == "sonder" else travaux.verifier_licence)(serveur, d):
             return occupe("Une opération est déjà en cours.")
         return 202, {"demarre": True}
     actions = _actions(corps)

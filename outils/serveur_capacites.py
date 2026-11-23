@@ -83,6 +83,30 @@ _CATALOGUE = {
     "tests-android": Capacite(
         "tests-android", "Image des tests Gradle/Android (SDK de l'hôte en lecture seule)", ("tests-image", "android-build"),
         "tests_android_image", "test -s ~/.myiafactory/tests-android-image.version", 0.5, 4),
+    # Licence Unity de Hub pour les tests (§ 5.16, tâche 14i) : une capacité À ÉTATS. Le marqueur ~/.myiafactory/unity-licence.etat
+    # (« conteneur B1|B2|B3 », « hote » ou « absente ») est écrit par la seule étape unity_licence_etat (outil de l'expérience J13,
+    # campagne qui rend 81, bouton « Vérifier la licence ») ; la sonde le lit, vérifie par `test -s` que les fichiers de licence
+    # existent toujours (JAMAIS leur contenu) et imprime conteneur|hote|absente ; présente = conteneur ou hote. L'état et la
+    # variante retenus sont gardés dans l'état local du serveur (`serveurs-etat.json` > `etats`, serveur_installation).
+    "unity-licence": Capacite(
+        "unity-licence", "Licence Unity de Hub pour les tests", ("base",), "unity_licence_etat",
+        "e=$(head -c 64 ~/.myiafactory/unity-licence.etat 2>/dev/null); e=${e%%[[:space:]]*}; "
+        "case \"$e\" in conteneur|hote) ;; *) e=absente ;; esac; "
+        "if [ \"$e\" != absente ]; then test -s ~/.local/share/unity3d/Unity/Unity_lic.ulf "
+        "|| for f in ~/.config/unity3d/Unity/licenses/*; do test -s \"$f\" && break; done || e=absente; fi; "
+        "echo \"$e\"; test \"$e\" != absente", 0.0, 5,
+        installable=False,
+        raison_non_installable="licence de Unity Hub : reconnecter Hub par la session graphique"),
+    # Bac à sable de l'hôte (option A, § 5.16, tâches 14h et 14i) : utilisateur unity-tests, script racine, marqueur de l'audit
+    # J14 (écrit SEULEMENT si toutes les vérifications de la sonde passent ; il prouve aussi la règle sudoers, que la sonde ne
+    # peut pas lire : /etc/sudoers.d n'est lisible que par root) et un éditeur de /opt/unity/editors lisible par tous.
+    "unity-bac-a-sable": Capacite(
+        "unity-bac-a-sable", "Bac à sable de l'hôte pour les tests Unity (option A)", ("unity-licence", "session-graphique"),
+        "unity_bac_a_sable",
+        "id -u unity-tests >/dev/null 2>&1 && test -x /usr/local/lib/myiafactory/unity-bac-a-sable.sh "
+        "&& test -x /usr/local/lib/myiafactory/sonde-bac-a-sable.sh && test -s ~/.myiafactory/unity-bac-a-sable.version "
+        "&& find /opt/unity/editors -mindepth 3 -maxdepth 3 -path '*/Editor/Unity' -perm -005 2>/dev/null | grep -q .",
+        0.0, 5),
     # Étape humaine : le jeton de l'abonnement est enregistré UNE fois par le Directeur ; la sonde ne lit jamais son contenu
     # (droits du dossier et du fichier, fichier non vide).
     "agent-abonnement": Capacite(
@@ -111,6 +135,9 @@ _BESOINS = {
     # les campagnes de tests d'un projet routées au serveur (`lancer.py tests …`) tournent dans l'image de tests
     "tests-serveur": ("tests-image",),
     "tests-serveur-android": ("tests-android",),
+    # option A des tests Unity (§ 5.16, J14) : le bac à sable de l'hôte, sur accord du Directeur ; la licence (non installable)
+    # reste une étape humaine, et la capacité n'est présente qu'après l'audit J14 (marqueur)
+    "tests-serveur-unity-hote": ("unity-bac-a-sable",),
 }
 
 CATALOGUE = MappingProxyType(_CATALOGUE)

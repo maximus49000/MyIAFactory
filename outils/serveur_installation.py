@@ -135,6 +135,9 @@ def _ecrire_etat(dossier, serveur_id, capacites, en_cours, debut, charge=_GARDER
     ancienne = tout.get(serveur_id, {}).get("charge") if charge is _GARDER else charge
     if ancienne is not None:
         entree["charge"] = ancienne
+    etats = tout.get(serveur_id, {}).get("etats")
+    if isinstance(etats, dict):
+        entree["etats"] = etats          # les états relevés (licence Unity…) ne sont jamais perdus par une sonde
     tout[serveur_id] = entree
     Path(dossier).mkdir(parents=True, exist_ok=True)
     ecrire_atomique(Path(dossier) / ETAT, json.dumps(tout, ensure_ascii=False, indent=2) + "\n")
@@ -204,6 +207,45 @@ def _enregistrer(dossier, serveur, etat, charge, horloge):
     if valide is not None:
         valide["maj"] = horloge()           # secondes epoch : une charge trop vieille est ignorée à la lecture
     _ecrire_etat(dossier, serveur.id, caps, False, debut, charge=valide, fusionner=False)
+
+
+def lire_etat_capacite(dossier, serveur_id, capacite):
+    """L'état relevé d'une capacité à états (`etats[capacite]` de l'entrée du serveur) : un dict, vide s'il manque."""
+    e = (lire_etat(dossier).get(serveur_id) or {}).get("etats")
+    v = e.get(capacite) if isinstance(e, dict) else None
+    return dict(v) if isinstance(v, dict) else {}
+
+
+def modifier_etat_capacite(dossier, serveur_id, capacite, modifier, vivant=pid_vivant):
+    """Réécrit `etats[capacite]` de l'entrée du serveur par `modifier(ancien: dict) -> dict` (`maj` posé ici), sous les mêmes
+    verrous qu'une installation ; rend le nouvel état. `ErreurInstallation` si une installation tient le verrou : rien n'est
+    écrit. Les capacités constatées, l'installation et la charge ne sont pas touchées."""
+    deja = ErreurInstallation("Une installation est en cours sur ce poste : état non noté.", "Réessayez à sa fin.")
+    if not _VERROU_PROCESSUS.acquire(blocking=False):
+        raise deja
+    try:
+        verrou = _prendre_verrou(dossier, vivant)
+        if verrou is None:
+            raise deja
+        try:
+            tout = lire_etat(dossier)
+            entree = dict(tout.get(serveur_id) or {})
+            etats = entree.get("etats") if isinstance(entree.get("etats"), dict) else {}
+            ancien = etats.get(capacite) if isinstance(etats.get(capacite), dict) else {}
+            neuf = dict(modifier(dict(ancien)))
+            neuf["maj"] = _maintenant()
+            entree["etats"] = {**etats, capacite: neuf}
+            tout[serveur_id] = entree
+            Path(dossier).mkdir(parents=True, exist_ok=True)
+            ecrire_atomique(Path(dossier) / ETAT, json.dumps(tout, ensure_ascii=False, indent=2) + "\n")
+            return neuf
+        finally:
+            try:
+                verrou.unlink()
+            except OSError:
+                pass
+    finally:
+        _VERROU_PROCESSUS.release()
 
 
 # ---------------------------------------------------------------- aperçu

@@ -24,6 +24,7 @@ from . import deport_conso
 from . import deport_types
 from . import fichiers_joints, releve, statuts
 from . import plateforme as modplateforme
+from . import registre
 from . import serveurs as modserveurs
 from . import semaines as modsemaines
 from . import sujets as modsujets
@@ -233,14 +234,22 @@ class Projet:
             return d, str(e)
 
     # -- exécution déportée ----------------------------------------------
-    def lieux_globaux(self):
-        """Les lieux par défaut du bureau (fichier du bureau) ; sans fichier ou illisible : tout au poste."""
-        if self.fichier_bureau is not None:
-            try:
-                return dict(reglages.lire_bureau(self.fichier_bureau)["deport"]["lieux"])
-            except reglages.ReglagesInvalides:
-                pass
-        return dict(moddeport.LIEUX_PAR_DEFAUT)
+    def niveaux_du_bureau(self):
+        """Les niveaux global et type tels que `registre` les lit : `{"deport": {"lieux": lieux ÉCRITS}, "types",
+        "reglages"}`. Sans fichier du bureau, ou s'il est illisible ou abîmé : `{}` (tout retombe sur le défaut, le
+        poste pour les lieux) ; l'état d'un projet ne casse jamais pour le fichier du bureau."""
+        if self.fichier_bureau is None:
+            return {}
+        try:
+            b = reglages.lire_bureau(self.fichier_bureau)
+        except reglages.ReglagesInvalides:
+            return {}
+        return {"deport": {"lieux": b["deport_lieux_explicites"]}, "types": b["types"], "reglages": b["reglages"]}
+
+    def genre(self):
+        """Le genre du projet (son type) s'il a un catalogue propre ; None pour un projet générique ou sans genre."""
+        g = deport_types.catalogue_du_projet(str(self.chemin_reglages.parent))[0]
+        return None if g == "generique" else g
 
     def lieux_du_projet(self):
         """Les lieux écrits dans les réglages du projet (surcharges), sans les défauts. Une valeur qui n'est pas un lieu
@@ -260,8 +269,155 @@ class Projet:
         return deport_types.catalogue_du_projet(str(self.chemin_reglages.parent))[1]
 
     def lieux_effectifs(self):
-        globaux, projet, catalogue = self.lieux_globaux(), self.lieux_du_projet(), self.catalogue_deport()
-        return {a: moddeport.lieu_effectif(globaux, projet, a, catalogue) for a in catalogue}
+        """{action: lieu} : projet, puis type (genre connu), puis global, sinon le poste (la recette : projet seul)."""
+        resolus = registre.lieux_effectifs(self.catalogue_deport(), {"deport": {"lieux": self.lieux_du_projet()}},
+                                           self.niveaux_du_bureau(), self.genre())
+        return {a: lieu for a, (lieu, _) in resolus.items()}
+
+    def poser_deport(self, demande):
+        """Écrit le déport du projet (`POST /api/reglages`, clé `deport`, et le niveau projet de la page Réglages) :
+        une demande partielle se fusionne sur les lieux écrits dans le projet ; ceux du bureau restent hérités. Rend
+        les réglages rechargés ; ValueError ou ReglagesInvalides (message en français) sinon."""
+        if not isinstance(demande, dict):
+            raise ValueError("« deport » doit être un objet {lieux, commandes, charge_heure}.")
+        actuel = reglages.charger(self.chemin_reglages)["deport"]
+        # un lieu écrit pour une action que le type du projet n'a plus (genre changé) est oublié : il ne doit
+        # pas faire refuser toutes les demandes suivantes
+        catalogue = self.catalogue_deport()
+        lieux = {a: v for a, v in self.lieux_du_projet().items() if a in catalogue}
+        if isinstance(demande.get("lieux"), dict):
+            lieux.update(demande["lieux"])
+            # null : l'action redevient non réglée (le projet hérite du bureau ; la recette est refusée)
+            # (pour une action du catalogue seulement : une action inconnue reste refusée)
+            lieux = {a: v for a, v in lieux.items() if not (v is None and a in catalogue)}
+        elif "lieux" in demande:
+            lieux = demande["lieux"]
+        return reglages.fixer_deport(self.chemin_reglages, {**actuel, **demande, "lieux": lieux}, catalogue)
+
+    # -- page Réglages : chaque réglage à son niveau (global, type, projet) ----------------------------------------
+    def _contexte_reglages(self):
+        """Ce que lit chaque ligne : catalogue, genre, niveaux du bureau, réglages bruts et lieux écrits du projet."""
+        try:
+            brut = json.loads(self.chemin_reglages.read_text(encoding="utf-8-sig"))
+        except (ValueError, OSError, RecursionError):
+            brut = {}
+        return {"catalogue": self.catalogue_deport(), "genre": self.genre(), "bureau": self.niveaux_du_bureau(),
+                "brut": brut if isinstance(brut, dict) else {}, "lieux_projet": self.lieux_du_projet()}
+
+    def _ligne_lieu(self, action, ctx):
+        """La ligne `deport.<action>` ; une action hors du catalogue du projet (réglée au global ou au type pour
+        d'autres projets) est décrite par le catalogue de tous les types et marquée `applicable: false`."""
+        catalogue, genre, bureau = ctx["catalogue"], ctx["genre"], ctx["bureau"]
+        applicable = action in catalogue
+        entree = catalogue[action] if applicable else deport_types.catalogue_union()[action]
+        lieu, origine = registre.lieux_effectifs({action: entree}, {"deport": {"lieux": ctx["lieux_projet"]}},
+                                                 bureau, genre)[action]
+        niveaux = ["projet"] if deport_types.sans_poste(entree) else list(registre.NIVEAUX)
+        lus = {"global": ((bureau.get("deport") or {}).get("lieux") or {}).get(action),
+               "type": ((((bureau.get("types") or {}).get(genre) or {}).get("deport") or {}).get("lieux") or {}).get(action)
+               if genre else None,
+               "projet": ctx["lieux_projet"].get(action)}
+        valeurs = {n: v for n, v in lus.items() if n in niveaux and v is not None}
+        return {"id": "deport." + action, "section": "actions", "libelle": entree["libelle"],
+                "aide": entree["bientot"] or "", "forme": "lieu", "choix": list(entree["lieux"]), "niveaux": niveaux,
+                "valeur": lieu, "origine": origine, "valeurs": valeurs, "applicable": applicable}
+
+    def _ligne_reglage(self, r, ctx):
+        """La ligne d'un réglage déclaré au registre (booléen) : valeur, origine et valeur posée à chaque niveau."""
+        genre, bureau, brut = ctx["genre"], ctx["bureau"], ctx["brut"]
+        valeur, origine = registre.valeur_effective(r, brut, bureau, genre)
+        lus = {"global": ("reglages",), "type": ("types", genre, "reglages") if genre else None}
+        valeurs = {}
+        for niveau, chemin in lus.items():
+            d = bureau
+            for c in chemin or ():
+                d = d.get(c) if isinstance(d, dict) else None
+            if chemin and isinstance(d, dict) and r.id in d and niveau in r.niveaux:
+                valeurs[niveau] = d[r.id]
+        if "projet" in r.niveaux and r.cle in brut:
+            valeurs["projet"] = brut[r.cle]
+        return {"id": r.id, "section": r.section, "libelle": r.libelle, "aide": r.aide, "forme": r.forme,
+                "niveaux": list(r.niveaux), "valeur": valeur, "origine": origine, "valeurs": valeurs,
+                "applicable": True}
+
+    def reglages_page(self):
+        """L'état de la page Réglages : une ligne `deport.<action>` par action du catalogue du projet, puis les
+        réglages déclarés au registre."""
+        ctx = self._contexte_reglages()
+        lignes = [self._ligne_lieu(a, ctx) for a in ctx["catalogue"]]
+        lignes += [self._ligne_reglage(r, ctx) for r in registre.REGISTRE]
+        return {"genre": ctx["genre"], "type_disponible": ctx["genre"] is not None, "lignes": lignes}
+
+    def _ecrivains(self):
+        """La table des réglages qui s'écrivent par niveau : id -> (écrivain(niveau, valeur), ligne(ctx))."""
+        table = {"deport." + a: (lambda n, v, a=a: self._poser_lieu(a, n, v), lambda ctx, a=a: self._ligne_lieu(a, ctx))
+                 for a in deport_types.catalogue_union()}
+        for r in registre.REGISTRE:
+            table[r.id] = (lambda n, v, r=r: self._poser_reglage_declare(r, n, v),
+                           lambda ctx, r=r: self._ligne_reglage(r, ctx))
+        return table
+
+    def poser_reglage(self, niveau, id_, valeur):
+        """Pose (ou efface, `valeur` None) le réglage `id_` au `niveau` donné ; rend la ligne rafraîchie. Tout est
+        vérifié AVANT d'écrire (le fichier du bureau n'est jamais rendu illisible) ; ValueError (français) sinon."""
+        if niveau not in registre.NIVEAUX:
+            raise ValueError("Niveau inconnu : « %s » (attendu : %s)." % (niveau, ", ".join(registre.NIVEAUX)))
+        table = self._ecrivains()
+        if not isinstance(id_, str) or id_ not in table:
+            raise ValueError("Réglage inconnu : « %s »." % (id_,))
+        ecrire, ligne = table[id_]
+        ecrire(niveau, valeur)
+        self._cache_etat = (0.0, self._cache_etat[1])
+        return ligne(self._contexte_reglages())
+
+    def _niveau_permis(self, niveau, niveaux, nom):
+        """Refuse un niveau que le réglage n'admet pas, ou le niveau type sans genre ; rend le genre (ou None)."""
+        if niveau not in niveaux:
+            raise ValueError("« %s » se règle seulement au niveau %s." % (nom, " ou ".join(niveaux)))
+        genre = self.genre()
+        if niveau == "type" and genre is None:
+            raise ValueError("Le type de ce projet n'est pas connu : le niveau « type » n'est pas disponible.")
+        if niveau != "projet" and self.fichier_bureau is None:
+            raise ValueError("Ce bureau n'est pas lancé sur le fichier du bureau commun : seul le niveau « projet » "
+                             "existe.")
+        return genre
+
+    def _poser_lieu(self, action, niveau, valeur):
+        catalogue, union = self.catalogue_deport(), deport_types.catalogue_union()
+        applicable = action in catalogue
+        entree = catalogue[action] if applicable else union[action]
+        niveaux = ["projet"] if deport_types.sans_poste(entree) else list(registre.NIVEAUX)
+        genre = self._niveau_permis(niveau, niveaux, entree["libelle"])
+        if niveau == "projet" and not applicable:
+            raise ValueError("L'action « %s » n'existe pas pour ce type de projet : elle ne se règle pas au niveau du "
+                             "projet." % action)
+        if valeur is not None:
+            if not isinstance(valeur, str) or valeur not in entree["lieux"]:
+                raise ValueError("« %s » ne tourne pas au lieu « %s » (choix : %s)."
+                                 % (entree["libelle"], valeur, ", ".join(entree["lieux"])))
+            moddeport.valider_lieux({action: valeur}, catalogue=catalogue if applicable else union)
+            if niveau != "projet":     # ce que relira `lire_bureau` : jamais un fichier du bureau refusé
+                moddeport.valider_lieux({action: valeur}, catalogue=union)
+        if niveau == "projet":
+            self.poser_deport({"lieux": {action: valeur}})
+        elif niveau == "global":
+            reglages.fixer_niveau_bureau(self.fichier_bureau, ("deport", "lieux", action), valeur)
+        else:
+            reglages.fixer_niveau_bureau(self.fichier_bureau, ("types", genre, "deport", "lieux", action), valeur)
+
+    def _poser_reglage_declare(self, r, niveau, valeur):
+        genre = self._niveau_permis(niveau, list(r.niveaux), r.libelle)
+        if valeur is not None and r.forme == "booleen" and type(valeur) is not bool:
+            raise ValueError("« %s » doit valoir vrai ou faux." % r.libelle)
+        if niveau == "projet":
+            if valeur is None:
+                reglages.effacer_cle(self.chemin_reglages, r.cle)
+            else:
+                getattr(reglages, "fixer_" + r.cle)(self.chemin_reglages, valeur)
+        elif niveau == "global":
+            reglages.fixer_niveau_bureau(self.fichier_bureau, ("reglages", r.id), valeur)
+        else:
+            reglages.fixer_niveau_bureau(self.fichier_bureau, ("types", genre, "reglages", r.id), valeur)
 
     def etat_deport(self):
         catalogue = self.catalogue_deport()
@@ -336,6 +492,10 @@ class Projet:
                 e["deport"] = self.etat_deport()
             except Exception as x:
                 e["deport_erreur"] = "Bloc « Où tournent les actions » indisponible : %s" % x
+            try:      # la page Réglages non plus : un fichier du bureau abîmé n'y donne que les défauts
+                e["reglages_page"] = self.reglages_page()
+            except Exception as x:
+                e["reglages_page_erreur"] = "Page Réglages indisponible : %s" % x
             sans_lecons_au_compteur(e)
             e["analyse_blocages"] = regl.get("analyse_blocages") is not False   # « Analyse intelligente des blocages »
             e["livraison_sur_demande"] = regl.get("livraison_sur_demande") is True   # « Livrer seulement sur demande »
@@ -2075,7 +2235,7 @@ class Handler(BaseHTTPRequestHandler):
             except (ValueError, UnicodeDecodeError, RecursionError):
                 return self._json(400, {"erreur": "Demande illisible."})
             return self._json(*self.server.connaissances(corps))
-        if chemin not in ("/api/reglages", "/api/demande", "/api/deport/appliquer"):
+        if chemin not in ("/api/reglages", "/api/reglages/niveau", "/api/demande", "/api/deport/appliquer"):
             return self._json(404, {"erreur": "Introuvable."})
         projet = self._projet(morceaux.query)
         if projet is None:
@@ -2104,6 +2264,21 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:  # jamais une connexion coupée sans réponse lisible
                 code, objet = 500, {"erreur": f"Erreur du bureau : {e}"[:200]}
             return self._json(code, objet)
+        if chemin == "/api/reglages/niveau":   # la page Réglages : un réglage, un niveau (global, type ou projet)
+            try:
+                corps = json.loads(self.rfile.read(longueur).decode("utf-8"))
+            except (ValueError, UnicodeDecodeError, RecursionError):
+                return self._json(400, {"erreur": "Demande illisible."})
+            if not isinstance(corps, dict) or "valeur" not in corps:
+                return self._json(400, {"erreur": "Le corps doit contenir « niveau », « id » et « valeur » (null "
+                                                  "pour effacer)."})
+            try:
+                ligne = projet.poser_reglage(corps.get("niveau"), corps.get("id"), corps["valeur"])
+            except (ValueError, reglages.ReglagesInvalides) as e:
+                return self._json(400, {"erreur": str(e)})
+            for p in list(self.server.projets.values()):   # un niveau global ou type vaut pour d'autres projets
+                p._cache_etat = (0.0, p._cache_etat[1])
+            return self._json(200, ligne)
         if chemin == "/api/demande":
             try:
                 demande = json.loads(self.rfile.read(longueur).decode("utf-8"))
@@ -2134,24 +2309,7 @@ class Handler(BaseHTTPRequestHandler):
                 nouveau = {"agents_abonnement_max": reglages.fixer_agents_abonnement_max(
                     self.server.fichier_bureau, corps["agents_abonnement_max"])}
             elif isinstance(corps, dict) and "deport" in corps and "charge_max" not in corps:
-                demande = corps["deport"]
-                if not isinstance(demande, dict):
-                    raise ValueError("« deport » doit être un objet {lieux, commandes, charge_heure}.")
-                actuel = reglages.charger(projet.chemin_reglages)["deport"]
-                # une demande partielle se fusionne sur les lieux écrits dans le projet ; ceux du bureau restent hérités
-                # un lieu écrit pour une action que le type du projet n'a plus (genre changé) est oublié : il ne doit
-                # pas faire refuser toutes les demandes suivantes
-                catalogue = projet.catalogue_deport()
-                lieux = {a: v for a, v in projet.lieux_du_projet().items() if a in catalogue}
-                if isinstance(demande.get("lieux"), dict):
-                    lieux.update(demande["lieux"])
-                    # null : l'action redevient non réglée (le projet hérite du bureau ; la recette est refusée)
-                    # (pour une action du catalogue seulement : une action inconnue reste refusée)
-                    lieux = {a: v for a, v in lieux.items() if not (v is None and a in catalogue)}
-                elif "lieux" in demande:
-                    lieux = demande["lieux"]
-                nouveau = reglages.fixer_deport(projet.chemin_reglages, {**actuel, **demande, "lieux": lieux},
-                                                catalogue)
+                nouveau = projet.poser_deport(corps["deport"])
             else:
                 if not isinstance(corps, dict) or "charge_max" not in corps:
                     raise ValueError("Le corps doit contenir « charge_max », « lecons_auto », « analyse_blocages », "

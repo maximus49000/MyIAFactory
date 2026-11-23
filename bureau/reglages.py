@@ -353,12 +353,16 @@ def effacer_cle(chemin_projet, cle):
     chemin = Path(chemin_projet)
     if chemin.exists():
         try:
-            donnees = json.loads(chemin.read_text(encoding="utf-8-sig"))
-        except (ValueError, OSError) as e:
-            raise ReglagesInvalides(f"Réglages illisibles ({chemin}) : {e}")
-        if isinstance(donnees, dict) and cle in donnees:
-            del donnees[cle]
-            _ecrire_fichier(chemin, donnees)
+            with _verrou_fichier(chemin):
+                try:
+                    donnees = json.loads(chemin.read_text(encoding="utf-8-sig"))
+                except (ValueError, OSError) as e:
+                    raise ReglagesInvalides(f"Réglages illisibles ({chemin}) : {e}")
+                if isinstance(donnees, dict) and cle in donnees:
+                    del donnees[cle]
+                    _ecrire_fichier(chemin, donnees)
+        except TimeoutError as e:
+            raise ReglagesInvalides(str(e)) from None
     return charger(chemin)
 
 
@@ -398,15 +402,20 @@ def fixer_cloud_dossier_approuve(chemin, valeur):
 
 
 def _ecrire_cle(chemin, cle, valeur):
+    """Pose la clé à plat `cle` : relue et réécrite SOUS VERROU (une autre écriture du même fichier n'est pas perdue)."""
     chemin = Path(chemin)
-    donnees = {}
-    if chemin.exists():
-        try:
-            donnees = json.loads(chemin.read_text(encoding="utf-8-sig"))
-        except (ValueError, OSError) as e:
-            raise ReglagesInvalides(f"Réglages illisibles ({chemin}) : {e}")
-    donnees[cle] = valeur
-    _ecrire_fichier(chemin, donnees)
+    try:
+        with _verrou_fichier(chemin):
+            donnees = {}
+            if chemin.exists():
+                try:
+                    donnees = json.loads(chemin.read_text(encoding="utf-8-sig"))
+                except (ValueError, OSError) as e:
+                    raise ReglagesInvalides(f"Réglages illisibles ({chemin}) : {e}")
+            donnees[cle] = valeur
+            _ecrire_fichier(chemin, donnees)
+    except TimeoutError as e:
+        raise ReglagesInvalides(str(e)) from None
     return charger(chemin)
 
 

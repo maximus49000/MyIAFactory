@@ -81,13 +81,28 @@ test("l'approbation du dossier cloud (carte de décision) écrit toujours cloud_
   assert.deepEqual(demandeRelancerSession("s1"), {type: "session_cloud", decision: "s1", verdict: "relancer"});
 });
 
-test("ctx.etat garde les valeurs effectives : aucune case de Direction ne les lisait pour son propre compte", () => {
-  inseres.length = 0;
-  const etat = {...ETAT, lecons_auto: true};
-  const contenu = new Noeud("div");
-  contenuDirecteur({etat, barre: {demander: async () => ({ok: true})}}, contenu);
-  assert.equal(etat.lecons_auto, true);            // Direction ne réécrit plus l'état
-  assert.equal(etat.cloud_dossier_approuve, true);
-  assert.equal(etat.livraison_github, true);
-  assert.equal(etat.analyse_blocages, true);
+test("Direction : sans validation automatique et avec deux leçons en attente, « Tout valider / Tout invalider » suit le titre « Leçons à valider »", () => {
+  const ancienApres = Noeud.prototype.after, ancienCherche = Noeud.prototype.querySelector;
+  const posees = [];   // [le nœud après lequel on a inséré, ce qui a été inséré]
+  Noeud.prototype.after = function (...e) { posees.push([this, e]); };
+  Noeud.prototype.querySelector = function (sel) {
+    return sel === "h3" ? this.tous((n) => n.tagName === "h3")[0] || null : null;   // le vrai titre créé, pas un nœud neuf
+  };
+  try {
+    const etat = {...ETAT, lecons_auto: false, lecons: [
+      {id: "l1", texte: "Toujours lancer les tests touchés.", etage: "projet", verdict_demande: null},
+      {id: "l2", texte: "Ne jamais pousser sans relire.", etage: "projet", verdict_demande: null}]};
+    const contenu = new Noeud("div");
+    contenuDirecteur({etat, barre: {demander: async () => ({ok: true})}}, contenu);
+    assert.equal(posees.length, 1, "une seule rangée insérée");
+    const [apres, [rangee]] = posees[0];
+    assert.equal(apres.tagName, "h3");
+    assert.match(apres.textContent, /Leçons à valider/, "ancrée après le titre de la section");
+    assert.ok(contenu.tous((n) => n === apres).length === 1, "le titre est bien dans le panneau");
+    assert.match(rangee.className, /tout/);
+    const libelles = rangee.enfants.map((b) => b.textContent);
+    assert.deepEqual(libelles, ["Tout valider (2)", "Tout invalider (2)"]);
+  } finally {
+    Noeud.prototype.after = ancienApres; Noeud.prototype.querySelector = ancienCherche;
+  }
 });

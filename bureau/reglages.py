@@ -8,6 +8,7 @@ from pathlib import Path
 
 from .deport import LIEUX_PAR_DEFAUT, valider_lieux
 from .deport_types import catalogue_union
+from .registre import REGISTRE
 from .releve import MOTIF_GENRE  # un id de projet suit le même motif qu'un genre
 # Le verrou d'écriture d'un fichier partagé vit dans `verrou_fichier` (compatible Python 3.9 : le lanceur des agents
 # l'importe aussi pour le sceau des tests) ; ses réglages d'attente s'y trouvent (`VERROU_ATTENTE_S`, `VERROU_PERIME_S`).
@@ -183,10 +184,55 @@ def lire_bureau(chemin):
     if "agents_abonnement_max" in donnees and (type(plafond) is not int or not
                                                 AGENTS_ABONNEMENT_MAX[0] <= plafond <= AGENTS_ABONNEMENT_MAX[1]):
         raise ReglagesInvalides("Fichier du bureau : « agents_abonnement_max » doit être un entier de 1 à 32 (ou absent).")
+    deport = normaliser_deport(donnees.get("deport", {}), "Fichier du bureau")
     return {"port": port, "projets": sortie, "acces": lire_acces(donnees.get("acces", {})),
             "agents_abonnement_max": plafond,
             "moteur": lire_moteur_du_bureau(donnees.get("moteur", {})),
-            "deport": normaliser_deport(donnees.get("deport", {}), "Fichier du bureau")}
+            "deport": deport,
+            # les lieux tels qu'écrits dans le fichier, sans les défauts : ce que la résolution à trois niveaux lit
+            "deport_lieux_explicites": dict(donnees.get("deport", {}).get("lieux", {})),
+            "reglages": _lire_reglages_du_niveau(donnees.get("reglages"), "reglages"),
+            "types": _lire_types_du_bureau(donnees.get("types"))}
+
+
+def _lire_reglages_du_niveau(v, nom):
+    """Les réglages posés à un niveau (global ou type) : `{id: valeur}` ; un id absent du registre est refusé."""
+    if v is None:
+        return {}
+    if not isinstance(v, dict):
+        raise ReglagesInvalides(f"Fichier du bureau : « {nom} » doit être un objet {{réglage: valeur}}.")
+    connus = {r.id for r in REGISTRE}
+    for id_ in v:
+        if id_ not in connus:
+            raise ReglagesInvalides(f"Fichier du bureau : « {nom} » : le réglage « {id_} » n'existe pas.")
+    return dict(v)
+
+
+def _lire_types_du_bureau(v):
+    """`types` : `{genre: {"reglages": {...}, "deport": {"lieux": {...}}}}` ; lieux validés comme ceux du bureau."""
+    if v is None:
+        return {}
+    if not isinstance(v, dict):
+        raise ReglagesInvalides("Fichier du bureau : « types » doit être un objet {genre: réglages}.")
+    sortie = {}
+    for genre, niveau in v.items():
+        if not MOTIF_GENRE.match(genre):
+            raise ReglagesInvalides(f"Fichier du bureau : « types » : genre « {genre} » invalide (lettres "
+                                    "minuscules, chiffres et tirets).")
+        if not isinstance(niveau, dict):
+            raise ReglagesInvalides(f"Fichier du bureau : « types.{genre} » doit être un objet.")
+        entree = dict(niveau)
+        entree["reglages"] = _lire_reglages_du_niveau(niveau.get("reglages"), f"types.{genre}.reglages")
+        if "deport" in niveau:
+            d = niveau["deport"]
+            if not isinstance(d, dict):
+                raise ReglagesInvalides(f"Fichier du bureau : « types.{genre}.deport » doit être un objet.")
+            try:
+                valider_lieux(d.get("lieux", {}), catalogue=catalogue_union())
+            except ValueError as e:
+                raise ReglagesInvalides(f"Fichier du bureau : « types.{genre}.deport.lieux » : {e}")
+        sortie[genre] = entree
+    return sortie
 
 
 def lire_moteur_du_bureau(v):
@@ -238,35 +284,82 @@ def fixer_agents_abonnement_max(chemin, valeur):
     n'est jamais perdue). Rend la valeur écrite."""
     if valeur is not None and (type(valeur) is not int or not AGENTS_ABONNEMENT_MAX[0] <= valeur <= AGENTS_ABONNEMENT_MAX[1]):
         raise ValueError("« agents_abonnement_max » doit être un entier de 1 à 32 (ou nul : aucun plafond).")
+    def poser(donnees):
+        if valeur is None:
+            donnees.pop("agents_abonnement_max", None)
+        else:
+            donnees["agents_abonnement_max"] = valeur
+        return valeur
+    return _modifier_bureau(chemin, poser)
+
+
+def _modifier_bureau(chemin, fonction):
+    """Réécrit le fichier du bureau : sous verrou, relit le contenu, le passe à `fonction(donnees)` (qui le modifie sur
+    place et rend la valeur de retour), puis écrit de façon atomique. Rend ce que rend `fonction`."""
     chemin = Path(chemin)
     try:
         with _verrou_fichier(chemin):
-            return _fixer_plafond(chemin, valeur)
+            try:
+                donnees = json.loads(chemin.read_text(encoding="utf-8-sig"))
+            except (ValueError, OSError) as e:
+                raise ReglagesInvalides(f"Fichier du bureau illisible ({chemin}) : {e}")
+            if not isinstance(donnees, dict):
+                raise ReglagesInvalides(f"Fichier du bureau illisible ({chemin}) : un objet JSON est attendu")
+            retour = fonction(donnees)
+            _ecrire_fichier(chemin, donnees)
+            return retour
     except TimeoutError as e:
         raise ReglagesInvalides(str(e)) from None
 
 
-def _fixer_plafond(chemin, valeur):
-    try:
-        donnees = json.loads(chemin.read_text(encoding="utf-8-sig"))
-    except (ValueError, OSError) as e:
-        raise ReglagesInvalides(f"Fichier du bureau illisible ({chemin}) : {e}")
-    if not isinstance(donnees, dict):
-        raise ReglagesInvalides(f"Fichier du bureau illisible ({chemin}) : un objet JSON est attendu")
-    if valeur is None:
-        donnees.pop("agents_abonnement_max", None)
-    else:
-        donnees["agents_abonnement_max"] = valeur
-    fd, tmp = tempfile.mkstemp(dir=str(chemin.parent), suffix=".tmp")
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            json.dump(donnees, f, ensure_ascii=False, indent=2)
-        os.replace(tmp, chemin)
-    except BaseException:
-        if os.path.exists(tmp):
-            os.unlink(tmp)
-        raise
-    return valeur
+def fixer_niveau_bureau(chemin_bureau, chemin_cle, valeur):
+    """Pose `valeur` au chemin imbriqué `chemin_cle` du fichier du bureau (ex. `("deport", "lieux", "tests")`,
+    `("types", "android", "reglages", "lecons_auto")`) ; `None` supprime la clé et élague les objets laissés vides.
+    Le fichier est relu sous verrou : le reste est gardé. Rend `valeur`."""
+    chemin_cle = tuple(chemin_cle)
+    if not chemin_cle:
+        raise ValueError("Le chemin de la clé du bureau est vide.")
+
+    def poser(donnees):
+        if valeur is None:
+            pile = [donnees]
+            for c in chemin_cle[:-1]:
+                suivant = pile[-1].get(c)
+                if not isinstance(suivant, dict):
+                    return None   # rien à effacer
+                pile.append(suivant)
+            if chemin_cle[-1] not in pile[-1]:
+                return None
+            del pile[-1][chemin_cle[-1]]
+            for i in range(len(pile) - 1, 0, -1):   # élague les objets vidés, jamais la racine
+                if pile[i]:
+                    break
+                del pile[i - 1][chemin_cle[i - 1]]
+            return None
+        courant = donnees
+        for c in chemin_cle[:-1]:
+            suivant = courant.setdefault(c, {})
+            if not isinstance(suivant, dict):
+                raise ReglagesInvalides(f"Fichier du bureau : « {c} » n'est pas un objet.")
+            courant = suivant
+        courant[chemin_cle[-1]] = valeur
+        return valeur
+    return _modifier_bureau(chemin_bureau, poser)
+
+
+def effacer_cle(chemin_projet, cle):
+    """Retire la clé à plat `cle` des réglages du projet (le projet retombe sur le type, le global ou le défaut).
+    Écriture atomique ; rend les réglages rechargés."""
+    chemin = Path(chemin_projet)
+    if chemin.exists():
+        try:
+            donnees = json.loads(chemin.read_text(encoding="utf-8-sig"))
+        except (ValueError, OSError) as e:
+            raise ReglagesInvalides(f"Réglages illisibles ({chemin}) : {e}")
+        if isinstance(donnees, dict) and cle in donnees:
+            del donnees[cle]
+            _ecrire_fichier(chemin, donnees)
+    return charger(chemin)
 
 
 def fixer_analyse_blocages(chemin, valeur):
@@ -313,6 +406,12 @@ def _ecrire_cle(chemin, cle, valeur):
         except (ValueError, OSError) as e:
             raise ReglagesInvalides(f"Réglages illisibles ({chemin}) : {e}")
     donnees[cle] = valeur
+    _ecrire_fichier(chemin, donnees)
+    return charger(chemin)
+
+
+def _ecrire_fichier(chemin, donnees):
+    """Écriture atomique (fichier temporaire voisin puis remplacement)."""
     fd, tmp = tempfile.mkstemp(dir=str(chemin.parent), suffix=".tmp")
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as f:
@@ -322,4 +421,3 @@ def _ecrire_cle(chemin, cle, valeur):
         if os.path.exists(tmp):
             os.unlink(tmp)
         raise
-    return charger(chemin)

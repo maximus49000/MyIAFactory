@@ -1,6 +1,7 @@
 # Partager les connaissances
 
-Un réglage de tout le bureau (case « Partager les connaissances », panneau Direction). Donnant-donnant :
+Un réglage de tout le bureau (case « Partager les connaissances », panneau Direction ; aussi dans la page Réglages, niveau
+Global, section « Partage des connaissances »). Donnant-donnant :
 
 | | Partage activé | Partage désactivé |
 |---|---|---|

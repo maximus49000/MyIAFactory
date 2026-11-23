@@ -133,9 +133,10 @@ libres et refuse de tourner sous root.
   avec un marqueur encore périmé est « bloquée ».
 - Le lanceur de tâches refuse d'envoyer quoi que ce soit tant que l'image est périmée (voir `serveur-taches.md`).
 
-## L'écran « Où tournent les actions »
+## L'aptitude des lieux
 
-Dans la même carte du panneau Direction, chaque action propose trois lieux : le **poste**, **GitHub** et le **serveur**. Chaque lieu
+Dans la même carte du panneau Direction (« Serveurs de travail », aussi ouverte par la roue crantée de la barre), la partie
+**« Aptitude des lieux »** montre, en **lecture seule**, pour chaque action, ce que valent le **poste**, **GitHub** et le **serveur**. Chaque lieu
 porte une **pastille de couleur et un libellé écrit** (la couleur n'est jamais seule), et sa raison s'affiche au survol :
 
 | Niveau | Couleur | Sens |
@@ -146,9 +147,9 @@ porte une **pastille de couleur et un libellé écrit** (la couleur n'est jamais
 | `indisponible` | gris | capacité manquante, serveur muet ou hors ligne : le choix « serveur » est grisé avec « Manque : ... » |
 
 **C'est un conseil, pas un routage** : le bureau ne déplace jamais une action de lui-même, et l'écran le rappelle (« Ce n'est qu'un
-conseil : le choix reste au Directeur »). Le choix de lieu fait avec les boutons radio de cet écran-ci n'est **pas enregistré** (aucune route ne le garde) ; le
-réglage qui compte (l'accord permanent de la recette sur émulateur) se fait dans les réglages du projet : voir
-[`deport.md`](deport.md).
+conseil : le choix reste au Directeur »). Cette partie ne règle rien : son bouton **« Régler dans Réglages »** ouvre la page
+Réglages, où se choisit le lieu de chaque action (global, type ou projet ; l'accord permanent de la recette sur émulateur, au
+projet seulement) : voir [`reglages.md`](reglages.md) et [`deport.md`](deport.md).
 
 **Ce qui est mesuré aujourd'hui, et ce qui ne l'est pas encore.** La recommandation n'utilise que ce que le **dernier test de connexion
 du serveur** a rangé dans l'état : la charge moyenne **sur 5 minutes** par cœur, la mémoire libre, le nombre de conteneurs (lus par SSH en

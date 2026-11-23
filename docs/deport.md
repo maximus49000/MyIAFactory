@@ -9,8 +9,10 @@ Compiler l'APK, lancer les tests ou les tests de charge ralentit le poste. Chaqu
   supplémentaire, ni appel à GitHub.
 - **Un lieu par action** : `poste` ou `github`. `serveur` est affiché grisé (« bientôt »), **sauf pour la recette sur émulateur**
   (voir plus bas), qui ne tourne que sur le serveur.
-- Le réglage est global (clé `deport` de `~/MyIAFactory/bureau.json`) avec **surcharge par projet** (clé `deport` des
-  réglages du projet, comme `lecons_auto`). Le projet l'emporte, puis le défaut global, puis le poste.
+- Le réglage a trois niveaux : **global** (clé `deport` de `~/MyIAFactory/bureau.json`), **type de projet**
+  (`types.<genre>.deport` du même fichier) et **projet** (clé `deport` des réglages du projet, comme `lecons_auto`). Le
+  projet l'emporte, puis le type, puis le global, puis le poste ; `deporter`, `lancer.py tests` et la consigne de départ
+  des agents lisent les mêmes trois niveaux que le bureau. Voir [`reglages.md`](reglages.md).
 - Jamais de bascule silencieuse : si GitHub est injoignable (code 4) ou le quota épuisé (code 8), `deporter` s'arrête
   et propose le poste ; `--poste` ne se lance qu'avec l'accord du Directeur.
 
@@ -30,7 +32,7 @@ Elle est à part :
 
 - **Serveur seulement** : ni poste ni GitHub, et **aucun lieu par défaut**. Non réglée, elle est refusée (code 2) ; `--poste` et
   `--sans-attendre` ne s'appliquent pas.
-- **Réglée dans les réglages du projet seulement** : le défaut global du bureau ne compte jamais pour elle. Régler le lieu sur
+- **Réglée dans les réglages du projet seulement** : ni le défaut global ni le niveau type du bureau ne comptent pour elle. Régler le lieu sur
   « serveur » vaut **accord permanent, pour ce projet**, de la lancer.
 - **Projets enregistrés seulement** : le projet doit figurer dans le bureau (`bureau.json`) et le réglage être lu dans le fichier
   de réglages que le bureau enregistre pour lui ; `--reglages` n'est admis que s'il désigne ce fichier.
@@ -51,14 +53,19 @@ et `charge` consomment l'APK. Dans le catalogue Android, les tests unitaires se 
 
 ## Les cases dans le bureau
 
-Dans les réglages du projet, le bloc « Où tournent les actions » montre une rangée par action du type du projet, avec
-le choix Poste / GitHub / Serveur (grisé « bientôt »). Un lieu que l'action n'offre pas est grisé avec son explication.
-Pour la **recette sur émulateur** la rangée ne propose que **« Serveur »** et **« Non réglé »** (le choix par défaut, qui vaut
-refus) : « Serveur » est grisé avec « déclarez d'abord un serveur (Serveurs), puis réglez sur serveur » tant qu'aucun serveur n'est
-déclaré, et une note rappelle que la régler sur serveur vaut accord permanent pour le projet (l'agent la lance sans redemander).
-Une combinaison qui impose une attente est signalée (« les tests au poste attendront l'APK de GitHub… ») avec la
-suggestion de mettre la chaîne entière au même lieu. Dès qu'une action est sur GitHub, le bloc propose l'aperçu du
-workflow et affiche la consommation du mois.
+Le choix se fait dans la **page Réglages** (roue crantée de la barre, « Réglages »), section « Où tournent les actions » :
+une rangée par action du type du projet, avec le choix Poste / GitHub / Serveur, au niveau choisi en haut de la page
+(Global, Type, Projet). Au niveau Projet, une pastille dit d'où vient la valeur (« propre au projet », « hérité du type… »,
+« hérité du global », « défaut ») et « hérité » efface la valeur posée à ce niveau. « Serveur » est grisé « bientôt » pour
+une action que `deporter` n'y sert pas ; un lieu que l'action n'offre pas est grisé avec son explication.
+Pour la **recette sur émulateur** la rangée ne propose que **« Serveur »** ; non réglée, elle reste « Non réglé » (refus).
+Elle se règle **au niveau Projet seulement** (« Projet seulement : accord permanent ») : « Serveur » est grisé avec « déclarez
+d'abord un serveur (Serveurs), puis réglez sur serveur » tant qu'aucun serveur n'est déclaré, et le bureau refuse aussi ce
+réglage. La régler sur serveur vaut accord permanent pour le projet (l'agent la lance sans redemander).
+Une combinaison qui impose une attente est signalée sous les actions (« les tests au poste attendront l'APK de GitHub… »)
+avec la suggestion de mettre la chaîne entière au même lieu. Dès qu'une action est sur GitHub, la section propose
+l'aperçu du workflow et affiche la consommation du mois. La carte « Serveurs de travail » ne fait que montrer l'aptitude
+des lieux (voir [`serveur.md`](serveur.md)).
 
 ## Valider le workflow
 
@@ -148,7 +155,7 @@ s'applique de nouveau.
 
 ## La consommation
 
-Le bloc « Où tournent les actions » des réglages du projet (pas la vue des coûts) cumule par mois et par action les
+La section « Où tournent les actions » de la page Réglages (pas la vue des coûts) cumule par mois et par action les
 minutes GitHub (un job est facturé à la minute entamée) et montre les derniers résultats. Un dépôt public est illimité. Pour un dépôt privé :
 
 - **alerte à 80 %** du quota ; **à 100 %**, proposition de passer au poste, avec l'accord du Directeur, et

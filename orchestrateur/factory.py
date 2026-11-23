@@ -7,6 +7,7 @@ import json
 import os
 import re
 import tempfile
+import time
 from pathlib import Path
 
 MOTIF_GENRE = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}\Z")
@@ -87,27 +88,53 @@ def _controler_flux(flux, nom, ids_services, vus):
 
 _CACHE = {}
 _CACHE_MAX = 64
+# Une date de modification plus proche que cela de l'heure courante ne prouve pas que le fichier n'a pas changé : deux
+# écritures de même taille dans le même grain d'horloge du système de fichiers (quelques millisecondes sous Linux,
+# jusqu'à 2 s sur FAT) gardent la même date. Règle des dates « douteuses » de git.
+DOUTE_DATE_NS = 2_000_000_000
+
+
+def _octets(chemin):
+    try:
+        with open(chemin, "rb") as f:
+            return f.read()
+    except OSError:
+        return None
 
 
 def lire(chemin):
     """Le fichier de factory, contrôlé : un dict dont les chemins sont des `Path` absolus.
 
-    Le résultat est gardé tant que le fichier ne change pas (date de modification et taille) : le moteur, le bureau et
-    l'outil le relisent des centaines de fois par tour, et chaque lecture résolvait sept chemins sur le disque (mesure :
-    13 428 lectures pour 54 tests, un tiers de leur durée). La clé porte aussi le dossier de l'utilisateur, dont
-    dépendent les chemins en « ~/ ». Chaque appel reçoit sa propre copie."""
+    Le résultat est gardé tant que le fichier ne change pas : le moteur, le bureau et l'outil le relisent des centaines
+    de fois par tour, et chaque lecture résolvait sept chemins sur le disque (mesure : 13 428 lectures pour 54 tests, un
+    tiers de leur durée). La clé porte le chemin, le volume, l'inode, la taille, les dates de modification et de
+    changement, et le dossier de l'utilisateur (dont dépendent les chemins en « ~/ »). Une entrée gardée alors que la date
+    du fichier était douteuse (`DOUTE_DATE_NS`) n'est rendue qu'après comparaison des octets du fichier (un petit
+    fichier : lecture brève, sans résolution de chemins) ; elle devient sûre dès qu'elle est confirmée hors du doute.
+    Chaque appel reçoit sa propre copie."""
     try:
         st = os.stat(chemin)
-        cle = (os.path.abspath(chemin), st.st_mtime_ns, st.st_size, os.path.expanduser("~"))
+        cle = (os.path.abspath(chemin), st.st_dev, st.st_ino, st.st_size, st.st_mtime_ns, st.st_ctime_ns,
+               os.path.expanduser("~"))
     except OSError:
-        cle = None   # illisible : `_lire` le dit
-    if cle is not None and cle in _CACHE:
-        return copy.deepcopy(_CACHE[cle])
+        return _lire(chemin)   # illisible : `_lire` le dit
+    douteux = abs(time.time_ns() - st.st_mtime_ns) < DOUTE_DATE_NS   # toute écriture rend la date récente
+    entree = _CACHE.get(cle)
+    if entree is not None:
+        r, octets = entree
+        if octets is None:
+            return copy.deepcopy(r)
+        if _octets(chemin) == octets:
+            if not douteux:
+                _CACHE[cle] = (r, None)   # confirmé hors du doute : toute écriture suivante changera la date
+            return copy.deepcopy(r)
+    avant = _octets(chemin) if douteux else None
     r = _lire(chemin)
-    if cle is not None:
-        if len(_CACHE) >= _CACHE_MAX:
-            _CACHE.clear()
-        _CACHE[cle] = copy.deepcopy(r)
+    if douteux and (avant is None or _octets(chemin) != avant):
+        return r   # le fichier a bougé pendant la lecture : rien n'est gardé
+    if len(_CACHE) >= _CACHE_MAX:
+        _CACHE.clear()
+    _CACHE[cle] = (copy.deepcopy(r), avant)
     return r
 
 

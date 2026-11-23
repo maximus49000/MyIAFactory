@@ -3,6 +3,7 @@ import json
 import os
 import re
 import tempfile
+import threading
 import unicodedata
 from pathlib import Path
 
@@ -79,17 +80,76 @@ def charger_effectif(chemin_projet, fichier_bureau=None):
     if fichier_bureau is None:
         return r
     try:
-        lu = lire_bureau(fichier_bureau)
-        niveaux = {"reglages": lu["reglages"], "types": lu["types"]}
-        genre = catalogue_du_projet(r["dossier"])[0]
-    except Exception:          # fichier du bureau absent, illisible, abîmé, chemin invalide : le projet seul
+        niveaux = _niveaux_du_bureau(fichier_bureau)
+    except (ReglagesInvalides, OSError, TypeError, ValueError):   # absent, illisible, abîmé, chemin invalide
         return r
+    genre = _genre_du_projet(r["dossier"])
     genre = None if genre == "generique" else genre      # comme la page Réglages : pas de niveau type sans genre
     for reglage in REGISTRE:
         valeur, _ = valeur_effective(reglage, brut, niveaux, genre)
         if type(valeur) is bool:     # les niveaux du bureau sont filtrés par `lire_bureau` ; garde de plus
             r[reglage.cle] = valeur
     return r
+
+
+# Le moteur relit les réglages effectifs plusieurs fois par passage et par projet : le fichier du bureau et le genre
+# du projet ne sont relus que s'ils ont changé (date en ns et taille). Une entrée par chemin (la dernière lue) : le cache
+# ne grossit pas au-delà des fichiers connus. Le bureau a plusieurs fils : chaque entrée est posée d'une seule
+# affectation, sous verrou. Les valeurs rendues sont partagées : à lire seulement.
+_CACHE_BUREAU = {}
+_CACHE_GENRE = {}
+_VERROU_CACHES = threading.Lock()
+_CACHE_MAX = 64
+
+
+def _signature(chemin):
+    """`(date en ns, taille)` du fichier, ou None s'il n'existe pas (ou n'est pas lisible)."""
+    try:
+        st = os.stat(chemin)
+    except (OSError, ValueError):
+        return None
+    return (st.st_mtime_ns, st.st_size)
+
+
+def _poser(cache, cle, valeur):
+    with _VERROU_CACHES:
+        if cle not in cache and len(cache) >= _CACHE_MAX:
+            cache.clear()
+        cache[cle] = valeur
+
+
+def _niveaux_du_bureau(fichier_bureau):
+    """`{"reglages", "types"}` du fichier du bureau, lus par `lire_bureau` (seule source) ; relus seulement si le
+    fichier a changé. Lève `ReglagesInvalides` (ou OSError, TypeError, ValueError) comme `lire_bureau` ; un refus est
+    gardé lui aussi, jusqu'au prochain changement du fichier."""
+    cle = str(Path(fichier_bureau))
+    signature = _signature(cle)
+    if signature is None:          # fichier disparu : jamais une ancienne lecture
+        with _VERROU_CACHES:
+            _CACHE_BUREAU.pop(cle, None)
+        raise ReglagesInvalides(f"Fichier du bureau introuvable ({cle}).")
+    entree = _CACHE_BUREAU.get(cle)
+    if entree is None or entree[0] != signature:
+        try:
+            lu = lire_bureau(cle)
+            entree = (signature, {"reglages": lu["reglages"], "types": lu["types"]}, None)
+        except ReglagesInvalides as e:
+            entree = (signature, None, str(e))
+        _poser(_CACHE_BUREAU, cle, entree)
+    if entree[2] is not None:      # une exception neuve : relever la même ferait grossir sa trace à chaque passage
+        raise ReglagesInvalides(entree[2])
+    return entree[1]
+
+
+def _genre_du_projet(dossier):
+    """Le genre de `catalogue_du_projet(dossier)`, relu seulement si l'un de ses deux `factory.json` a changé."""
+    dossier = str(dossier)
+    signature = tuple(_signature(os.path.join(dossier, *p)) for p in ((".factory", "factory.json"), ("factory.json",)))
+    entree = _CACHE_GENRE.get(dossier)
+    if entree is None or entree[0] != signature:
+        entree = (signature, catalogue_du_projet(dossier)[0])
+        _poser(_CACHE_GENRE, dossier, entree)
+    return entree[1]
 
 
 def _verifier_moteur(r):

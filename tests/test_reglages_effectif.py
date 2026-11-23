@@ -4,6 +4,7 @@ import shutil
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from bureau import reglages
 
@@ -104,6 +105,34 @@ class Effectif(unittest.TestCase):
         self.assertEqual(len(lu["ignores"]), 4)
         self.assertTrue(any("lecons_auto" in x and "ignor" in x for x in lu["ignores"]))
         self.assertTrue(any("une_session_moyenne" in x and "types." + ANDROID in x for x in lu["ignores"]))
+
+    def test_le_cache_suit_le_fichier_du_bureau_reecrit_ou_supprime(self):
+        """Le fichier du bureau n'est relu que s'il a changé : réécrit, sa nouvelle valeur est prise ; supprimé, le
+        projet seul (aucune ancienne lecture) ; abîmé puis réparé, de nouveau lu."""
+        b = bureau_avec(self.regl, reglages={"lecons_auto": True})
+        self.assertIs(reglages.charger_effectif(self.regl, b)["lecons_auto"], True)
+        with mock.patch.object(reglages, "lire_bureau", wraps=reglages.lire_bureau) as lu:
+            for _ in range(3):
+                self.assertIs(reglages.charger_effectif(self.regl, b)["lecons_auto"], True)
+            self.assertEqual(lu.call_count, 0)                  # inchangé : pas relu
+            bureau_avec(self.regl, reglages={"lecons_auto": False, "analyse_blocages": False})
+            r = reglages.charger_effectif(self.regl, b)
+            self.assertEqual((r["lecons_auto"], r["analyse_blocages"]), (False, False))
+            self.assertEqual(lu.call_count, 1)
+        b.unlink()
+        self.assertEqual(reglages.charger_effectif(self.regl, b), reglages.charger(self.regl))
+        b.write_text("{abime", encoding="utf-8")
+        self.assertEqual(reglages.charger_effectif(self.regl, b), reglages.charger(self.regl))
+        bureau_avec(self.regl, reglages={"livraison_sur_demande": True})
+        self.assertIs(reglages.charger_effectif(self.regl, b)["livraison_sur_demande"], True)
+
+    def test_le_cache_suit_le_genre_du_projet(self):
+        bureau = bureau_avec(self.regl, types={ANDROID: {"reglages": {"lecons_auto": True}}})
+        self.assertIs(reglages.charger_effectif(self.regl, bureau)["lecons_auto"], False)    # générique
+        self.en_android()
+        self.assertIs(reglages.charger_effectif(self.regl, bureau)["lecons_auto"], True)
+        (self.tmp / "factory.json").unlink()
+        self.assertIs(reglages.charger_effectif(self.regl, bureau)["lecons_auto"], False)
 
     def test_une_mauvaise_valeur_globale_laisse_le_type_agir(self):
         self.en_android()

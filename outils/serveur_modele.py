@@ -36,9 +36,26 @@ class Serveur:
     fournisseur: "str | None" = None
     reglages_fournisseur: dict = field(default_factory=dict)
     places_tests: "int | None" = None      # campagnes de tests simultanées voulues (1 à 4) ; None : le défaut de la route
+    budget_tests_mo: "int | None" = None   # mémoire des tests, en Mo (8 192 à 40 960) ; None : BUDGET_TESTS_DEFAUT_MO
 
 
 PLACES_TESTS_MAX = 4
+BUDGET_TESTS_MIN_MO, BUDGET_TESTS_MAX_MO, BUDGET_TESTS_DEFAUT_MO = 8192, 40960, 32768
+
+
+def budget_tests_valide(valeur):
+    """`valeur` si c'est un entier dans [8 192 ; 40 960] Mo, sinon None (jamais un booléen, ni un texte)."""
+    if isinstance(valeur, bool) or not isinstance(valeur, int) or not BUDGET_TESTS_MIN_MO <= valeur <= BUDGET_TESTS_MAX_MO:
+        return None
+    return valeur
+
+
+def raison_budget(entree):
+    """La phrase que le bureau montre quand le `budget_tests_mo` d'une entrée est hors bornes (le défaut s'applique), sinon None."""
+    if not isinstance(entree, dict) or entree.get("budget_tests_mo") is None or budget_tests_valide(entree["budget_tests_mo"]):
+        return None
+    return (f"budget_tests_mo hors bornes ({BUDGET_TESTS_MIN_MO} à {BUDGET_TESTS_MAX_MO} Mo) : "
+            f"{BUDGET_TESTS_DEFAUT_MO} Mo utilisés.")
 
 
 def _en_dict(serveur):
@@ -46,6 +63,8 @@ def _en_dict(serveur):
     d = asdict(serveur)
     if d.get("places_tests") is None:
         del d["places_tests"]
+    if d.get("budget_tests_mo") is None:
+        del d["budget_tests_mo"]
     return d
 
 
@@ -127,7 +146,8 @@ def valider(serveur):
     places = serveur.get("places_tests")
     if isinstance(places, bool) or not isinstance(places, int) or not 1 <= places <= PLACES_TESTS_MAX:
         places = None       # hors bornes : on retombe sur le défaut de la route (le bureau le dit, voir `rejets_places`)
-    return Serveur(ident, nom, hote, utilisateur, cle, fournisseur, dict(reglages), places)
+    return Serveur(ident, nom, hote, utilisateur, cle, fournisseur, dict(reglages), places,
+                   budget_tests_valide(serveur.get("budget_tests_mo")))     # hors bornes : le défaut (voir `raison_budget`)
 
 
 def lire_avec_rejets(dossier=DOSSIER):

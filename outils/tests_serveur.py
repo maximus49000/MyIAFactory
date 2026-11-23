@@ -47,12 +47,17 @@ import campagne  # noqa: E402
 import plateforme_acces  # noqa: E402
 import plateforme_ssh  # noqa: E402
 import serveur_etat  # noqa: E402
+import serveur_modele  # noqa: E402
 import serveur_tache  # noqa: E402
 import tests_images  # noqa: E402
 import tests_instantane  # noqa: E402
 from plateforme import DOSSIER_DISTANT  # noqa: E402
 
 LIMITES = {"cpus": 4, "memoire_mo": 8192, "duree_s": 1800}
+# Bornes des limites d'une campagne (§ 5.14) : au-delà, décision du Directeur (le profil forcé ne les dépasse jamais).
+BORNES_LIMITES = {"cpus": 8, "memoire_mo": 16384, "duree_s": 3600}
+UNITE_MEMOIRE_MO = 2048        # un jeton de mémoire de l'enveloppe (~/taches/.jeton-tests-1..20)
+BUDGET_UNITES_DEFAUT = 16      # celui de l'enveloppe quand le 14e argument est absent (= 32 768 Mo)
 PLACES_DEFAUT = 3      # mesuré (J3) : 3 campagnes complètes simultanées = 179 s chacune, comme une seule (165 s) ; 4 : 207 s
 PLACES_MAX = 4
 INJOIGNABLE_S = 300
@@ -546,6 +551,53 @@ class _Attente:
             campagne._oublier_l_attente(self.attentes)
 
 
+def limites_de(profil, forces=None):
+    """Les limites de la campagne : `cpus`, `memoire_mo`, `duree_s` du profil (`ressources_par_defaut`, § 5.14), relevées par
+    `forces` (`tests.profil_force.ressources` du projet, écrit par le bureau seul) ; une valeur absente ou invalide retombe sur
+    `LIMITES`. Au-delà de `BORNES_LIMITES` : `Repli` (décision du Directeur requise), avant toute connexion."""
+    limites = dict(LIMITES)
+    for source in (getattr(profil, "ressources", None), forces):
+        if isinstance(source, dict):
+            for cle in limites:
+                v = source.get(cle)
+                if isinstance(v, int) and not isinstance(v, bool) and v > 0:
+                    limites[cle] = v
+    for cle, maximum in BORNES_LIMITES.items():
+        if limites[cle] > maximum:
+            raise Repli(f"refusé ({cle} {limites[cle]} au-delà de {maximum} : décision du Directeur requise)")
+    return limites
+
+
+def _limites_forcees_par_defaut(racine):
+    """Les `tests.profil_force.ressources` enregistrés au bureau pour ce projet (le plus haut de chaque clé s'ils diffèrent) ;
+    toute erreur : rien (les limites du profil)."""
+    forces = {}
+    try:
+        try:
+            from bureau import deport_types
+        except ImportError:
+            sys.path.append(str(ICI.parent))
+            from bureau import deport_types
+        for fichier in deport_types.reglages_enregistres(racine) or []:
+            x = deport_types._lire_json_sur(fichier)
+            tests = x.get("tests") if isinstance(x, dict) else None
+            force = tests.get("profil_force") if isinstance(tests, dict) else None
+            res = force.get("ressources") if isinstance(force, dict) else None
+            for cle in LIMITES:
+                v = res.get(cle) if isinstance(res, dict) else None
+                if isinstance(v, int) and not isinstance(v, bool) and v > forces.get(cle, 0):
+                    forces[cle] = v
+    except Exception:  # noqa: BLE001 — jamais de limite relevée sur un doute
+        return {}
+    return forces
+
+
+def budget_unites_de(serveur):
+    """Le budget mémoire des tests du serveur, en jetons de 2 Go (4 à 20) : `budget_tests_mo` // 2 048, sinon le défaut (16)."""
+    mo = serveur_modele.budget_tests_valide(getattr(serveur, "budget_tests_mo", None))
+    return BUDGET_UNITES_DEFAUT if mo is None else mo // UNITE_MEMOIRE_MO
+
+
 def places_de(serveur):
     """Campagnes simultanées voulues pour ce serveur : son réglage `places_tests` (1 à 4), sinon `PLACES_DEFAUT`."""
     voulues = getattr(serveur, "places_tests", None)
@@ -556,10 +608,12 @@ def places_de(serveur):
 
 def _au_serveur(commande, racine, attendre, places, dossier_etat, ssh, noter, horloge, maintenant, dire, choisir,
                 instantane, projet_de, injoignable, attentes, sortie, sortie_erreur, nouvel_id, forcer, popen_base,
-                dormir, travail_go=None, analyse=None, sdk_android=None, empreinte=None, reseau_code=None):
+                dormir, travail_go=None, analyse=None, sdk_android=None, empreinte=None, reseau_code=None,
+                ressources_forcees=None):
     """La campagne au serveur ; rend son code, ou lève `Repli`. `KeyboardInterrupt` remonte telle quelle."""
     appel = horloge()
     profil = _profil_de_la_campagne(analyse or _analyse_par_defaut, racine, commande)
+    limites = limites_de(profil, (ressources_forcees or _limites_forcees_par_defaut)(racine))
     image, famille, requises = _image_de_la_campagne(profil, sdk_android)
     cle, deps, famille_deps = _deps_de_la_campagne(profil, famille, commande, racine, empreinte)
     reseau = "refuse"
@@ -615,18 +669,22 @@ def _au_serveur(commande, racine, attendre, places, dossier_etat, ssh, noter, ho
     finally:
         _effacer(prive, dormir)
 
-    distante = (f"\"{ENVELOPPE_DISTANTE}\" {ident} {places} {LIMITES['cpus']} {LIMITES['memoire_mo']} "
-                f"{LIMITES['duree_s']} {projet} {deps}")
-    if travail_go is not None or image is not None or cle is not None:
+    distante = (f"\"{ENVELOPPE_DISTANTE}\" {ident} {places} {limites['cpus']} {limites['memoire_mo']} "
+                f"{limites['duree_s']} {projet} {deps}")
+    unites = budget_unites_de(serveur)
+    plus = unites != BUDGET_UNITES_DEFAUT      # le 14e argument force les 8e à 13e : la ligne reste celle d'avant sans lui
+    if travail_go is not None or image is not None or cle is not None or plus:
         distante += f" {int(travail_go) if travail_go is not None else 10}"   # 8e argument (facultatif) : taille maximale de travail/, en Go
-    if image is not None or cle is not None:
+    if image is not None or cle is not None or plus:
         # 9e et 10e (facultatifs) : image du catalogue et sa famille (celle des dépendances pour l'image par défaut)
-        distante += f" {image or tests_images.IMAGE_DEFAUT} {famille or famille_deps}"
-    if cle is not None:
+        distante += f" {image or tests_images.IMAGE_DEFAUT} {famille or famille_deps or 'python'}"
+    if cle is not None or plus:
         budget = getattr(serveur, "budget_caches_go", None)
         if isinstance(budget, bool) or not isinstance(budget, int) or not 1 <= budget <= 1000:
             budget = BUDGET_CACHES_GO
-        distante += f" {cle} {reseau} {budget}"     # 11e à 13e : échauffement, accord réseau (code du projet), budget Q5
+        distante += f" {cle or '-'} {reseau} {budget}"     # 11e à 13e : échauffement, accord réseau (code du projet), budget Q5
+    if plus:
+        distante += f" {unites}"                           # 14e : budget de mémoire des tests, en jetons de 2 Go
     attente = _Attente(attentes, racine, attendre, dire, maintenant)
     erreur = _ErreurMontree(sortie_erreur if sortie_erreur is not None else _erreur_du_poste(), serveur.cle)
     depart = horloge()
@@ -684,7 +742,8 @@ def executer(commande, dossier=None, attendre=True, forcer=False, places=None, d
              maintenant=time.time, dire=print, *, choisir=None, instantane=tests_instantane, projet_de=None,
              injoignable=INJOIGNABLE, attentes=None, sortie=None, sortie_erreur=None,
              nouvel_id=serveur_tache.nouvel_id, _popen=subprocess.Popen, dormir=time.sleep, accord=None,
-             travail_go=None, analyse=None, sdk_android=None, empreinte=None, reseau_code=None) -> int:
+             travail_go=None, analyse=None, sdk_android=None, empreinte=None, reseau_code=None,
+             ressources_forcees=None) -> int:
     """Lance `commande` au serveur et rend son code ; sinon (règles R1–R5) au poste, une fois, sous son verrou. Avec
     `forcer` (`--serveur`) : jamais de repli, la raison est dite et le code est 4. `KeyboardInterrupt` remonte (le
     lanceur rend 130) : rien n'est relancé, rien n'est noté.
@@ -707,7 +766,7 @@ def executer(commande, dossier=None, attendre=True, forcer=False, places=None, d
                            choisir or serveur_tache.choisir_serveur, instantane, projet_de or _projet_par_defaut,
                            injoignable, attentes, sortie, sortie_erreur, nouvel_id, forcer, _popen, dormir,
                            travail_go=travail_go, analyse=analyse, sdk_android=sdk_android, empreinte=empreinte,
-                           reseau_code=reseau_code)
+                           reseau_code=reseau_code, ressources_forcees=ressources_forcees)
     except _Rendu as e:
         return e.code
     except Repli as e:

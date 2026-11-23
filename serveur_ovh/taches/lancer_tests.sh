@@ -2,12 +2,21 @@
 # Enveloppe HÔTE d'une campagne de tests : exécutée sur le serveur par UNE session SSH du poste, elle reste au premier plan
 # du début à la fin (place, conteneur, sortie en direct, nettoyage) ; l'entrée standard de la session sert de laisse.
 # Usage : lancer_tests.sh <id> <places> <cpus> <memoire_mo> <duree_s> <projet> <deps> [<travail_go> [<image> [<famille>
-#         [<echauffement> [<reseau_code> [<budget_caches_go>]]]]]]
+#         [<echauffement> [<reseau_code> [<budget_caches_go> [<budget_unites>]]]]]]]
 #   id t<AAAAMMJJ>-<HHMMSS>-<4 hexa> ; places 1..4 ; cpus 1..64 ; memoire_mo 256..65536 ; duree_s 1..3600 (nombres sans zéro
 #   initial) ; projet ^[a-z0-9][a-z0-9-]{0,39}$ ; deps 16 hexa (empreinte du cache, tests_profil.empreinte_deps) ou « - » ;
 #   echauffement (11e) : clé de la table FERMÉE ECH (npm, pip, gradle…), par défaut celle de la famille (ECH_DEFAUT) ;
 #   reseau_code (12e) accorde|refuse (défaut refuse) : l'accord du Directeur pour le réseau d'un échauffement qui exécute du
-#   code du projet (posé par la route d'après tests.adoption) ; budget_caches_go (13e) 1..1000, défaut 40 (Q5).
+#   code du projet (posé par la route d'après tests.adoption) ; budget_caches_go (13e) 1..1000, défaut 40 (Q5) ;
+#   budget_unites (14e, tâche 14e) ^([4-9]|1[0-9]|20)$, défaut 16 : le budget mémoire des tests du serveur, en jetons de 2 Go.
+# JETONS DE MÉMOIRE (conception § 5.5 et § 5.14) : ~/taches/.jeton-tests-1..20 (flock -n, un descripteur chacun, comme la place) ;
+#   une campagne en veut ceil(memoire_mo / 2048) EN PLUS de sa place ; jamais plus de budget_unites tenus en tout (les jetons
+#   tenus par d'autres comptent, même au-delà du budget : abaisser le budget n'expulse personne). Seul le PREMIER ticket de la
+#   file en prend, un par un, et les garde jusqu'à en avoir assez (puis prend sa place) : pas d'interblocage, pas de famine ; un
+#   ticket qui cesse d'être le premier (un plus ancien arrive après coup) rend les siens. Un poids au-delà du budget est refusé
+#   (code 2) : il attendrait pour toujours. Rendus avec la place (fin, laisse coupée, panne : le verrou meurt avec la session).
+#   RÉSIDUEL CONNU : les jetons ne sont pas refermés dans les fils (comme la place, descripteur 8, seuls les appels docker
+#   brefs le font) : si l'enveloppe était tuée net, le conteneur (docker run) les garderait jusqu'à ce que le surveillant le tue.
 # DÉPENDANCES (conception § 5.13, tâche 14d et sa relecture), quand deps ≠ « - » : cache ~/tests/.deps/<projet>/<clé>-<deps>/
 #   (contenu/ = ce que l'outil a produit, .pret, .utilise, .verrou-produit et .non-verrouille éventuels) ; son verrou est HORS
 #   du dossier : <projet>/.<clé>-<deps>.verrou. Absent (ou « non verrouillé » et .pret de plus de 7 jours) : ÉCHAUFFEMENT avant
@@ -47,7 +56,7 @@
 #   inodes, travail-plein, echeance), jamais montées dans le conteneur.
 # Sortie standard : celle du conteneur, séparateurs de lignes autres que \n réécrits (tests_hote.py --couper), coupée à
 #   50 Mo (52 428 800 octets ; le reste est lu et jeté).
-# Sortie d'erreur : `#attente <rang> <total>` pendant la file (à chaque changement, rappel toutes les 30 s) ; la sortie
+# Sortie d'erreur : `#attente <rang> <total> <jetons_libres>` pendant la file (à chaque changement, rappel toutes les 30 s) ; la sortie
 #   d'erreur du conteneur préfixée `| ` à chaque ligne (\r devenu \n, \x0b \x0c \x1c-\x1e U+0085 U+2028 U+2029 écrits en
 #   texte ; coupée à 50 Mo) ; les messages de l'enveloppe (« lancer_tests : … ») ; puis, SEULEMENT pour un code produit par
 #   l'enveloppe elle-même, la ligne `#refus <code>` ; et TOUJOURS en dernière ligne
@@ -160,6 +169,7 @@ RAISONS="${RAISONS//$'\n'/ }"
 RAISONS_MEMOIRE=" echauffement plafond inodes duree distribution-redirection distribution-somme "
 RAISONS_BREVES=" distribution-injoignable mandataire reseau-interne "
 PLACES_MAX=4
+JETONS_MAX=20
 DUREE_MAX=3600
 DISQUE_MIN_KO=5242880                    # 5 Go libres au départ
 DISQUE_ARRET_KO=2097152                  # 2 Go libres pendant la campagne
@@ -175,7 +185,7 @@ if [[ ${ENVELOPPE_DU_S:-} =~ ^[0-9]{1,3}$ ]]; then DU_S="$ENVELOPPE_DU_S"; fi   
 
 # --- Arguments (rien n'est écrit avant la fin de ce bloc) ------------------
 
-[ $# -ge 7 ] && [ $# -le 13 ] || refuser "usage : <id> <places> <cpus> <memoire_mo> <duree_s> <projet> <deps> [<travail_go> [<image> [<famille> [<echauffement> [<reseau_code> [<budget_caches_go>]]]]]]"
+[ $# -ge 7 ] && [ $# -le 14 ] || refuser "usage : <id> <places> <cpus> <memoire_mo> <duree_s> <projet> <deps> [<travail_go> [<image> [<famille> [<echauffement> [<reseau_code> [<budget_caches_go> [<budget_unites>]]]]]]]"
 for argument in "$@"; do
   [[ $argument == *[[:cntrl:]]* ]] && refuser "caractère de contrôle refusé dans un argument."
 done
@@ -190,12 +200,15 @@ ID="$1"; PLACES="$2"; CPUS="$3"; MEMOIRE="$4"; DUREE="$5"; PROJET="$6"; DEPS="$7
 [[ $TRAVAIL_GO =~ ^[1-9][0-9]{0,2}$ ]] && [ "$TRAVAIL_GO" -le 200 ] || refuser "travail_go refusé (1 à 200)."
 [[ $IMAGE_DEMANDEE =~ ^myiafactory/tests(-[a-z0-9]{1,24})?$ ]] || refuser "image refusée (myiafactory/tests ou myiafactory/tests-<nom>)."
 [[ $FAMILLE =~ ^[a-z][a-z-]{1,15}$ ]] && [[ $FAMILLES == *" $FAMILLE "* ]] || refuser "famille refusée."
-ECH_CLE="${11-${ECH_DEFAUT[$FAMILLE]-"-"}}"; RESEAU="${12-refuse}"; BUDGET="${13-40}"
+ECH_CLE="${11-${ECH_DEFAUT[$FAMILLE]-"-"}}"; RESEAU="${12-refuse}"; BUDGET="${13-40}"; BUDGET_U="${14-16}"
 if [ "$ECH_CLE" != - ]; then
   [[ $ECH_CLE =~ ^[a-z][a-z-]{1,11}$ ]] && [ -n "${ECH[$ECH_CLE]+x}" ] || refuser "échauffement refusé (clé hors de la table)."
 fi
 [[ $RESEAU =~ ^(accorde|refuse)$ ]] || refuser "reseau_code refusé (accorde ou refuse)."
 [[ $BUDGET =~ ^[1-9][0-9]{0,3}$ ]] && [ "$BUDGET" -le 1000 ] || refuser "budget_caches_go refusé (1 à 1000)."
+[[ $BUDGET_U =~ ^([4-9]|1[0-9]|20)$ ]] || refuser "budget_unites refusé (4 à $JETONS_MAX)."
+POIDS=$(((MEMOIRE + 2047) / 2048))
+[ "$POIDS" -le "$BUDGET_U" ] || refuser "memoire_mo refusée : $POIDS jetons de 2 Go, plus que le budget de mémoire du serveur ($BUDGET_U)."
 [ "$DEPS" = - ] || [ "$ECH_CLE" != - ] || refuser "deps sans échauffement connu pour la famille $FAMILLE."
 IMAGE="$IMAGE_DEMANDEE"
 TRAVAIL_MAX_KO=$((TRAVAIL_GO * 1048576))
@@ -226,6 +239,15 @@ chmod 700 -- "$TESTS" "$DOSSIER" "$ENTREE" 2>/dev/null   # 0700 imposé (créés
 
 # --- À partir d'ici, toute fin passe par finir : nettoyage, #refus éventuel, puis #fin ------------------------------
 
+declare -A MES_JETONS=()                               # numéro -> descripteur des jetons de mémoire tenus
+liberer_jetons() {
+  local k f
+  for k in "${!MES_JETONS[@]}"; do
+    f="${MES_JETONS[$k]}"
+    flock -u "$f" 2>/dev/null; exec {f}>&-
+  done
+  MES_JETONS=()
+}
 A_NOUS=1; TICKET=""; PID_LAISSE=""; PID_SURVEILLANT=""; CONTENEUR=0
 DEPS_CONTENEUR=0; MANDATAIRE=0; DEPS_RESEAU=""; VOLUMES=(); TMP_CACHE=""
 
@@ -266,6 +288,7 @@ finir() {   # finir <code> [conteneur] : « conteneur » = le code vient du cont
   exec 3>&- 5>&- 6>&- 7>&-                             # sommes Gradle, cache, place d'échauffement, préparation rendus
   [ -n "$TICKET" ] && rm -f -- "$TICKET"
   liberer_creneau
+  liberer_jetons
   if [ -e "$DOSSIER/sortie-coupee" ]; then printf '%s\n' "Sortie coupée à 50 Mo" >&2; fi
   if [ -e "$DOSSIER/erreur-coupee" ]; then printf '%s\n' "Sortie d'erreur coupée à 50 Mo" >&2; fi
   if [ "$A_NOUS" = 1 ]; then
@@ -801,7 +824,37 @@ prendre_place() {   # 0 si une place est prise (descripteur 8)
   return 0
 }
 
-DEBUT_ATTENTE=$(date +%s); dernier=""; dernier_t=0
+JETONS_LIBRES=0
+compter_jetons_libres() {   # sans rien garder : JETONS_LIBRES = budget - (tenus par d'autres) - (les miens)
+  local k f autres=0
+  for ((k = 1; k <= JETONS_MAX; k++)); do
+    [ -n "${MES_JETONS[$k]+x}" ] && continue
+    exec {f}>> "$HOME/taches/.jeton-tests-$k" || echouer 1 "jeton de mémoire inaccessible."
+    if flock -n "$f"; then flock -u "$f"; else autres=$((autres + 1)); fi
+    exec {f}>&-
+  done
+  JETONS_LIBRES=$((BUDGET_U - autres - ${#MES_JETONS[@]})); [ "$JETONS_LIBRES" -ge 0 ] || JETONS_LIBRES=0
+}
+tenir_jetons() {   # un passage, réservé au premier ticket (le poids atteint, il n'est plus appelé) ; jamais plus de BUDGET_U tenus en tout
+  local k f autres=0 i
+  local -a nums=() fds=()
+  for ((k = 1; k <= JETONS_MAX; k++)); do
+    [ -n "${MES_JETONS[$k]+x}" ] && continue
+    exec {f}>> "$HOME/taches/.jeton-tests-$k" || echouer 1 "jeton de mémoire inaccessible."
+    if flock -n "$f"; then nums+=("$k"); fds+=("$f"); else autres=$((autres + 1)); exec {f}>&-; fi
+  done
+  # Les libres sont tenus le temps du choix : personne d'autre ne peut les prendre ; gardés seulement ceux qu'il faut.
+  for i in "${!nums[@]}"; do
+    if [ "${#MES_JETONS[@]}" -lt "$POIDS" ] && [ $((${#MES_JETONS[@]} + autres)) -lt "$BUDGET_U" ]; then
+      MES_JETONS[${nums[$i]}]="${fds[$i]}"
+    else
+      f="${fds[$i]}"; flock -u "$f" 2>/dev/null; exec {f}>&-
+    fi
+  done
+  JETONS_LIBRES=$((BUDGET_U - autres - ${#MES_JETONS[@]})); [ "$JETONS_LIBRES" -ge 0 ] || JETONS_LIBRES=0
+}
+
+DEBUT_ATTENTE=$(date +%s); dernier=""; dernier_l=""; dernier_t=0
 while :; do
   rang=1; total=0
   for t in "$FILE"/*; do
@@ -817,11 +870,20 @@ while :; do
       rm -f -- "$t"                                   # ticket mort : son enveloppe ne vit plus
     fi
   done
-  if [ "$rang" = 1 ] && prendre_place; then break; fi
+  connu=0
+  if [ "$rang" = 1 ]; then
+    if [ "${#MES_JETONS[@]}" -lt "$POIDS" ]; then tenir_jetons; connu=1; fi   # le poids atteint : plus rien à sonder
+    if [ "${#MES_JETONS[@]}" -ge "$POIDS" ] && prendre_place; then break; fi
+  elif [ "${#MES_JETONS[@]}" -gt 0 ]; then
+    liberer_jetons                                    # plus le premier (un plus ancien est arrivé) : jamais de jeton en attente d'un autre
+  fi
   maintenant=$(date +%s)
-  if [ "$rang $total" != "$dernier" ] || [ $((maintenant - dernier_t)) -ge 30 ]; then
-    printf '#attente %s %s\n' "$rang" "$total" >&2
-    dernier="$rang $total"; dernier_t=$maintenant
+  if [ "$rang $total" != "$dernier" ] || { [ "$connu" = 1 ] && [ "$JETONS_LIBRES" != "$dernier_l" ]; } ||
+     [ $((maintenant - dernier_t)) -ge 30 ]; then
+    [ "$connu" = 1 ] || compter_jetons_libres
+    printf '#attente %s %s %s
+' "$rang" "$total" "$JETONS_LIBRES" >&2
+    dernier="$rang $total"; dernier_l="$JETONS_LIBRES"; dernier_t=$maintenant
   fi
   sleep "$SONDE"
 done

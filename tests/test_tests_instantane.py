@@ -18,11 +18,15 @@ from unittest import mock
 RACINE = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(RACINE / "outils"))
 import tests_instantane as ti  # noqa: E402
+from tests import plateforme_tests  # noqa: E402
 
 EXCLUS_FORCES = [".env", ".env.production", "cle/id_ed25519", "cle/id_rsa.pub", "sous/bureau.json", "x.local.json",
                  ".claude/settings.local.json", "node_modules/p/i.js", "sous/node_modules/q.js", ".factory/r.json",
                  "certs/serveur.pem", "certs/serveur.KEY", "android/app/release.keystore", "tests-sceau.json",
-                 ".npmrc", "credentials.json", ".git-credentials", "android/local.properties", "infra/x.tfstate"]
+                 ".npmrc", "credentials.json", ".git-credentials", "android/local.properties", "infra/x.tfstate",
+                 "config/prod.env", "app-firebase-adminsdk-x1.json", "secrets.properties", ".dev.vars",
+                 ".streamlit/secrets.toml", "x.secret", ".mcp.json", ".m2/settings.xml", ".pgpass"]
+ADMIS = ["google-services.json", "gradle.properties", "appsettings.Development.json", ".vscode/settings.json"]
 
 
 def _git(argv, cwd):
@@ -59,7 +63,8 @@ def _faux_git(sorties):
 
     def git(argv, cwd):
         appels.append(list(argv))
-        return sorties["-s" if "-s" in argv else "ls"]
+        cle = "-s" if "-s" in argv else "-d" if "-d" in argv else "ls"
+        return sorties.get(cle, (0, ""))
     git.appels = appels
     return git
 
@@ -80,6 +85,8 @@ class TestDepotReel(unittest.TestCase):
         _ecrire(cls.depot, "outil.sh", b"#!/bin/sh\necho ok\n")
         for nom in EXCLUS_FORCES:
             _ecrire(cls.depot, nom, b"SECRET\n")
+        for nom in ADMIS + ["parti.py"]:
+            _ecrire(cls.depot, nom, b"{}\n")
         cls.lien = _lien_dossier(os.path.join(cls.depot, "l"), os.path.dirname(dehors) + os.sep + ".ssh")
         try:
             os.link(os.path.join(dehors, "id_secret"), os.path.join(cls.depot, "dur.txt"))
@@ -87,8 +94,9 @@ class TestDepotReel(unittest.TestCase):
         except (OSError, AttributeError, NotImplementedError):
             cls.lien_dur = False
         _git(["init", "-q"], cls.depot)
-        _git(["add", "-f", "--", ".gitignore", "a.py"] + EXCLUS_FORCES, cls.depot)
+        _git(["add", "-f", "--", ".gitignore", "a.py", "parti.py"] + EXCLUS_FORCES, cls.depot)
         _git(["commit", "-q", "-m", "depart"], cls.depot)
+        os.remove(os.path.join(cls.depot, "parti.py"))
         cls.retenus, cls.ecartes = ti.lister(cls.depot)
 
     @classmethod
@@ -99,10 +107,14 @@ class TestDepotReel(unittest.TestCase):
         return any(e == nom or e.startswith(nom + " (") for e in self.ecartes)
 
     def test_suivis_et_non_suivis_non_ignores(self):
-        for nom in ("a.py", "b.py", ".gitignore", "outil.sh"):
+        for nom in ["a.py", "b.py", ".gitignore", "outil.sh"] + ADMIS:
             self.assertIn(nom, self.retenus)
         self.assertNotIn("c.log", self.retenus)
         self.assertEqual(self.retenus, sorted(self.retenus))
+
+    def test_supprime_suivi_ni_retenu_ni_nomme(self):
+        self.assertNotIn("parti.py", self.retenus)
+        self.assertFalse(self._ecarte("parti.py"), self.ecartes)
 
     def test_exclus_meme_suivis(self):
         for nom in EXCLUS_FORCES:
@@ -234,6 +246,146 @@ class TestSansGit(unittest.TestCase):
             with self.assertRaises(ti.HorsLimites) as c:
                 ti.ecrire_tar(self.tmp, ["a.py"], io.BytesIO())
         self.assertIn("a.py", c.exception.raison)
+
+    def _piege(self, action, autre=None):
+        """`open` de remplacement pour ti : le fichier rendu exécute `action(n, chemin)` avant sa n-ième lecture."""
+        ouvrir = open
+
+        class Piege:
+            def __init__(self, chemin, *a, **k):
+                self.chemin, self.f, self.n = chemin, ouvrir(autre or chemin, *a, **k), 0
+
+            def read(self, n=-1):
+                self.n += 1
+                action(self.n, self.chemin)
+                return self.f.read(n)
+
+            def __getattr__(self, attr):
+                return getattr(self.f, attr)
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                self.f.close()
+        return mock.patch.object(ti, "open", Piege, create=True)
+
+    def _refus_ecriture(self, nom="a.py"):
+        with self.assertRaises(ti.HorsLimites) as c:
+            ti.ecrire_tar(self.tmp, [nom], io.BytesIO())
+        self.assertIn(nom, c.exception.raison)
+        return c.exception.raison
+
+    def test_remplace_apres_lstat(self):
+        _ecrire(self.tmp, "a.py", b"0123456789")
+        autre = _ecrire(self.tmp, "autre.py", b"9876543210")
+        with self._piege(lambda n, c: None, autre=str(autre)):
+            self.assertIn("remplacé", self._refus_ecriture())
+        git = _faux_git({"ls": (0, "a.py\0")})
+        with self._piege(lambda n, c: None, autre=str(autre)):
+            self.assertEqual(ti.lister(self.tmp, git=git), ([], ["a.py (remplacé pendant la lecture)"]))
+
+    def test_croissance_apres_ouverture(self):
+        _ecrire(self.tmp, "a.py", b"0123456789")
+
+        def grossir(n, chemin):
+            if n == 1:
+                with open(chemin, "ab") as g:
+                    g.write(b"PLUS")
+        with self._piege(grossir):
+            self.assertIn("modifié", self._refus_ecriture())
+
+    def test_date_changee_pendant_la_lecture(self):
+        _ecrire(self.tmp, "a.py", b"0123456789")
+        with self._piege(lambda n, c: n == 1 and os.utime(c, ns=(10 ** 9, 10 ** 9))):
+            self.assertIn("modifié", self._refus_ecriture())
+
+    def test_erreur_de_lecture(self):
+        _ecrire(self.tmp, "a.py", b"0123456789")
+
+        def casser(n, chemin):
+            if n == 2:
+                raise OSError("disque")
+        with self._piege(casser):
+            self.assertIn("lecture impossible", self._refus_ecriture())
+
+    def test_identite_nulle_refusee(self):
+        _ecrire(self.tmp, "a.py")
+        reel = os.lstat
+
+        def sans_inode(chemin):
+            s = reel(chemin)
+            return os.stat_result((s.st_mode, 0, s.st_dev, s.st_nlink, s.st_uid, s.st_gid, s.st_size,
+                                   int(s.st_atime), int(s.st_mtime), int(s.st_ctime)))
+        with mock.patch.object(ti.os, "lstat", sans_inode):
+            with self.assertRaises(ti.HorsLimites) as c:
+                ti.lister(self.tmp, git=_faux_git({"ls": (0, "a.py\0")}))
+        self.assertIn("identité", c.exception.raison)
+
+    def test_pointeur_git_de_sous_module_jamais(self):
+        _ecrire(self.tmp, "sous/.git", b"gitdir: ../../.git/modules/sous\n")
+        _ecrire(self.tmp, "sous/a.py")
+        retenus, ecartes = ti.lister(self.tmp, git=_faux_git({"ls": (0, "sous/.git\0sous/a.py\0.git/config\0")}))
+        self.assertEqual((retenus, ecartes), (["sous/a.py"], []))
+
+    def test_cle_privee_par_le_contenu(self):
+        _ecrire(self.tmp, "fixtures/cle.txt", b"x\n-----BEGIN OPENSSH PRIVATE KEY-----\nAAAA\n")
+        _ecrire(self.tmp, "src/rsa.py", b'CLE = """-----BEGIN RSA PRIVATE KEY-----\n"""\n')
+        _ecrire(self.tmp, "compte.json", b'{"type": "service_account", "private_key": "x", "client_email": "a@b"}')
+        _ecrire(self.tmp, "publique.txt", b"-----BEGIN PUBLIC KEY-----\nAAAA\n")
+        _ecrire(self.tmp, "doc.md", b'Le champ "private_key" est lu par ...\n')
+        _ecrire(self.tmp, "loin.txt", b"x" * ti.LECTURE_CONTENU + b"-----BEGIN PRIVATE KEY-----\n")
+        git = _faux_git({"ls": (0, "fixtures/cle.txt\0src/rsa.py\0compte.json\0publique.txt\0doc.md\0loin.txt\0")})
+        retenus, ecartes = ti.lister(self.tmp, git=git)
+        self.assertEqual(retenus, ["doc.md", "loin.txt", "publique.txt"])
+        self.assertEqual(sorted(ecartes), ["compte.json (clé privée)", "fixtures/cle.txt (clé privée)",
+                                           "src/rsa.py (clé privée)"])
+        self.assertIn("clé privée", self._refus_ecriture("fixtures/cle.txt"))
+
+    def test_doublons_refuses_par_ecrire_tar(self):
+        _ecrire(self.tmp, "a.py")
+        with self.assertRaises(ti.HorsLimites) as c:
+            ti.ecrire_tar(self.tmp, ["a.py", "A.py" if os.name == "nt" else "./a.py"], io.BytesIO())
+        self.assertIn("a.py", c.exception.raison)
+
+    def test_trop_de_fichiers_avant_le_disque(self):
+        git = _faux_git({"ls": (0, "a.py\0b.py\0node_modules/x.js\0")})
+        with mock.patch.object(ti, "MAX_FICHIERS", 1), mock.patch.object(ti, "_verifier", side_effect=AssertionError):
+            with self.assertRaises(ti.HorsLimites) as c:
+                ti.lister(self.tmp, git=git)
+        self.assertIn("2", c.exception.raison)
+
+    def test_git_durci(self):
+        appels = []
+
+        def run(argv, **k):
+            appels.append((argv, k))
+            return subprocess.CompletedProcess(argv, 0, b"", b"")
+        herite = {"GIT_DIR": "x", "GIT_WORK_TREE": "y", "GIT_INDEX_FILE": "z", "GIT_CEILING_DIRECTORIES": "c",
+                  "GIT_CONFIG_PARAMETERS": "'core.fsmonitor'='evil'", "GIT_CONFIG_COUNT": "1",
+                  "GIT_CONFIG_KEY_0": "core.fsmonitor", "GIT_CONFIG_VALUE_0": "evil", "GIT_CONFIG_NOSYSTEM": "0"}
+        with mock.patch.dict(os.environ, herite), mock.patch.object(ti.subprocess, "run", run):
+            ti.lister(self.tmp)
+            ti.executables(self.tmp)
+        self.assertEqual(len(appels), 3)
+        for argv, k in appels:
+            self.assertEqual(argv[:9], ["git", "-c", "core.fsmonitor=false", "-c", "core.untrackedCache=false",
+                                        "-c", "core.hooksPath=" + os.devnull, "-c", "core.quotepath=off"])
+            env = k["env"]
+            self.assertEqual(sorted(c for c in env if c.upper().startswith("GIT_")),
+                             ["GIT_CONFIG_NOSYSTEM", "GIT_OPTIONAL_LOCKS", "GIT_TERMINAL_PROMPT"])
+            self.assertEqual((env["GIT_CONFIG_NOSYSTEM"], env["GIT_TERMINAL_PROMPT"]), ("1", "0"))
+
+    @plateforme_tests.windows_seulement("noms courts 8.3, flux et périphériques de Windows")
+    def test_noms_windows_refuses(self):
+        git = _faux_git({"ls": (0, "a.py.\0nul.txt\0src/a.py:flux\0ENV~1\0cle/ID_ED2~1\0b.py \0")})
+        retenus, ecartes = ti.lister(self.tmp, git=git)
+        self.assertEqual(retenus, [])
+        self.assertEqual(sorted(ecartes), sorted(["ENV~1 (nom court 8.3)", "cle/ID_ED2~1 (nom court 8.3)",
+                                                  "a.py. (nom refusé sous Windows)",
+                                                  "nul.txt (nom refusé sous Windows)",
+                                                  "src/a.py:flux (nom refusé sous Windows)",
+                                                  "b.py  (nom refusé sous Windows)"]))
 
     def test_empreinte_verrou_node(self):
         self.assertIsNone(ti.empreinte_verrou_node(self.tmp))

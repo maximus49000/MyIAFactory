@@ -26,7 +26,8 @@ DECISIONS_FONCTIONNALITE = ("valider_cahier", "valider_methode", "methode_a_revo
                             "genre_fonctionnalite", "environnement")
 DECISIONS_PROJET = ("confirmer_genre", "session_cloud", "organisation", "elargir_genre", "valider_etape", "environnement",
                     "outil_agent", "accord_agent", "serie_arretee", "faire_chez_partenaire", "fable_tache",
-                    "decoupage_lieux", "blocage_analyse")
+                    "decoupage_lieux", "blocage_analyse", "tests_serveur_adoption", "tests_image_derivee",
+                    "tests_reseau_echauffement", "tests_profil")
 ETAGES = ("projet", "genre", "skill")
 MOTIF_GENRE = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}\Z")
 MAX_FONCTIONNALITES = 100
@@ -743,6 +744,12 @@ def _verifier_decisions_projet(r, cles_agents, erreurs, ids_decisions):
                     erreurs.append(f"{nom} : la décision « {i} » : « {c} » est un texte.")
             if d.get("verdict_recommande") not in (None, "autoriser", "refuser"):
                 erreurs.append(f"{nom} : la décision « {i} » : « verdict_recommande » vaut autoriser ou refuser.")
+        elif d.get("genre") in ("tests_serveur_adoption", "tests_image_derivee", "tests_reseau_echauffement", "tests_profil"):
+            if not _est_dict(d.get("charge")):
+                erreurs.append(f"{nom} : la décision « {i} » : « charge » est un objet.")
+            if not isinstance(d.get("reponses"), list) or not 1 <= len(d["reponses"]) <= 6 or not all(
+                    _texte_plein(x) and len(x) <= 40 for x in d["reponses"]):
+                erreurs.append(f"{nom} : la décision « {i} » : « reponses » est une liste de 1 à 6 mots.")
         elif d.get("genre") == "blocage_analyse":
             if not all(_texte_plein(d.get(c)) for c in ("tache", "analyse", "question", "recommandation")):
                 erreurs.append(f"{nom} : la décision « {i} » : « tache », « analyse », « question » et "

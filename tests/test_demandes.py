@@ -786,6 +786,21 @@ class TestVerifierGenreEtWorkflow(unittest.TestCase):
         del sans_raison["decisions_projet"][-1]["raison"]
         self.assertNotEqual(de_la_decision(sans_raison), [])
 
+    def test_tests_serveur(self):
+        r = copy.deepcopy(R5)
+        r["decisions_projet"].append({"id": "d91", "genre": "tests_serveur_adoption", "texte": "Activer ?",
+                                      "charge": {"statut": "passe"}, "reponses": ["activer", "plus_tard"]})
+        de_la_decision = lambda r: [x for x in releve.valider(r) if "d91" in x]   # noqa: E731
+        self.assertEqual(de_la_decision(r), [])
+        base = {"type": "tests_serveur", "decision": "d91"}
+        for verdict in ("activer", "plus_tard"):
+            self.assertIsNone(demandes.verifier({**base, "verdict": verdict}, r, frozenset(), None))
+        for mauvais in ({**base, "verdict": "marquer"}, {**base, "verdict": "activer", "decision": "o1"}):
+            self.assertIsNotNone(demandes.verifier(mauvais, r, frozenset(), None), mauvais)
+        sans_charge = copy.deepcopy(r)
+        del sans_charge["decisions_projet"][-1]["charge"]
+        self.assertNotEqual(de_la_decision(sans_charge), [])
+
     def test_serie_arretee_et_fin_vue(self):
         r = copy.deepcopy(R5)
         r["decisions_projet"].append({"id": "s1", "genre": "serie_arretee", "texte": "La série ne progresse plus",

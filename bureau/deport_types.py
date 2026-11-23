@@ -52,7 +52,7 @@ GENERIQUE = {
 ANDROID = {
     "apk": _entree("Générer l'APK", "./gradlew assembleDebug", produit="apk",
                    artefact="app/build/outputs/apk/debug/*.apk", lieux=("poste", "github")),
-    "tests": _entree("Tests unitaires", "./gradlew testDebugUnitTest", lieux=("poste", "github")),
+    "tests": _entree("Tests unitaires", "./gradlew testDebugUnitTest", lieux=("poste", "github", "serveur")),
     "lint": _entree("Analyse lint", "./gradlew lintDebug", lieux=("poste", "github")),
     "emulateur": _entree("Tests sur émulateur", "./gradlew connectedDebugAndroidTest", lieux=("poste",),
                          bientot=_PEU_FIABLE),

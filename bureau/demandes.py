@@ -24,7 +24,7 @@ CHAMPS = {"bouton": ("id",), "deplacer": ("tache", "colonne"),
           "retour_element": ("fonctionnalite", "element", "texte"),
           "organisation": ("decision", "verdict"), "genre_fonctionnalite": ("decision", "fonctionnalite", "choix"),
           "environnement": ("decision", "verdict"), "elargir_genre": ("decision", "verdict"),
-          "valider_etape": ("decision", "verdict"), "outil_agent": ("decision", "verdict"), "accord_agent": ("decision", "verdict"),
+          "tests_serveur": ("decision", "verdict"), "valider_etape": ("decision", "verdict"), "outil_agent": ("decision", "verdict"), "accord_agent": ("decision", "verdict"),
           "partenaire_regle": ("partenaire", "operation"), "partenaire_inscrit": ("partenaire", "inscrit"),
           "faire_chez_partenaire": ("decision", "verdict"), "partenaires_actualiser": (),
           "partenaires_maj": ("confirme",), "installer_outil": ("decision", "outil"),
@@ -54,9 +54,10 @@ DEMANDES_V4 = ("fonctionnalite", "message", "cahier", "methode", "genre", "sessi
                "parallelisme", "recruter", "depot_git", "passer_polyvalent", "outil_agent", "accord_agent", "regle_projet",
                "serie_arretee", "fin_vue", "faire_chez_partenaire", "fable_tache", "proposer_decoupage", "decoupage_lieux",
                "lieu_etape", "regroupement_etape", "blocage_analyse", "anomalie", "livrer_maintenant", "publier_livrable",
-               "question", "question_approfondir")
+               "question", "question_approfondir", "tests_serveur")
 NATURES = ("fonctionnalite", "correction")
 VERDICTS_BLOCAGE = ("suivre", "preciser", "laisser")   # suivre la recommandation du Chef, répondre autrement, laisser
+GENRES_TESTS_SERVEUR = ("tests_serveur_adoption", "tests_image_derivee", "tests_reseau_echauffement", "tests_profil")
 ETATS_ANOMALIE = ("vue", "reglee")
 VERDICTS_FABLE = ("autoriser", "refuser")      # « refuser » : la tâche part sur Opus
 VERDICTS_DECOUPAGE = ("valider", "refuser")    # « refuser » : rien ne change
@@ -548,6 +549,14 @@ def _verifier_v4(demande, r, elements):
             return f"Réponse inconnue ({', '.join(VERDICTS_OUTIL)})."
         if demande["verdict"] == "autoriser" and not d.get("programme"):
             return "Cette décision ne nomme pas de programme à autoriser."
+        return None
+    if genre == "tests_serveur":     # l'adoption des tests au serveur : une des réponses de la décision
+        d = next((x for x in r.get("decisions_projet", []) if x.get("id") == demande["decision"]
+                  and x.get("genre") in GENRES_TESTS_SERVEUR), None)
+        if d is None:
+            return "Décision inconnue."
+        if demande["verdict"] not in (d.get("reponses") or []):
+            return f"Réponse inconnue ({', '.join(d.get('reponses') or [])})."
         return None
     if genre == "blocage_analyse":   # « Suivre la recommandation », « Répondre autrement » ou « Laisser bloquée »
         if _decision(r.get("decisions_projet", []), demande["decision"], "blocage_analyse") is None:

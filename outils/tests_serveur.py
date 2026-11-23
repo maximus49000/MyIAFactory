@@ -350,6 +350,23 @@ def _image_de_la_campagne(profil, sdk_android, commande=None):
     return image, famille, requises
 
 
+def _adoption_par_defaut(racine):
+    import tests_adoption
+    return tests_adoption.adoption_lue(racine)
+
+
+def _controler_adoption(profil, racine, adoption=None):
+    """Réévaluation (§ 5.15) : si le projet a une adoption notée (`tests.adoption`, écrite par le bureau) dont l'empreinte de
+    profil n'est plus celle du profil courant (verrou, versions d'outils, commande), la campagne passe au poste une fois, en
+    le disant : jamais de campagne au serveur sur un profil non évalué. Sans adoption notée : comportement d'avant."""
+    try:
+        notee = (adoption or _adoption_par_defaut)(racine)
+    except Exception:  # noqa: BLE001 — réglages illisibles : comme sans adoption
+        return
+    if isinstance(notee, dict) and notee.get("empreinte_profil") and notee["empreinte_profil"] != profil.empreinte:
+        raise Repli("refusé (profil changé : nouvelle évaluation proposée)")
+
+
 def _projet_par_defaut(dossier):
     return _tests_mesures().projet_enregistre(dossier)
 
@@ -926,6 +943,8 @@ def _au_serveur(commande, racine, attendre, places, dossier_etat, ssh, noter, ho
     # avant tout : les valeurs données (B3 : accord) ; le choix automatique de l'exécuteur Unity vient après celui du serveur
     suffixe = _arguments_executeur(executeur, licence, hotes_licence, reseau_licence, racine, version_hote)
     profil = _profil_de_la_campagne(analyse or _analyse_par_defaut, racine, commande)
+    if not evaluation:
+        _controler_adoption(profil, racine)
     limites = limites_de(profil, (ressources_forcees or _limites_forcees_par_defaut)(racine))
     image, famille, requises = _image_de_la_campagne(profil, sdk_android, commande)
     if licence is not None and famille != "unity":

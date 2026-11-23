@@ -2573,12 +2573,38 @@ def _rejouer_le_retour(projet, etat, fid):
     return _retoucher_prototype(projet, etat, fid, f"{marque}de l'utilisateur, resté sans suite :\n{texte}")
 
 
-def _prototype_fait(projet, etat, f):
-    """L'élément du prototype est fait (sa méthode est validée) : la série ne le reprend pas."""
+def _suite_du_prototype(projet, fid, taches):
+    """Le rang de la première étape du flux que le prototype n'a pas tenue. Le prototype est une seule tâche, du rôle de
+    la première étape de production : il tient les premières étapes de ce rôle et les validations qui les suivent (le
+    Directeur a validé le prototype) ; les étapes des autres rôles restent à faire pour son élément (cas réel, FM_Stats :
+    la maquette validée, la fonctionnalité était déclarée terminée sans code, ni tests, ni livraison). Sans tâche de
+    prototype (une méthode reprise), rien n'a été fait : tout le flux reste."""
+    roles = [t.get("role") for t in taches if str(t.get("etape")) == "prototype"]
+    pas = _production(projet, fid)
+    k = 0
+    while roles and roles[-1] and k < len(pas) and (wf.est_validation(pas[k]) or pas[k].get("role") == roles[-1]):
+        k += 1
+    return k
+
+
+def _taches_du_prototype(projet, fid, eid):
+    detail = lancer(projet, "detail", {"fonctionnalite": fid, "taches": True})
+    return [t for t in detail.get("taches") or [] if t.get("element") == eid and str(t.get("etape")) == "prototype"]
+
+
+def _prototype_fait(projet, etat, f, taches=None):
+    """L'élément du prototype a fini son prototype (sa méthode est validée) : il est fait si le prototype a tenu tout le
+    flux, sinon il entre dans la série à la première étape que le prototype n'a pas tenue (`_suite_du_prototype`)."""
     e = _element_du_prototype(projet, etat, f)
-    if e:
-        _m(etat, "elements")[f"{f['id']}/{e['id']}"] = {"fid": f["id"], "element": e, "phase": "fait", "pas": 0,
+    if not e:
+        return
+    v = _m(etat, "elements")[f"{f['id']}/{e['id']}"] = {"fid": f["id"], "element": e, "phase": "fait", "pas": 0,
                                                         "tour": 0, "corrections": 0, "taches": []}
+    debut = _suite_du_prototype(projet, f["id"], _taches_du_prototype(projet, f["id"], e["id"]) if taches is None
+                                else taches)
+    if debut < len(_production(projet, f["id"])):
+        v.update(phase="flux", pas=debut, attendus=0, rapports=[])
+        _tache_de_flux(projet, etat, v)
 
 
 def _reponse_a_une_question(projet, etat, demande, f, accord):
@@ -6081,7 +6107,9 @@ def _reprendre_l_element(projet, etat, f, element, taches):
     pas = [t for t in taches if _pas_de_serie(t)]
     if not pas:
         if any(str(t.get("etape")) == "prototype" for t in taches) or all(t["colonne"] == "fait" for t in taches):
-            _etat_element(etat, fid, element)["phase"] = "fait"     # l'élément du prototype, fait avec la méthode
+            # l'élément du prototype : la suite de son flux est créée à la validation de la méthode (`_prototype_fait`) ;
+            # sans aucune tâche de flux, c'est une série lancée avant cette règle, il reste fait (rien n'est rouvert)
+            _etat_element(etat, fid, element)["phase"] = "fait"
         return None       # sinon une tâche à part, encore ouverte : il sera repris quand elle sera faite
     etapes = [str(t["etape"]).split(":", 1)[1] for t in pas
               if str(t["etape"]).startswith((ETAPES_DE_FLUX, ETAPES_DE_VALIDATION))]

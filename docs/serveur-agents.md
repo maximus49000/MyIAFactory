@@ -118,6 +118,44 @@ La branche **est gardée, non fusionnée** quand : l'agent a été **arrêté** 
 autre limite du serveur l'a arrêté ; le rapport n'est pas « fait » ; ou la branche touche des **chemins réservés** (voir « La fusion
 locale protégée »). Elle reste alors dans le projet, à la disposition du Directeur.
 
+## Livrables rapatriés
+
+Un livrable construit au serveur (l'APK de `construire-apk`, sous `android_app/build/…`) est **ignoré par git** : il n'est pas dans le
+paquet. Après le rapport de l'agent, le moteur rapatrie donc **en octets**, au poste, à leur chemin relatif dans le projet, les fichiers
+que le rapport déclare livrables (`fichiers` avec `livrable: true`) ; le bureau peut alors les proposer au téléchargement
+(`outils/serveur_livrables.py`, appelé par `ExecuteurServeur.rapatrier_livrables`).
+
+- **Quels fichiers.** Seulement ceux du rapport, chacun revalidé au poste : chemin relatif au projet, sans `..`, sans lecteur ni `/`
+  initial, segments au motif strict (lettres, chiffres, `_ . + -`, jamais un segment qui commence par « . ») ; extension dans une liste
+  **fermée et minimale** propre au rapatriement : `.apk`, `.aab`, `.zip` (aucun exécutable du poste : ni `.exe`, `.msi`, `.dmg`,
+  `.jar`) ; le chemin doit être une **sortie de build Android** : `(^|/)build/(app/)?outputs/(flutter-apk|apk|bundle)/<fichier>`,
+  exigé pour un fichier neuf comme pour un fichier existant (Gradle range `apk/release/…` et `bundle/release/…` un niveau plus bas :
+  refusés tant qu'aucune décision n'élargit le motif) ; **jamais** une clé ou un certificat (`.keystore`, `.jks`, `.pem`, `.key`,
+  `.p12`, `.pfx`…) ni rien sous `maison/`, `android-signature/`, `agent-identifiants/`, `node_modules/`, `venv/`, `.venv/`,
+  `vendor/`, `.git/`, `.factory/`, `site-packages/` ; **8 fichiers** au plus, **500 Mo** chacun, **1 Go** en tout.
+- **Pourquoi côté poste.** La liste n'est connue que du rapport, lu par le moteur sur le poste ; l'enveloppe du serveur n'est pas
+  modifiée. Le poste envoie chaque chemin validé comme une **valeur** insérée dans deux scripts figés (aucun espace, guillemet ni
+  caractère de motif possible) : le **manifeste** (taille et SHA-256), puis l'**envoi** d'un fichier.
+- **Au serveur.** `~/taches/<id>`, `travail` et `travail/projet` ne sont pas des liens et `pwd -P` vaut bien ce chemin ; aucun
+  composant du chemin demandé n'est un lien. Le fichier est ouvert **une fois** (descripteur 3), vérifié sur ce descripteur
+  (`stat -L /proc/self/fd/3` : fichier ordinaire, un seul lien, même inode que le chemin), puis haché ou envoyé **depuis ce
+  descripteur** : un échange de fichier entre le contrôle et la lecture ne passe pas. Un fichier qui contient le jeton de
+  l'abonnement est refusé (même `grep -F` que la sortie).
+- **Limite connue.** Un `.zip` (ou un APK, qui en est un) peut contenir n'importe quoi, une clé comprise, et son contenu compressé
+  n'est pas lisible par le `grep -F` du jeton : le contrôle porte sur le chemin et l'extension, pas sur le contenu d'une archive.
+- **Au poste.** Les octets arrivent dans un fichier temporaire du **même dossier**, la taille et le SHA-256 sont vérifiés contre le
+  manifeste, puis le fichier est **renommé** (atomique) ; un écart jette le temporaire et retire les dossiers créés pour lui.
+  L'espace libre doit couvrir la taille plus 1 Go. La destination reste dans le projet (aucun lien suivi), n'est jamais un fichier
+  **suivi par git**, et son chemin est écrit dans **`.git/info/exclude`** (local, jamais commité, une ligne `/<chemin>`, une seule fois)
+  avant le renommage : le commit « Factory : … » (`git add -A`) ne l'ajoute jamais, même si l'agent a retiré `/build/` du
+  `.gitignore`. Un fichier déjà là n'est remplacé que s'il est **plus ancien que la tâche** (date `cree` de l'index) ; sinon il est
+  gardé et la raison est dite.
+- **Arrêt.** L'arrêt du bureau est lu avant chaque fichier et pendant un transfert (ssh coupé) ; les fichiers restants sont dits
+  « arrêt demandé ». Délai d'un envoi : taille à 1 Mo/s plus 60 s, 30 min au plus ; manifeste : 3 min.
+- **Résultat dit.** Une ligne par fichier dans le journal de la tâche (caractères de contrôle remplacés) : « Livrable rapatrié : `<chemin>` (`<taille>`, `<sha16>`) », ou
+  « Livrable non rapatrié : `<chemin>` : `<raison>` ». Un refus ou une panne ne fait **jamais** échouer la tâche et ne touche pas aux
+  commits rapatriés (la branche `agent/<tâche>` revient comme avant).
+
 ## Les limites par défaut
 
 Valeurs lues dans le code (`LIMITES_AGENT` de `outils/serveur_agent.py`, `lancer_agent.sh`, `entree-agent.py`). Une limite ne dépasse jamais son défaut.
@@ -503,4 +541,7 @@ Tout ce qui précède est vérifié par des tests simulés. À prouver sur le se
   minimal) ; le nom exact de l'archive et la présence de la 3.47.1 dans `releases_linux.json`.
 - **APK au serveur** : `flutter build apk --debug` dans l'agent (téléchargement de Gradle et des dépendances par le
   réseau de l'agent, durée, mémoire sous 4 Go, taille de `/maison/.gradle` et de `android-up`, chemin réel du JDK dans
-  l'image, overlay du SDK Android) ; la récupération de l'APK produit (hors commits aujourd'hui).
+  l'image, overlay du SDK Android).
+- **Livrables rapatriés** (voir cette section) : le manifeste et l'envoi au vrai serveur (`stat`, `sha256sum`, `find -links`),
+  la durée d'un APK de 50 à 150 Mo par `executer_vers_fichier`, le chemin réellement déclaré par l'agent dans son rapport, et le
+  bouton « Télécharger » du bureau sur le fichier rapatrié.

@@ -312,11 +312,26 @@ class Appel(Base):
         self.executeur()(argv, b"m", {}, None, 300)
         self.assertIsNone(f.lancements[0]["apk"])                  # mode seul : aucun APK
         f.ident = "t20261120-121500-dddd"
+        (self.tmp / "app-debug.apk").write_bytes(b"PK\x03\x04octets-de-l-apk")
+        # le moteur (`apk_pour_le_pilote`) donne un CHEMIN : le serveur doit en recevoir les OCTETS (essai réel du 2026-11-23)
         ex = es.ExecuteurServeur(self.projet, TACHE, "pilote", {"projet": "demo"}, dossier=self.dossier, ssh=object(),
                                  dormir=self.dormir, pas_s=15, horloge=lambda: self.t, git=faux_git_sans_branche,
-                                 apk="C:/p/app-debug.apk")
+                                 apk=str(self.tmp / "app-debug.apk"))
         ex(argv, b"m", {}, None, 300)
-        self.assertEqual((f.lancements[1]["apk"], f.lancements[1]["demande"]["mode"]), ("C:/p/app-debug.apk", "pilote"))
+        self.assertEqual((f.lancements[1]["apk"], f.lancements[1]["demande"]["mode"]),
+                         (b"PK\x03\x04octets-de-l-apk", "pilote"))
+
+    def test_apk_introuvable_rend_code_1_sans_lancer(self):
+        f = self.faux()
+        (self.tmp / "c.md").write_text("c", encoding="utf-8")
+        argv = appel._argv("claude", "sonnet", str(self.tmp / "c.md"), OUTILS, None)
+        ex = es.ExecuteurServeur(self.projet, TACHE, "pilote", {"projet": "demo"}, dossier=self.dossier, ssh=object(),
+                                 dormir=self.dormir, pas_s=15, horloge=lambda: self.t, git=faux_git_sans_branche,
+                                 apk=str(self.tmp / "absent.apk"))
+        code, sortie = ex(argv, b"m", {}, None, 300)
+        self.assertEqual(code, 1)
+        self.assertIn("APK illisible", sortie.decode("utf-8"))
+        self.assertEqual(f.lancements, [])
 
     def test_echec_rend_code_1_et_la_raison(self):
         self.faux(etats=("echouee",), statut="erreur", raison="Secret de l'abonnement trouvé : rien rapatrié.")

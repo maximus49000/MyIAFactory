@@ -410,9 +410,18 @@ class ExecuteurServeur:
                    "branche": branche, "base": base, "limites": limites, "reprend": reprend}
         if not demande.get("modele"):
             demande["modele"] = _valeur(distant, "--model")
+        apk = self.apk
+        if isinstance(apk, (str, Path)):      # le moteur donne un CHEMIN (`apk_pour_le_pilote`) ; le serveur reçoit les OCTETS
+            try:
+                chemin = Path(apk)
+                if not chemin.is_file() or chemin.stat().st_size > st.APK_MAX_OCTETS:
+                    raise OSError("fichier absent ou trop gros")
+                apk = chemin.read_bytes()
+            except OSError as e:
+                return None, (1, f"APK illisible pour l'agent pilote ({e}) : {Path(str(apk)).name}".encode("utf-8")), False
         res = sa.lancer_agent(demande, paquet, distant, consigne, entree, dossier=self.dossier, ssh=self.ssh,
                               attente_max_s=self.attente_max_s, dormir=self._dormir, projet=self.projet,
-                              git=self._git_(sa), **({"apk": self.apk} if self.apk else {}))
+                              git=self._git_(sa), **({"apk": apk} if apk else {}))
         self.avertissement = res.get("avertissement")
         ident, etat = res.get("id"), res.get("etat")
         erreur = res.get("erreur") or res.get("raison") or ""

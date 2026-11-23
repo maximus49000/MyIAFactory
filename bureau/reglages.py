@@ -10,7 +10,7 @@ from pathlib import Path
 
 from .deport import LIEUX_PAR_DEFAUT, valider_lieux
 from .deport_types import catalogue_du_projet, catalogue_union
-from .registre import REGISTRE, SIGNATURES_APK, valeur_effective, verifier_valeur
+from .registre import PROFILS_OUTILS, REGISTRE, SIGNATURES_APK, valeur_effective, verifier_valeur
 from .releve import MOTIF_GENRE  # un id de projet suit le même motif qu'un genre
 # Le verrou d'écriture d'un fichier partagé vit dans `verrou_fichier` (compatible Python 3.9 : le lanceur des agents
 # l'importe aussi pour le sceau des tests) ; ses réglages d'attente s'y trouvent (`VERROU_ATTENTE_S`, `VERROU_PERIME_S`).
@@ -36,8 +36,8 @@ DEFAUTS = {"port": 8770, "charge_max": 75, "fraicheur_min": 30, "releve": {}, "p
            # programmation relit et teste elle-même (essai de coûts du 2026-11-19 : 0,12 à 0,17 € et 3 à 7 min de moins,
            # mais plus de regard neuf). Faux : comme avant.
            "une_session_moyenne": False,
-           # Qui signe les APK construits au serveur (15e) : la valeur la plus sûre.
-           "signature_apk": "aucune",
+           # Qui signe les APK construits au serveur (15e) et le profil d'outils des agents du serveur (15g) : la valeur la plus sûre.
+           "signature_apk": "aucune", "outils_agents_serveur": "aucun",
            # Exécution déportée : lieu de chaque action (poste, github, serveur), commande de remplacement éventuelle
            # par action, heure de la campagne de charge. Les clés absentes valent ces défauts.
            "deport": {"lieux": dict(LIEUX_PAR_DEFAUT), "commandes": {}, "charge_heure": "03:00"}}
@@ -555,6 +555,13 @@ def fixer_signature_apk(chemin, valeur):
     if valeur not in SIGNATURES_APK:
         raise ValueError("« signature_apk » doit valoir l'un de : %s." % ", ".join(SIGNATURES_APK))
     return _ecrire_cle(chemin, "signature_apk", valeur)
+
+
+def fixer_outils_agents_serveur(chemin, valeur):
+    """Note le profil d'outils des agents du serveur (`aucun` ou `flutter`)."""
+    if valeur not in PROFILS_OUTILS:
+        raise ValueError("« outils_agents_serveur » doit valoir l'un de : %s." % ", ".join(PROFILS_OUTILS))
+    return _ecrire_cle(chemin, "outils_agents_serveur", valeur)
 
 
 def fixer_cloud_dossier_approuve(chemin, valeur):

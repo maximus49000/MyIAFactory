@@ -3419,6 +3419,19 @@ def retirer_l_agent(fiche, a_des_taches):
     fi.ecrire_fiche(dict(fiche, retire=True, retrait_prevu=False))
 
 
+def programmes_des_agents_serveur(ctx):
+    """Les programmes du profil d'outils « agents du serveur » du projet (réglage `outils_agents_serveur`, projet puis type puis
+    global ; page Réglages) : `()` par défaut ou au moindre doute (réglages ou bureau illisibles)."""
+    if ctx.f["reglages"] is None:
+        return ()
+    try:
+        from bureau import deport_types, registre, reglages
+        nom = reglages.charger_effectif(Path(ctx.f["reglages"]), deport_types.BUREAU)["outils_agents_serveur"]
+        return tuple(registre.PROFILS_OUTILS.get(nom, ()))
+    except Exception:  # noqa: BLE001 — un doute n'ouvre aucun outil
+        return ()
+
+
 def synchroniser_equipe(ctx, creer=True, cloud_aussi=True):
     """Ramène l'équipe d'un projet polyvalent aux places (voir `recrutement.ajuster_equipe`) : crée des fiches polyvalentes
     (prénom et clé libres), retire les agents libres en trop, marque (`Retrait : prévu`) ceux qui travaillent encore.
@@ -3455,6 +3468,9 @@ def synchroniser_equipe(ctx, creer=True, cloud_aussi=True):
                 cle = rc.cle_d_agent_libre(prises, ctx.f["fiches"])
                 nouvelle = fi.nouvelle_fiche(cle, rc.prenom_libre(existantes), lieu)
                 nouvelle["chemin"] = Path(ctx.f["fiches"]) / f"{cle}.md"
+                if lieu == "serveur":      # le profil d'outils du type de projet (Réglages) : jamais d'ouverture fiche par fiche
+                    for programme in programmes_des_agents_serveur(ctx):
+                        fi.ouvrir_outil(nouvelle, fi.regle_bash(programme))
                 fi.ecrire_fiche(nouvelle)
                 prises.add(cle)
                 existantes.append(nouvelle)

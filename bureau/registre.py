@@ -41,6 +41,10 @@ def _choix(id_, section, libelle, aide, options, libelles, niveaux=_TROIS):
 
 # Signature des APK que construit le serveur (tâche 15e) : un choix de l'utilisateur, jamais codé en dur.
 SIGNATURES_APK = ("aucune", "debug_serveur", "poste_signe")
+# Programmes ouverts aux agents du serveur d'un type de projet (tâche 15g) : un profil nommé, une liste fermée de programmes
+# (chacun devient la règle `Bash(<programme>:*)` de la fiche de l'agent créé ; jamais `Bash` seul).
+PROFILS_OUTILS = {"aucun": (),
+                  "flutter": ("analyser-flutter", "tester-flutter", "construire-apk", "flutter")}
 
 
 # les réglages à cases sont déclarés ici ; les lieux sont dérivés du catalogue du déport.
@@ -75,6 +79,11 @@ REGISTRE = (
            "signe » : la clé de release reste au poste.",
            SIGNATURES_APK, ("Aucune clé ne quitte le poste", "Clé de debug copiée au serveur",
                             "Le serveur construit, le poste signe")),
+    _choix("outils_agents_serveur", "serveur", "Outils ouverts aux agents du serveur",
+           "Le profil de programmes que reçoit chaque agent créé au serveur pour ce type de projet (Flutter : "
+           "analyser-flutter, tester-flutter, construire-apk et flutter) : plus besoin de lui ouvrir l'outil fiche par "
+           "fiche. Défaut : aucun outil de plus.",
+           tuple(PROFILS_OUTILS), ("Aucun outil de plus", "Profil Flutter")),
 )
 
 

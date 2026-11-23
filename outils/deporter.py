@@ -98,6 +98,7 @@ PAS_VERROU_S = 2
 ESSAIS_APPARITION = 12
 PAUSE_APPARITION_S = 5
 DELAI_GIT_S = 60
+MSG_AMONT_GITHUB = "tests au serveur demandés mais l'artefact amont vient de GitHub : tests au poste"
 
 
 def _maintenant():
@@ -328,13 +329,17 @@ def _etat_du_depot(racine, fichier, git):
 
 # --- verrou de la course -----------------------------------------------------------------------------------------
 
-def _verrou_perime(chemin, maintenant):
+def _verrou_perime(chemin, maintenant, etat=None):
+    """Le verrou d'un processus mort, d'un pid repris par un autre programme (`campagne.vivant_et_meme` : date de
+    création notée `demarre`, sinon postérieure à `t`), ou vieux de plus de 5 minutes. `etat` : pour les tests."""
     try:
         donnees = json.loads(chemin.read_text(encoding="utf-8"))
-        pid, debut = donnees.get("pid"), float(donnees.get("t", 0))
+        pid, debut, demarre = donnees.get("pid"), float(donnees.get("t", 0)), donnees.get("demarre")
     except (OSError, ValueError, TypeError, AttributeError):
-        pid, debut = None, 0.0
-    return (not campagne.pid_vivant(pid)) or maintenant - debut > VERROU_PERIME_S
+        pid, debut, demarre = None, 0.0, None
+    if not isinstance(pid, int) or isinstance(pid, bool) or pid <= 0:
+        return True
+    return (not campagne.vivant_et_meme(pid, demarre, debut, etat=etat)) or maintenant - debut > VERROU_PERIME_S
 
 
 @contextlib.contextmanager
@@ -364,7 +369,7 @@ def _verrou_du_run(chemin, attendre, dormir, dire):
             dormir(PAS_VERROU_S)
             continue
         with os.fdopen(fd, "w", encoding="utf-8") as f:
-            json.dump({"pid": os.getpid(), "t": time.time()}, f)
+            json.dump({"pid": os.getpid(), "demarre": campagne.mon_demarrage(), "t": time.time()}, f)
         break
     try:
         yield
@@ -621,6 +626,9 @@ def main(argv=None, executer_poste=campagne.executer, gh=github_actions, git=_gi
                   "ou relancez avec --poste." % action, file=sys.stderr)
             return 2
         return lancer_au_poste()
+    if lieux[action] == "serveur" and not au_serveur and amont:
+        # routée sur serveur mais une production vient de GitHub : la route ne sait pas l'attendre ; le poste, dit
+        dire(MSG_AMONT_GITHUB)
 
     contexte = {"action": action, "lieux": lieux, "catalogue": catalogue, "amont": amont, "opt": opt,
                 "dossier": dossier, "projet": racine_du_projet(dossier), "gh": gh, "git": git, "dormir": dormir,
@@ -642,7 +650,16 @@ def main(argv=None, executer_poste=campagne.executer, gh=github_actions, git=_gi
 USAGE_TESTS = ("Usage : lancer.py tests [--dossier <dossier>] [--sans-attendre] [--local | --serveur] -- <commande de "
                "test>")
 MSG_SANS_312_TESTS = ("Python 3.12 introuvable : la route des tests au serveur l'exige (python.org, ou « winget install "
-                      "Python.Python.3.12 »).")
+                      "Python.Python.3.12 »)")
+
+
+class RouteIndisponible(Exception):
+    """La route du serveur ne peut pas être lancée d'ici (pas de Python 3.12, lancement ou import impossible) :
+    `raison` est dite en une ligne, puis le poste (ou 4 avec `--serveur`)."""
+
+    def __init__(self, raison):
+        Exception.__init__(self, raison)
+        self.raison = raison
 
 
 def _retirer_route(argv):
@@ -692,35 +709,65 @@ def _importer_tests_serveur():
     return tests_serveur
 
 
-def _executer_route(commande):
+def _executer_route(commande, run=subprocess.run):
     """Lance `lancer.py serveur-tests …` sous un Python 3.12 à part (liste, jamais de shell ; sorties héritées) ; rend
-    son code, 130 sur Ctrl-C, None si le lancement est impossible."""
+    son code, 130 sur Ctrl-C ; `RouteIndisponible` si le lancement est impossible (OSError)."""
     sys.stdout.flush()
     sys.stderr.flush()
     try:
-        return subprocess.run(list(commande), stdin=subprocess.DEVNULL).returncode
+        return run(list(commande), stdin=subprocess.DEVNULL).returncode
     except KeyboardInterrupt:
         return 130
-    except OSError:
-        return None
+    except OSError as e:
+        raise RouteIndisponible("Lancement de Python 3.12 impossible (%s : %s)" % (type(e).__name__, e))
+
+
+def _importer_route(importer):
+    """Le module de la route ; `RouteIndisponible` (une ligne, pas de trace) s'il ne s'importe pas."""
+    try:
+        return importer()
+    except KeyboardInterrupt:
+        raise
+    except Exception as e:  # noqa: BLE001 — module absent ou abîmé : dit, puis le poste
+        raise RouteIndisponible("Route du serveur indisponible (%s : %s)" % (type(e).__name__, e))
 
 
 def _route_par_defaut(commande, dossier, attendre, forcer, version=None, importer=_importer_tests_serveur,
                       trouver_python=_python_312, executer=_executer_route):
     """La campagne par `tests_serveur.executer` (dans ce processus sous Python 3.12 et plus, sinon `lancer.py
-    serveur-tests` par un Python 3.12 à part, `-E -s`) ; rend son code, ou None sans Python 3.12."""
+    serveur-tests` par un Python 3.12 à part, `-E -s`) ; rend son code (130 sur Ctrl-C) ; `RouteIndisponible` sans
+    Python 3.12, si son lancement échoue ou si la route ne s'importe pas."""
     version = tuple(sys.version_info[:2]) if version is None else tuple(version)
     if version >= (3, 12):
         try:
-            return importer().executer(list(commande), dossier=dossier, attendre=attendre, forcer=forcer)
+            module = _importer_route(importer)
+            return module.executer(list(commande), dossier=dossier, attendre=attendre, forcer=forcer)
         except KeyboardInterrupt:
             return 130
     python = trouver_python()
     if not python:
-        return None
+        raise RouteIndisponible(MSG_SANS_312_TESTS)
     argv = list(python) + OPTIONS_PYTHON + [str(LANCEUR), "serveur-tests", "--dossier", str(dossier)]
     argv += ([] if attendre else ["--sans-attendre"]) + (["--serveur"] if forcer else []) + ["--"] + list(commande)
     return executer(argv)
+
+
+def _amont_github(argv, bureau):
+    """Les actions dont `tests` (pris au serveur) attend une production de GitHub, d'après les lieux effectifs."""
+    lus = _lieux_des_options(argv, bureau)
+    if not lus or "tests" not in lus[1]:
+        return []
+    lieux, catalogue = lus
+    return [d for d in a_attendre(dict(lieux, tests="serveur"), "tests", catalogue) if lieux.get(d) == "github"]
+
+
+def _juger(dossier, bureau):
+    """`(dossier résolu, refus ou None)` ; un dossier illisible est un refus."""
+    try:
+        dossier = str(Path(dossier or os.getcwd()).resolve())
+        return dossier, refus_route(dossier, "tests", bureau=str(bureau))
+    except (OSError, ValueError, RuntimeError) as e:
+        return str(dossier), "dossier illisible (%s)" % type(e).__name__
 
 
 def lancer_tests(argv, bureau=BUREAU, deporter_main=None, campagne_main=None, route=None):
@@ -731,8 +778,9 @@ def lancer_tests(argv, bureau=BUREAU, deporter_main=None, campagne_main=None, ro
        enregistrés ou par défaut au bureau) : la route (`route(commande, dossier, attendre, forcer)`, défaut
        `_route_par_defaut`), qui se replie au poste par ses règles ; `--serveur` la force (jamais de repli) ;
     4. sinon la campagne du poste, comme toujours (sans un mot si rien ne demande le serveur).
-    `--serveur` sans accord : code 2 et la raison, jamais de route. Sans Python 3.12 : le poste avec une ligne (4 avec
-    `--serveur`)."""
+    `--serveur` sans accord : code 2 et la raison, jamais de route ; `--serveur` quand les tests attendent une
+    production de GitHub : code 2 (la route ne sait pas l'attendre). Route indisponible (pas de Python 3.12, lancement
+    ou import impossible) : le poste avec une ligne (4 avec `--serveur`). Ctrl-C pendant le jugement : 130."""
     argv, local, serveur = _retirer_route(argv)
     poste = campagne_main or campagne.main
     if local and serveur:
@@ -740,41 +788,52 @@ def lancer_tests(argv, bureau=BUREAU, deporter_main=None, campagne_main=None, ro
         return 2
     if local:
         return poste(argv)
-    if not serveur and faut_deporter("tests", argv, bureau):
+    try:
+        if not serveur and faut_deporter("tests", argv, bureau):
+            vers_deporter = True
+        else:
+            vers_deporter = False
+            lues = _options_campagne(argv)
+            if lues is not None:
+                dossier, attendre, commande = lues
+                dossier, refus = _juger(dossier, bureau)
+                demande = (not refus) or serveur or lieu_de("tests", argv, bureau) == "serveur"
+                amont = _amont_github(argv, bureau) if serveur and not refus else []
+    except KeyboardInterrupt:
+        return 130
+    if vers_deporter:
         return (deporter_main or main)(["tests"] + argv)
-    lues = _options_campagne(argv)
     if lues is None:
         if serveur:
             print(USAGE_TESTS, file=sys.stderr)
             return 2
         return poste(argv)
-    dossier, attendre, commande = lues
-    try:
-        dossier = str(Path(dossier or os.getcwd()).resolve())
-        refus = refus_route(dossier, "tests", bureau=str(bureau))
-    except (OSError, ValueError, RuntimeError) as e:
-        refus = "dossier illisible (%s)" % type(e).__name__
     if refus:
         if serveur:
             print("Tests au serveur refusés : %s" % refus, file=sys.stderr)
             return 2
-        if lieu_de("tests", argv, bureau) == "serveur":      # le serveur est demandé, sans accord : dit, une ligne
+        if demande:      # le serveur est demandé, sans accord : dit, une ligne
             print("Tests au poste (une campagne à la fois) : %s" % refus.split("\n")[0], file=sys.stderr, flush=True)
         return poste(argv)
-    code = (route or _route_par_defaut)(commande, dossier, attendre, serveur)
-    if code is None:
+    if amont:
+        print("Tests au serveur refusés : ils attendent la production « %s » de GitHub, que la route ne sait pas "
+              "attendre. Relancez sans --serveur (le poste après GitHub)." % ", ".join(amont), file=sys.stderr)
+        return 2
+    try:
+        return (route or _route_par_defaut)(commande, dossier, attendre, serveur)
+    except RouteIndisponible as e:
         if serveur:
-            print("%s Rien n'est lancé au poste (--serveur)." % MSG_SANS_312_TESTS, file=sys.stderr)
+            print("%s. Rien n'est lancé au poste (--serveur)." % e.raison, file=sys.stderr)
             return 4
-        print("%s Tests au poste (une campagne à la fois)." % MSG_SANS_312_TESTS, file=sys.stderr, flush=True)
+        print("%s : tests au poste (une campagne à la fois)." % e.raison, file=sys.stderr, flush=True)
         return poste(argv)
-    return code
 
 
-def serveur_tests(argv, bureau=BUREAU, importer=_importer_tests_serveur):
+def serveur_tests(argv, bureau=BUREAU, importer=_importer_tests_serveur, version=None):
     """`lancer.py serveur-tests [--dossier D] [--sans-attendre] [--serveur] -- <commande>` : l'autre porte de la route
-    (lancée par `lancer_tests` sous un Python plus ancien, ou à la main). Le même accord (`refus_route`) est vérifié
-    AVANT d'importer la route : sans lui, code 2 et rien ne part."""
+    (lancée par `lancer_tests` sous un Python plus ancien, ou à la main). Exige Python 3.12 (4 sinon). Le même accord
+    (`refus_route`) est vérifié AVANT d'importer la route : sans lui, code 2 et rien ne part (la route le revérifie).
+    Ctrl-C pendant le jugement : 130 ; route qui ne s'importe pas : 4 avec la raison."""
     argv = list(argv)
     options = _retirer_route(argv)
     lues = _options_campagne(options[0]) if not options[1] else None
@@ -782,17 +841,28 @@ def serveur_tests(argv, bureau=BUREAU, importer=_importer_tests_serveur):
         print("Usage : lancer.py serveur-tests [--dossier <dossier>] [--sans-attendre] [--serveur] -- <commande de "
               "test>", file=sys.stderr)
         return 2
+    version = tuple(sys.version_info[:2]) if version is None else tuple(version)
+    if version < (3, 12):
+        print("%s : relancez par « py -3.12 lancer.py serveur-tests … » (ou « lancer.py tests », qui le trouve)."
+              % MSG_SANS_312_TESTS, file=sys.stderr)
+        return 4
     try:
-        dossier = str(Path(lues[0] or os.getcwd()).resolve())
-        refus = refus_route(dossier, "tests", bureau=str(bureau))
-    except (OSError, ValueError, RuntimeError) as e:
-        refus = "dossier illisible (%s)" % type(e).__name__
+        dossier, refus = _juger(lues[0], bureau)
+    except KeyboardInterrupt:
+        return 130
     if refus:
         print("Tests au serveur refusés : %s" % refus, file=sys.stderr)
         return 2
+    try:
+        module = _importer_route(importer)
+    except KeyboardInterrupt:
+        return 130
+    except RouteIndisponible as e:
+        print("%s. Rien n'est lancé." % e.raison, file=sys.stderr)
+        return 4
     # le dossier jugé, déjà résolu : la route ne le résout pas une seconde fois (un lien changé entre-temps)
-    return importer().main(["--dossier", dossier] + ([] if lues[1] else ["--sans-attendre"])
-                           + (["--serveur"] if options[2] else []) + ["--"] + lues[2])
+    return module.main(["--dossier", dossier] + ([] if lues[1] else ["--sans-attendre"])
+                       + (["--serveur"] if options[2] else []) + ["--"] + lues[2])
 
 
 def _jobs_necessaires(cibles, lieux, catalogue):

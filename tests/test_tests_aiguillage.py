@@ -9,6 +9,7 @@ import os
 import sys
 import tempfile
 import unittest
+import unittest.mock
 from pathlib import Path
 
 RACINE = Path(__file__).resolve().parent.parent
@@ -208,6 +209,9 @@ class TestAiguillage(Base):
         self.assertEqual(self.vus, [("poste", ["--dossier", src, "--", "x"])])
 
     def test_options_retirees_de_la_commande(self):
+        ici = os.getcwd()
+        os.chdir(str(self.tmp))      # jamais la racine du dépôt : le dossier courant est le dossier temporaire
+        self.addCleanup(os.chdir, ici)
         self.assertEqual(self.lancer(["--local", "--", "npx", "vitest", "--local"]), 0)
         self.assertEqual(self.vus, [("poste", ["--", "npx", "vitest", "--local"])])
         self.vus.clear()
@@ -234,18 +238,26 @@ class TestAiguillage(Base):
         self.assertEqual(appels, [python + deporter.OPTIONS_PYTHON + [str(deporter.LANCEUR), "serveur-tests",
                                                                        "--dossier", "D", "--sans-attendre",
                                                                        "--serveur", "--", "x", "y"]])
-        self.assertIsNone(deporter._route_par_defaut(["x"], "D", True, False, version=(3, 9),
-                                                     trouver_python=lambda: None, executer=appels.append))
+        with self.assertRaises(deporter.RouteIndisponible) as e:
+            deporter._route_par_defaut(["x"], "D", True, False, version=(3, 9), trouver_python=lambda: None,
+                                       executer=appels.append)
+        self.assertIn("Python 3.12 introuvable", e.exception.raison)
+        self.assertEqual(len(appels), 1)
 
     def test_sans_python_312_le_poste_avec_une_ligne(self):
         self.ecrire_reglages({"tests": "serveur"})
         self.ecrire_bureau([self.reglages])
-        self.assertEqual(self.lancer(["--dossier", str(self.p), "--", "x"], route=lambda *a: None), 0)
+
+        def indisponible(*a):
+            raise deporter.RouteIndisponible("Raison X")
+        self.assertEqual(self.lancer(["--dossier", str(self.p), "--", "x"], route=indisponible), 0)
         self.assertEqual(self.vus, [("poste", ["--dossier", str(self.p), "--", "x"])])
         self.assertEqual(len(self.sortie.strip().splitlines()), 1)
+        self.assertIn("Raison X", self.sortie)
         self.vus.clear()
-        self.assertEqual(self.lancer(["--serveur", "--dossier", str(self.p), "--", "x"], route=lambda *a: None), 4)
+        self.assertEqual(self.lancer(["--serveur", "--dossier", str(self.p), "--", "x"], route=indisponible), 4)
         self.assertEqual(self.vus, [])
+        self.assertIn("Raison X", self.sortie)
 
     def test_porte_serveur_tests(self):
         """`lancer.py serveur-tests` est une autre porte : le même accord, avant tout import de la route."""
@@ -260,7 +272,7 @@ class TestAiguillage(Base):
         def porte(argv):
             sortie = io.StringIO()
             with contextlib.redirect_stderr(sortie):
-                return deporter.serveur_tests(argv, bureau=self.bureau, importer=lambda: Route)
+                return deporter.serveur_tests(argv, bureau=self.bureau, importer=lambda: Route, version=(3, 12))
 
         argv = ["--dossier", str(self.p), "--serveur", "--", "x"]
         self.assertEqual(porte(argv), 2)
@@ -282,9 +294,268 @@ class TestAiguillage(Base):
                                                           deport_types.GENERIQUE))
 
 
+class TestAccordChemins(Base):
+    """Relecture de la tâche 7 : chemins voisins, projets emboîtés, entrées écartées, racines trop larges."""
+
+    def test_prefixe_frere_jamais_le_projet(self):
+        self.ecrire_reglages({"tests": "serveur"})
+        self.ecrire_bureau([self.reglages])
+        frere = self.tmp / "p-evil"
+        (frere / ".factory").mkdir(parents=True)
+        self.ecrire_reglages({"tests": "serveur"}, fichier=frere / ".factory" / "reglages.json")
+        self.assertIn("enregistré", self.refus(frere))
+        self.lancer(["--dossier", str(frere), "--", "x"])
+        self.assertNotIn("route", [v[0] for v in self.vus])
+
+    def emboite(self, dehors, dedans):
+        sous = self.p / "sub"
+        (sous / ".factory").mkdir(parents=True)
+        (sous / "x").mkdir()
+        self.ecrire_reglages({"tests": dehors})
+        self.ecrire_reglages({"tests": dedans}, fichier=sous / ".factory" / "reglages.json")
+        self.ecrire_bureau([self.reglages, sous / ".factory" / "reglages.json"])
+        return sous
+
+    def test_projets_emboites_le_plus_long_decide(self):
+        sous = self.emboite("serveur", "poste")
+        self.assertIsNotNone(self.refus(sous / "x"))
+        self.assertIsNone(self.refus(self.p / "src"))
+
+    def test_projets_emboites_le_plus_long_decide_a_l_inverse(self):
+        sous = self.emboite("poste", "serveur")
+        self.assertIsNone(self.refus(sous / "x"))
+        self.assertIsNotNone(self.refus(self.p / "src"))
+
+    def test_fichiers_enregistres_en_desaccord(self):
+        autre = self.p / "reglages.json"             # même projet : le dossier du fichier
+        self.ecrire_reglages({"tests": "serveur"})
+        self.ecrire_reglages({"tests": "poste"}, fichier=autre)
+        self.ecrire_bureau([self.reglages, autre])
+        self.assertIn("poste", self.refus(self.p))
+        self.ecrire_reglages({"tests": "serveur"}, fichier=autre)
+        self.assertIsNone(self.refus(self.p))
+
+    @unittest.skipUnless(os.name == "nt", "casse et préfixe \\\\?\\ : Windows")
+    def test_casse_et_prefixe_long(self):
+        self.ecrire_reglages({"tests": "serveur"})
+        self.ecrire_bureau([self.reglages])
+        self.assertIsNone(self.refus(str(self.p / "src").upper()))
+        long = "\\\\?\\" + str(self.p / "src")
+        self.assertIsNone(self.refus(long))
+        self.assertEqual(self.lancer(["--dossier", long, "--", "x"]), 7)
+        self.assertEqual([v[0] for v in self.vus], ["route"])
+
+    @unittest.skipUnless(os.name == "nt", "jonction Windows")
+    def test_entree_plus_longue_ecartee_refuse(self):
+        """Une entrée du bureau plus longue dont le `.factory` est une jonction vers ailleurs est écartée par
+        `projet_enregistre` : le projet parent (réglé serveur) ne doit pas donner l'accord à sa place."""
+        import _winapi
+        self.ecrire_reglages({"tests": "serveur"})
+        ailleurs = self.tmp / "ailleurs" / ".factory"
+        ailleurs.mkdir(parents=True)
+        self.ecrire_reglages({"tests": "serveur"}, fichier=ailleurs / "reglages.json")
+        sous = self.p / "sub"
+        (sous / "x").mkdir(parents=True)
+        _winapi.CreateJunction(str(ailleurs), str(sous / ".factory"))
+        self.addCleanup(os.rmdir, str(sous / ".factory"))
+        self.ecrire_bureau([self.reglages, sous / ".factory" / "reglages.json"])
+        self.assertIn("mènent ailleurs", self.refus(sous / "x"))
+        self.assertIsNone(self.refus(self.p / "src"))
+
+    def test_racine_trop_large_refusee(self):
+        maison = Path(os.path.expanduser("~"))
+        self.ecrire_bureau([maison / ".factory" / "reglages.json"], lieux={"tests": "serveur"})
+        self.assertIn("personnel", self.refus(maison / "un-projet-qui-n-existe-pas"))
+        racine = Path(self.tmp.anchor)
+        self.ecrire_bureau([racine / ".factory" / "reglages.json"], lieux={"tests": "serveur"})
+        self.assertIn("racine de lecteur", self.refus(self.p))
+
+
+class TestCheminDeLAccord(Base):
+    """L'accord est bien jugé par `refus_route` (témoin) : un refus coupe la route, `--reglages` compris."""
+
+    def espion(self, reponse):
+        appels = []
+
+        def refus_route(dossier, action, bureau=None):
+            appels.append((dossier, action, bureau))
+            if isinstance(reponse, BaseException):
+                raise reponse
+            return reponse
+        patch = unittest.mock.patch.object(deporter, "refus_route", refus_route)
+        patch.start()
+        self.addCleanup(patch.stop)
+        return appels
+
+    def test_refus_coupe_la_route(self):
+        src = str(self.p / "src")
+        appels = self.espion("non")
+        self.lancer(["--dossier", src, "--", "x"])
+        self.assertEqual(appels, [(src, "tests", str(self.bureau))])
+        self.assertEqual(self.vus, [("poste", ["--dossier", src, "--", "x"])])
+
+    def test_reglages_jamais_routes_meme_avec_l_accord(self):
+        """`--reglages` n'est pas une option de la campagne : même si l'accord était donné (témoin à None), la route
+        n'est jamais prise (la campagne dit l'usage), ni par `--serveur`, ni par la porte `serveur-tests`."""
+        src = str(self.p / "src")
+        self.espion(None)
+        argv = ["--dossier", src, "--reglages", str(self.reglages), "--", "x"]
+        self.lancer(argv)
+        self.assertEqual(self.vus, [("poste", argv)])
+        self.vus.clear()
+        self.assertEqual(self.lancer(["--serveur"] + argv), 2)
+        self.assertEqual(self.vus, [])
+        sortie = io.StringIO()
+        with contextlib.redirect_stderr(sortie):
+            self.assertEqual(deporter.serveur_tests(argv, bureau=self.bureau, importer=lambda: self.fail("importée"),
+                                                    version=(3, 12)), 2)
+
+    def test_accord_ouvre_la_route(self):
+        appels = self.espion(None)
+        src = str(self.p / "src")
+        self.assertEqual(self.lancer(["--dossier", src, "--", "x"]), 7)
+        self.assertEqual(appels, [(src, "tests", str(self.bureau))])
+        self.assertEqual(self.vus, [("route", ["x"], src, True, False)])
+
+    def test_ctrl_c_pendant_le_jugement(self):
+        self.espion(KeyboardInterrupt())
+        self.assertEqual(self.lancer(["--dossier", str(self.p), "--", "x"]), 130)
+        self.assertEqual(self.vus, [])
+        self.assertEqual(deporter.serveur_tests(["--dossier", str(self.p), "--", "x"], bureau=self.bureau,
+                                                importer=lambda: self.fail("importée"), version=(3, 12)), 130)
+
+    def test_porte_refuse_sans_importer(self):
+        self.espion("non")
+        sortie = io.StringIO()
+        with contextlib.redirect_stderr(sortie):
+            code = deporter.serveur_tests(["--dossier", str(self.p), "--", "x"], bureau=self.bureau,
+                                          importer=lambda: self.fail("importée"), version=(3, 12))
+        self.assertEqual(code, 2)
+        self.assertIn("non", sortie.getvalue())
+
+
+class TestAmontGitHub(Base):
+    """`tests: serveur` avec une production attendue de GitHub (`apk: github`) : jamais en silence."""
+
+    def setUp(self):
+        Base.setUp(self)
+        self.ecrire_reglages({"tests": "serveur", "apk": "github"})
+        self.ecrire_bureau([self.reglages])
+
+    def test_lancer_tests_passe_par_deporter_jamais_la_route(self):
+        self.assertEqual(self.lancer(["--dossier", str(self.p), "--", "x"]), 0)
+        self.assertEqual(self.vus, [("deporter", ["tests", "--dossier", str(self.p), "--", "x"])])
+
+    def test_deporter_dit_puis_lance_au_poste_avec_l_artefact(self):
+        postes = []
+
+        def sur_github(c):           # l'exécution GitHub simulée : l'artefact téléchargé, puis la suite de deporter
+            return c["lancer_au_poste"]({"MYIAFACTORY_ARTEFACT_APK": "a.apk"})
+        patch = unittest.mock.patch.object(deporter, "_sur_github", sur_github)
+        patch.start()
+        self.addCleanup(patch.stop)
+        dits = []
+        code = deporter.main(["tests", "--dossier", str(self.p), "--", "x"], bureau=self.bureau,
+                             executer_poste=lambda c, dossier=None, attendre=True, env=None:
+                             postes.append((c, env)) or 0,
+                             dire=lambda texte, **k: dits.append(texte), repertoire_attente=self.tmp / "attente")
+        self.assertEqual(code, 0)
+        self.assertEqual(postes, [(["x"], {"MYIAFACTORY_ARTEFACT_APK": "a.apk"})])
+        self.assertEqual(dits, [deporter.MSG_AMONT_GITHUB])
+
+    def test_serveur_force_refuse_sans_l_artefact(self):
+        self.assertEqual(self.lancer(["--serveur", "--dossier", str(self.p), "--", "x"]), 2)
+        self.assertEqual(self.vus, [])
+        self.assertIn("GitHub", self.sortie)
+
+
+class TestIndisponible(Base):
+    """M8 : lancement, import, version, Ctrl-C de la route."""
+
+    def test_executer_route_ctrl_c_et_oserror(self):
+        def ctrl_c(*a, **k):
+            raise KeyboardInterrupt
+
+        def absent(*a, **k):
+            raise FileNotFoundError("py.exe")
+        self.assertEqual(deporter._executer_route(["py"], run=ctrl_c), 130)
+        with self.assertRaises(deporter.RouteIndisponible) as e:
+            deporter._executer_route(["py"], run=absent)
+        self.assertIn("Lancement de Python 3.12 impossible", e.exception.raison)
+        self.assertNotIn("introuvable", e.exception.raison)
+
+    def test_import_en_echec(self):
+        def casse():
+            raise ImportError("tests_serveur abîmé")
+        with self.assertRaises(deporter.RouteIndisponible) as e:
+            deporter._route_par_defaut(["x"], "D", True, False, version=(3, 12), importer=casse)
+        self.assertIn("ImportError", e.exception.raison)
+        self.assertEqual(deporter._route_par_defaut(["x"], "D", True, False, version=(3, 12),
+                                                    importer=lambda: unittest.mock.Mock(
+                                                        executer=unittest.mock.Mock(side_effect=KeyboardInterrupt))),
+                         130)
+        self.ecrire_reglages({"tests": "serveur"})
+        self.ecrire_bureau([self.reglages])
+        sortie = io.StringIO()
+        with contextlib.redirect_stderr(sortie):
+            code = deporter.serveur_tests(["--dossier", str(self.p), "--", "x"], bureau=self.bureau, importer=casse,
+                                          version=(3, 12))
+        self.assertEqual(code, 4)
+        self.assertIn("ImportError", sortie.getvalue())
+
+    def test_porte_exige_312(self):
+        self.ecrire_reglages({"tests": "serveur"})
+        self.ecrire_bureau([self.reglages])
+        sortie = io.StringIO()
+        with contextlib.redirect_stderr(sortie):
+            code = deporter.serveur_tests(["--dossier", str(self.p), "--", "x"], bureau=self.bureau,
+                                          importer=lambda: self.fail("importée"), version=(3, 9))
+        self.assertEqual(code, 4)
+
+    def test_porte_transmet_sans_attendre(self):
+        self.ecrire_reglages({"tests": "serveur"})
+        self.ecrire_bureau([self.reglages])
+        vus = []
+        route = unittest.mock.Mock(main=lambda argv: vus.append(argv) or 0)
+        deporter.serveur_tests(["--sans-attendre", "--dossier", str(self.p), "--", "x"], bureau=self.bureau,
+                               importer=lambda: route, version=(3, 12))
+        self.assertEqual(vus, [["--dossier", str(self.p), "--sans-attendre", "--", "x"]])
+
+
+class TestVerrouDuRun(Base):
+    """Le verrou de la course de `deporter` reconnaît un pid repris par un autre programme (`vivant_et_meme`)."""
+
+    def test_pid_repris_perime(self):
+        import time
+        chemin = self.tmp / "v.lock"
+        t = time.time()
+        chemin.write_text(json.dumps({"pid": 4242, "demarre": 1000.0, "t": t}), encoding="utf-8")
+        self.assertFalse(deporter._verrou_perime(chemin, t, etat=lambda pid: (True, 1000.0)))     # le même
+        self.assertTrue(deporter._verrou_perime(chemin, t, etat=lambda pid: (True, 9000.0)))      # pid repris
+        self.assertTrue(deporter._verrou_perime(chemin, t, etat=lambda pid: (False, None)))       # mort
+        self.assertTrue(deporter._verrou_perime(chemin, t + 1000, etat=lambda pid: (True, 1000.0)))  # trop vieux
+        chemin.write_text(json.dumps({"pid": 4242, "t": t}), encoding="utf-8")                   # ancienne note
+        self.assertTrue(deporter._verrou_perime(chemin, t, etat=lambda pid: (True, t + 60)))      # né après elle
+        self.assertFalse(deporter._verrou_perime(chemin, t, etat=lambda pid: (True, t - 60)))
+        chemin.write_text(json.dumps({"pid": True, "t": t}), encoding="utf-8")
+        self.assertTrue(deporter._verrou_perime(chemin, t, etat=lambda pid: (True, None)))
+
+    def test_verrou_note_sa_date_de_creation(self):
+        chemin = self.tmp / "w.lock"
+        with deporter._verrou_du_run(chemin, True, lambda s: None, lambda *a, **k: None):
+            note = json.loads(chemin.read_text(encoding="utf-8"))
+        self.assertEqual(note["pid"], os.getpid())
+        self.assertIn("demarre", note)
+        self.assertFalse(chemin.exists())
+
+
 class TestCompatibilite(unittest.TestCase):
     def test_compatible_py39(self):
-        for chemin in ("bureau/deport_types.py", "outils/deporter.py", "lancer.py"):
+        # tout ce que le lanceur importe sous un Python ancien (`lancer.py tests` / `deporter`)
+        for chemin in ("bureau/deport_types.py", "outils/deporter.py", "lancer.py", "bureau/tests_mesures.py",
+                       "bureau/tests_sceau.py", "bureau/verrou_fichier.py", "bureau/deport.py", "bureau/deport_conso.py",
+                       "bureau/serveur.py", "bureau/__init__.py", "outils/campagne.py", "outils/deport_depot.py",
+                       "outils/github_actions.py"):
             ast.parse((RACINE / chemin).read_text(encoding="utf-8"), feature_version=(3, 9))
 
     def test_lancer_annonce_serveur_tests(self):

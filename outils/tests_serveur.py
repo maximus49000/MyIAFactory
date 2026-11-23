@@ -54,6 +54,12 @@ INJOIGNABLE_S = 300
 INJOIGNABLE = Path("~/MyIAFactory/tests-serveur-injoignable.json").expanduser()
 # Hors de `campagne.ATTENTES` : une attente au serveur ne doit jamais retenir la file du poste (ni en fausser les rangs).
 ATTENTES_SERVEUR = Path("~/MyIAFactory/tests-en-attente-serveur").expanduser()
+
+
+def attentes_serveur_par_defaut():
+    """`ATTENTES_SERVEUR`, sauf dans un processus de test lancé par le lanceur (`campagne.isole()`) : le même nom sous
+    `campagne.dossier_etat()`, jamais le vrai dossier. Résolu à chaque appel."""
+    return ATTENTES_SERVEUR if not campagne.isole() else campagne.dossier_etat() / ATTENTES_SERVEUR.name
 ENVELOPPE_DISTANTE = f"{DOSSIER_DISTANT}/taches/lancer_tests.sh"
 REQUISES = ("tests-image",)
 DEPOT_MIN_S = 120
@@ -242,6 +248,20 @@ def _fin_pour_la_mesure(fin_sortie, fin_erreur):
 
 def _noter_par_defaut(dossier, **mesure):
     return campagne._noter_par_defaut(dossier, **mesure)
+
+
+def _refus_par_defaut(racine):
+    """L'accord du Directeur pour ce dossier (`deport_types.refus_route`, le vrai bureau) : None, ou la raison du refus.
+    Une erreur inattendue est un refus."""
+    try:
+        try:
+            from bureau import deport_types
+        except ImportError:
+            sys.path.append(str(ICI.parent))
+            from bureau import deport_types
+        return deport_types.refus_route(racine, "tests")
+    except Exception as e:  # noqa: BLE001 — jamais de route sur un doute
+        return f"accord illisible ({type(e).__name__})"
 
 
 def _projet_par_defaut(dossier):
@@ -488,13 +508,25 @@ def _au_serveur(commande, racine, attendre, places, dossier_etat, ssh, noter, ho
 def executer(commande, dossier=None, attendre=True, forcer=False, places=None, dossier_etat=plateforme_acces.DOSSIER,
              ssh=plateforme_ssh, executer_poste=campagne.executer, noter=None, horloge=time.monotonic,
              maintenant=time.time, dire=print, *, choisir=None, instantane=tests_instantane, projet_de=None,
-             injoignable=INJOIGNABLE, attentes=ATTENTES_SERVEUR, sortie=None, sortie_erreur=None,
-             nouvel_id=serveur_tache.nouvel_id, _popen=subprocess.Popen, dormir=time.sleep) -> int:
+             injoignable=INJOIGNABLE, attentes=None, sortie=None, sortie_erreur=None,
+             nouvel_id=serveur_tache.nouvel_id, _popen=subprocess.Popen, dormir=time.sleep, accord=None) -> int:
     """Lance `commande` au serveur et rend son code ; sinon (règles R1–R5) au poste, une fois, sous son verrou. Avec
     `forcer` (`--serveur`) : jamais de repli, la raison est dite et le code est 4. `KeyboardInterrupt` remonte (le
-    lanceur rend 130) : rien n'est relancé, rien n'est noté."""
+    lanceur rend 130) : rien n'est relancé, rien n'est noté.
+    L'accord du Directeur (`deport_types.refus_route(racine, "tests")`, `accord(racine) -> refus | None`) est revérifié
+    ici à chaque appel, sur le dossier résolu, avant toute connexion : sans lui, le poste avec une ligne, ou code 2 avec
+    `forcer` (`--serveur` force la route, jamais l'accord)."""
     commande = [str(x) for x in commande]
+    if attentes is None:
+        attentes = attentes_serveur_par_defaut()
     racine = str(Path(dossier or os.getcwd()).resolve())
+    refus = (accord or _refus_par_defaut)(racine)
+    if refus:
+        if forcer:
+            dire(f"Tests au serveur refusés : {refus}")
+            return 2
+        dire(f"Serveur refusé ({refus.splitlines()[0]}) : tests au poste (une campagne à la fois).")
+        return executer_poste(commande, dossier=dossier, attendre=attendre)
     try:
         return _au_serveur(commande, racine, attendre, places, dossier_etat, ssh, noter, horloge, maintenant, dire,
                            choisir or serveur_tache.choisir_serveur, instantane, projet_de or _projet_par_defaut,

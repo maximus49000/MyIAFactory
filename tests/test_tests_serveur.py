@@ -142,7 +142,7 @@ class Base(unittest.TestCase):
             horloge=lambda: 50.0, maintenant=lambda: self.mur[0], dire=lambda *a, **kw: self.dits.append(" ".join(a)),
             choisir=choisir or choisir_defaut, instantane=self.instantane, projet_de=lambda d: ("projet-a", Path(d)),
             injoignable=self.injoignable, attentes=self.attentes, sortie=io.BytesIO(), sortie_erreur=io.BytesIO(),
-            nouvel_id=lambda: ID, dormir=lambda s: None)
+            nouvel_id=lambda: ID, dormir=lambda s: None, accord=lambda racine: None)
         options.update(k)
         return tests_serveur.executer(list(commande), **options)
 
@@ -561,8 +561,7 @@ class TestCorrectifs(Base):
     def test_attentes_du_serveur_hors_de_la_file_du_poste(self):
         import campagne
         self.assertNotEqual(tests_serveur.ATTENTES_SERVEUR, campagne.ATTENTES)
-        defaut = tests_serveur.executer.__kwdefaults__["attentes"]
-        self.assertEqual(defaut, tests_serveur.ATTENTES_SERVEUR)
+        self.assertNotEqual(tests_serveur.attentes_serveur_par_defaut(), campagne.attentes_par_defaut())
         poste = Path(self._t.name) / "attentes-poste"
 
         def session(sortie, sur_attente, popen, sortie_erreur):
@@ -596,6 +595,54 @@ class TestMain(unittest.TestCase):
         def interrompu(commande, **k):
             raise KeyboardInterrupt
         self.assertEqual(tests_serveur.main(["--", "x"], executer=interrompu), 130)
+
+
+class TestAccordDeLaRoute(Base):
+    """La route revérifie l'accord du Directeur à chaque appel (`lancer.py serveur-tests` et `__main__` sont des
+    portes) ; `--serveur` force la route, jamais l'accord."""
+
+    def test_sans_accord_le_poste_sans_aucune_connexion(self):
+        ssh = FauxSsh()
+        self.assertEqual(self.lancer(ssh, accord=lambda racine: "non réglé"), 0)
+        self.assertEqual((ssh.appels_octets, ssh.appels_flux), ([], []))
+        self.assertEqual(len(self.poste.appels), 1)
+        self.assertTrue(self.dit("non réglé"))
+
+    def test_sans_accord_serveur_force_code_2(self):
+        ssh = FauxSsh()
+        self.assertEqual(self.lancer(ssh, accord=lambda racine: "non réglé", forcer=True), 2)
+        self.assertEqual((ssh.appels_octets, ssh.appels_flux, self.poste.appels), ([], [], []))
+
+    def test_accord_juge_sur_le_dossier_resolu_par_refus_route(self):
+        from bureau import deport_types
+        vus = []
+        ancien = deport_types.refus_route
+        deport_types.refus_route = lambda racine, action, bureau=None: vus.append((racine, action)) or "non"
+        self.addCleanup(setattr, deport_types, "refus_route", ancien)
+        ssh = FauxSsh()
+        self.assertEqual(self.lancer(ssh, accord=None), 0)
+        self.assertEqual(vus, [(str(Path(self.dossier).resolve()), "tests")])
+        self.assertEqual(ssh.appels_flux, [])
+
+    def test_accord_qui_leve_est_un_refus(self):
+        from bureau import deport_types
+        ancien = deport_types.refus_route
+
+        def casse(*a, **k):
+            raise RuntimeError("x")
+        deport_types.refus_route = casse
+        self.addCleanup(setattr, deport_types, "refus_route", ancien)
+        self.assertIn("accord illisible", tests_serveur._refus_par_defaut(self.dossier))
+
+    def test_file_du_serveur_isolee_dans_un_processus_de_test(self):
+        from unittest import mock
+        isole = Path(self._t.name) / "etat"
+        with mock.patch.object(campagne, "isole", lambda: True), \
+                mock.patch.object(campagne, "dossier_etat", lambda: isole):
+            self.assertEqual(tests_serveur.attentes_serveur_par_defaut(), isole / tests_serveur.ATTENTES_SERVEUR.name)
+        with mock.patch.object(campagne, "isole", lambda: False):
+            self.assertEqual(tests_serveur.attentes_serveur_par_defaut(), tests_serveur.ATTENTES_SERVEUR)
+        self.assertIsNone(tests_serveur.executer.__kwdefaults__["attentes"])      # résolu à l'appel
 
 
 if __name__ == "__main__":

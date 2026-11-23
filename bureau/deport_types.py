@@ -243,23 +243,79 @@ def _lieu_ecrit(donnees, action):
     return True, lieux[action]
 
 
+def _contient(racine, cible):
+    return cible == racine or cible.startswith(racine if racine.endswith(os.sep) else racine + os.sep)
+
+
+def _plus_longue_entree(cible, bureau):
+    """`(racine normée, entrée valide)` de l'entrée du bureau à la racine la plus longue qui contient `cible` (normée),
+    TOUTES entrées comptées, même celles dont le fichier mène ailleurs (lien, jonction) ; None si aucune. Une entrée
+    illisible (chemin vide, erreur de résolution) qui pourrait contenir `cible` rend `("?", False)`."""
+    donnees = _lire_json_sur(bureau)
+    projets = donnees.get("projets") if isinstance(donnees, dict) else None
+    if not isinstance(projets, list):
+        return None
+    base, meilleur = os.path.dirname(os.path.abspath(bureau)), None
+    for entree in projets:
+        chemin = entree.get("chemin") if isinstance(entree, dict) else entree
+        if not isinstance(chemin, str) or not chemin.strip() or "\x00" in chemin:
+            continue
+        try:
+            fichier = os.path.abspath(os.path.join(base, _sans_prefixe(chemin)))
+            racine = _norme(_racine_des_reglages(fichier))
+            valide = _norme(_racine_des_reglages(os.path.realpath(fichier))) == racine
+        except (OSError, ValueError):
+            return "?", False      # on ne sait pas si elle contient `cible` : jamais d'accord par défaut d'un parent
+        if _contient(racine, cible) and (meilleur is None or len(racine) > len(meilleur[0])):
+            meilleur = (racine, valide)
+    return meilleur
+
+
+def _racine_trop_large(racine):
+    """Vrai pour une racine de lecteur, le dossier personnel ou un de ses parents : jamais l'accord pour tout dessous."""
+    if os.path.dirname(racine) == racine:
+        return True
+    try:
+        maison = _norme(os.path.expanduser("~"))
+    except (OSError, ValueError):
+        return True
+    return _contient(racine, maison)
+
+
 def refus_route(dossier, action, bureau=None):
     """None si `action` (routée, ex. `tests`) lancée depuis `dossier` a l'accord du Directeur pour partir au serveur ;
     sinon le message du refus (en français). Le projet est celui du bureau qui CONTIENT `dossier`
     (`tests_mesures.projet_enregistre`, le plus long : une copie de travail `.claude/worktrees/x` rangée sous le projet
     compte comme lui ; chemins résolus, liens et jonctions compris : un lien vers un dossier non enregistré n'est pas
-    le projet). L'accord se lit dans les SEULS fichiers de réglages que le bureau enregistre pour ce projet (jamais
-    `--reglages`, un `.factory` imbriqué ni un fichier du dossier de travail) ; s'ils ne règlent pas l'action, dans le
-    défaut du bureau (`deport.lieux`, écrit par le seul Directeur). Un fichier enregistré illisible (absent, en lien,
-    abîmé) refuse : son réglage propre n'est jamais remplacé par le défaut. Fichier du bureau absent ou abîmé : refus."""
+    le projet). Refus aussi quand l'entrée la plus longue qui contient `dossier` est écartée (son fichier de réglages
+    ou son `.factory` mène ailleurs) : jamais l'accord d'un projet parent plus court à sa place ; et quand la racine du
+    projet est une racine de lecteur, le dossier personnel ou un de ses parents (un tel « projet » couvrirait tout).
+    L'accord se lit dans les SEULS fichiers de réglages que le bureau enregistre pour ce projet (jamais `--reglages`,
+    un `.factory` imbriqué ni un fichier du dossier de travail) ; s'ils ne règlent pas l'action, dans le défaut du
+    bureau (`deport.lieux`, écrit par le seul Directeur). Plusieurs fichiers enregistrés qui la règlent doivent tous
+    dire serveur. Un fichier enregistré illisible (absent, en lien, abîmé) refuse : son réglage propre n'est jamais
+    remplacé par le défaut. Fichier du bureau absent ou abîmé : refus."""
     bureau = BUREAU if bureau is None else str(bureau)
     if action not in ROUTEES_AU_SERVEUR:
         return "« %s » n'est pas une action routée au serveur." % action
     from . import tests_mesures      # ici : `tests_mesures` importe ce module
+    try:
+        cible = _norme(dossier)
+        plus_longue = _plus_longue_entree(cible, bureau)
+    except (OSError, ValueError):
+        return MSG_NON_ENREGISTRE % (dossier, bureau, action)
+    if plus_longue is None:
+        return MSG_NON_ENREGISTRE % (dossier, bureau, action)
+    if not plus_longue[1]:
+        return ("L'entrée du bureau qui contient %s a des réglages qui mènent ailleurs (lien ou jonction) : pas de tests "
+                "au serveur, ni par un projet parent. %s" % (dossier, MSG_REGLEZ_SERVEUR))
     trouve = tests_mesures.projet_enregistre(dossier, bureau)
-    if trouve is None:
+    if trouve is None or _norme(trouve[1]) != plus_longue[0]:
         return MSG_NON_ENREGISTRE % (dossier, bureau, action)
     racine = str(trouve[1])
+    if _racine_trop_large(plus_longue[0]):
+        return ("Le projet enregistré %s est une racine de lecteur ou contient le dossier personnel : il ne vaut pas "
+                "accord pour tout ce qu'il contient. Enregistrez le dossier du projet lui-même." % racine)
     if not routee_au_serveur(action, catalogue_du_projet(racine)[1]):
         return "« %s » ne tourne pas au serveur pour ce type de projet." % action
     enregistres = reglages_enregistres(racine, bureau)

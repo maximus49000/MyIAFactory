@@ -537,10 +537,12 @@ def _recette_au_serveur(opt, projet, catalogue, action, env, serveur_tache, dire
 # --- exécution ---------------------------------------------------------------------------------------------------
 
 def main(argv=None, executer_poste=campagne.executer, gh=github_actions, git=_git, dormir=time.sleep, dire=None,
-         bureau=BUREAU, repertoire_attente=EN_COURS, artefacts=ARTEFACTS, cache_conso=None, serveur_tache=None):
+         bureau=BUREAU, repertoire_attente=EN_COURS, artefacts=ARTEFACTS, cache_conso=None, serveur_tache=None,
+         noter=None):
     """`artefacts` : où vont les artefacts téléchargés (`<artefacts>/<commit>/<produit>`) ; `cache_conso` : le dossier
     du cache de consommation (None : celui de `bureau.deport_conso`, `~/MyIAFactory`) ; `serveur_tache` : le lanceur
-    de tâches du serveur pour la recette sur émulateur (`argv -> code` ; None : `_serveur_tache`)."""
+    de tâches du serveur pour la recette sur émulateur (`argv -> code` ; None : `_serveur_tache`) ; `noter` : qui note
+    au journal des tests une campagne faite sur GitHub (None : `bureau.tests_mesures.noter_campagne`)."""
     argv = list(sys.argv[1:] if argv is None else argv)
     if dire is None:
         def dire(texte, **k):
@@ -604,7 +606,7 @@ def main(argv=None, executer_poste=campagne.executer, gh=github_actions, git=_gi
     contexte = {"action": action, "lieux": lieux, "catalogue": catalogue, "amont": amont, "opt": opt,
                 "dossier": dossier, "projet": racine_du_projet(dossier), "gh": gh, "git": git, "dormir": dormir,
                 "dire": dire, "id": id_, "repertoire": repertoire_attente, "artefacts": artefacts,
-                "cache_conso": cache_conso, "lancer_au_poste": lancer_au_poste}
+                "cache_conso": cache_conso, "lancer_au_poste": lancer_au_poste, "commande": commande, "noter": noter}
     try:
         return _sur_github(contexte)
     except _Refus as r:
@@ -773,6 +775,21 @@ def _artefact(c, racine, run, commit, produit):
     return chemin
 
 
+def _noter_le_run(c, run, reussi, noter=None):
+    """Note au journal des tests du projet la campagne faite sur GitHub (une ligne par exécution : `run` déjà noté,
+    rien de plus). Toute erreur est tue : la mesure ne change jamais le code de sortie."""
+    try:
+        if noter is None:
+            from bureau import tests_mesures
+            noter = tests_mesures.noter_campagne
+        commande = (" ".join(c.get("commande") or []) or (c["catalogue"].get("tests") or {}).get("commande")
+                    or "tests")
+        noter(c["dossier"], commande=commande, duree_s=run.get("duree_s") or 0, attente_s=0, code=0 if reussi else 1,
+              lieu="github", run=run.get("id"))
+    except Exception:  # noqa: BLE001 — la mesure ne casse jamais une campagne
+        pass
+
+
 def _sur_github(c):
     action, lieux, catalogue, amont, opt = c["action"], c["lieux"], c["catalogue"], c["amont"], c["opt"]
     gh, git, dormir, dire, id_, repertoire = c["gh"], c["git"], c["dormir"], c["dire"], c["id"], c["repertoire"]
@@ -811,6 +828,8 @@ def _sur_github(c):
         reussi = _job_reussi(gh, racine, run, action)
         dire("Exécution %s : %s (%s)." % (run.get("id"), "réussie" if reussi else "échouée (%s)" % run.get("conclusion"),
                                            run.get("url", "")))
+        if action == "tests":
+            _noter_le_run(c, run, reussi, noter=c.get("noter"))
         return 0 if reussi else 1
     echecs = [d for d in amont if not _job_reussi(gh, racine, run, d)]
     dire("Exécution %s : %s (%s)." % (run.get("id"), run.get("conclusion"), run.get("url", "")))

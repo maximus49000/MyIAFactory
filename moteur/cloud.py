@@ -401,7 +401,8 @@ def chercher_rapports(dossier_projet, taches, *, executer=None):
 
 # Les fichiers d'état que le moteur réécrit lui-même : en conflit, la version locale (celle du moteur) l'emporte.
 ETAT_DU_MOTEUR = re.compile(r"^\.factory/(attente-[^/]+\.json|anomalies-logiciel\.jsonl|presence\.json|moteur-reveil"
-                            r"|suivi\.json(\.precedent)?|demandes\.jsonl|sessions\.json|[^/]+-historique\.jsonl)$")
+                            r"|suivi\.json(\.precedent)?|demandes\.jsonl|sessions\.json|[^/]+-historique\.jsonl"
+                            r"|tests-mesures\.jsonl)$")
 
 
 def _regler_les_conflits_d_etat(executer, dossier, options=()):

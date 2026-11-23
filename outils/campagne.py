@@ -10,6 +10,7 @@ vitest du projet en même temps, et chacun attendait plus de six minutes) :
     python <skill>/lancer.py tests [--dossier <dossier>] [--sans-attendre] -- <commande de test>
 attend son tour, lance la commande (sa sortie s'affiche telle quelle), rend son code et libère le verrou.
 """
+import codecs
 import json
 import os
 import subprocess
@@ -17,6 +18,7 @@ import sys
 import time
 from datetime import datetime
 from pathlib import Path
+from typing import BinaryIO, List, Optional, Tuple  # noqa: F401 — annotations en commentaires (Python 3.9)
 
 VERROU = Path("~/MyIAFactory/tests-en-cours.json").expanduser()
 # Les campagnes qui attendent leur tour, une par fichier `<pid>.json` ({pid, depuis, racine, tache, motif}) : le bureau
@@ -224,30 +226,130 @@ def attendre_son_tour(racine, attendre=True, verrou=VERROU, lister=processus, do
             _oublier_l_attente(attentes)
 
 
-def _lancer(commande, dossier, env=None):
-    """Lance la commande de test (sous Windows par l'interpréteur de commandes : `npx`, `npm` sont des `.cmd`).
-    `env` : des variables ajoutées à l'environnement hérité (ex. le chemin d'un artefact téléchargé)."""
+def relayer(entree, sortie, garder=4096, morceau=65536):
+    # type: (BinaryIO, Optional[BinaryIO], int, int) -> Tuple[int, str]
+    """Copie `entree` vers `sortie` morceau par morceau, telle quelle et dans l'ordre (`flush` après chaque morceau,
+    `read1` quand le flux l'a : on rend ce qui est arrivé sans attendre un morceau plein). Rend `(octets, fin)` : le
+    nombre d'octets lus et le décodage `utf-8`/`replace` des `garder` derniers (seuls gardés en mémoire ; jamais
+    d'erreur de décodage). Une `sortie` nulle ou qui casse (l'agent a fermé son tuyau) n'arrête pas la lecture :
+    l'entrée est vidée jusqu'au bout, la commande n'est jamais bloquée sur un tuyau plein."""
+    lire = getattr(entree, "read1", None) or entree.read
+    octets, fin = 0, b""
+    while True:
+        b = lire(morceau)
+        if not b:
+            break
+        octets += len(b)
+        fin = b[-garder:] if len(b) >= garder else (fin + b)[-garder:]
+        if sortie is not None:
+            try:
+                sortie.write(b)
+                sortie.flush()
+            except (OSError, ValueError):
+                sortie = None      # sortie fermée : on continue de vider l'entrée sans rien écrire
+    return octets, bytes(fin).decode("utf-8", "replace")
+
+
+class _VersTexte:
+    """Une sortie binaire posée sur un flux texte sans `buffer` (`sys.stdout` remplacé) : décodage incrémental."""
+
+    def __init__(self, flux):
+        self.flux = flux
+        self.decodeur = codecs.getincrementaldecoder("utf-8")("replace")
+
+    def write(self, b):
+        self.flux.write(self.decodeur.decode(b))
+
+    def flush(self):
+        self.flux.flush()
+
+
+def _sortie_du_poste():
+    flux = sys.stdout
+    if flux is None:
+        return None
+    try:
+        flux.flush()      # ce que le lanceur a déjà dit passe avant la sortie de la commande
+    except (OSError, ValueError):
+        pass
+    tampon = getattr(flux, "buffer", None)
+    return tampon if tampon is not None else _VersTexte(flux)
+
+
+def _lancer(commande, dossier, env=None, sortie=None):
+    # type: (List[str], Optional[str], Optional[dict], Optional[BinaryIO]) -> Tuple[int, int, str]
+    """Lance la commande de test (sous Windows par l'interpréteur de commandes : `npx`, `npm` sont des `.cmd`), sa
+    sortie et ses erreurs relayées vers `sortie` (par défaut celle du lanceur) par `relayer`, qui compte les octets et
+    garde la fin. Rend `(code, octets, fin)`. `env` : des variables ajoutées à l'environnement hérité (ex. le chemin
+    d'un artefact téléchargé). Une interruption tue la commande et remonte (comme `subprocess.run`)."""
     complet = dict(os.environ, **env) if env else None
+    if sortie is None:
+        sortie = _sortie_du_poste()
     if sys.platform == "win32":
-        return subprocess.run(subprocess.list2cmdline(commande), cwd=dossier, shell=True, env=complet).returncode
-    return subprocess.run(commande, cwd=dossier, env=complet).returncode
+        p = subprocess.Popen(subprocess.list2cmdline(commande), cwd=dossier, shell=True, env=complet,
+                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    else:
+        p = subprocess.Popen(commande, cwd=dossier, env=complet, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    with p:
+        try:
+            octets, fin = relayer(p.stdout, sortie)
+            code = p.wait()
+        except BaseException:
+            p.kill()
+            raise
+    return code, octets, fin
+
+
+def _noter_par_defaut(racine, **mesure):
+    """`bureau.tests_mesures.noter_campagne`, importé seulement au moment de noter (le dossier de la skill est ajouté
+    au chemin d'import s'il n'y est pas)."""
+    try:
+        from bureau import tests_mesures
+    except ImportError:
+        sys.path.append(str(Path(__file__).resolve().parent.parent))
+        from bureau import tests_mesures
+    return tests_mesures.noter_campagne(racine, **mesure)
 
 
 def executer(commande, dossier=None, attendre=True, verrou=VERROU, lister=processus, dormir=time.sleep, dire=print,
-             lancer=_lancer, attentes=ATTENTES, env=None):
+             lancer=_lancer, attentes=ATTENTES, env=None, horloge=time.monotonic, noter=None):
     """Les tests d'un projet, une campagne à la fois sur le poste : attend son tour, lance `commande` dans `dossier`,
     rend son code (3 si refusé sans attendre) et libère toujours le verrou. `env` : variables ajoutées à
-    l'environnement de la commande (sans `env`, `lancer` est appelé comme avant, à deux arguments)."""
+    l'environnement de la commande (sans `env`, `lancer` est appelé comme avant, à deux arguments).
+
+    Mesure passive : `attente_s` va de l'appel à la prise du verrou, `duree_s` de la prise du verrou à la fin de la
+    commande ; `lancer` rend un code (anciens appelants) ou `(code, octets, fin)`. Après la commande, verrou libéré,
+    la campagne est notée par `noter` (défaut : `bureau.tests_mesures.noter_campagne`) ; une mesure qui échoue est tue
+    et ne change jamais le code rendu. Refus ou interruption : rien n'est noté."""
+    appel = horloge()
+    commande = list(commande)
     racine = str(Path(dossier or os.getcwd()).resolve())
     if not attendre_son_tour(racine, attendre=attendre, verrou=verrou, lister=lister, dormir=dormir, dire=dire,
                              attentes=attentes):
         return 3
     try:
+        pris = horloge()
+        horloge()      # début de la commande
         if env:
-            return lancer(list(commande), dossier, env=env)
-        return lancer(list(commande), dossier)
+            rendu = lancer(list(commande), dossier, env=env)
+        else:
+            rendu = lancer(list(commande), dossier)
+        fini = horloge()
     finally:
         liberer(verrou)
+    if isinstance(rendu, tuple) and rendu:
+        code = rendu[0]
+        octets = rendu[1] if len(rendu) > 1 else None
+        fin = rendu[2] if len(rendu) > 2 else ""
+    else:
+        code, octets, fin = rendu, None, ""
+    try:
+        (noter or _noter_par_defaut)(racine, commande=" ".join(str(x) for x in commande), duree_s=fini - pris,
+                                     attente_s=pris - appel, code=code, fin=fin, octets=octets,
+                                     tache=os.environ.get(VARIABLE_TACHE) or None)
+    except Exception:  # noqa: BLE001 — la mesure ne casse jamais une campagne
+        pass
+    return code
 
 
 def main(argv=None, executer=executer):

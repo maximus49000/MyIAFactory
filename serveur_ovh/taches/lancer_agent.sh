@@ -83,7 +83,10 @@ DELAI_ARRET=60                            # docker stop -t : l'entrée de l'agen
 LIMITE_SORTIE_KO=540672                   # sortie/ : paquet 500 Mo + flux 20 Mo + erreurs et fin.json, en Ko
 if [[ ${ENVELOPPE_SORTIE_MAX_KO:-} =~ ^[1-9][0-9]{0,8}$ ]]; then LIMITE_SORTIE_KO="$ENVELOPPE_SORTIE_MAX_KO"; fi   # tests
 TRAVAIL_MAX_KO=8388608                    # travail/ + maison/ : 8 Go au plus (sondés toutes les DU_TRAVAIL_S secondes)
-if [[ ${ENVELOPPE_TRAVAIL_MAX_KO:-} =~ ^[1-9][0-9]{0,11}$ ]]; then TRAVAIL_MAX_KO="$ENVELOPPE_TRAVAIL_MAX_KO"; fi   # tests
+TRAVAIL_FLUTTER_MAX_KO=16777216           # projet Flutter (flutter-up existe) : 16 Go (Gradle 3 à 5 Go, couches des SDK, build/)
+if [[ ${ENVELOPPE_TRAVAIL_MAX_KO:-} =~ ^[1-9][0-9]{0,11}$ ]]; then                                                 # tests
+  TRAVAIL_MAX_KO="$ENVELOPPE_TRAVAIL_MAX_KO"; TRAVAIL_FLUTTER_MAX_KO="$ENVELOPPE_TRAVAIL_MAX_KO"
+fi
 DU_TRAVAIL_S=60
 if [[ ${ENVELOPPE_DU_TRAVAIL_S:-} =~ ^[1-9][0-9]{0,3}$ ]]; then DU_TRAVAIL_S="$ENVELOPPE_DU_TRAVAIL_S"; fi          # tests
 LIBRE_MIN_KO=5242880                      # disque du serveur : moins de 5 Go libres (df -Pk) -> la tâche s'arrête en limite
@@ -311,7 +314,7 @@ preparer_overlay() {
 veilleur() {
   { : >&8; } 2>/dev/null || exit 2                  # sans la place héritée de l'enveloppe, jamais de veilleur
   printf '%s\n' "$$" > "$DOSSIER/veilleur.pid"
-  local debut_iso debut_s maintenant pannes=0 etat_conteneur motif ko prochaine pause libre dernier_du mesures
+  local debut_iso debut_s maintenant pannes=0 etat_conteneur motif ko prochaine pause libre dernier_du mesures plafond
   debut_iso=$(debut_ecrit); [ -n "$debut_iso" ] || debut_iso=$(maintenant_iso)
   debut_s=$(date +%s)
   dernier_du=$debut_s
@@ -393,8 +396,10 @@ veilleur() {
       [ -d "$DOSSIER/flutter-up" ] && mesures+=("$DOSSIER/flutter-up")      # projet Flutter : les couches hautes des SDK
       [ -d "$DOSSIER/android-up" ] && mesures+=("$DOSSIER/android-up")
       ko=$(du -sck --apparent-size -- "${mesures[@]}" 2>/dev/null | tail -n 1 | cut -f1)
-      if [[ $ko =~ ^[0-9]+$ ]] && [ "$ko" -gt "$TRAVAIL_MAX_KO" ]; then
-        arreter_puis terminee limite "Limite atteinte : travail et maison trop volumineux (${ko} Ko, maximum ${TRAVAIL_MAX_KO} Ko)"
+      plafond="$TRAVAIL_MAX_KO"
+      [ -d "$DOSSIER/flutter-up" ] && plafond="$TRAVAIL_FLUTTER_MAX_KO"
+      if [[ $ko =~ ^[0-9]+$ ]] && [ "$ko" -gt "$plafond" ]; then
+        arreter_puis terminee limite "Limite atteinte : travail et maison trop volumineux (${ko} Ko, maximum ${plafond} Ko)"
       fi
     fi
     # Sommeil d'une sonde, raccourci jusqu'à l'échéance si elle tombe avant (au moins 1 s).

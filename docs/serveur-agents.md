@@ -126,15 +126,15 @@ Valeurs lues dans le code (`LIMITES_AGENT` de `outils/serveur_agent.py`, `lancer
 |---|---|---|
 | Durée maximale | **2400 s** (40 min) ; jamais au-dessus du délai demandé par le moteur ; l'enveloppe accepte 1 à 86400 | veilleur ; l'entrée arrête `claude` **120 s avant** (à mi-chemin pour une tâche de moins de 240 s), conclut, et note `"echeance": true` |
 | Tours de l'agent | **200** (`--max-turns`, ajouté par l'entrée) | `claude` |
-| Mémoire | **4096 Mo** (swap identique : pas de swap) | `docker run` |
-| Processeurs | **2** | `docker run` |
+| Mémoire | **4096 Mo** (swap identique : pas de swap) ; projet Flutter : **12 288 Mo** (`LIMITES_AGENT_FLUTTER` : un build APK dépasse 4 Go) | `docker run` |
+| Processeurs | **2** ; projet Flutter : **4** | `docker run` |
 | Processus | **512** ; `/tmp` en mémoire de 1 Go ; système de fichiers en lecture seule | `docker run` |
 | Paquet Git | **500 Mo** à l'aller comme au retour | poste (aller) ; poste et serveur (retour) |
 | Flux `stream-json` | **20 Mo** (au-delà : `claude` arrêté) ; `claude.err` 64 Ko | entrée |
 | `sortie/` | **540 672 Ko** (paquet 500 Mo + flux 20 Mo + marge), taille apparente, sondé toutes les 5 s | veilleur (`limite`) |
-| `travail/` + `maison/` | **8 Go**, sondés toutes les 60 s | veilleur (`limite`) |
+| `travail/` + `maison/` | **8 Go** ; projet Flutter : **16 Go** avec les couches hautes des SDK (`flutter-up`, `android-up` ; Gradle prend 3 à 5 Go dans `maison/`), sondés toutes les 60 s | veilleur (`limite`) |
 | Disque du serveur | plancher de **5 Go** libres (`df`), sondé toutes les 5 s | veilleur (`limite`) |
-| Places d'agent par serveur | **2** par défaut, de **1 à 4** (réglage `agents_serveur_max` du projet quand il est donné) | enveloppe (verrous `flock`) |
+| Places d'agent par serveur | **2** par défaut, de **1 à 4** (réglage `agents_serveur_max` du projet quand il est donné) ; elles comptent des agents, **pas de la mémoire** : 2 agents Flutter (24 Go) + l'émulation (6 Go) + des campagnes de tests (jetons de mémoire de 14e, tests seulement) peuvent approcher les 62 Go du serveur | enveloppe (verrous `flock`) |
 | Attente d'une place | nouvel essai toutes les **15 s**, **600 s** au plus | poste |
 | Suivi par le poste | durée de la tâche **+ 120 s**, puis arrêt et rapatriement du travail | exécuteur distant |
 | Consigne, message | 1 Mo au plus chacun ; options de `claude` : 64 Ko | poste |

@@ -209,6 +209,64 @@ class TestDemandeEtDepot(Base):
             self.assertIs(es._projet_flutter(p), True)
 
 
+class TestMemoireFlutter(Base):
+    """Un build APK (démons Gradle et Kotlin, gen_snapshot, flutter) dépasse 4 Go : 12 Go et 4 processeurs pour un projet
+    Flutter, les autres projets gardent 4096 Mo et 2."""
+
+    def test_limites_par_defaut_selon_le_projet(self):
+        self.assertEqual((sa.LIMITES_AGENT["memoire_mo"], sa.LIMITES_AGENT["cpus"]), (4096, 2))
+        self.assertEqual((sa.LIMITES_AGENT_FLUTTER["memoire_mo"], sa.LIMITES_AGENT_FLUTTER["cpus"]), (12288, 4))
+        d = self.demande(flutter=True)
+        self.assertEqual((d.limites["memoire_mo"], d.limites["cpus"]), (12288, 4))
+        d = self.demande()
+        self.assertEqual((d.limites["memoire_mo"], d.limites["cpus"]), (4096, 2))
+        with self.assertRaises(ValueError):                           # le plafond Flutter ne vaut que pour Flutter
+            self.demande(limites={"memoire_mo": 12288})
+        self.assertEqual(self.demande(flutter=True, limites={"memoire_mo": 8192}).limites["memoire_mo"], 8192)
+        with self.assertRaises(ValueError):
+            self.demande(flutter=True, limites={"memoire_mo": 12289})
+
+    def test_ligne_de_lancement(self):
+        declarer(self.dossier, [("ovh1", {**CAPS_AGENT, "flutter-sdk": "presente"})])
+        self.lancer(self.demande(flutter=True, flutter_dossier="android_app"))
+        self.assertIn(f'lancer_agent.sh" {ID1} seul 2400 12288 4 2\n', self.srv.ops("lancer_agent")[0][1])
+
+    def test_ligne_de_lancement_ordinaire(self):
+        self.lancer()
+        self.assertIn(f'lancer_agent.sh" {ID1} seul 2400 4096 2 2\n', self.srv.ops("lancer_agent")[0][1])
+
+
+@unittest.skipUnless(shutil.which("bash"), "bash absent")
+class TestPlafondTravailFlutter(unittest.TestCase):
+    sdk = tsf.TestEnveloppeFlutter.__dict__["sdk"]
+
+    def test_docker_run_porte_la_memoire_flutter(self):
+        with Banc() as b:
+            self.sdk(b)
+            b.ecrire_entree(flutter=True)
+            r = b.lancer("seul", "30", "12288", "4", "2")
+            self.assertEqual(r.returncode, 0, r.stderr + r.stdout)
+            a = b.run_args()
+            suite_dans(self, a, "--memory", "12288m")
+            suite_dans(self, a, "--memory-swap", "12288m")
+            suite_dans(self, a, "--cpus", "4")
+            b.arreter()
+            b.attendre_final()
+
+    def test_plafond_travail_releve_pour_flutter(self):
+        texte = (RACINE / "serveur_ovh" / "taches" / "lancer_agent.sh").read_text(encoding="utf-8")
+        self.assertIn("TRAVAIL_MAX_KO=8388608", texte)                 # 8 Go : projets ordinaires, inchangé
+        self.assertIn("TRAVAIL_FLUTTER_MAX_KO=16777216", texte)        # 16 Go : Flutter (Gradle, couches des SDK)
+        with Banc(ENVELOPPE_TRAVAIL_MAX_KO="1", ENVELOPPE_DU_TRAVAIL_S="1") as b:
+            self.sdk(b)
+            b.ecrire_entree(flutter=True)
+            r = b.lancer("seul", "30", "2048", "2", "2")
+            self.assertEqual(r.returncode, 0, r.stderr + r.stdout)
+            (b.dossier / "maison" / "gros").write_bytes(b"x" * 4096)
+            e = b.attendre_final()
+            self.assertEqual(e["statut"], "limite")                     # le réglage des tests vaut aussi pour Flutter
+
+
 class TestConsigne(unittest.TestCase):
     def test_la_consigne_cite_les_commandes_uniques(self):
         from orchestrateur import depart

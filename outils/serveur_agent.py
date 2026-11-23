@@ -31,6 +31,9 @@ from plateforme import DOSSIER_DISTANT, RACINE_SERVEUR
 
 LIMITES_AGENT = {"duree_s": 2400, "tours": 200, "memoire_mo": 4096, "cpus": 2, "paquet_octets": 524288000,
                  "flux_octets": 20971520}
+# Projet Flutter : un build APK (démons Gradle et Kotlin, gen_snapshot, flutter) dépasse 4 Go (essai réel : démon Gradle
+# tué par le cgroup) : 12 Go et 4 processeurs par défaut et au plus ; les autres projets gardent LIMITES_AGENT.
+LIMITES_AGENT_FLUTTER = {**LIMITES_AGENT, "memoire_mo": 12288, "cpus": 4}
 MODES_AGENT = ("seul", "pilote")
 PLACES_DEFAUT = 2
 CLES_DEMANDE_AGENT = frozenset({"id", "projet", "tache", "mode", "modele", "branche", "base", "limites", "reprend", "places",
@@ -194,11 +197,12 @@ def _ref_valide(nom, git_, drapeau=()):
     return code == 0, sortie.decode("utf-8", "replace").strip()
 
 
-def _entier_limite(cle, v):
+def _entier_limite(cle, v, plafonds=None):
+    plafonds = plafonds or LIMITES_AGENT
     if isinstance(v, bool) or not isinstance(v, int):
         raise ValueError(f"La limite « {cle} » doit être un nombre entier.")
-    if not 1 <= v <= LIMITES_AGENT[cle]:
-        raise ValueError(f"La limite « {cle} » doit être comprise entre 1 et {LIMITES_AGENT[cle]}.")
+    if not 1 <= v <= plafonds[cle]:
+        raise ValueError(f"La limite « {cle} » doit être comprise entre 1 et {plafonds[cle]}.")
     return v
 
 
@@ -261,11 +265,12 @@ def valider_demande_agent(brut, git=_git):
     limites_brutes = brut.get("limites")
     if limites_brutes is not None and not isinstance(limites_brutes, dict):
         raise ValueError("Les limites doivent être un dictionnaire.")
-    limites = dict(LIMITES_AGENT)
+    plafonds = LIMITES_AGENT_FLUTTER if flutter else LIMITES_AGENT
+    limites = dict(plafonds)
     for cle, v in (limites_brutes or {}).items():
         if cle not in LIMITES_AGENT:
             raise ValueError("Limite inconnue : " + repr(str(cle)[:40]) + ".")
-        limites[cle] = _entier_limite(cle, v)
+        limites[cle] = _entier_limite(cle, v, plafonds)
     return DemandeAgent(id=ident, projet=projet, tache=tache, mode=mode, modele=modele, branche=branche, base=base,
                         limites=MappingProxyType(limites), reprend=reprend, places=places, genre=genre,
                         flutter=flutter, flutter_dossier=flutter_dossier)

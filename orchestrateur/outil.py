@@ -3707,8 +3707,9 @@ DOSSIER_PLATEFORME = None     # le dossier de la plateforme (serveurs.json, serv
 SONDE_PERIMEE_S = 24 * 3600     # une sonde plus vieille que 24 h ne dit plus que le serveur est en ligne
 
 
-def serveur_hors_ligne(dossier=None, maintenant=None):
-    """Vrai si aucun serveur déclaré n'a, à la dernière sonde, les capacités `agent` et `agent-abonnement` présentes et
+def serveur_hors_ligne(dossier=None, maintenant=None, besoin="agent-serveur"):
+    """Vrai si aucun serveur déclaré n'a, à la dernière sonde, les capacités du `besoin` (par défaut `agent` et
+    `agent-abonnement` ; `agent-flutter` y ajoute `flutter-sdk`) présentes et
     constatées il y a moins de 24 h (état local `serveurs-etat.json` : aucune connexion). Une date de sonde illisible, ou
     la moindre erreur de lecture, vaut hors ligne ; une capacité sans date (état ancien) n'est pas jugée périmée."""
     try:
@@ -3726,7 +3727,7 @@ def serveur_hors_ligne(dossier=None, maintenant=None):
             caps = (connu.get(serveur.id) or {}).get("capacites")
             caps = caps if isinstance(caps, dict) else {}
             pret = True
-            for c in serveur_capacites.BESOINS["agent-serveur"]:
+            for c in serveur_capacites.BESOINS[besoin]:
                 e = caps.get(c) if isinstance(caps.get(c), dict) else {}
                 if e.get("statut") not in serveur_tache.STATUTS_PRETS:
                     pret = False
@@ -3740,6 +3741,31 @@ def serveur_hors_ligne(dossier=None, maintenant=None):
         return True
     except Exception:       # tout souci de lecture : on ne peut pas dire qu'il est en ligne
         return True
+
+
+def besoin_serveur(fac):
+    """Le besoin d'un agent serveur de ce projet (`fac` : sa factory lue) : `agent-flutter` pour un projet Flutter
+    (`outils/projet_flutter.py`), sinon `agent-serveur`. Toute erreur de lecture : `agent-serveur` (comme avant)."""
+    try:
+        chemin = Path(fac["chemin"])
+        projet = chemin.parent.parent if chemin.parent.name == ".factory" else chemin.parent
+        outils = str(Path(__file__).resolve().parent.parent / "outils")
+        if outils not in sys.path:
+            sys.path.append(outils)
+        import projet_flutter
+        return "agent-flutter" if projet_flutter.est_flutter(projet) else "agent-serveur"
+    except Exception:
+        return "agent-serveur"
+
+
+def raison_serveur(fac):
+    """Pourquoi le serveur ne peut pas prendre un agent de ce projet, ou None : « hors ligne » (aucun serveur prêt pour
+    les agents), « flutter-sdk absent du serveur » (projet Flutter, aucun serveur prêt n'a le SDK Flutter)."""
+    if serveur_hors_ligne():
+        return "hors ligne"
+    if besoin_serveur(fac) == "agent-flutter" and serveur_hors_ligne(besoin="agent-flutter"):
+        return "flutter-sdk absent du serveur"
+    return None
 
 
 def actifs_abonnement(ctx, s, bureau=None):
@@ -3803,7 +3829,14 @@ def _bascule_des_lieux(ctx, role, garde=False):
         return None
     return {"ordre_lieux": depart.ordre_du_metier(ctx.f, role),
             "places": {"local": ctx.f["agents_locaux_max"], "serveur": serveur, "cloud": places_cloud_du_projet(ctx)},
-            "hors_ligne": frozenset({"serveur"}) if serveur and serveur_hors_ligne() else frozenset()}
+            "hors_ligne": _serveur_indisponible(ctx) if serveur else frozenset()}
+
+
+def _serveur_indisponible(ctx):
+    """`{"serveur"}` (avec sa raison, dite par `depart`) si le serveur ne peut pas prendre un agent de ce projet, sinon vide :
+    le choix retombe alors sur le lieu suivant de l'ordre."""
+    raison = raison_serveur(ctx.f)
+    return depart.HorsLigne({"serveur"}, {"serveur": raison}) if raison else frozenset()
 
 
 def cmd_agent_libre(ctx, e):

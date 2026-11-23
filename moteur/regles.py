@@ -3095,8 +3095,11 @@ def _ligne_du_lieu(ctx, lieu, ensuite=False):
     s = "s" if n > 1 else ""
     accord = s if mot == "locale" else ""
     noms = ", ".join(dict.fromkeys(ctx.prenoms.get(o["agent"], o["agent"]) for o in occupants))
-    if lieu == "serveur" and n and outil.serveur_hors_ligne():
+    raison = outil.raison_serveur(ctx.fac) if lieu == "serveur" and n else None
+    if raison == "hors ligne":
         ligne = f"{quoi} ; le serveur est hors ligne (aucune sonde récente ne le dit prêt pour les agents)"
+    elif raison:
+        ligne = f"{quoi} ; {raison} (projet Flutter : capacité flutter-sdk à installer)"
     elif occupants and len(occupants) >= n:
         ligne = f"{quoi} ; {n} place{s} {mot}{accord}, occupée{s} par {noms}"
     elif n == 0:

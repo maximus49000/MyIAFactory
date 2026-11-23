@@ -124,6 +124,18 @@ def _modules():
     return serveur_agent, serveur_tache
 
 
+def _projet_flutter(projet):
+    """Vrai si le projet du poste est un projet Flutter (`outils/projet_flutter.py`) ; faux s'il ne l'est pas ou si la
+    lecture échoue (l'agent part alors sans le SDK Flutter, comme avant)."""
+    if _OUTILS not in sys.path:
+        sys.path.append(_OUTILS)
+    try:
+        import projet_flutter
+        return projet_flutter.est_flutter(projet)
+    except Exception:
+        return False
+
+
 def argv_distant(argv):
     """`(argv pour le serveur, chemin local de la consigne)` : `argv[0]` devient `claude`, le fichier de consigne
     `/entree/consigne.md` ; chaque option passe par `DRAPEAUX` (valeur entière revérifiée). `ValueError` pour toute option
@@ -410,6 +422,8 @@ class ExecuteurServeur:
                    "branche": branche, "base": base, "limites": limites, "reprend": reprend}
         if not demande.get("modele"):
             demande["modele"] = _valeur(distant, "--model")
+        if "flutter" not in demande:          # projet Flutter (pubspec.yaml vu sur le poste) : un booléen, rien d'autre
+            demande["flutter"] = _projet_flutter(self.projet)
         apk = self.apk
         if isinstance(apk, (str, Path)):      # le moteur donne un CHEMIN (`apk_pour_le_pilote`) ; le serveur reçoit les OCTETS
             try:

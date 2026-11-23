@@ -33,6 +33,15 @@ LIEUX_DE_TACHE = ("local", "serveur", "cloud")     # les lieux où une tâche d'
 ORDRE_PAR_DEFAUT = list(LIEUX_DE_TACHE)
 
 
+class HorsLigne(frozenset):
+    """Les lieux hors ligne (un ensemble, comparé comme tel) et, pour chacun, la raison dite (`raisons`)."""
+
+    def __new__(cls, lieux, raisons=None):
+        soi = super().__new__(cls, lieux)
+        soi.raisons = dict(raisons or {})
+        return soi
+
+
 def lieu_pour(ordre, places, occupes, hors_ligne, actifs_abonnement, plafond_abonnement):
     """`(lieu, raison)` : où part une tâche libre. Pure. Le plafond d'abonnement atteint l'emporte sur toute place
     (`(None, "plafond d'abonnement atteint (n/n)")`) ; sinon le premier lieu de `ordre` qui n'est pas hors ligne et dont les
@@ -48,7 +57,7 @@ def lieu_pour(ordre, places, occupes, hors_ligne, actifs_abonnement, plafond_abo
 
 def _etat_du_lieu(lieu, places, occupes, hors_ligne):
     if lieu in hors_ligne:
-        return "hors ligne"
+        return getattr(hors_ligne, "raisons", {}).get(lieu) or "hors ligne"
     n = places.get(lieu, 0)
     return "0 place" if n <= 0 else f"{occupes.get(lieu, 0)}/{n} occupés"
 

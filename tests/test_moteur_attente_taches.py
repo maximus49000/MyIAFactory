@@ -100,6 +100,14 @@ class Agent(Attentes):
             r = self.raison(self.raisons(), t)
         self.assertIn("le serveur est hors ligne", " ".join(r["detail"]))
 
+    def test_projet_flutter_sans_flutter_sdk_le_dit(self):
+        from unittest import mock
+        from orchestrateur import outil
+        t = self.serveur()
+        with mock.patch.object(outil, "raison_serveur", return_value="flutter-sdk absent du serveur"):
+            r = self.raison(self.raisons(), t)
+        self.assertIn("flutter-sdk absent du serveur", " ".join(r["detail"]))
+
     def test_place_serveur_libre_mais_hors_ligne_pas_toutes_prises(self):
         """Une place serveur libre n'est pas « toutes prises » : la raison dit que le serveur est hors ligne."""
         from unittest import mock

@@ -4,9 +4,9 @@
 # Contrat d'entrée standard : SEULES les étapes licence (la licence) et bureau_distant (UNE ligne : le mot de passe de la
 # session graphique) lisent stdin. Pour toutes les autres, stdin est fermé (/dev/null) afin qu'aucune commande
 # (ssh, apt, docker...) ne puisse consommer ce que l'appelant envoie.
-# Les étapes android_build, android_emulateur, emulateur_image, agent_image, tests_image et unity_cli (capacités du serveur) ne lisent pas non plus stdin : aucun secret.
-# Usage : mise_en_place.sh --etape <durcissement|docker|images|licence|bureau_distant|android_build|android_emulateur|emulateur_image|agent_image|tests_image|unity_cli|etat> [--simuler]
-# Réservées aux tests (valeurs par défaut en production) : JVM_RACINE, KVM_PERIPH, SDK_DELAI_S.
+# Les étapes android_build, android_emulateur, emulateur_image, agent_image, tests_image, flutter_sdk et unity_cli (capacités du serveur) ne lisent pas non plus stdin : aucun secret.
+# Usage : mise_en_place.sh --etape <durcissement|docker|images|licence|bureau_distant|android_build|android_emulateur|emulateur_image|agent_image|tests_image|flutter_sdk|unity_cli|etat> [--simuler]
+# Réservées aux tests (valeurs par défaut en production) : JVM_RACINE, KVM_PERIPH, SDK_DELAI_S, FLUTTER_DELAI_S, PYTHON_HOTE.
 # Sortie standard : UN SEUL objet JSON {"etape","statut","detail","versions","disque_libre_go"}.
 # Idempotent : chaque étape constate l'état avant d'agir. --simuler n'exécute aucune commande apt/docker/ufw/systemctl.
 # La licence Unity (.ulf) et le mot de passe de session arrivent par l'entrée standard (stdin), jamais en argument, et ne sont jamais réaffichés.
@@ -30,6 +30,12 @@ V_SDK_IMAGE_EMULATEUR="system-images;android-34;google_apis;x86_64"
 URL_MANIFESTE_ANDROID="https://dl.google.com/android/repository/repository2-3.xml"
 URL_DEPOT_ANDROID="https://dl.google.com/android/repository"
 URL_INSTALLEUR_UNITY="https://unity.com/install.sh"
+# Flutter (miroir de la clé flutter de serveur_ovh/versions.json) : SDK stable épinglé, installé sur l'HÔTE dans ~/flutter-sdk
+# (jamais dans une image, jamais pour root) ; l'archive officielle est vérifiée par le SHA-256 du manifeste officiel.
+V_FLUTTER="3.47.1"
+V_FLUTTER_CANAL="stable"
+URL_FLUTTER_MANIFESTE="https://storage.googleapis.com/flutter_infra_release/releases/releases_linux.json"
+URL_FLUTTER_DEPOT="https://storage.googleapis.com/flutter_infra_release/releases"
 # Session graphique : dépôts apt (sources notées dans serveur_ovh/versions.json, clé unity_hub ; paquets non épinglés).
 URL_DEPOT_UNITY_HUB="https://hub.unity3d.com/linux/repos/deb"
 URL_CLE_UNITY_HUB="https://hub.unity3d.com/linux/keys/public"
@@ -51,14 +57,14 @@ SIMULER=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --etape)
-      [ $# -ge 2 ] || { echo "L'option --etape attend une valeur (durcissement, docker, images, licence, bureau_distant, android_build, android_emulateur, emulateur_image, agent_image, tests_image, unity_cli ou etat)." >&2; exit 2; }
+      [ $# -ge 2 ] || { echo "L'option --etape attend une valeur (durcissement, docker, images, licence, bureau_distant, android_build, android_emulateur, emulateur_image, agent_image, tests_image, flutter_sdk, unity_cli ou etat)." >&2; exit 2; }
       ETAPE="$2"; shift 2 ;;
     --simuler) SIMULER=1; shift ;;
     *) echo "Argument inconnu : $1" >&2; exit 2 ;;
   esac
 done
 case "$ETAPE" in
-  durcissement|docker|images|licence|bureau_distant|android_build|android_emulateur|emulateur_image|agent_image|tests_image|unity_cli|etat) ;;
+  durcissement|docker|images|licence|bureau_distant|android_build|android_emulateur|emulateur_image|agent_image|tests_image|flutter_sdk|unity_cli|etat) ;;
   *) echo "Étape inconnue ou absente : '$ETAPE'" >&2; exit 2 ;;
 esac
 
@@ -467,6 +473,7 @@ SEUIL_EMULATEUR_IMAGE_GO=3
 SEUIL_UNITY_CLI_GO=2
 SEUIL_AGENT_IMAGE_GO=3
 SEUIL_TESTS_IMAGE_GO=3
+SEUIL_FLUTTER_GO=6
 RESEAU_AGENTS="myiafactory-agents"
 
 # Les étapes de capacités s'installent pour l'utilisateur SSH ordinaire, jamais pour root (comme bureau_distant).
@@ -906,6 +913,188 @@ etape_tests_image() {
   repondre fait "Image myiafactory/tests déjà à jour (${empreinte})."
 }
 
+# --- Flutter ---------------------------------------------------------------
+
+# Étape flutter_sdk : le SDK Flutter V_FLUTTER (canal stable) dans ~/flutter-sdk, sur l'HÔTE, pour l'utilisateur SSH
+# ordinaire (jamais root, jamais dans une image) ; les conteneurs des agents d'un projet Flutter le montent EN LECTURE SEULE
+# (serveur_ovh/taches/lancer_agent.sh). Prérequis : la capacité android-build (SDK Android de l'hôte ~/android-sdk, ses
+# licences). Chemin suivi :
+#   1. manifeste officiel releases_linux.json téléchargé dans un fichier (jamais exécuté), lu par python3 -I (JSON) : UNE
+#      seule archive pour la version épinglée au canal stable, nom vérifié par motif strict
+#      (stable/linux/flutter_linux_<version>-stable.tar.xz) et SHA-256 de 64 hexadécimaux ; l'adresse du manifeste
+#      (base_url) n'est jamais suivie : l'archive est prise sur URL_FLUTTER_DEPOT ;
+#   2. archive téléchargée dans un dossier temporaire du même disque, VÉRIFIÉE par ce SHA-256 avant toute extraction, puis
+#      extraite (tar, sans propriétaire ni droits de l'archive) ; jamais de « curl | sh » ;
+#   3. mise en place atomique (mv -T) ; un ~/flutter-sdk d'une autre version est mis de côté (flutter-sdk.ancien.<date>,
+#      jamais supprimé ici) et remis si la mise en place échoue ;
+#   4. `flutter precache --android --universal` (et --no- de tout le reste) puis licences Android acceptées (sdkmanager de
+#      ~/android-sdk) : un conteneur d'agent n'a rien à télécharger dans le SDK (il est en lecture seule) ;
+#      bin/cache/lockfile existe (le conteneur y monte son propre fichier de verrou, inscriptible) ;
+#   5. `flutter --version --machine` doit dire frameworkVersion = V_FLUTTER ; marqueur ~/.myiafactory/flutter-sdk.version
+#      (contenu = « flutter=<version>;canal=stable ») retiré avant tout changement et écrit en dernier.
+# git safe.directory n'est pas touché : le conteneur tourne sous l'utilisateur de l'hôte, propriétaire de ~/flutter-sdk.
+# Idempotent : marqueur à jour et SDK en place -> « fait » sans réseau. FLUTTER_DELAI_S (1200 s) : délai de precache.
+# Délais internes bornés (manifeste 120 s, archive 1200 s, 2 × version 300 s, precache 1200 s, licences 120 s,
+# 2 × sdkmanager 120 s = 3480 s) sous le délai SSH de l'étape (serveur_installation.DELAIS_ETAPE_S : 3600 s) ; apt non borné.
+# Un ~/flutter-sdk déjà présent de la bonne version (flutter --version) est accepté sans contrôle de somme : il a été
+# posé par cette étape ou par l'utilisateur du serveur lui-même (hors menace).
+FLUTTER_SDK="${HOME}/flutter-sdk"
+MARQUEUR_FLUTTER="${HOME}/.myiafactory/flutter-sdk.version"
+EMPREINTE_FLUTTER="flutter=${V_FLUTTER};canal=${V_FLUTTER_CANAL}"
+MOTIF_VERSION_FLUTTER='^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$'
+# Lecture du manifeste (JSON) : les couples (archive, sha256) DISTINCTS de la version au canal stable, Linux x64 ; un seul
+# attendu. Code 3 : aucun ou plusieurs ; 4 : manifeste illisible. Le programme est un texte fixe, jamais une entrée.
+PROGRAMME_MANIFESTE_FLUTTER='import json, sys
+try:
+    with open(sys.argv[1], encoding="utf-8") as f:
+        d = json.load(f)
+    rel = d.get("releases") if isinstance(d, dict) else None
+    if not isinstance(rel, list):
+        raise ValueError
+except (OSError, ValueError):
+    sys.exit(4)
+vus = {(r.get("archive"), r.get("sha256")) for r in rel
+       if isinstance(r, dict) and r.get("channel") == sys.argv[3] and r.get("version") == sys.argv[2]
+       and r.get("dart_sdk_arch", "x64") == "x64"}
+if len(vus) != 1:
+    sys.exit(3)
+a, s = vus.pop()
+if not isinstance(a, str) or not isinstance(s, str):
+    sys.exit(3)
+print(a + " " + s)'
+
+# flutter_hote <délai_s> <arguments...> : le flutter de ~/flutter-sdk, sans analyse ni vérification de version, sous délai.
+flutter_hote() {
+  local delai="$1"
+  shift
+  CI=true FLUTTER_SUPPRESS_ANALYTICS=true ANDROID_HOME="$SDK_ANDROID" ANDROID_SDK_ROOT="$SDK_ANDROID" \
+    timeout "$delai" "$FLUTTER_SDK/bin/flutter" --no-version-check --suppress-analytics "$@"
+}
+
+# 0 si ~/flutter-sdk est un dossier (pas un lien) dont `flutter --version --machine` dit frameworkVersion = V_FLUTTER.
+flutter_version_ok() {
+  local sortie
+  [ -d "$FLUTTER_SDK" ] && [ ! -L "$FLUTTER_SDK" ] && [ -x "$FLUTTER_SDK/bin/flutter" ] || return 1
+  sortie=$(flutter_hote 300 --version --machine 2>/dev/null | head -c 65536)
+  [[ $sortie =~ \"frameworkVersion\"[[:space:]]*:[[:space:]]*\"([0-9A-Za-z.+-]{1,40})\" ]] && [ "${BASH_REMATCH[1]}" = "$V_FLUTTER" ]
+}
+
+# Prêt sans rien relancer : marqueur à jour, SDK en place (dossier, flutter, Dart embarqué, fichier de verrou).
+flutter_pret() {
+  [ "$(head -c 256 "$MARQUEUR_FLUTTER" 2>/dev/null)" = "$EMPREINTE_FLUTTER" ] \
+    && [ -d "$FLUTTER_SDK" ] && [ ! -L "$FLUTTER_SDK" ] && [ -x "$FLUTTER_SDK/bin/flutter" ] \
+    && [ -x "$FLUTTER_SDK/bin/cache/dart-sdk/bin/dart" ] && [ -f "$FLUTTER_SDK/bin/cache/lockfile" ] \
+    && [ ! -L "$FLUTTER_SDK/bin/cache/lockfile" ]
+}
+
+# Télécharge, vérifie (SHA-256 du manifeste officiel), extrait et met en place ~/flutter-sdk. En cas d'échec, ECHEC_FLUTTER
+# dit pourquoi et la fonction retourne 1 ; le dossier temporaire est supprimé sur tous les chemins.
+installer_archive_flutter() {
+  local travail ligne archive attendu obtenu ancien="" ok=1 motif_archive
+  ECHEC_FLUTTER=""
+  motif_archive="^stable/linux/flutter_linux_${V_FLUTTER//./[.]}-stable[.]tar[.]xz$"
+  travail=$(mktemp -d "$HOME/.flutter-sdk.telechargement.XXXXXX") || { ECHEC_FLUTTER="Dossier temporaire non créable."; return 1; }
+  while :; do
+    curl -fsSL --proto '=https' --connect-timeout 20 --max-time 120 --max-filesize 33554432 "$URL_FLUTTER_MANIFESTE" \
+      -o "$travail/releases_linux.json" >/dev/null 2>&1 && [ -s "$travail/releases_linux.json" ] \
+      || { ECHEC_FLUTTER="Manifeste officiel Flutter introuvable ou vide (${URL_FLUTTER_MANIFESTE})."; break; }
+    ligne=$("${PYTHON_HOTE:-python3}" -I -c "$PROGRAMME_MANIFESTE_FLUTTER" "$travail/releases_linux.json" "$V_FLUTTER" "$V_FLUTTER_CANAL" 2>/dev/null)
+    case $? in
+      0) ;;
+      3) ECHEC_FLUTTER="Le manifeste officiel ne donne pas UNE archive Linux pour Flutter ${V_FLUTTER} (canal ${V_FLUTTER_CANAL})."; break ;;
+      *) ECHEC_FLUTTER="Manifeste officiel Flutter illisible (JSON attendu, python3 requis)."; break ;;
+    esac
+    ligne="${ligne%$'\r'}"
+    archive="${ligne%% *}"
+    attendu="${ligne#* }"
+    [[ $archive =~ $motif_archive ]] \
+      || { ECHEC_FLUTTER="Nom d'archive inattendu dans le manifeste officiel Flutter : archive refusée."; break; }
+    [[ $attendu =~ ^[0-9a-f]{64}$ ]] \
+      || { ECHEC_FLUTTER="Empreinte SHA-256 du manifeste officiel Flutter mal formée : archive refusée."; break; }
+    curl -fsSL --proto '=https' --connect-timeout 20 --max-time 1200 --max-filesize 3221225472 "${URL_FLUTTER_DEPOT}/${archive}" \
+      -o "$travail/flutter.tar.xz" >/dev/null 2>&1 && [ -s "$travail/flutter.tar.xz" ] \
+      || { ECHEC_FLUTTER="Téléchargement de ${archive##*/} impossible, vide ou tronqué."; break; }
+    obtenu=$(sha256sum "$travail/flutter.tar.xz" 2>/dev/null | awk '{print tolower($1)}')
+    [ -n "$obtenu" ] && [ "$obtenu" = "$attendu" ] \
+      || { ECHEC_FLUTTER="Empreinte SHA-256 de ${archive##*/} différente de celle du manifeste officiel : archive refusée, rien n'est extrait."; break; }
+    mkdir "$travail/extrait" && tar -xJf "$travail/flutter.tar.xz" -C "$travail/extrait" --no-same-owner --no-same-permissions >/dev/null 2>&1 \
+      && [ -d "$travail/extrait/flutter" ] && [ ! -L "$travail/extrait/flutter" ] && [ -x "$travail/extrait/flutter/bin/flutter" ] \
+      || { ECHEC_FLUTTER="Extraction de ${archive##*/} impossible ou archive sans flutter/bin/flutter."; break; }
+    if [ -e "$FLUTTER_SDK" ] || [ -L "$FLUTTER_SDK" ]; then
+      ancien="${FLUTTER_SDK}.ancien.$(date +%Y%m%d%H%M%S)"
+      mv -T "$FLUTTER_SDK" "$ancien" 2>/dev/null \
+        || { ancien=""; ECHEC_FLUTTER="Mise de côté de l'ancien ${FLUTTER_SDK} impossible."; break; }
+    fi
+    if ! mv -T "$travail/extrait/flutter" "$FLUTTER_SDK" 2>/dev/null; then
+      [ -z "$ancien" ] || mv -T "$ancien" "$FLUTTER_SDK" 2>/dev/null
+      ancien=""
+      ECHEC_FLUTTER="Mise en place de ${FLUTTER_SDK} impossible (l'ancien dossier, s'il existait, a été remis)."
+      break
+    fi
+    ok=0
+    break
+  done
+  rm -rf "$travail"
+  [ -z "$ancien" ] || NOTE_FLUTTER=" L'ancien SDK a été mis de côté dans ${ancien} (à supprimer à la main une fois l'essai fait)."
+  return "$ok"
+}
+
+etape_flutter_sdk() {
+  local code lic=0 delai="${FLUTTER_DELAI_S:-1200}" sdkmanager="$SDK_ANDROID/cmdline-tools/latest/bin/sdkmanager" note_lic=""
+  # sdkmanager (--version, repli JDK 21) sous 120 s ici : la somme des délais internes tient sous le délai SSH (3600 s).
+  local SDK_DELAI_S="${SDK_DELAI_S:-120}"
+  NOTE_FLUTTER=""
+  if [ "$SIMULER" = 1 ]; then
+    repondre a_faire "Simulation : téléchargerait le manifeste officiel ${URL_FLUTTER_MANIFESTE}, puis l'archive de Flutter ${V_FLUTTER} (canal ${V_FLUTTER_CANAL}) vérifiée par son SHA-256 avant extraction dans ${FLUTTER_SDK}, lancerait flutter precache --android, accepterait les licences Android puis écrirait ${MARQUEUR_FLUTTER}."
+  fi
+  refuser_root
+  [[ $V_FLUTTER =~ $MOTIF_VERSION_FLUTTER ]] && [ "$V_FLUTTER_CANAL" = stable ] \
+    || repondre bloque "Version de Flutter épinglée mal formée : rien n'a été installé."
+  # Une session SSH tuée en cours de téléchargement laisse son dossier temporaire : on le retire.
+  rm -rf "$HOME"/.flutter-sdk.telechargement.* 2>/dev/null
+  if flutter_pret; then
+    repondre fait "Flutter ${V_FLUTTER} déjà en place dans ${FLUTTER_SDK} (marqueur à jour)."
+  fi
+  if [ -L "$FLUTTER_SDK" ]; then
+    repondre bloque "${FLUTTER_SDK} est un lien symbolique : refusé (il serait monté chez les agents). Rien n'a été modifié."
+  fi
+  android_sdk_pret || repondre a_faire "Installez d'abord la capacité android-build (étape android_build) : Flutter pour Android s'appuie sur le SDK Android de l'hôte ${SDK_ANDROID}. Rien n'a été installé."
+  exiger_disque "$SEUIL_FLUTTER_GO"
+  assurer_paquets curl xz-utils git || repondre bloque "Installation de curl, xz-utils et git impossible."
+  mkdir -p "$HOME/.myiafactory" || repondre bloque "Dossier ~/.myiafactory non créable."
+  rm -f "$MARQUEUR_FLUTTER"
+  if ! flutter_version_ok; then
+    installer_archive_flutter || repondre bloque "${ECHEC_FLUTTER} Rien n'a été installé."
+  fi
+  flutter_hote "$delai" precache --android --universal --no-ios --no-web --no-linux --no-windows --no-macos --no-fuchsia >/dev/null 2>&1
+  code=$?
+  if [ "$code" = 124 ]; then
+    repondre bloque "Délai dépassé (${delai} s) pour flutter precache : artefacts Android de Flutter incomplets, à refaire.${NOTE_FLUTTER}"
+  elif [ "$code" != 0 ]; then
+    repondre bloque "flutter precache --android a échoué (code ${code}) : artefacts Android de Flutter non téléchargés.${NOTE_FLUTTER}"
+  fi
+  # Licences Android (déjà acceptées par android_build d'ordinaire) : un échec n'est qu'un avertissement.
+  if [ -x "$sdkmanager" ] && preparer_jdk_sdkmanager; then
+    yes 2>/dev/null | sdk_cmd_delai "${SDK_DELAI_LICENCE_S:-120}" "$sdkmanager" --sdk_root="$SDK_ANDROID" --licenses >/dev/null 2>&1
+    lic=${PIPESTATUS[1]}
+    [ "$lic" = 0 ] || note_lic=" Avertissement : sdkmanager --licenses a échoué (code ${lic}) ; les licences acceptées par android_build restent valables."
+  else
+    note_lic=" Licences Android non revues ici (sdkmanager de ${SDK_ANDROID} absent ou inutilisable) : celles d'android_build valent."
+  fi
+  if [ ! -e "$FLUTTER_SDK/bin/cache/lockfile" ] && [ ! -L "$FLUTTER_SDK/bin/cache/lockfile" ]; then
+    : > "$FLUTTER_SDK/bin/cache/lockfile" 2>/dev/null || repondre bloque "Fichier de verrou ${FLUTTER_SDK}/bin/cache/lockfile non créable."
+  fi
+  [ -f "$FLUTTER_SDK/bin/cache/lockfile" ] && [ ! -L "$FLUTTER_SDK/bin/cache/lockfile" ] \
+    || repondre bloque "${FLUTTER_SDK}/bin/cache/lockfile n'est pas un fichier ordinaire : refusé."
+  [ -x "$FLUTTER_SDK/bin/cache/dart-sdk/bin/dart" ] || repondre bloque "Dart embarqué absent de ${FLUTTER_SDK}/bin/cache/dart-sdk après precache."
+  flutter_version_ok || repondre bloque "Flutter inutilisable après l'installation (flutter --version --machine ne dit pas ${V_FLUTTER}).${NOTE_FLUTTER}"
+  if ! { printf '%s\n' "$EMPREINTE_FLUTTER" > "$MARQUEUR_FLUTTER.tmp.$$" && mv -f "$MARQUEUR_FLUTTER.tmp.$$" "$MARQUEUR_FLUTTER"; }; then
+    rm -f "$MARQUEUR_FLUTTER.tmp.$$"
+    repondre bloque "Marqueur ${MARQUEUR_FLUTTER} non écrit."
+  fi
+  repondre fait "Flutter ${V_FLUTTER} installé dans ${FLUTTER_SDK} (archive officielle vérifiée par SHA-256, artefacts Android préchargés) ; marqueur écrit.${note_lic}${NOTE_FLUTTER}"
+}
+
 # --- Unity CLI -------------------------------------------------------------
 
 # Étape unity_cli : l'outil officiel Unity CLI seulement, installé pour l'utilisateur dans ~/.local/bin/unity. Le script
@@ -973,6 +1162,7 @@ case "$ETAPE" in
   emulateur_image) etape_emulateur_image ;;
   agent_image) etape_agent_image ;;
   tests_image) etape_tests_image ;;
+  flutter_sdk) etape_flutter_sdk ;;
   unity_cli) etape_unity_cli ;;
   etat) etape_etat ;;
 esac

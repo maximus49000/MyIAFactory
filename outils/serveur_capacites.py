@@ -79,6 +79,12 @@ _CATALOGUE = {
     "tests-image": Capacite(
         "tests-image", "Image des campagnes de tests (conteneur sans réseau ni secret)", ("base",), "tests_image",
         "test -s ~/.myiafactory/tests-image.version", 1.0, 6),
+    # SDK Flutter de l'HÔTE (~/flutter-sdk, version épinglée de versions.json), monté en lecture seule dans le conteneur des
+    # agents d'un projet Flutter ; Flutter pour Android s'appuie sur le SDK Android de l'hôte (android-build). Le marqueur
+    # porte la version : une autre version épinglée le rend périmé (MARQUEURS de serveur_installation).
+    "flutter-sdk": Capacite(
+        "flutter-sdk", "Flutter (SDK de l'hôte, en lecture seule chez les agents)", ("android-build",), "flutter_sdk",
+        "test -s ~/.myiafactory/flutter-sdk.version && test -x ~/flutter-sdk/bin/flutter", 3.0, 12),
     # Étape humaine : le jeton de l'abonnement est enregistré UNE fois par le Directeur ; la sonde ne lit jamais son contenu
     # (droits du dossier et du fichier, fichier non vide).
     "agent-abonnement": Capacite(
@@ -104,6 +110,8 @@ _BESOINS = {
     # un agent du projet tourne sur le serveur : seul (branche et rapport) ou pilote (il conduit l'émulateur par le pont fermé)
     "agent-serveur": ("agent", "agent-abonnement"),
     "agent-pilote": ("agent", "agent-abonnement", "emulateur-image"),
+    # un agent d'un projet Flutter (pubspec.yaml qui dépend de flutter, vu sur le poste) : en plus, le SDK Flutter de l'hôte
+    "agent-flutter": ("agent", "agent-abonnement", "flutter-sdk"),
     # les campagnes de tests d'un projet routées au serveur (`lancer.py tests …`) tournent dans l'image de tests
     "tests-serveur": ("tests-image",),
 }

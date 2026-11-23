@@ -437,6 +437,30 @@ class TestDepartCommandes(AvecProjet):
         self.assertIn("serveur : hors ligne", r["raison"])
         self.assertEqual(r["raison"], "serveur : hors ligne ; local : aucune fiche libre ; cloud : 0 place")
 
+    def flutter(self):
+        """Ce projet devient un projet Flutter (pubspec.yaml d'un sous-dossier qui dépend de flutter)."""
+        chemin = self.factory.resolve()
+        projet = chemin.parent.parent if chemin.parent.name == ".factory" else chemin.parent
+        (projet / "android_app").mkdir(exist_ok=True)
+        (projet / "android_app" / "pubspec.yaml").write_text("name: x\ndependencies:\n  flutter:\n    sdk: flutter\n",
+                                                            encoding="utf-8")
+
+    def test_projet_flutter_sans_flutter_sdk_retombe_au_poste_avec_la_raison(self):
+        self.fiche_serveur()
+        self.regler(agents_serveur_max=1, ordre_lieux=["serveur", "local", "cloud"])
+        self.serveur({"agent": "presente", "agent-abonnement": "presente"})
+        self.assertEqual(self.ok("agent-libre", entree={"role": "dev"})["agent"], "srv-1")     # non Flutter : inchangé
+        self.flutter()
+        self.assertTrue(outil.serveur_hors_ligne(besoin="agent-flutter"))
+        self.assertFalse(outil.serveur_hors_ligne())
+        self.assertEqual(self.ok("agent-libre", entree={"role": "dev"})["agent"], "dev-1")     # le lieu suivant
+        self.ok("tache", entree={"titre": "A", "colonne": "dev", "agent": "dev-1"})
+        r = self.ok("agent-libre", entree={"role": "dev"})
+        self.assertIsNone(r["agent"])
+        self.assertIn("serveur : flutter-sdk absent du serveur", r["raison"])
+        self.serveur({"agent": "presente", "agent-abonnement": "presente", "flutter-sdk": "presente"})
+        self.assertEqual(self.ok("agent-libre", entree={"role": "dev"})["agent"], "srv-1")
+
     def test_commande_ordre_par_metier_l_emporte(self):
         self.fiche_serveur()
         self.regler(agents_serveur_max=1, ordre_lieux=["serveur", "local", "cloud"],

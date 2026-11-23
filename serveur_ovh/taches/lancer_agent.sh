@@ -42,6 +42,13 @@
 #   conteneur parti avec sortie/fin.json -> terminee, ok (le code de claude est dans fin.json ; "echeance": true -> limite),
 #   sans -> echouee, erreur ; sortie/ au-delà de LIMITE_SORTIE_KO, travail/ + maison/ au-delà de TRAVAIL_MAX_KO (sondages du
 #   en taille apparente, pas des quotas), moins de LIBRE_MIN_KO libres sur le disque -> terminee, limite.
+# Flutter : « "flutter": true » dans demande.json (écrit par le poste quand le projet a un pubspec.yaml qui dépend de
+#   flutter ; une seule clé, true ou false, sinon refusé ; absente = false) -> ~/flutter-sdk (capacité flutter-sdk, exigée :
+#   dossier ordinaire, bin/flutter, bin/cache/lockfile, marqueur ~/.myiafactory/flutter-sdk.version) monté EN LECTURE SEULE
+#   sur /opt/flutter-sdk, un fichier de verrou PROPRE à la tâche (~/taches/<id>/flutter-verrou, vide) monté par-dessus
+#   /opt/flutter-sdk/bin/cache/lockfile (seul fichier que flutter écrit dans son SDK), ~/android-sdk en lecture seule sur
+#   /opt/android-sdk s'il existe, et -e AGENT_FLUTTER=1 (l'entrée pose alors PATH, FLUTTER_ROOT, PUB_CACHE sous /maison,
+#   ANDROID_HOME, CI=true et FLUTTER_SUPPRESS_ANALYTICS : valeurs fixes). Aucun autre droit : mêmes durcissements.
 # Durée : duree_s (argument 3) fait foi ; elle est passée au conteneur (-e AGENT_DUREE_S) : l'échéance interne de l'entrée
 #   (duree_s - 120 s) et celle du veilleur partent de la même valeur, quoi que porte limites.duree_s dans demande.json.
 # Hôte exigé : kernel.yama.ptrace_scope >= 1 (lu dans /proc/sys/kernel/yama/ptrace_scope ; 0 -> echouee, rien ne démarre ;
@@ -78,6 +85,7 @@ MOTIF_REPREND_NUL='"reprend"[[:space:]]*:[[:space:]]*null'
 MOTIF_PROJET='"projet"[[:space:]]*:[[:space:]]*"([^"\\]{1,200})"'
 MOTIF_TYPE_EMULATION='"type"[[:space:]]*:[[:space:]]*"emulation"'
 MOTIF_ECHEANCE='"echeance"[[:space:]]*:[[:space:]]*true'
+MOTIF_FLUTTER='"flutter":[[:space:]]*(true|false)[[:space:]]*[,}]'
 PTRACE_SCOPE=/proc/sys/kernel/yama/ptrace_scope    # lu seulement (jamais modifié ici)
 if [ -n "${ENVELOPPE_PTRACE_SCOPE:-}" ]; then PTRACE_SCOPE="$ENVELOPPE_PTRACE_SCOPE"; fi                           # tests
 
@@ -397,6 +405,28 @@ if [ -n "$REPREND" ]; then
     fin_erreur "Reprise refusée : la tâche $REPREND n'est pas une tâche d'agent du même projet."
 fi
 
+# Flutter : « "flutter": true|false » de demande.json (écrit par le poste) ; une clé en double ou une autre valeur est
+# refusée ; absente : false. Le SDK de l'hôte doit être en place (capacité flutter-sdk) AVANT de prendre une place.
+FLUTTER=0
+FLUTTER_SDK="$HOME/flutter-sdk"
+SDK_ANDROID="$HOME/android-sdk"
+reste="${demande//\"flutter\":/}"
+occurrences=$(( (${#demande} - ${#reste}) / 10 ))
+if [ "$occurrences" -gt 1 ]; then fin_erreur "demande.json : clé flutter en double."; fi
+if [ "$occurrences" = 1 ]; then
+  if [[ $demande =~ $MOTIF_FLUTTER ]]; then
+    [ "${BASH_REMATCH[1]}" = true ] && FLUTTER=1
+  else
+    fin_erreur "demande.json : flutter mal formé (true ou false)."
+  fi
+fi
+if [ "$FLUTTER" = 1 ]; then
+  [ -d "$FLUTTER_SDK" ] && [ ! -L "$FLUTTER_SDK" ] && [ -x "$FLUTTER_SDK/bin/flutter" ] &&
+    [ -f "$FLUTTER_SDK/bin/cache/lockfile" ] && [ ! -L "$FLUTTER_SDK/bin/cache/lockfile" ] &&
+    [ -s "$HOME/.myiafactory/flutter-sdk.version" ] ||
+    fin_erreur "Flutter absent du serveur (~/flutter-sdk incomplet) : installez la capacité flutter-sdk (lancer.py plateforme serveurs installer <id> agent-flutter --accord)."
+fi
+
 # Places : les PLACES_MAX verrous sont tous essayés. Un verrou tenu = un agent qui tourne ; la place prise est le premier
 # verrou libre de rang <= places, et seulement si moins de <places> agents tournent (places abaissé pendant que des agents
 # tiennent les places 3 et 4 : jamais dépassé). Un verrou libre essayé est relâché aussitôt (descripteur 9).
@@ -444,6 +474,15 @@ COMMANDE=(run --pull never -d --rm --name "tache-$ID" --label "$GENRE" --user "$
   -v "$DOSSIER/entree:/entree:ro" -v "$DOSSIER/travail:/travail" -v "$DOSSIER/maison:/maison" -v "$DOSSIER/sortie:/sortie"
   -v "$JETON:/run/identifiants/jeton:ro")
 if [ "$MODE" = pilote ]; then COMMANDE+=(-v "$DOSSIER/pont:/pont" -v "$DOSSIER/outil:/outil:ro"); fi
+if [ "$FLUTTER" = 1 ]; then                        # --mount : une source absente est une erreur, jamais créée par root
+  rm -f -- "$DOSSIER/flutter-verrou"
+  : > "$DOSSIER/flutter-verrou" || echec "Fichier de verrou de Flutter non créable (~/taches/$ID/flutter-verrou)."
+  COMMANDE+=(--mount "type=bind,src=$FLUTTER_SDK,dst=/opt/flutter-sdk,readonly"
+    --mount "type=bind,src=$DOSSIER/flutter-verrou,dst=/opt/flutter-sdk/bin/cache/lockfile" -e AGENT_FLUTTER=1)
+  if [ -d "$SDK_ANDROID" ] && [ ! -L "$SDK_ANDROID" ]; then
+    COMMANDE+=(--mount "type=bind,src=$SDK_ANDROID,dst=/opt/android-sdk,readonly")
+  fi
+fi
 COMMANDE+=("$IMAGE" entree-agent)
 if ! dk 120 "${COMMANDE[@]}" >/dev/null 2>"$DOSSIER/docker-run.log"; then
   dk 30 rm -f "tache-$ID" >/dev/null 2>&1          # un docker run figé (délai) a pu laisser un conteneur à demi créé

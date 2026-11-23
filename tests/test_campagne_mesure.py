@@ -19,6 +19,21 @@ from installation import mise_en_place  # noqa: E402
 from moteur import cloud  # noqa: E402
 
 
+def garder_le_poste(test, autres=()):
+    """Aucun test ne touche la vraie file ni le vrai verrou du poste (un test qui oubliait `attentes=` attendait derrière
+    les vraies campagnes, sans fin) : les fonctions de `campagne` qui les lisent ou les écrivent refusent ces chemins."""
+    reels = {Path(p).resolve() for p in (campagne.ATTENTES, campagne.VERROU, *autres)}
+    for nom in ("_file", "_noter_l_attente", "_oublier_l_attente", "prendre", "liberer"):
+        vrai = getattr(campagne, nom)
+
+        def garde(chemin, *a, _vrai=vrai, _nom=nom, **k):
+            if Path(chemin).resolve() in reels:
+                raise AssertionError(f"campagne.{_nom} touche le vrai {chemin}")
+            return _vrai(chemin, *a, **k)
+        setattr(campagne, nom, garde)
+        test.addCleanup(setattr, campagne, nom, vrai)
+
+
 class Enregistreur:
     def __init__(self, lever=False):
         self.appels, self.lever = [], lever
@@ -36,6 +51,7 @@ class TestExecuterMesure(unittest.TestCase):
         self.verrou = Path(self._t.name) / "tests-en-cours.json"
         self.attentes = Path(self._t.name) / "tests-en-attente"
         self.temps = [0.0]
+        garder_le_poste(self)
 
     def dormir(self, s):
         self.temps[0] += s

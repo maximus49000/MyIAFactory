@@ -11,6 +11,21 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "outils"))
 import campagne  # noqa: E402
 
 
+def garder_le_poste(test, autres=()):
+    """Aucun test ne touche la vraie file ni le vrai verrou du poste (un test qui oubliait `attentes=` attendait derrière
+    les vraies campagnes, sans fin) : les fonctions de `campagne` qui les lisent ou les écrivent refusent ces chemins."""
+    reels = {Path(p).resolve() for p in (campagne.ATTENTES, campagne.VERROU, *autres)}
+    for nom in ("_file", "_noter_l_attente", "_oublier_l_attente", "prendre", "liberer"):
+        vrai = getattr(campagne, nom)
+
+        def garde(chemin, *a, _vrai=vrai, _nom=nom, **k):
+            if Path(chemin).resolve() in reels:
+                raise AssertionError(f"campagne.{_nom} touche le vrai {chemin}")
+            return _vrai(chemin, *a, **k)
+        setattr(campagne, nom, garde)
+        test.addCleanup(setattr, campagne, nom, vrai)
+
+
 class TestCampagne(unittest.TestCase):
     def setUp(self):
         self._t = tempfile.TemporaryDirectory()
@@ -18,6 +33,7 @@ class TestCampagne(unittest.TestCase):
         self.verrou = Path(self._t.name) / "tests-en-cours.json"
         self.attentes = Path(self._t.name) / "tests-en-attente"
         self.dits, self.sommes = [], []
+        garder_le_poste(self)
 
     def tour(self, lister=lambda: [], attendre=True, dormir=None):
         return campagne.attendre_son_tour("skill", attendre=attendre, verrou=self.verrou, lister=lister,
@@ -144,7 +160,7 @@ class TestCampagne(unittest.TestCase):
             raise OSError("introuvable")
         with self.assertRaises(OSError):
             campagne.executer(["x"], verrou=self.verrou, lister=lambda: [], dormir=self.sommes.append,
-                              dire=lambda t, **k: None, lancer=lancer)
+                              dire=lambda t, **k: None, lancer=lancer, attentes=self.attentes)
         self.assertFalse(self.verrou.exists())
 
     def test_la_ligne_de_commande_exige_une_commande_apres_les_tirets(self):
@@ -153,6 +169,14 @@ class TestCampagne(unittest.TestCase):
         self.assertEqual(campagne.main(["--dossier", "front", "--", "npx", "vitest", "run"],
                                        executer=lambda c, dossier=None, attendre=True: vu.append((c, dossier)) or 4), 4)
         self.assertEqual(vu, [(["npx", "vitest", "run"], "front")])
+
+    def test_garde_la_vraie_file_et_le_vrai_verrou(self):
+        with self.assertRaises(AssertionError):
+            campagne.executer(["x"], verrou=self.verrou, lister=lambda: [], dormir=self.sommes.append,
+                              dire=lambda t, **k: None, lancer=lambda c, d: 0)          # sans attentes= : la vraie file
+        with self.assertRaises(AssertionError):
+            campagne.attendre_son_tour("skill", lister=lambda: [], dormir=self.sommes.append, attentes=self.attentes)
+
 
 if __name__ == "__main__":
     unittest.main()

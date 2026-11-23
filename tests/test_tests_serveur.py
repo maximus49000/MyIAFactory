@@ -13,9 +13,25 @@ from types import SimpleNamespace
 RACINE = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(RACINE / "outils"))
 sys.path.insert(0, str(RACINE))
+import campagne  # noqa: E402
 import serveur_tache  # noqa: E402
 import tests_instantane  # noqa: E402
 import tests_serveur  # noqa: E402
+
+
+def garder_le_poste(test, autres=(tests_serveur.ATTENTES_SERVEUR,)):
+    """Aucun test ne touche la vraie file ni le vrai verrou du poste (un test qui oubliait `attentes=` attendait derrière
+    les vraies campagnes, sans fin) : les fonctions de `campagne` qui les lisent ou les écrivent refusent ces chemins."""
+    reels = {Path(p).resolve() for p in (campagne.ATTENTES, campagne.VERROU, *autres)}
+    for nom in ("_file", "_noter_l_attente", "_oublier_l_attente", "prendre", "liberer"):
+        vrai = getattr(campagne, nom)
+
+        def garde(chemin, *a, _vrai=vrai, _nom=nom, **k):
+            if Path(chemin).resolve() in reels:
+                raise AssertionError(f"campagne.{_nom} touche le vrai {chemin}")
+            return _vrai(chemin, *a, **k)
+        setattr(campagne, nom, garde)
+        test.addCleanup(setattr, campagne, nom, vrai)
 
 SERVEUR = SimpleNamespace(id="ovh-1", nom="OVH", hote="203.0.113.7", utilisateur="ubuntu",
                           cle="C:/Users/x/.ssh/id_ed25519_myiafactory")
@@ -35,13 +51,19 @@ class FauxSsh:
 
     def __init__(self, depots=(), sessions=()):
         self.depots, self.sessions = list(depots), list(sessions)
-        self.appels_octets, self.appels_flux = [], []
+        self.appels_octets, self.appels_flux, self.nettoyages = [], [], []
 
-    def executer_octets(self, hote, commande, cle, entree=None, delai=60):
-        donnees = entree.read() if hasattr(entree, "read") else entree
+    def executer_octets(self, hote, commande, cle, entree=None, delai=60, _plus=()):
+        if entree is None:                      # nettoyage au mieux
+            self.nettoyages.append(commande)
+            return 0, b"", ""
+        donnees = entree.read()
         self.appels_octets.append({"hote": hote, "commande": commande, "cle": cle, "octets": donnees, "delai": delai,
-                                   "chemin": getattr(entree, "name", None)})
-        return self.depots.pop(0) if self.depots else (0, b"", "")
+                                   "plus": tuple(_plus)})
+        r = self.depots.pop(0) if self.depots else (0, b"", "")
+        if isinstance(r, BaseException):
+            raise r
+        return r
 
     def executer_en_flux(self, hote, commande, cle, premiere_ligne, sortie, sur_attente=None, delai_connexion=30,
                          popen=None, sortie_erreur=None, delai_total=None, delai_silence=None):
@@ -59,15 +81,16 @@ class FauxSsh:
 class FauxInstantane:
     HorsLimites = tests_instantane.HorsLimites
 
-    def __init__(self, hors_limites=None, ecrire_leve=None):
+    def __init__(self, hors_limites=None, ecrire_leve=None, ecartes=(), deps=None):
         self.hors_limites, self.ecrire_leve = hors_limites, ecrire_leve
+        self.ecartes, self.deps = list(ecartes), deps
         self.destinations = []
         self.executables_passes = None
 
     def lister(self, racine, git=None):
         if self.hors_limites:
             raise tests_instantane.HorsLimites(self.hors_limites)
-        return ["a.py", "outils/x.py"], []
+        return ["a.py", "outils/x.py"], list(self.ecartes)
 
     def executables(self, racine, git=None):
         return {"outils/x.py"}
@@ -76,12 +99,14 @@ class FauxInstantane:
         self.destinations.append(destination.name)
         self.executables_passes = set(executables or ())
         destination.write(b"un morceau d'archive")
+        if isinstance(self.ecrire_leve, BaseException):
+            raise self.ecrire_leve
         if self.ecrire_leve:
             raise tests_instantane.HorsLimites(self.ecrire_leve)
         return 2, 20
 
     def empreinte_verrou_node(self, racine):
-        return None
+        return self.deps
 
 
 class Poste:
@@ -106,6 +131,7 @@ class Base(unittest.TestCase):
         self.dits = []
         self.mur = [1_000_000.0]
         self.instantane = FauxInstantane()
+        garder_le_poste(self)
 
     def lancer(self, ssh, commande=("py", "-3.12", "-m", "unittest"), choisir=None, **k):
         def choisir_defaut(dossier, requises):
@@ -116,7 +142,7 @@ class Base(unittest.TestCase):
             horloge=lambda: 50.0, maintenant=lambda: self.mur[0], dire=lambda *a, **kw: self.dits.append(" ".join(a)),
             choisir=choisir or choisir_defaut, instantane=self.instantane, projet_de=lambda d: ("projet-a", Path(d)),
             injoignable=self.injoignable, attentes=self.attentes, sortie=io.BytesIO(), sortie_erreur=io.BytesIO(),
-            nouvel_id=lambda: ID)
+            nouvel_id=lambda: ID, dormir=lambda s: None)
         options.update(k)
         return tests_serveur.executer(list(commande), **options)
 
@@ -142,11 +168,17 @@ class TestRoute(Base):
         self.assertEqual(self.lancer(ssh, commande=("py", "-3.12", "outils/x.py", "a b;rm -rf ~")), 0)
         depot = ssh.appels_octets[0]
         self.assertEqual(depot["hote"], "ubuntu@203.0.113.7")
-        self.assertIn(f"install -d -m 700 \"$HOME/tests/{ID}/entree\"", depot["commande"])
-        self.assertIn(f"\"$HOME/tests/{ID}/entree/entree.tar\"", depot["commande"])
+        self.assertIn(f"umask 077 && mkdir -p -- \"$HOME/tests\" && {{ mkdir -m 700 -- \"$HOME/tests/{ID}\" ||",
+                      depot["commande"])
+        self.assertIn(f"set -C && cat > \"$HOME/tests/{ID}\"/entree/entree.tar", depot["commande"])
         self.assertEqual(depot["octets"], b"un morceau d'archive")
+        self.assertIn("ServerAliveInterval=15", depot["plus"])
+        self.assertIn("ServerAliveCountMax=4", depot["plus"])
+        self.assertEqual(depot["delai"], 120)
         flux = ssh.appels_flux[0]
-        self.assertEqual(flux["commande"], f"{tests_serveur.ENVELOPPE_DISTANTE} {ID} 2 4 8192 1800 projet-a -")
+        self.assertEqual(flux["commande"],
+                         f"\"{tests_serveur.ENVELOPPE_DISTANTE}\" {ID} 2 4 8192 1800 projet-a -")
+        self.assertTrue(tests_serveur.ENVELOPPE_DISTANTE.startswith("$HOME/"))
         self.assertEqual(json.loads(flux["premiere_ligne"]), ["python3", "outils/x.py", "a b;rm -rf ~"])
         self.assertIsNone(flux["delai_total"])
         self.assertEqual(self.instantane.executables_passes, {"outils/x.py"})
@@ -155,8 +187,7 @@ class TestRoute(Base):
         self.assertFalse(os.path.abspath(chemin).startswith(os.path.abspath(self.dossier)))
         self.assertFalse(os.path.exists(chemin))
         self.assertFalse(os.path.exists(os.path.dirname(chemin)))
-        # la clé n'apparaît jamais dans ce qui est dit
-        self.assertFalse(any("id_ed25519" in d for d in self.dits))
+        self.assertEqual(ssh.nettoyages, [])
 
     def test_sortie_d_erreur_montree_sans_prefixe_et_mesuree(self):
         def session(sortie, sur_attente, popen, sortie_erreur):
@@ -336,6 +367,217 @@ class TestRepli(Base):
         self.assertEqual(len(lignes), 1)
         self.assertTrue(lignes[0].startswith("Serveur "))
         self.assertTrue(lignes[0].endswith(": tests au poste (une campagne à la fois)."))
+
+
+class TestCorrectifs(Base):
+    def session(self, **champs):
+        return dict({"code": 0, "octets": 0, "fin": "", "fin_serveur": (0, 100, 110, 0), "erreur": "", "code_ssh": 0,
+                     "raison": "fin", "refus": None}, **champs)
+
+    def test_r4_seulement_si_rien_du_conteneur(self):
+        # rien reçu (connexion) : repli
+        ssh = FauxSsh(sessions=[{"code": 255, "fin_serveur": None, "code_ssh": 255, "raison": "connexion"}])
+        self.assertEqual(self.lancer(ssh), 0)
+        self.assertEqual(len(self.poste.appels), 1)
+        # seulement l'attente d'une place, aucun octet : repli
+        def attente_seule(sortie, sur_attente, popen, sortie_erreur):
+            sur_attente(1, 1)
+            return self.session(code=255, fin_serveur=None, code_ssh=255, raison="perdue")
+        self.assertEqual(self.lancer(FauxSsh(sessions=[attente_seule])), 0)
+        self.assertEqual(len(self.poste.appels), 2)
+
+    def test_session_perdue_apres_le_depart_ne_relance_rien(self):
+        def sortie_vue(sortie, sur_attente, popen, sortie_erreur):
+            sortie.write(b"debut\n")
+            return self.session(code=255, octets=6, fin_serveur=None, code_ssh=255, raison="perdue")
+
+        def erreur_vue(sortie, sur_attente, popen, sortie_erreur):
+            sortie_erreur.write(b"| test_a ... ok\n")
+            return self.session(code=255, fin_serveur=None, code_ssh=255, raison="perdue")
+        for session in (sortie_vue, erreur_vue):
+            with self.subTest(session=session.__name__):
+                if self.injoignable.exists():
+                    self.injoignable.unlink()
+                self.assertEqual(self.lancer(FauxSsh(sessions=[session])), 1)
+                self.assertEqual(self.poste.appels, [])
+                self.assertTrue(self.dit("rien n'est relancé"))
+                self.assertTrue(self.injoignable.exists())
+        self.assertEqual(self.notes, [])
+
+    def test_lecteur_d_erreur_encore_vivant(self):
+        # marque non validée (lecteur pas fini) : fin_serveur None, ssh 0 → jamais un succès, jamais de repli
+        ssh = FauxSsh(sessions=[{"code": 0, "octets": 50, "fin_serveur": None, "code_ssh": 0, "raison": "perdue"}])
+        self.assertEqual(self.lancer(ssh), 1)
+        self.assertEqual(self.poste.appels, [])
+
+    def test_refus_qui_replient(self):
+        for code in (78, 79, 125, 126, 127):
+            with self.subTest(code=code):
+                ssh = FauxSsh(sessions=[{"code": code, "fin_serveur": (code, 1, 2, 0), "refus": code}])
+                n = len(self.poste.appels)
+                self.assertEqual(self.lancer(ssh), 0)
+                self.assertEqual(len(self.poste.appels), n + 1)
+        self.assertEqual(self.notes, [])
+
+    def test_arrets_au_serveur_sans_repli_et_notes(self):
+        attendus = {74: "disque, inodes ou taille du dossier de travail", 130: "arrêtée au serveur (signal)",
+                    124: "délai dépassé au serveur", 1: "l'enveloppe a échoué"}
+        for code, texte in attendus.items():
+            with self.subTest(code=code):
+                self.dits.clear()
+                self.notes.clear()
+                ssh = FauxSsh(sessions=[{"code": code, "fin_serveur": (code, 100, 150, 0), "refus": code}])
+                self.assertEqual(self.lancer(ssh), code)
+                self.assertEqual(self.poste.appels, [])
+                self.assertTrue(self.dit(texte), self.dits)
+                self.assertEqual(len(self.notes), 1)
+                self.assertEqual(self.notes[0][1]["code"], code)
+                self.assertEqual(self.notes[0][1]["duree_s"], 50)
+
+    def test_refus_2_nettoie_le_dossier_distant(self):
+        ssh = FauxSsh(sessions=[{"code": 2, "fin_serveur": (2, 1, 2, 0), "refus": 2}])
+        self.assertEqual(self.lancer(ssh), 2)
+        self.assertEqual(ssh.nettoyages, [f"rm -rf -- \"$HOME/tests/{ID}\""])
+        self.assertEqual(self.notes, [])
+
+    def test_depot_refuse_nettoie_et_replie(self):
+        ssh = FauxSsh(depots=[(1, b"", "No space left on device")])
+        self.assertEqual(self.lancer(ssh), 0)
+        self.assertEqual(ssh.nettoyages, [f"rm -rf -- \"$HOME/tests/{ID}\""])
+        self.assertFalse(self.injoignable.exists())
+        self.assertEqual(ssh.appels_flux, [])
+
+    def test_identifiant_deja_pris_un_autre_est_tire(self):
+        ids = iter(["t20261123-101500-aaaa", "t20261123-101500-bbbb"])
+        ssh = FauxSsh(depots=[(73, b"", ""), (0, b"", "")])
+        self.assertEqual(self.lancer(ssh, nouvel_id=lambda: next(ids)), 0)
+        self.assertEqual(len(ssh.appels_octets), 2)
+        self.assertIn("t20261123-101500-bbbb", ssh.appels_flux[0]["commande"])
+        self.assertEqual(ssh.nettoyages, [])           # jamais l'effacement du dossier d'un autre
+
+        ssh = FauxSsh(depots=[(73, b"", "")] * 5)
+        self.assertEqual(self.lancer(ssh), 0)
+        self.assertEqual(len(ssh.appels_octets), 5)
+        self.assertEqual(ssh.appels_flux, [])
+        self.assertEqual(len(self.poste.appels), 1)
+
+    def test_messages_du_depot(self):
+        cas = [("@@@ WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED! @@@", "clé d'hôte changée"),
+               ("ubuntu@203.0.113.7: Permission denied (publickey).", "accès refusé")]
+        for erreur, texte in cas:
+            with self.subTest(texte=texte):
+                if self.injoignable.exists():
+                    self.injoignable.unlink()          # sinon le second essai est court-circuité par la mémoire
+                self.assertEqual(self.lancer(FauxSsh(depots=[(255, b"", erreur)])), 0)
+                self.assertTrue(self.dit(texte))
+
+    def test_ctrl_c_pendant_le_depot(self):
+        ssh = FauxSsh(depots=[(0xC000013A, b"", "")])
+        self.assertEqual(self.lancer(ssh), 130)
+        self.assertEqual(self.poste.appels, [])
+        self.assertEqual(ssh.appels_flux, [])
+        self.assertFalse(self.injoignable.exists())
+        self.assertFalse(os.path.exists(os.path.dirname(self.instantane.destinations[0])))
+
+    def test_interruption_pendant_instantane_ou_depot_efface_l_archive(self):
+        self.instantane = FauxInstantane(ecrire_leve=KeyboardInterrupt())
+        with self.assertRaises(KeyboardInterrupt):
+            self.lancer(FauxSsh())
+        self.assertFalse(os.path.exists(os.path.dirname(self.instantane.destinations[0])))
+        self.instantane = FauxInstantane()
+        with self.assertRaises(KeyboardInterrupt):
+            self.lancer(FauxSsh(depots=[KeyboardInterrupt()]))
+        self.assertFalse(os.path.exists(os.path.dirname(self.instantane.destinations[0])))
+        self.assertEqual(self.poste.appels, [])
+
+    def test_validations_avant_tout_envoi(self):
+        cas = [dict(places=5), dict(places=0), dict(places=True), dict(places="2"),
+               dict(nouvel_id=lambda: "../x"), dict(nouvel_id=lambda: f"{ID};rm"),
+               dict(projet_de=lambda d: ("../Projet", Path(d))), dict(projet_de=lambda d: None)]
+        for options in cas:
+            with self.subTest(options=options):
+                ssh = FauxSsh()
+                n = len(self.poste.appels)
+                self.assertEqual(self.lancer(ssh, **options), 0)
+                self.assertEqual(ssh.appels_octets + ssh.appels_flux, [])
+                self.assertEqual(len(self.poste.appels), n + 1)
+        for deps in ("zz", "0123456789abcdef; rm", "ABCDEF0123456789"):
+            with self.subTest(deps=deps):
+                self.instantane = FauxInstantane(deps=deps)
+                ssh = FauxSsh()
+                self.lancer(ssh)
+                self.assertEqual(ssh.appels_octets + ssh.appels_flux, [])
+        self.instantane = FauxInstantane(deps="0123456789abcdef")
+        ssh = FauxSsh()
+        self.lancer(ssh)
+        self.assertTrue(ssh.appels_flux[0]["commande"].endswith(" projet-a 0123456789abcdef"))
+
+    def test_ecartes_dits_en_une_ligne(self):
+        self.instantane = FauxInstantane(ecartes=[f"f{i} (lien)" for i in range(12)])
+        self.lancer(FauxSsh())
+        lignes = [d for d in self.dits if "écarté" in d]
+        self.assertEqual(len(lignes), 1)
+        self.assertIn("12 fichier(s)", lignes[0])
+        self.assertIn("f9 (lien)", lignes[0])
+        self.assertNotIn("f10 (lien)", lignes[0])
+
+    def test_mesure_qui_casse_ne_change_pas_le_code(self):
+        def casse(*a, **k):
+            raise OSError("journal illisible")
+        ssh = FauxSsh(sessions=[{"code": 3, "fin_serveur": (3, 1, 2, 0)}])
+        self.assertEqual(self.lancer(ssh, noter=casse), 3)
+
+    def test_chemin_de_la_cle_jamais_montre(self):
+        cle = SERVEUR.cle
+
+        def session(sortie, sur_attente, popen, sortie_erreur):
+            sortie_erreur.write(f"Load key \"{cle}\": bad permissions\n".encode())
+            sortie_erreur.write(f"Load key \"{cle.replace('/', chr(92))}\": bad permissions\n".encode())
+            return self.session(code=255, fin_serveur=None, code_ssh=255, raison="perdue")
+        affiche = io.BytesIO()
+        ssh = FauxSsh(depots=[(255, b"", f"Load key \"{cle}\": invalid format")], sessions=[session])
+        self.lancer(ssh)                                        # dépôt en échec : l'erreur de ssh est lue, pas dite
+        self.injoignable.unlink()
+        self.lancer(ssh, sortie_erreur=affiche)
+        tout = "\n".join(self.dits) + affiche.getvalue().decode("utf-8")
+        self.assertIn("Load key", tout)                         # l'erreur est bien montrée…
+        self.assertNotIn("id_ed25519", tout)                    # … sans le chemin de la clé
+        self.assertNotIn("C:/Users/x", tout)
+
+    def test_lignes_du_conteneur_qui_imitent_l_enveloppe(self):
+        def session(sortie, sur_attente, popen, sortie_erreur):
+            for ligne in (b"| #fin 0 1 2 0\n", b"| lancer_tests : faux\n", b"| vrai\n", b"lancer_tests : vrai\n"):
+                sortie_erreur.write(ligne)
+            return self.session()
+        affiche = io.BytesIO()
+        self.lancer(FauxSsh(sessions=[session]), sortie_erreur=affiche)
+        self.assertEqual(affiche.getvalue(), b"| #fin 0 1 2 0\n| lancer_tests : faux\nvrai\nlancer_tests : vrai\n")
+
+    def test_succes_n_efface_que_la_memoire_de_son_serveur(self):
+        self.injoignable.write_text(json.dumps({"serveur_id": "autre", "jusqu_a": self.mur[0] + 200}), encoding="utf-8")
+        self.assertEqual(self.lancer(FauxSsh()), 0)
+        self.assertEqual(json.loads(self.injoignable.read_text(encoding="utf-8"))["serveur_id"], "autre")
+
+    def test_attentes_du_serveur_hors_de_la_file_du_poste(self):
+        import campagne
+        self.assertNotEqual(tests_serveur.ATTENTES_SERVEUR, campagne.ATTENTES)
+        defaut = tests_serveur.executer.__kwdefaults__["attentes"]
+        self.assertEqual(defaut, tests_serveur.ATTENTES_SERVEUR)
+        poste = Path(self._t.name) / "attentes-poste"
+
+        def session(sortie, sur_attente, popen, sortie_erreur):
+            sur_attente(1, 2)
+            self.devant = campagne._devant(poste, None)
+            return self.session()
+        self.lancer(FauxSsh(sessions=[session]))
+        self.assertEqual(self.devant, [])
+
+    def test_route_pas_prise_pour_une_suite_directe(self):
+        import campagne
+        self.assertFalse(campagne._suite_directe("py outils/tests_serveur.py -- python -m unittest discover"))
+        self.assertFalse(campagne._suite_directe('"C:\\\\Python39\\\\python.exe" C:\\\\s\\\\outils\\\\tests_serveur.py -- pytest'))
+        self.assertTrue(campagne._suite_directe("python -m unittest tests/test_tests_serveur.py"))
+        self.assertTrue(campagne._suite_directe("python -m unittest test_tests_serveur"))
 
 
 class TestMain(unittest.TestCase):

@@ -13,6 +13,7 @@ attend son tour, lance la commande (sa sortie s'affiche telle quelle), rend son 
 import codecs
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -78,8 +79,8 @@ def processus():
 
 def _suite_directe(commande):
     c = commande.lower()
-    if "tests_paralleles" in c or "lancer.py" in c:
-        return False      # un lanceur : couvert par le verrou
+    if "tests_paralleles" in c or "lancer.py" in c or re.search(r"(^|[\s\\/\"'])tests_serveur\.py", c):
+        return False      # un lanceur (ou la route serveur, qui ne lance rien au poste) : couvert par le verrou
     return "unittest" in c or "pytest" in c or any(n in c for n in SUITES_NODE)
 
 

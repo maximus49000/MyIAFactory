@@ -372,8 +372,36 @@ def _lacher_laisse(p, ecrivain):
     _fermer(p.stdin)
 
 
+PAS_S = 0.2           # le fil principal n'attend jamais plus longtemps d'un coup : le Ctrl-C lui arrive tout de suite
+ARRET_S = 5           # après `terminate()`, délai avant `kill()`
+# Codes de ssh.exe tué par le Ctrl-C de la console (STATUS_CONTROL_C_EXIT, non signé et signé).
+CODES_CTRL_C = (0xC000013A, 0xC000013A - (1 << 32))
+
+
+def _attendre_fil(fil, delai=None):
+    """`join` par pas courts (jamais un blocage long du fil principal sous Windows) ; rend True si le fil a fini."""
+    fin = None if delai is None else time.monotonic() + delai
+    while fil.is_alive():
+        if fin is not None and time.monotonic() >= fin:
+            return False
+        fil.join(PAS_S if fin is None else max(0.0, min(PAS_S, fin - time.monotonic())))
+    return True
+
+
+def _attendre_processus(p, delai):
+    """`wait` par pas courts ; `subprocess.TimeoutExpired` une fois `delai` écoulé."""
+    fin = time.monotonic() + delai
+    while True:
+        try:
+            return p.wait(timeout=max(0.0, min(PAS_S, fin - time.monotonic())))
+        except subprocess.TimeoutExpired:
+            if time.monotonic() >= fin:
+                raise
+
+
 def _arreter(p, ecrivain):
-    """Ctrl-C : laisse fermée, `terminate()`, puis `kill()` après 5 s ; un second Ctrl-C ici tue ssh tout de suite."""
+    """Ctrl-C : laisse fermée D'ABORD, puis `terminate()`, puis `kill()` après 5 s (si l'écriture de la première ligne
+    est bloquée, `_lacher_laisse` tue ssh avant de fermer) ; un second Ctrl-C ici tue ssh tout de suite."""
     try:
         _lacher_laisse(p, ecrivain)
         try:
@@ -381,11 +409,11 @@ def _arreter(p, ecrivain):
         except OSError:
             pass
         try:
-            p.wait(timeout=5)
+            _attendre_processus(p, ARRET_S)
         except subprocess.TimeoutExpired:
             p.kill()
             try:
-                p.wait(timeout=5)
+                _attendre_processus(p, ARRET_S)
             except subprocess.TimeoutExpired:
                 pass
     except KeyboardInterrupt:
@@ -411,8 +439,9 @@ def executer_en_flux(hote, commande, cle, premiere_ligne, sortie, sur_attente=No
     entiers de `#fin` seulement si c'est la dernière ligne non vide de la sortie d'erreur ; `refus` = ce code seulement si
     la ligne non vide juste avant est exactement `#refus <même code>` (code rendu par l'enveloppe elle-même, jamais par
     les tests) ; `code` = celui de la marque s'il y en a une, 124 après un délai, sinon celui de ssh ; `raison` : "refus"
-    (marque + `#refus`), "fin" (marque : code des tests), "delai", "silence", "connexion" (ssh 255 sans rien reçu de
-    l'enveloppe) ou "perdue" (session finie sans marque)."""
+    (marque + `#refus`), "fin" (marque : code des tests), "delai", "silence", "interrompu" (ssh.exe tué par le Ctrl-C
+    de la console, code 130), "connexion" (ssh 255 sans rien reçu de l'enveloppe) ou "perdue" (session finie sans
+    marque). Un `KeyboardInterrupt` reçu ici est toujours relevé (jamais rendu en code)."""
     import campagne
     _verifier_hote(hote)
     if not isinstance(commande, str) or not commande.strip() or any(c in commande for c in "\r\n\0"):
@@ -422,7 +451,10 @@ def executer_en_flux(hote, commande, cle, premiere_ligne, sortie, sur_attente=No
     ligne = premiere_ligne[:-1] if premiere_ligne.endswith(b"\n") else premiere_ligne
     if not ligne.strip() or len(ligne) > PREMIERE_LIGNE_MAX or any(c in ligne for c in b"\r\n\0"):
         raise ValueError(f"Première ligne invalide : vide, sur plusieurs lignes ou plus de {PREMIERE_LIGNE_MAX} octets.")
-    args = ["ssh", *_options(cle), "-T", "-o", f"ConnectTimeout={max(1, min(int(delai_connexion), 30))}",
+    # LogLevel=ERROR en ligne de commande (prime sur ~/.ssh/config) : un `LogLevel VERBOSE/DEBUG` de l'utilisateur
+    # écrirait des lignes `debug1:` / `Transferred:` APRÈS `#fin`, qui ne serait plus la dernière ligne.
+    args = ["ssh", *_options(cle), "-T", "-o", "LogLevel=ERROR",
+            "-o", f"ConnectTimeout={max(1, min(int(delai_connexion), 30))}",
             "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=4", "--", hote, commande]
     try:
         p = popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -457,29 +489,45 @@ def executer_en_flux(hote, commande, cle, premiere_ligne, sortie, sur_attente=No
             else:
                 fini.wait(pas)
                 continue
+            _lacher_laisse(p, ecrivain)   # la laisse d'abord : l'enveloppe tue le conteneur
             try:
                 p.kill()
             except OSError:
                 pass
-            _lacher_laisse(p, ecrivain)
             return
+
+    relais = {}
+
+    def relayer():
+        try:
+            relais["fait"] = campagne.relayer(_Suivi(p.stdout, activite), sortie, garder=4096)
+        except BaseException as e:   # noqa: BLE001 — relevée dans le fil principal
+            relais["exception"] = e
 
     lecteur = threading.Thread(target=erreurs.lire, args=(p.stderr,), daemon=True)
     ecrivain = threading.Thread(target=ecrire, daemon=True)
+    relayeur = threading.Thread(target=relayer, daemon=True)
     lecteur.start()
     ecrivain.start()
+    relayeur.start()
+    # Le délai total court dès le départ, attente d'une place comprise ; seulement si l'appelant le donne.
     if delai_total is not None or delai_silence is not None:
         threading.Thread(target=surveiller, daemon=True).start()
     try:
-        octets, fin = campagne.relayer(_Suivi(p.stdout, activite), sortie, garder=4096)
-        lecteur.join(10)              # la sortie d'erreur finit avec ssh
+        # Les deux tuyaux sont lus dans des fils : le fil principal n'attend que par pas de 0,2 s (sous Windows, un
+        # `ReadFile` bloquant ne serait pas interrompu par le Ctrl-C).
+        _attendre_fil(relayeur)
+        if "exception" in relais:
+            raise relais["exception"]
+        octets, fin = relais["fait"]
+        _attendre_fil(lecteur, 10)    # la sortie d'erreur finit avec ssh
         _lacher_laisse(p, ecrivain)   # la laisse, seulement après la fin de la sortie standard
         try:
-            code_ssh = p.wait(timeout=10)
+            code_ssh = _attendre_processus(p, 10)
         except subprocess.TimeoutExpired:
             p.kill()
-            code_ssh = p.wait(timeout=10)
-        lecteur.join(2)
+            code_ssh = _attendre_processus(p, 10)
+        _attendre_fil(lecteur, 2)
     except BaseException:
         fini.set()
         _arreter(p, ecrivain)
@@ -492,6 +540,8 @@ def executer_en_flux(hote, commande, cle, premiere_ligne, sortie, sur_attente=No
         code, raison = fin_serveur[0], ("refus" if refus is not None else "fin")
     elif etat["coupure"] is not None:
         code, raison = 124, etat["coupure"]
+    elif code_ssh in CODES_CTRL_C:     # Ctrl-C de la console reçu par ssh.exe avant le KeyboardInterrupt de Python
+        code, raison = 130, "interrompu"
     else:
         code = code_ssh
         raison = "connexion" if code_ssh == 255 and octets == 0 and not erreurs.vu else "perdue"

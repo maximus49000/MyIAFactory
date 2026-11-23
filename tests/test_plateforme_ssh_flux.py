@@ -38,10 +38,11 @@ class FauxFlux:
 
 
 class FauxEntree:
-    def __init__(self, echec=None):
+    def __init__(self, echec=None, evenements=None):
         self.ecrit = b""
         self.closed = False
         self.echec = echec
+        self.evenements = evenements if evenements is not None else []
 
     def write(self, b):
         if self.echec is not None:
@@ -55,14 +56,54 @@ class FauxEntree:
         pass
 
     def close(self):
+        self.evenements.append("close")
         self.closed = True
 
 
+class EntreeTuyau:
+    """L'entrée de ssh sur un VRAI tuyau plein (personne ne lit) : `flush` bloque en tenant le verrou du tampon, et
+    `close` depuis un autre fil attendrait ce verrou. Le faux `kill` ferme le côté lecture (ssh mort), ce qui débloque."""
+
+    def __init__(self, evenements):
+        import io
+        import os
+        self.os = os
+        self.lecture, ecriture = os.pipe()
+        os.set_blocking(ecriture, False)
+        try:
+            while os.write(ecriture, b"x" * 4096):
+                pass
+        except BlockingIOError:
+            pass
+        os.set_blocking(ecriture, True)
+        self.f = io.BufferedWriter(io.FileIO(ecriture, "wb"))
+        self.evenements = evenements
+        self.closed = False
+
+    def write(self, b):
+        return self.f.write(b)
+
+    def flush(self):
+        self.f.flush()
+
+    def close(self):
+        self.evenements.append("close")
+        self.closed = True
+        self.f.close()
+
+    def fermer_lecture(self):
+        if self.lecture is not None:
+            self.os.close(self.lecture)
+            self.lecture = None
+
+
 class FauxProcessus:
-    def __init__(self, sortie=(), erreur=(), code=0, bloquer=False, tenace=False, echec_ecriture=None):
+    def __init__(self, sortie=(), erreur=(), code=0, bloquer=False, tenace=False, echec_ecriture=None,
+                 evenements=None):
         self.tue = threading.Event()
         bloc = self.tue if bloquer else None
-        self.stdin = FauxEntree(echec_ecriture)
+        self.evenements = evenements if evenements is not None else []
+        self.stdin = FauxEntree(echec_ecriture, self.evenements)
         self.stdout = FauxFlux(sortie, bloquer=bloc)
         self.stderr = FauxFlux(erreur, bloquer=bloc)
         self.code = code
@@ -81,11 +122,15 @@ class FauxProcessus:
         return self.returncode
 
     def terminate(self):
+        self.evenements.append("terminate")
         self.termine = True
         if not self.tenace:
             self.tue.set()
 
     def kill(self):
+        self.evenements.append("kill")
+        if isinstance(self.stdin, EntreeTuyau):
+            self.stdin.fermer_lecture()
         self.kill_appele = True
         self.code = 1                # comme Windows après TerminateProcess
         self.tue.set()
@@ -200,11 +245,70 @@ class TestFlux(unittest.TestCase):
 
     def test_interruption_tue_si_terminate_ne_suffit_pas(self):
         p = FauxProcessus([b"a"], [], bloquer=True, tenace=True)
-        with mock.patch.object(campagne, "relayer", side_effect=KeyboardInterrupt):
+        with mock.patch.object(plateforme_ssh, "ARRET_S", 0.05), \
+                mock.patch.object(campagne, "relayer", side_effect=KeyboardInterrupt):
             with self.assertRaises(KeyboardInterrupt):
                 lancer(p)
         self.assertTrue(p.termine)
         self.assertTrue(p.kill_appele)
+
+    def test_interruption_ordre_laisse_puis_terminate_puis_kill(self):
+        for tenace, attendu in ((True, ["close", "terminate", "kill"]), (False, ["close", "terminate"])):
+            with self.subTest(tenace=tenace):
+                p = FauxProcessus([b"a"], [], bloquer=True, tenace=tenace)
+                with mock.patch.object(plateforme_ssh, "ARRET_S", 0.05), \
+                        mock.patch.object(campagne, "relayer", side_effect=KeyboardInterrupt):
+                    with self.assertRaises(KeyboardInterrupt):
+                        lancer(p)
+                self.assertEqual(p.evenements, attendu)
+
+    def test_ctrl_c_arrive_vite_pendant_une_lecture_bloquee(self):
+        import _thread
+        p = FauxProcessus([], [], bloquer=True)          # aucune sortie : la lecture reste bloquée
+        minuterie = threading.Timer(0.05, _thread.interrupt_main)
+        t0 = time.monotonic()
+        minuterie.start()
+        try:
+            with self.assertRaises(KeyboardInterrupt):
+                lancer(p)
+        finally:
+            minuterie.cancel()
+        self.assertLess(time.monotonic() - t0, 2)         # pas les 5 s de la lecture bloquée
+        self.assertEqual(p.evenements[:2], ["close", "terminate"])
+
+    def test_code_ctrl_c_de_ssh_exe(self):
+        for code in (3221225786, -1073741510):
+            with self.subTest(code=code):
+                r, _, _ = lancer(FauxProcessus([b"moitie"], [b"| x\n"], code=code))
+                self.assertEqual((r["code"], r["raison"], r["code_ssh"]), (130, "interrompu", code))
+        r, _, _ = lancer(FauxProcessus([], [b"#fin 1 1 2 0\n"], code=3221225786))   # marque lue : elle fait foi
+        self.assertEqual((r["code"], r["raison"]), (1, "fin"))
+
+    def test_ecriture_bloquee_sur_tuyau_plein_tue_avant_de_fermer(self):
+        evenements = []
+        p = FauxProcessus([], [], code=255, evenements=evenements)
+        p.stdin = EntreeTuyau(evenements)
+        resultat = {}
+        fil = threading.Thread(target=lambda: resultat.update(r=lancer(p)[0]), daemon=True)
+        fil.start()
+        fil.join(5)
+        try:
+            self.assertFalse(fil.is_alive(), "interblocage : la laisse fermée pendant une écriture bloquée")
+            self.assertEqual(evenements[:2], ["kill", "close"])
+            self.assertIsNone(resultat["r"]["fin_serveur"])
+        finally:
+            p.stdin.fermer_lecture()
+
+    def test_delai_total_compte_aussi_l_attente_d_une_place(self):
+        p = FauxProcessus([], [], bloquer=True)
+        p.stderr.morceaux = [lambda: (p.tue.wait(0.01), b"#attente 1 2\n")[1]] * 200
+        vues = []
+        t0 = time.monotonic()
+        r, _, _ = lancer(p, delai_total=0.1, delai_silence=0.5, sur_attente=lambda a, b: vues.append(a))
+        self.assertLess(time.monotonic() - t0, 2)
+        self.assertEqual((r["code"], r["raison"]), (124, "delai"))
+        self.assertTrue(vues)
+        self.assertEqual(p.evenements[:2], ["close", "kill"])   # laisse d'abord, puis ssh tué
 
     def test_hote_invalide(self):
         popen = FauxPopen()
@@ -221,8 +325,10 @@ class TestFlux(unittest.TestCase):
         _, _, popen = lancer(FauxProcessus([], [b"#fin 0 1 2 0\n"]), delai_connexion=300)
         args, kw = popen.appels[0]
         for option in ("BatchMode=yes", "StrictHostKeyChecking=accept-new", "PasswordAuthentication=no",
-                       "ConnectTimeout=30", "ServerAliveInterval=15", "ServerAliveCountMax=4"):
+                       "ConnectTimeout=30", "ServerAliveInterval=15", "ServerAliveCountMax=4", "LogLevel=ERROR"):
             self.assertIn(option, args)
+            self.assertEqual(args[args.index(option) - 1], "-o")
+            self.assertLess(args.index(option), args.index("--"))
         self.assertNotIn("StrictHostKeyChecking=no", args)
         self.assertEqual(args[args.index("-i") + 1], str(Path("cle")))
         self.assertEqual(args[-3:], ["--", HOTE, COMMANDE])

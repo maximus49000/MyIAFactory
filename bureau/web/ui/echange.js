@@ -7,11 +7,17 @@
 import {el} from "./dom.js";
 import {blocOutil} from "./outils.js";
 import {verifierCreation, motsInterdits} from "./verifs.js";
-import {etiquettePart, etiquettePlage, avecPart, marquerPart} from "./abonnement.js";
+import {etiquettePart, etiquettePlage, avecPart, marquerPart, creerBoutonConnexion} from "./abonnement.js";
 import {etiquetteCO2} from "./empreinte.js";
 
 export const DELAI_RELECTURE_MS = 2500;
 const plein = (t) => typeof t === "string" && t.trim() !== "";
+
+// Vrai si l'erreur d'un tour dit que la connexion de Claude Code est perdue ou expirée : la page offre alors le bouton
+// « Se connecter » (`claude auth login`) à côté de « Renvoyer ».
+export function erreurDeConnexion(texte) {
+  return /failed to authenticate|authentication_failed|claude auth login|\/login|not logged in|login reached its time limit|connexion (expir|perdue)/i.test(String(texte ?? ""));
+}
 
 // --- Les corps des requêtes.
 
@@ -27,6 +33,7 @@ export function corpsInfos(champs, id) {
   const corps = {parent: champs.parent.trim(), nom: champs.nom.trim(), mots_interdits: motsInterdits(champs.mots),
                  facturation: champs.facturation === true, github: champs.github === true,
                  description: champs.description.trim()};
+  if (plein(champs.repertoire)) corps.repertoire = champs.repertoire.trim();
   if (plein(id)) corps.id = id;
   return corps;
 }
@@ -392,6 +399,8 @@ export function ouvrirDefinition(options = {}, deps = {}) {
     facturation.disabled = Boolean(b?.echange?.length);
     const github = saisie("checkbox", infos.github === true);
     const description = zone("Ce que fera ce projet : ce que vous voulez obtenir, pour qui, ce qui compte", 5, infos.description, 3900);
+    const repertoire = saisie("text", infos.repertoire || "", {placeholder: "Facultatif : dossier d'un projet existant à scanner", maxLength: 500});
+    repertoire.setAttribute("autocomplete", "off");
     const erreur = bandeau(etat.message);
     const valider = bouton("Valider", false, "submit");
     const annuler = bouton(b ? "Retour" : "Annuler", true);
@@ -403,13 +412,15 @@ export function ouvrirDefinition(options = {}, deps = {}) {
     const rangee = el("div", "lecon-boutons");
     rangee.append(valider, annuler);
     form.append(el("h2", "", "Nouveau projet — 1. Les informations"), champ("Dossier parent", parent), suggestions,
-                champ("Nom du projet", nom), champ("Mots interdits (le nom du projet est ajouté)", mots),
+                champ("Nom du projet", nom),
+                champ("Répertoire existant à scanner", repertoire, "Le code déjà présent est lu une fois (inventaire et résumé) : le chef en tient compte pour définir le workflow."),
+                champ("Mots interdits (le nom du projet est ajouté)", mots),
                 champ("Description du projet", description, "Obligatoire : le chef s'en sert pour vous poser les bonnes questions."),
                 cocheFacturation, cocheGithub, erreur, rangee);
     form.addEventListener("submit", async (ev) => {
       ev.preventDefault();
       const champs = {parent: parent.value, nom: nom.value, mots: mots.value, facturation: facturation.checked,
-                      github: github.checked, description: description.value};
+                      github: github.checked, description: description.value, repertoire: repertoire.value};
       const message = verifierInfos(champs);
       if (message) { erreur.textContent = message; return; }
       erreur.textContent = "";
@@ -451,6 +462,15 @@ export function ouvrirDefinition(options = {}, deps = {}) {
     const b = etat.brouillon;
     const v = vueEchange(b);
     const corps = [el("h2", "", "Nouveau projet — 2. Le chef"), el("p", "lecon-meta", `${b.infos.nom} · tour ${b.tours} sur ${b.tours_max}`)];
+    const scan = b.connaissance;
+    if (scan) {
+      const note = el("details", "creation-scan");
+      note.append(el("summary", "", scan.resume ? `Répertoire scanné (${scan.nb_fichiers ?? "?"} fichiers)` : "Répertoire : scan partiel"));
+      note.append(el("p", "lecon-meta", scan.repertoire || ""));
+      if (scan.avertissement) note.append(el("p", "", scan.avertissement));
+      if (scan.resume) note.append(el("p", "", scan.resume));
+      corps.push(note);
+    }
     const flux = el("div", "creation-echange");
     for (const m of v.messages) flux.append(el("div", "creation-message " + (m.auteur === "chef" ? "chef" : "utilisateur"), m.texte));
     corps.push(flux);
@@ -466,6 +486,10 @@ export function ouvrirDefinition(options = {}, deps = {}) {
       corps.push(bandeau(v.erreur));
       const renvoyer = bouton("Renvoyer");
       renvoyer.addEventListener("click", () => { renvoyer.disabled = true; envoyerTour({id: b.id}); });
+      if (erreurDeConnexion(v.erreur)) {
+        corps.push(el("p", "lecon-meta", "La connexion à Claude est perdue. Reconnectez-vous (terminez la connexion dans le navigateur), puis renvoyez le tour."));
+        corps.push(creerBoutonConnexion());
+      }
       corps.push(renvoyer);
     }
     const bas = el("div", "lecon-boutons");

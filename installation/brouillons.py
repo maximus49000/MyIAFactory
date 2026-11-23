@@ -24,7 +24,7 @@ from installation.dossier import Echec
 
 JOURS_PURGE = 30
 MOTIF_ID = re.compile(r"^c[0-9a-f]{12}\Z")     # jamais un chemin
-CLES_INFOS = ("parent", "nom", "mots_interdits", "facturation", "github", "description")
+CLES_INFOS = ("parent", "nom", "mots_interdits", "facturation", "github", "description", "repertoire")
 _VERROU = threading.RLock()
 _VIVANTS = set()      # les brouillons dont un tour tourne dans ce processus
 
@@ -79,12 +79,14 @@ def _ecrire_fichier(chemin, texte):
 
 
 def creer(infos, *, dossier=None, maintenant=None):
-    """Un brouillon neuf, écrit. `infos` : {parent, nom, mots_interdits, facturation, github, description}."""
+    """Un brouillon neuf, écrit. `infos` : {parent, nom, mots_interdits, facturation, github, description, repertoire?}
+    (`repertoire` : un répertoire existant à scanner, voir `installation.scan`)."""
     if not isinstance(infos, dict) or set(infos) - set(CLES_INFOS):
         raise Echec("Les informations du projet ne portent que : " + ", ".join(CLES_INFOS) + ".")
     t = maintenant or datetime.now()
     b = {"id": "c" + secrets.token_hex(6), "cree": _iso(t), "maj": _iso(t), "infos": json.loads(json.dumps(infos)),
-         "echange": [], "tours": 0, "proposition": None, "usages": [], "erreur": None, "en_cours": None}
+         "echange": [], "tours": 0, "proposition": None, "usages": [], "erreur": None, "en_cours": None,
+         "connaissance": None}
     _ecrire_fichier(_chemin(b["id"], dossier), json.dumps(b, ensure_ascii=False, indent=1))
     return b
 

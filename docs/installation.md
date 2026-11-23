@@ -212,7 +212,11 @@ Sur un bureau qui suit plusieurs projets (fichier de bureau commun), la dernièr
 
 1. **Fenêtre 1, les informations.** Dossier parent, nom (il devient le nom du dossier), mots interdits (le nom du projet
    y est ajouté), description (obligatoire : le chef s'en sert pour vous poser les bonnes questions), « suivre les coûts »
-   (un objectif de facturation) et « dépôt GitHub privé ». **Valider** contrôle le nom et le dossier tout de suite :
+   (un objectif de facturation) et « dépôt GitHub privé ». Un champ facultatif, **« Répertoire existant à scanner »**,
+   désigne un dossier de code déjà présent : au premier tour, le bureau en fait l'inventaire (`examiner`) et un agent Haiku en
+   lecture seule en rédige un résumé de 300 mots (`installation/scan.py`) ; le chef les reçoit (`connaissance`) et le scan
+   n'est refait que si le répertoire change. Si la connexion à Claude est perdue, l'erreur du tour offre un bouton
+   « Se connecter » (`claude auth login`) à côté de « Renvoyer ». **Valider** contrôle le nom et le dossier tout de suite :
    rien n'est écrit dans un projet.
 2. **Fenêtre 2, l'échange avec le chef.** Chaque message porte des questions : répondez dans le champ texte, ou d'un clic
    sur un bouton de réponse quand le chef en propose. Quand plusieurs réponses peuvent être vraies ensemble (« multiple »,

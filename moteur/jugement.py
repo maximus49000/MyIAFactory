@@ -24,7 +24,8 @@ Dossiers attendus (préparés par la table de règles) :
 - `definir_workflow` (appelé par le bureau, avant que le projet n'existe) : `projet` (nom, description, facturation,
   github), `genres_connus`, `mots_interdits` (le nom du projet en fait partie), `services` ([{id, nom}], la facturation
   si elle est demandée), `echange` ([{auteur: chef, message, questions} | {auteur: utilisateur, reponses: [{question,
-  texte}]}]), `tours_de_questions`, `tours_max`, `proposer_maintenant`, `proposition_precedente`, `correction` ;
+  texte}]}]), `tours_de_questions`, `tours_max`, `proposer_maintenant`, `proposition_precedente`, `correction`, `connaissance` (le scan du répertoire existant que l'utilisateur a désigné,
+  `installation.scan`, ou null) ;
 - `decouper_lieux` (un projet en cours, sur le clic du Directeur) : `flux` (le flux de référence, `lieux.flux_de_reference`),
   `environnement` ([{outil, pour, objectif}]), `suggerees` (ids d'étapes qu'un outil cite), `metiers` ([{role, lieu}]).
   La réponse `{flux, message}` est vérifiée strictement par `lieux.verifier_proposition`.

@@ -505,7 +505,7 @@ Le bureau qui suit plusieurs projets (fichier de bureau commun) crée un projet 
 | Route | Corps | Effet |
 |---|---|---|
 | `GET /api/creations` | — (ou `?id=` pour un brouillon) | les brouillons à reprendre, avec leur coût en euros, et le coût des échanges abandonnés |
-| `POST /api/creations/infos` | `parent`, `nom`, `description`, … (+ `id` pour changer un brouillon) | première fenêtre validée : contrôle du nom et du dossier, brouillon créé ; rien n'est encore écrit dans un projet |
+| `POST /api/creations/infos` | `parent`, `nom`, `description`, `repertoire?` (un dossier existant à scanner), … (+ `id` pour changer un brouillon) | première fenêtre validée : contrôle du nom et du dossier, brouillon créé ; rien n'est encore écrit dans un projet |
 | `POST /api/creations/tour` | `id`, `reponses?`, `correction?`, `proposer_maintenant?` | un tour d'échange avec le chef (jugement `definir_workflow`), lancé en arrière-plan : la réponse marque le brouillon `tour: "en_cours"`, la page le relit ; 4 tours de questions au plus avant la proposition |
 | `POST /api/creations/valider` | `id` ; facultatifs : `fable` (les clés des agents cochés pour Fable), `installer` (vrai : créer la tâche d'installation des outils), `genre_description` (la phrase du genre nouveau) | crée le projet avec son workflow de genre, ses services, ses agents et son genre, l'inscrit au bureau, verse les usages de l'échange à son relevé |
 | `POST /api/creations/supprimer` | `id` | abandonne le brouillon (ses usages restent comptés) |

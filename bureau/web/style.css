@@ -804,6 +804,12 @@ body.panneau-grand .cat-grille { grid-template-columns: repeat(auto-fill, minmax
 .vignette-bouton:hover { background: rgba(61, 58, 75, 1); }
 .visionneuse { position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; background: rgba(20, 20, 28, 0.88); }
 .visionneuse img { width: min(86vh, 92vw); height: auto; max-height: 86vh; object-fit: contain; border-radius: 6px; background: #fff; }
+.visionneuse-maquette { width: min(96vw, 1200px); height: 88vh; border: 0; border-radius: 6px; background: #fff; }
+.visionneuse-maquette[hidden], .visionneuse img[hidden], .visionneuse-onglet[hidden] { display: none; }
+.visionneuse-onglet { position: absolute; top: max(14px, env(safe-area-inset-top)); left: 16px; z-index: 1; padding: 8px 12px; border-radius: 8px; color: #fff; background: rgba(0, 0, 0, 0.55); text-decoration: underline; }
+.val-vignette-html { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; min-width: 140px; min-height: 100px; padding: 12px; }
+.val-maquette-icone { font-size: 28px; line-height: 1; }
+.vignette-maquette-html { position: static; opacity: 1; }
 .visionneuse-fleche, .visionneuse-fermer { position: absolute; border: 0; color: #fff; background: rgba(255, 255, 255, 0.14); cursor: pointer; border-radius: 50%; }
 .visionneuse-fleche { top: 50%; width: 52px; height: 52px; margin-top: -26px; font-size: 34px; line-height: 1; }
 .visionneuse-fleche.gauche { left: 16px; } .visionneuse-fleche.droite { right: 16px; }

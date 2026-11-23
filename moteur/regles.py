@@ -3915,7 +3915,8 @@ def _matiere(projet, etat, t):
                         "sans jargon : ce qu'on veut obtenir et pourquoi), affiché en tête de la tâche ; précise-le "
                         "ensuite si les réponses le changent. **Une seule série de questions** : dès que l'utilisateur y a répondu, écris le "
                         "cahier des charges sans reposer de questions (ce qui reste ouvert, choisis-le toi-même et dis-le "
-                        "dans ton message). Le cahier : une maquette (images PNG ou JPEG que tu fabriques, écrites dans "
+                        "dans ton message). Le cahier : une maquette (images PNG ou JPEG, ou page HTML autonome, y compris dynamique : un seul fichier, styles "
+                        "et scripts en ligne, sans ressource externe ni réseau, 2 Mo au plus ; écrites dans "
                         f"`{_dossier_des_pieces(projet)}/{fid}/`) et la liste des étapes à réaliser, dans l'ordre : "
                         'rends `"cahier": {"maquette": [{"chemin": "…", "legende": "…"}], "etapes": [textes]}` : chaque '
                         "maquette a sa légende, une phrase (160 caractères au plus) qui dit à quoi elle correspond (écran, "

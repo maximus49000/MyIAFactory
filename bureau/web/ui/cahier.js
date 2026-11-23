@@ -9,7 +9,7 @@ import {el} from "./dom.js";
 import {dateFr} from "./texte.js";
 import {avecProjet, projetCourant, urlProjet} from "./projets.js";
 import {reessayerImage} from "./reessai.js";
-import {ouvrirVisionneuse} from "./visionneuse.js";
+import {ouvrirVisionneuse, estMaquetteHtml} from "./visionneuse.js";
 import {creerAccuses} from "./accuse.js";
 import {rendreTexte} from "./markdown.js";
 import {demandeCahier, demandeMethode, vueCahier, versionsDe} from "./fonctionnalite.js";
@@ -20,7 +20,8 @@ const plein = (t) => typeof t === "string" && t.trim() !== "";
 export const MODES_PARTENAIRE = {direct: "appelé directement par l'agent", inscrit: "à faire par vous, sur son site",
   aucun: "écarté : pas de partenaire pour ce besoin"};
 
-const urlImage = (chemin) => avecProjet(`/api/image?chemin=${encodeURIComponent(chemin)}`, projetCourant());
+const urlImage = (chemin) => avecProjet(`/api/${estMaquetteHtml(chemin) ? "maquette" : "image"}?chemin=${encodeURIComponent(chemin)}`,
+  projetCourant());
 
 export function fonctionnaliteDe(etat, id) {
   return (Array.isArray(etat?.fonctionnalites) ? etat.fonctionnalites : []).find((f) => f?.id === id) || null;
@@ -64,12 +65,18 @@ function piecesCahier(etat, c, parent) {
       if (etat?.images_ok === true) {
         const b = el("button", "val-vignette");
         b.type = "button";
-        b.setAttribute("aria-label", "Agrandir : " + (m.legende || m.chemin));
-        const img = el("img", "");
-        img.src = urlImage(m.chemin);
-        img.alt = m.legende || m.chemin;
-        reessayerImage(img);
-        b.append(img);
+        if (estMaquetteHtml(m.chemin)) {      // page interactive : pas d'aperçu chargé, on l'ouvre dans la visionneuse
+          b.classList.add("val-vignette-html");
+          b.setAttribute("aria-label", "Ouvrir la maquette interactive : " + (m.legende || m.chemin));
+          b.append(el("span", "val-maquette-icone", "▶"), el("span", "val-maquette-texte", "Maquette interactive"));
+        } else {
+          b.setAttribute("aria-label", "Agrandir : " + (m.legende || m.chemin));
+          const img = el("img", "");
+          img.src = urlImage(m.chemin);
+          img.alt = m.legende || m.chemin;
+          reessayerImage(img);
+          b.append(img);
+        }
         b.addEventListener("click", () => ouvrirVisionneuse(maquettes, n, urlImage, b));
         fig.append(b);
       } else fig.append(el("figcaption", "val-meta", "Image non affichable (aucune racine d'images déclarée)"));

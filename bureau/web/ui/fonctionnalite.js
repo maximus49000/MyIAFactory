@@ -12,7 +12,7 @@ import {urlProjet, projetCourant} from "./projets.js";
 import {EXTENSIONS_TELECHARGEABLES, extension, urlTelechargement} from "./validation.js";
 import {blocMarkdown, estMarkdown, rendreTexte} from "./markdown.js";
 import {reessayerImage} from "./reessai.js";
-import {ouvrirVisionneuse, voisine} from "./visionneuse.js";
+import {ouvrirVisionneuse, voisine, estMaquetteHtml} from "./visionneuse.js";
 export {voisine};
 import {dimensionsReduites, formatEnvoye, qualitePour, nomEnvoye} from "../logique/mobile.js";
 import {ACCEPT, MAX_NOM, MAX_OCTETS_IMAGE, MAX_OCTETS_FICHIER, categorie, typeEnvoye, estPhoto, verifierChoix, tailleBase64,
@@ -266,7 +266,7 @@ export function presentation(f, agir, enCorrection) {
 }
 
 // --- Le panneau.
-const urlImage = (chemin) => urlProjet(`/api/image?chemin=${encodeURIComponent(chemin)}`);
+const urlImage = (chemin) => urlProjet(`/api/${estMaquetteHtml(chemin) ? "maquette" : "image"}?chemin=${encodeURIComponent(chemin)}`);
 
 // Les documents de la fonctionnalité, rangés par étape : celles du parcours dans l'ordre, puis les colonnes du flux
 // (une tâche range ses captures sous sa colonne), puis « Autres » ; dans chaque groupe, les plus récents d'abord.
@@ -936,7 +936,16 @@ function vignettes(images, etat) {
   liste.forEach((image, n) => {
     const chemin = image.chemin;
     const fig = el("figure", "vignette");
-    if (etat.images_ok === true) {
+    if (etat.images_ok === true && estMaquetteHtml(chemin)) {
+      const ouvrir = el("button", "vignette-bouton vignette-maquette-html", "Maquette interactive");
+      ouvrir.type = "button";
+      ouvrir.addEventListener("click", () => ouvrirVisionneuse(liste, n, urlImage, ouvrir));
+      fig.append(ouvrir);
+      if (image.legende) {
+        fig.classList.add("avec-legende");
+        fig.append(el("figcaption", "vignette-legende", image.legende));
+      }
+    } else if (etat.images_ok === true) {
       const img = document.createElement("img");
       img.loading = "lazy";
       img.src = urlImage(chemin);

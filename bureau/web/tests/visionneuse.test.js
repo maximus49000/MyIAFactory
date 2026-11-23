@@ -167,3 +167,26 @@ test("rouvrir une visionneuse remplace la précédente ; la feuille de style la 
   assert.match(css, /body\.val-ouverte, body\.visionneuse-ouverte \{ overflow: hidden/);
   assert.doesNotMatch(css, /val-image\.agrandie/);
 });
+
+test("une maquette HTML s'ouvre dans un iframe en bac à sable (allow-scripts seul), fermable par Échap", () => {
+  remettre();
+  const vignette = document.createElement("button");
+  corps.append(vignette);
+  vignette.focus();
+  const urlM = (c) => (c.endsWith(".html") ? "/api/maquette?chemin=" : "/api/image?chemin=") + c;
+  ouvrirVisionneuse([{chemin: "pieces/f1/m.html", legende: "Écran"}, {chemin: "b.png", legende: "B"}], 0, urlM, vignette);
+  const cadre = corps.tous((n) => n.tagName === "iframe")[0];
+  assert.equal(cadre.attributs.sandbox, "allow-scripts");
+  assert.equal(cadre.attributs.referrerpolicy, "no-referrer");
+  assert.ok(!/allow-same-origin|allow-top-navigation|allow-popups|allow-forms/.test(cadre.attributs.sandbox));
+  assert.equal(cadre.src, "/api/maquette?chemin=pieces/f1/m.html");
+  assert.equal(cadre.hidden, false);
+  const onglet = corps.tous((n) => n.classList.contains("visionneuse-onglet"))[0];
+  assert.equal(onglet.hidden, false);
+  assert.equal(onglet.attributs.rel, "noopener noreferrer");
+  touche("ArrowRight");                                                                  // une image : l'iframe se cache
+  assert.equal(cadre.hidden, true);
+  assert.equal(onglet.hidden, true);
+  touche("Escape");
+  assert.equal(nb("visionneuse"), 0);
+});

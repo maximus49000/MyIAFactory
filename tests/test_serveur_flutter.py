@@ -371,18 +371,36 @@ class TestEnveloppeFlutter(unittest.TestCase):
             (b.home / ".myiafactory").mkdir()
             (b.home / ".myiafactory" / "flutter-sdk.version").write_text(f"flutter={VERSION};canal=stable\n", newline="\n")
 
-    def test_projet_flutter_monte_le_sdk_en_lecture_seule(self):
+    def test_projet_flutter_sdk_en_lecture_seule_et_bin_cache_en_overlay_par_tache(self):
         with Banc() as b:
             self.sdk(b)
             (b.home / "android-sdk").mkdir()
             b.ecrire_entree(flutter=True)
             r = b.lancer("seul", "30", "2048", "2", "2")
             self.assertEqual(r.returncode, 0, r.stderr + r.stdout)
+            h, d, vol = b.h(), f"{b.h()}/taches/{ID}", f"flutter-{ID}"
+            creation = b.appels("docker volume create")
+            self.assertEqual(len(creation), 1, b.journal)
+            self.assertIn(f"--driver local --opt type=overlay --opt device=overlay --opt o=lowerdir={h}/flutter-sdk/bin/cache,"
+                          f"upperdir={d}/flutter-up,workdir={d}/flutter-work {vol}", creation[0])
+            for sous in ("flutter-up", "flutter-work"):
+                self.assertTrue((b.dossier / sous).is_dir())
+            # validation : un run bref, sans réseau, qui monte le volume, AVANT le conteneur de l'agent
+            v = b.run_args("verif.txt")
+            self.assertIn("--rm", v)
+            suite_dans(self, v, "--network", "none")
+            suite_dans(self, v, "--mount", f"type=volume,src={vol},dst=/opt/flutter-sdk/bin/cache")
+            for x in ("--read-only",):
+                self.assertIn(x, v)
+            suite_dans(self, v, "--cap-drop", "ALL")
+            j = b.journal
+            self.assertLess(j.index("docker volume create"), j.index("verif-flutter-"))
+            self.assertLess(j.index("verif-flutter-"), j.index("docker run --pull never -d"))
             a = b.run_args()
-            h = b.h()
             suite_dans(self, a, "--mount", f"type=bind,src={h}/flutter-sdk,dst=/opt/flutter-sdk,readonly")
-            suite_dans(self, a, "--mount", f"type=bind,src={h}/taches/{ID}/flutter-verrou,dst=/opt/flutter-sdk/bin/cache/lockfile")
+            suite_dans(self, a, "--mount", f"type=volume,src={vol},dst=/opt/flutter-sdk/bin/cache")
             suite_dans(self, a, "--mount", f"type=bind,src={h}/android-sdk,dst=/opt/android-sdk,readonly")
+            self.assertNotIn("flutter-verrou", " ".join(a))
             self.assertEqual([a[i + 1] for i in range(len(a) - 1) if a[i] == "-e"],
                              ["HOME=/maison", "AGENT_DUREE_S=30", "AGENT_FLUTTER=1"])
             for x in ("--read-only", "--rm", "-d"):                          # mêmes durcissements qu'un agent ordinaire
@@ -393,10 +411,52 @@ class TestEnveloppeFlutter(unittest.TestCase):
             suite_dans(self, a, "--network", "myiafactory-agents")
             self.assertNotIn("--privileged", a)
             self.assertEqual(a[-2:], ["myiafactory/agent", "entree-agent"])
-            self.assertEqual((b.dossier / "flutter-verrou").read_bytes(), b"")
-            # seuls les SDK sont montés en lecture seule ; aucun montage inscriptible d'un dossier de l'hôte en plus
-            montages = [a[i + 1] for i in range(len(a) - 1) if a[i] == "--mount"]
-            self.assertEqual(len(montages), 3)
+            self.assertEqual(len([a[i + 1] for i in range(len(a) - 1) if a[i] == "--mount"]), 3)
+            self.assertEqual(b.appels("docker volume rm"), [])
+            b.arreter()
+            b.attendre_final()
+            self.assertTrue([x for x in b.appels("docker volume rm") if vol in x], b.journal)   # retiré à la fin
+
+    def test_overlay_refuse_echec_clair_sans_agent_et_volume_retire(self):
+        with Banc(FAUX_VERIF_CODE="125") as b:
+            self.sdk(b)
+            b.ecrire_entree(flutter=True)
+            r = b.lancer("seul", "30", "2048", "2", "2")
+            self.assertEqual(r.returncode, 1, r.stderr + r.stdout)
+            self.assertFalse([x for x in b.appels("docker run") if " -d " in f" {x} "], b.journal)
+            e = b.etat()
+            self.assertEqual((e["etat"], e["statut"]), ("echouee", "erreur"))
+            self.assertIn("flutter : overlay refusé", e["raison"])
+            self.assertTrue([x for x in b.appels("docker volume rm") if f"flutter-{ID}" in x], b.journal)
+            self.assertNotIn("type=bind,src=", " ".join(b.run_args("verif.txt")))      # le volume seul, aucun dossier de l'hôte
+
+    def test_docker_run_en_echec_retire_le_volume(self):
+        with Banc(FAUX_RUN_ECHEC="1") as b:
+            self.sdk(b)
+            b.ecrire_entree(flutter=True)
+            r = b.lancer("seul", "30", "2048", "2", "2")
+            self.assertEqual(r.returncode, 1, r.stderr + r.stdout)
+            self.assertTrue([x for x in b.appels("docker volume rm") if f"flutter-{ID}" in x], b.journal)
+
+    def test_balayage_des_volumes_de_taches_finies(self):
+        with Banc() as b:
+            self.sdk(b)
+            b.ecrire_entree(flutter=True)
+            finie, vivante = "t20261120-080000-aaaa", "t20261120-080000-bbbb"
+            for ident, etat in ((finie, "terminee"), (vivante, "en_cours")):
+                (b.home / "taches" / ident).mkdir(parents=True)
+                (b.home / "taches" / ident / "etat.json").write_text(json.dumps({"id": ident, "etat": etat}),
+                                                                         newline="\n")
+            (b.bin / "docker").rename(b.bin / "docker-banc")
+            (b.bin / "docker").write_text(
+                '#!/bin/sh\nif [ "$1 $2" = "volume ls" ]; then echo "docker $*" >> "$FAUX_JOURNAL"; '
+                f'printf "flutter-{finie}\\nflutter-{vivante}\\nflutter-x;rm\\nautre\\n"; exit 0; fi\n'
+                'exec "$(dirname "$0")/docker-banc" "$@"\n', newline="\n")
+            (b.bin / "docker").chmod(0o755)
+            r = b.lancer("seul", "30", "2048", "2", "2")
+            self.assertEqual(r.returncode, 0, r.stderr + r.stdout)
+            rm = b.appels("docker volume rm")
+            self.assertEqual(rm, [f"docker volume rm flutter-{finie}"], b.journal)
             b.arreter()
             b.attendre_final()
 
@@ -411,7 +471,8 @@ class TestEnveloppeFlutter(unittest.TestCase):
                 a = b.run_args()
                 self.assertNotIn("--mount", a)
                 self.assertNotIn("AGENT_FLUTTER=1", a)
-                self.assertFalse((b.dossier / "flutter-verrou").exists())
+                self.assertFalse((b.dossier / "flutter-up").exists())
+                self.assertEqual(b.appels("docker volume"), [])
                 b.arreter()
                 b.attendre_final()
 
@@ -460,6 +521,9 @@ class TestEntreeFlutter(unittest.TestCase):
                     os.environ.pop(k, None)
                 else:
                     os.environ[k] = v
+
+    def test_image_agent_inchangee_par_l_overlay(self):
+        self.assertNotIn("overlay", (RACINE / "serveur_ovh" / "images" / "agent" / "entree-agent.py").read_text(encoding="utf-8"))
 
     def test_variables_fixes_seulement_pour_un_projet_flutter(self):
         self.assertEqual(self.env(), {})

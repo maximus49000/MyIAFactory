@@ -308,6 +308,30 @@ test("en_mode_telephone_la_barre_garde_le_rond_et_le_selecteur_et_replie_les_act
   assert.deepEqual(choix.enfants.map((o) => o.textContent), ["Alpha", "Bêta", "Nouveau projet…"]);
 });
 
+test("serveurs_de_travail_n_est_propose_que_si_le_bureau_peut_agir", async () => {
+  // la carte n'est montée (panneau Direction) qu'avec `etat.agir === true` : sans elle, l'entrée ne mènerait nulle part
+  const {creerBarre} = await import("../ui/barre.js");
+  const entete = new Noeud("header");
+  Object.defineProperty(entete, "scrollWidth", {get: () => 300});
+  entete.clientWidth = 375;
+  const b = creerBarre(entete, new Noeud("div"));
+  const appels = [];
+  b.brancherMenu({ouvrirReglages: () => appels.push("reglages"), ouvrirServeurs: () => appels.push("serveurs")});
+  const roue = entete.tous((n) => n.tagName === "BUTTON" && n.getAttribute("aria-label") === "Paramètres")[0];
+  const serveurs = () => entete.tous((n) => n.getAttribute("role") === "menuitem" && n.textContent.startsWith("Serveurs de travail"))[0];
+  const reglages = () => entete.tous((n) => n.getAttribute("role") === "menuitem" && n.textContent.startsWith("Réglages"))[0];
+  b.majEtat({projet: "Alpha", version: 4, agir: false, factory: {etat: "en marche"}});
+  roue.click();
+  assert.ok(serveurs().hidden, "sans `agir`, pas d'entrée « Serveurs de travail »");
+  assert.equal(reglages().hidden, false, "la page Réglages reste proposée");
+  roue.click();
+  b.majEtat({projet: "Alpha", version: 4, agir: true, factory: {etat: "en marche"}});
+  roue.click();
+  assert.equal(serveurs().hidden, false);
+  serveurs().click();
+  assert.deepEqual(appels, ["serveurs"]);
+});
+
 test("panneaux_branche_le_menu_de_la_roue", () => {
   assert.match(panneaux, /barre\.brancherMenu\(\{/);
   assert.match(panneaux, /ouvrirReglages: \(\) => ouvrirPanneau\("reglages", null\)/);

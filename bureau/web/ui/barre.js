@@ -108,10 +108,12 @@ export function creerBarre(entete, bandeau) {
   separateur.setAttribute("aria-hidden", "true");
   const liens = {ouvrirReglages: null, ouvrirServeurs: null};   // donnés par les panneaux (`brancherMenu`), créés après
   let replies = [];
+  let peutAgir = false;   // `etat.agir` du dernier état : la même condition que le montage de la carte des serveurs
   const telephone = () => document.documentElement.classList.contains("mobile");
   const menu = creerMenuParametres({
     get ouvrirReglages() { return liens.ouvrirReglages; },
-    get ouvrirServeurs() { return liens.ouvrirServeurs; },
+    // la carte « Serveurs de travail » n'est montée (panneau Direction) que si le bureau peut agir : sinon, pas d'entrée
+    get ouvrirServeurs() { return peutAgir ? liens.ouvrirServeurs : null; },
     get associerTelephone() { return boutonTelephone.hidden ? null : () => boutonTelephone.click(); },
     actions: () => replies.flatMap(entreesDe),
     // La retenue n'a plus sa place dans la barre (téléphone, barre étroite) : elle ouvre le menu, en lecture seule.
@@ -358,6 +360,7 @@ export function creerBarre(entete, bandeau) {
       majRetenue(etat);
       boutonListe.hidden = !listeDisponible(etat);
       majActions(etat);
+      peutAgir = etat.agir === true;
       const v4 = (etat.version ?? 1) >= 4 && etat.agir === true;
       boutonNouvelle.hidden = boutonCorrection.hidden = boutonQuestion.hidden = boutonFonctions.hidden = !v4;
       majLivrables(etat);

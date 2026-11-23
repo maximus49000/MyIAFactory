@@ -6,7 +6,7 @@ import {el} from "./dom.js";
 import {urlProjet, projetCourant} from "./projets.js";
 import {sectionLieux} from "./lieux.js";
 import {boutonDemande} from "./decisions.js";
-import {blocApercu, blocConso} from "./deport.js";
+import {avertissementsGroupes, blocApercu, blocConso, MSG_SANS_SERVEUR, MSG_SERVEUR} from "./deport.js";
 import {sectionPartage} from "./partage.js";
 
 // Le niveau édité est un état de vue (pas de donnée) : il survit aux redessins de `rouvrir()`.
@@ -107,6 +107,9 @@ function ligneReglage(ctx, l, niveau, message, groupe, fetchFn) {
     label.append(c);
     rang.append(label);
   } else {
+    // « Serveur » : seulement pour une action que `deporter` y sert, et une fois un serveur déclaré (comme l'ancien bloc)
+    const serveurDeclare = ctx.etat?.deport?.serveur_declare === true;
+    const raisonServeur = l.servie_au_serveur === true ? (serveurDeclare ? "" : MSG_SANS_SERVEUR) : MSG_SERVEUR;
     for (const lieu of Array.isArray(l.choix) ? l.choix : []) {
       const label = el("label", "lecons-auto-label deport-choix");
       const r = document.createElement("input");
@@ -114,12 +117,13 @@ function ligneReglage(ctx, l, niveau, message, groupe, fetchFn) {
       r.name = "reglage-" + l.id;
       r.value = lieu;
       r.checked = valeur === lieu;
-      r.disabled = verrou;
-      r.grise = verrou;
+      const raison = lieu === "serveur" ? raisonServeur : "";
+      r.disabled = verrou || raison !== "";
+      r.grise = r.disabled;
       r.addEventListener("change", () => ecrire(lieu));
       controles.push(r);
       groupe.push(r);
-      label.append(r, el("span", "", " " + (LIEUX[lieu] || lieu)));
+      label.append(r, el("span", "", " " + (LIEUX[lieu] || lieu) + (raison && !verrou ? " (" + raison + ")" : "")));
       rang.append(label);
     }
   }
@@ -145,7 +149,7 @@ function barreNiveaux(ctx, page) {
   barre.setAttribute("role", "group");
   barre.setAttribute("aria-label", "Niveau de réglage");
   const defs = [
-    ["global", "Global", false],
+    ["global", "Global", page.global_disponible === false],
     ["type", `Type : ${page.genre || "aucun"}`, !page.type_disponible],
     ["projet", `Projet : ${projetCourant() || "ce projet"}`, false],
   ];
@@ -169,11 +173,17 @@ export function contenuReglages(ctx, contenu, fetchFn = fetch) {
   }
   // un type sans genre ne s'édite pas : on retombe sur le projet
   if (niveauEdite === "type" && !page.type_disponible) niveauEdite = "projet";
+  // un bureau lancé sur un seul projet (sans fichier du bureau) : pas de niveau global, on retombe sur le projet
+  if (niveauEdite === "global" && page.global_disponible === false) niveauEdite = "projet";
   const lignes = Array.isArray(page.lignes) ? page.lignes : [];
   const message = el("p", "note reglages-message", dernierMessage);
   message.setAttribute("aria-live", "polite");
   const groupe = [];
   contenu.append(message, barreNiveaux(ctx, page));
+  // ce que la lecture du fichier du bureau a écarté (clé inconnue, type abîmé) : dit, jamais bloquant
+  for (const t of Array.isArray(page.ignores) ? page.ignores : []) {
+    if (typeof t === "string" && t) contenu.append(el("p", "note reglages-ignore", t));
+  }
 
   for (const [section, titre] of SECTIONS) {
     const de = lignes.filter((l) => l.section === section);
@@ -181,6 +191,12 @@ export function contenuReglages(ctx, contenu, fetchFn = fetch) {
     const bloc = el("section", "partie reglages-section");
     bloc.append(el("h4", "", titre));
     for (const l of de) bloc.append(ligneReglage(ctx, l, niveauEdite, message, groupe, fetchFn));
+    if (section === "actions") {
+      // les attentes en chaîne (« les tests au poste attendront l'APK produit par GitHub… ») : lieux effectifs du projet
+      for (const phrase of avertissementsGroupes(ctx.etat.deport?.avertissements)) {
+        bloc.append(el("p", "note deport-avertissement", phrase));
+      }
+    }
     if (section === "actions" && de.some((l) => (l.valeur === "github" && niveauEdite === "projet") || l.valeurs?.[niveauEdite] === "github")) {
       bloc.append(blocApercu(fetchFn));
       if (ctx.etat.deport?.conso) bloc.append(blocConso(ctx.etat.deport.conso));

@@ -244,7 +244,8 @@ class Projet:
             b = reglages.lire_bureau(self.fichier_bureau)
         except reglages.ReglagesInvalides:
             return {}
-        return {"deport": {"lieux": b["deport_lieux_explicites"]}, "types": b["types"], "reglages": b["reglages"]}
+        return {"deport": {"lieux": b["deport_lieux_explicites"]}, "types": b["types"], "reglages": b["reglages"],
+                "ignores": b["ignores"]}
 
     def genre(self):
         """Le genre du projet (son type) s'il a un catalogue propre ; None pour un projet générique ou sans genre."""
@@ -318,10 +319,13 @@ class Projet:
                if genre else None,
                "projet": ctx["lieux_projet"].get(action)}
         valeurs = {n: v for n, v in lus.items() if n in niveaux and v is not None}
+        servie = deport_types.servie_au_serveur(action, catalogue if applicable else deport_types.catalogue_union())
         return {"id": "deport." + action, "section": "actions", "libelle": entree["libelle"],
                 "aide": entree["bientot"] or "", "forme": "lieu", "choix": list(entree["lieux"]), "niveaux": niveaux,
                 "valeur": lieu, "origine": origine, "valeurs": valeurs, "applicable": applicable,
-                "defaut": None if deport_types.sans_poste(entree) else "poste"}
+                "defaut": None if deport_types.sans_poste(entree) else "poste",
+                # « Serveur » n'est réglable que pour une action que `deporter` y sert (sinon : « bientôt »)
+                "servie_au_serveur": servie}
 
     def _ligne_reglage(self, r, ctx):
         """La ligne d'un réglage déclaré au registre (booléen) : valeur, origine et valeur posée à chaque niveau."""
@@ -347,7 +351,11 @@ class Projet:
         ctx = self._contexte_reglages()
         lignes = [self._ligne_lieu(a, ctx) for a in ctx["catalogue"]]
         lignes += [self._ligne_reglage(r, ctx) for r in registre.REGISTRE]
-        return {"genre": ctx["genre"], "type_disponible": ctx["genre"] is not None, "lignes": lignes}
+        return {"genre": ctx["genre"], "type_disponible": ctx["genre"] is not None and self.fichier_bureau is not None,
+                # global et type vivent dans le fichier du bureau : un bureau lancé sur un seul projet n'a que le projet
+                "global_disponible": self.fichier_bureau is not None, "lignes": lignes,
+                # ce que la lecture tolérante du fichier du bureau a écarté (clé inconnue, type abîmé)
+                "ignores": list(ctx["bureau"].get("ignores") or [])}
 
     def _ecrivains(self):
         """La table des réglages qui s'écrivent par niveau : id -> (écrivain(niveau, valeur), ligne(ctx))."""
@@ -396,6 +404,13 @@ class Projet:
             if not isinstance(valeur, str) or valeur not in entree["lieux"]:
                 raise ValueError("« %s » ne tourne pas au lieu « %s » (choix : %s)."
                                  % (entree["libelle"], valeur, ", ".join(entree["lieux"])))
+            if valeur == "serveur":   # les mêmes garde-fous que les cases grisées de la page
+                if not deport_types.servie_au_serveur(action, catalogue if applicable else union):
+                    raise ValueError("« %s » : le lieu « serveur » n'est pas encore disponible (bientôt)."
+                                     % entree["libelle"])
+                if not modserveurs.declare():
+                    raise ValueError("« %s » : déclarez d'abord un serveur (Serveurs), puis réglez sur serveur."
+                                     % entree["libelle"])
             moddeport.valider_lieux({action: valeur}, catalogue=catalogue if applicable else union)
             if niveau != "projet":     # ce que relira `lire_bureau` : jamais un fichier du bureau refusé
                 moddeport.valider_lieux({action: valeur}, catalogue=union)
@@ -2277,6 +2292,8 @@ class Handler(BaseHTTPRequestHandler):
                 ligne = projet.poser_reglage(corps.get("niveau"), corps.get("id"), corps["valeur"])
             except (ValueError, reglages.ReglagesInvalides) as e:
                 return self._json(400, {"erreur": str(e)})
+            except Exception as e:  # jamais une connexion coupée sans réponse lisible (fichier tenu sous Windows…)
+                return self._json(500, {"erreur": f"Erreur du bureau : {e}"[:200]})
             for p in list(self.server.projets.values()):   # un niveau global ou type vaut pour d'autres projets
                 p._cache_etat = (0.0, p._cache_etat[1])
             return self._json(200, ligne)

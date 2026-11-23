@@ -61,7 +61,62 @@ test("refus_serveur_remet_l_etat_reel", async () => {
   assert.equal(radios(bloc, "deport.apk").find((r) => r.value === "poste").checked, true);
   assert.match(bloc.textContent, /Refusé : pas maintenant/);
   assert.equal(ctx.rouvert, undefined);
-  assert.equal(radios(bloc).some((r) => r.disabled), false);
+  // les contrôles sont rendus (« Serveur » reste grisé : l'action n'est pas servie au serveur)
+  assert.equal(radios(bloc).filter((r) => r.value !== "serveur").some((r) => r.disabled), false);
+  assert.equal(radios(bloc).find((r) => r.value === "serveur").disabled, true);
+});
+
+test("serveur_grise_bientot_pour_une_action_non_servie", () => {
+  definirNiveauEdite("projet");
+  for (const niveau of ["projet", "global"]) {
+    definirNiveauEdite(niveau);
+    const {bloc} = rendre(page([ligne("deport.apk", {servie_au_serveur: false})]), undefined, {deport: {serveur_declare: true}});
+    const r = radios(bloc, "deport.apk");
+    assert.equal(r.find((x) => x.value === "serveur").disabled, true, niveau);
+    assert.equal(r.find((x) => x.value === "poste").disabled, false);
+    assert.equal(r.find((x) => x.value === "github").disabled, false);
+    assert.match(bloc.textContent, /Serveur \(bientôt\)/);
+  }
+  definirNiveauEdite("projet");
+});
+
+test("recette_serveur_grise_tant_qu_aucun_serveur_n_est_declare", () => {
+  definirNiveauEdite("projet");
+  const recette = () => ligne("deport.recette-emulateur", {niveaux: ["projet"], choix: ["serveur"], valeur: null, defaut: null, servie_au_serveur: true});
+  const sans = rendre(page([recette()]), undefined, {deport: {serveur_declare: false}}).bloc;
+  assert.equal(radios(sans, "deport.recette-emulateur")[0].disabled, true);
+  assert.match(sans.textContent, /déclarez d'abord un serveur \(Serveurs\), puis réglez sur serveur/);
+  const avec = rendre(page([recette()]), undefined, {deport: {serveur_declare: true}}).bloc;
+  assert.equal(radios(avec, "deport.recette-emulateur")[0].disabled, false);
+  assert.doesNotMatch(avec.textContent, /déclarez d'abord/);
+});
+
+test("les_attentes_en_chaine_sont_dites_sous_les_actions", () => {
+  definirNiveauEdite("projet");
+  const textes = ["« tests » tourne au lieu « poste » mais attendra l'APK produit par GitHub : mettez la chaîne entière au même lieu pour éviter cette attente.",
+    "« charge » tourne au lieu « poste » mais attendra l'APK produit par GitHub : mettez la chaîne entière au même lieu pour éviter cette attente."];
+  const {bloc} = rendre(page([ligne("deport.apk")]), undefined, {deport: {avertissements: textes}});
+  const notes = bloc.tous((n) => /\bdeport-avertissement\b/.test(n.className));
+  assert.equal(notes.length, 1, "un seul texte par situation");
+  assert.match(notes[0].textContent, /tests, charge : au lieu « poste », attend l'APK produit par GitHub/);
+  assert.equal(rendre(page([ligne("deport.apk")])).bloc.tous((n) => /\bdeport-avertissement\b/.test(n.className)).length, 0);
+});
+
+test("global_grise_sans_fichier_du_bureau_et_retombe_sur_projet", () => {
+  definirNiveauEdite("global");
+  const {bloc} = rendre(page([ligne("deport.apk")], {global_disponible: false, type_disponible: false}));
+  assert.equal(bouton(bloc, "Global").disabled, true);
+  assert.equal(niveauEditeActuel(), "projet");
+  const actif = boutons(bloc).filter((b) => /\bactif\b/.test(b.className));
+  assert.match(actif[0].textContent, /^Projet/);
+  definirNiveauEdite("projet");
+  assert.equal(bouton(rendre(page([ligne("deport.apk")], {global_disponible: true})).bloc, "Global").disabled, false);
+});
+
+test("les_cles_ignorees_du_fichier_du_bureau_sont_dites", () => {
+  definirNiveauEdite("projet");
+  const {bloc} = rendre(page([ligne("deport.apk")], {ignores: ["Fichier du bureau : « reglages » : le réglage inconnu « x » est ignoré."]}));
+  assert.match(bloc.textContent, /le réglage inconnu « x » est ignoré/);
 });
 
 test("un succès enregistre au niveau édité, remplace la ligne et rouvre", async () => {
@@ -101,10 +156,11 @@ test("ligne_projet_seul_desactivee_au_niveau_global", () => {
   definirNiveauEdite("global");
   const {bloc} = rendre(page([ligne("deport.recette-emulateur", {niveaux: ["projet"], choix: ["serveur"], valeur: null}), ligne("deport.apk")]));
   assert.equal(radios(bloc, "deport.recette-emulateur").every((r) => r.disabled), true);
-  assert.equal(radios(bloc, "deport.apk").some((r) => r.disabled), false);
+  assert.equal(radios(bloc, "deport.apk").filter((r) => r.value !== "serveur").some((r) => r.disabled), false);
   assert.match(bloc.textContent, /Projet seulement : jamais hérité/);
   definirNiveauEdite("projet");
-  const {bloc: p} = rendre(page([ligne("deport.recette-emulateur", {niveaux: ["projet"], choix: ["serveur"], valeur: null})]));
+  const {bloc: p} = rendre(page([ligne("deport.recette-emulateur", {niveaux: ["projet"], choix: ["serveur"], valeur: null, servie_au_serveur: true})]),
+    undefined, {deport: {serveur_declare: true}});
   assert.equal(radios(p, "deport.recette-emulateur").some((r) => r.disabled), false);
   assert.match(p.textContent, /Projet seulement : accord permanent/);
 });

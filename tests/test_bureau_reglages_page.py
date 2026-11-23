@@ -195,6 +195,88 @@ class TestReglagesPage(AvecFichierDuBureau):
         self.assertEqual(self.lignes()["deport.apk"]["origine"], "projet")
 
 
+class TestGardeFousDuServeur(AvecFichierDuBureau):
+    """Les garde-fous de l'ancien bloc Direction : « Serveur » seulement pour une action que `deporter` y sert, et la
+    recette sur serveur seulement quand un serveur est déclaré ; publiés pour la page et vérifiés à l'écriture."""
+    RECETTE = "deport.recette-emulateur"
+
+    def setUp(self):
+        super().setUp()
+        from bureau import serveurs as modserveurs
+        self.plateforme = self.tmp / "plateforme"
+        self.plateforme.mkdir()
+        ancien = modserveurs.DOSSIER
+        modserveurs.DOSSIER = self.plateforme          # jamais les serveurs déclarés du vrai poste
+        self.addCleanup(setattr, modserveurs, "DOSSIER", ancien)
+
+    def declarer_un_serveur(self):
+        (self.plateforme / "serveurs.json").write_text(json.dumps(
+            [{"id": "s1", "nom": "S1", "hote": "s1.example.org", "utilisateur": "ubuntu", "cle": "C:/cles/s1"}]),
+            encoding="utf-8")
+
+    def test_servie_au_serveur_publiee_par_ligne(self):
+        lignes = self.lignes()
+        self.assertIs(lignes[self.RECETTE]["servie_au_serveur"], True)
+        for a in ("apk", "tests", "emulateur", "charge"):
+            self.assertIs(lignes["deport." + a]["servie_au_serveur"], False, a)
+        e = self.etat()
+        self.assertIs(e["deport"]["serveur_declare"], False)
+
+    def test_serveur_refuse_pour_une_action_non_servie(self):
+        for niveau, id_ in (("projet", "deport.apk"), ("global", "deport.charge"), ("projet", "deport.emulateur")):
+            r, rep = self.poster(niveau, id_, "serveur")
+            self.assertEqual(r.status, 400, (niveau, id_))
+            self.assertIn("bientôt", rep["erreur"])
+        self.assertEqual(self.bureau_brut(), {"projets": ["demo/reglages.json"]})
+
+    def test_recette_sur_serveur_refusee_sans_serveur_declare(self):
+        r, rep = self.poster("projet", self.RECETTE, "serveur")
+        self.assertEqual(r.status, 400, rep)
+        self.assertIn("déclarez d'abord un serveur", rep["erreur"])
+        self.assertNotIn("recette-emulateur", json.dumps(self.projet_brut()))
+        self.declarer_un_serveur()
+        r, ligne = self.poster("projet", self.RECETTE, "serveur")
+        self.assertEqual(r.status, 200, ligne)
+        self.assertEqual((ligne["valeur"], ligne["origine"]), ("serveur", "projet"))
+        r, ligne = self.poster("projet", self.RECETTE, None)      # le retour à « non réglé » reste permis
+        self.assertEqual(r.status, 200, ligne)
+
+
+class TestRouteEtDisponibilites(AvecFichierDuBureau):
+    def test_une_panne_d_ecriture_donne_500_lisible(self):
+        with mock.patch.object(reglages, "fixer_niveau_bureau", side_effect=PermissionError("fichier tenu")):
+            r, rep = self.poster("global", "deport.apk", "github")
+        self.assertEqual(r.status, 500)
+        self.assertTrue(rep["erreur"].startswith("Erreur du bureau : "), rep)
+        self.assertIn("fichier tenu", rep["erreur"])
+        self.assertLessEqual(len(rep["erreur"]), 200)
+
+    def test_global_disponible_avec_le_fichier_du_bureau(self):
+        page = self.etat()["reglages_page"]
+        self.assertIs(page["global_disponible"], True)
+        self.assertEqual(page["ignores"], [])
+
+    def test_les_cles_ignorees_sont_publiees(self):
+        self.bureau.write_text(json.dumps({"projets": ["demo/reglages.json"], "reglages": {"inconnu": 1}}),
+                               encoding="utf-8")
+        ignores = self.etat()["reglages_page"]["ignores"]
+        self.assertEqual(len(ignores), 1)
+        self.assertIn("inconnu", ignores[0])
+
+
+class TestBureauDUnSeulProjet(AvecServeur):
+    """`creer(chemin_reglages)` sans fichier du bureau : seul le niveau projet existe."""
+
+    def test_global_indisponible(self):
+        self.srv.projet()._cache_etat = (0.0, None)
+        page = self.json("/api/etat")["reglages_page"]
+        self.assertIs(page["global_disponible"], False)
+        self.assertIs(page["type_disponible"], False)      # le niveau type vit aussi dans le fichier du bureau
+        r, data = self.req("POST", "/api/reglages/niveau",
+                           json.dumps({"niveau": "global", "id": "deport.apk", "valeur": "github"}), self.ENT)
+        self.assertEqual(r.status, 400)
+
+
 class TestReglageBooleenParLaTable(AvecFichierDuBureau):
     """Un réglage booléen déclaré au registre s'écrit par la même table (les déclarations viennent à la tâche 7)."""
     LECONS = registre.Reglage("lecons_auto", "automatisations", "Valider les leçons automatiquement", "",

@@ -230,7 +230,8 @@ class TestDeportParTypeDeProjet(AvecServeur):
         self.en_android()
         d = self.json("/api/etat")["deport"]
         actions = {a["id"]: a for a in d["actions"]}
-        self.assertEqual(list(actions), ["apk", "tests", "lint", "emulateur", "release", "recette-emulateur"])
+        self.assertEqual(list(actions), ["apk", "tests", "lint", "emulateur", "release", "release-signe",
+                                         "recette-emulateur"])
         self.assertEqual(actions["tests"]["libelle"], "Tests unitaires")
         self.assertEqual(actions["emulateur"]["lieux"], ["poste"])
         self.assertIn("clés de signature", actions["release"]["bientot"])

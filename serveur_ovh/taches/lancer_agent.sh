@@ -44,9 +44,9 @@
 #   en taille apparente, pas des quotas), moins de LIBRE_MIN_KO libres sur le disque -> terminee, limite.
 # Flutter : « "flutter": true » dans demande.json (écrit par le poste quand le projet a un pubspec.yaml qui dépend de
 #   flutter ; une seule clé, true ou false, sinon refusé ; absente = false) -> ~/flutter-sdk (capacité flutter-sdk, exigée :
-#   dossier ordinaire, bin/flutter, bin/cache/lockfile, marqueur ~/.myiafactory/flutter-sdk.version) monté EN LECTURE SEULE
-#   sur /opt/flutter-sdk, SAUF bin/cache : flutter y écrit (engine.stamp, engine.realm, lockfile) ; il reçoit un volume
-#   overlay PROPRE à la tâche, flutter-<id> (lowerdir = ~/flutter-sdk/bin/cache, jamais modifié ; upperdir et workdir =
+#   dossier ordinaire, bin/flutter, bin/cache/lockfile, marqueur ~/.myiafactory/flutter-sdk.version) en COPIE SUR ÉCRITURE
+#   PAR TÂCHE sur /opt/flutter-sdk : flutter écrit dans son SDK (bin/cache, packages/flutter_tools/.dart_tool…) ; le SDK
+#   entier y est un volume overlay PROPRE à la tâche, flutter-<id> (lowerdir = ~/flutter-sdk, lu, jamais modifié ; upperdir et workdir =
 #   ~/taches/<id>/flutter-up et flutter-work, 0700, même disque), créé par `docker volume create` puis PROUVÉ par un
 #   `docker run --rm --network none` bref qui le monte (un overlay n'est monté qu'au run) : refusé -> tâche échouée
 #   « flutter : overlay refusé », jamais de repli en écriture sur le SDK de l'hôte. Le volume est retiré à la fin (conclure),
@@ -237,7 +237,7 @@ controle_secret() {
   return 2
 }
 
-# --- Flutter : bin/cache en copie sur écriture, par tâche --------------------
+# --- Flutter : le SDK en copie sur écriture, par tâche ------------------------
 
 VOLUME_FLUTTER="flutter-$ID"                # $ID validé par MOTIF_ID : nom fermé
 
@@ -352,7 +352,7 @@ veilleur() {
     if [ $((maintenant - dernier_du)) -ge "$DU_TRAVAIL_S" ]; then
       dernier_du=$maintenant
       mesures=("$DOSSIER/travail" "$DOSSIER/maison")
-      [ -d "$DOSSIER/flutter-up" ] && mesures+=("$DOSSIER/flutter-up")      # projet Flutter : la couche haute de bin/cache
+      [ -d "$DOSSIER/flutter-up" ] && mesures+=("$DOSSIER/flutter-up")      # projet Flutter : la couche haute du SDK
       ko=$(du -sck --apparent-size -- "${mesures[@]}" 2>/dev/null | tail -n 1 | cut -f1)
       if [[ $ko =~ ^[0-9]+$ ]] && [ "$ko" -gt "$TRAVAIL_MAX_KO" ]; then
         arreter_puis terminee limite "Limite atteinte : travail et maison trop volumineux (${ko} Ko, maximum ${TRAVAIL_MAX_KO} Ko)"
@@ -517,18 +517,19 @@ if [ "$FLUTTER" = 1 ]; then                        # --mount : une source absent
   mkdir -p -- "$DOSSIER/flutter-up" "$DOSSIER/flutter-work" && chmod 700 "$DOSSIER/flutter-up" "$DOSSIER/flutter-work" ||
     echec "flutter : dossiers de l'overlay non créables (~/taches/$ID/flutter-up, flutter-work)."
   dk 60 volume create --driver local --opt type=overlay --opt device=overlay \
-    --opt "o=lowerdir=$FLUTTER_SDK/bin/cache,upperdir=$DOSSIER/flutter-up,workdir=$DOSSIER/flutter-work" "$VOLUME_FLUTTER" \
+    --opt "o=lowerdir=$FLUTTER_SDK,upperdir=$DOSSIER/flutter-up,workdir=$DOSSIER/flutter-work" "$VOLUME_FLUTTER" \
     >/dev/null 2>>"$DOSSIER/docker-run.log" || echec "flutter : overlay refusé (volume non créé : voir docker-run.log)."
-  # Preuve : `volume create` ne monte rien ; un run bref, sans réseau ni dossier de l'hôte, monte le volume et y lit le verrou.
+  # Preuve : `volume create` ne monte rien ; un run bref, sans réseau ni dossier de l'hôte, monte le volume, y trouve flutter
+  # exécutable et le verrou lisible.
   VERIF=(run --rm --pull never --name "verif-flutter-$ID" --label "$GENRE" --network none --user "$UTILISATEUR" --read-only
     --cap-drop ALL --security-opt no-new-privileges --pids-limit 64 --memory 256m --memory-swap 256m
-    --mount "type=volume,src=$VOLUME_FLUTTER,dst=/opt/flutter-sdk/bin/cache" "$IMAGE" test -f /opt/flutter-sdk/bin/cache/lockfile)
+    --mount "type=volume,src=$VOLUME_FLUTTER,dst=/opt/flutter-sdk" "$IMAGE"
+    test -x /opt/flutter-sdk/bin/flutter -a -r /opt/flutter-sdk/bin/cache/lockfile)
   if ! dk 120 "${VERIF[@]}" >/dev/null 2>>"$DOSSIER/docker-run.log"; then
     dk 30 rm -f "verif-flutter-$ID" >/dev/null 2>&1
-    echec "flutter : overlay refusé (le volume de bin/cache ne se monte pas : voir docker-run.log) ; le SDK de l'hôte n'est jamais monté en écriture."
+    echec "flutter : overlay refusé (le volume du SDK ne se monte pas : voir docker-run.log) ; le SDK de l'hôte n'est jamais monté en écriture."
   fi
-  COMMANDE+=(--mount "type=bind,src=$FLUTTER_SDK,dst=/opt/flutter-sdk,readonly"
-    --mount "type=volume,src=$VOLUME_FLUTTER,dst=/opt/flutter-sdk/bin/cache" -e AGENT_FLUTTER=1)
+  COMMANDE+=(--mount "type=volume,src=$VOLUME_FLUTTER,dst=/opt/flutter-sdk" -e AGENT_FLUTTER=1)   # jamais le SDK en bind
   if [ -d "$SDK_ANDROID" ] && [ ! -L "$SDK_ANDROID" ]; then
     COMMANDE+=(--mount "type=bind,src=$SDK_ANDROID,dst=/opt/android-sdk,readonly")
   fi

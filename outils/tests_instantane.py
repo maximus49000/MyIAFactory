@@ -9,7 +9,9 @@ Ce module décide de CE QUI QUITTE LE POSTE : il est volontairement strict, et c
   courants), comparés sans tenir compte de la casse à CHAQUE segment du chemin (un dossier `.git`, `node_modules`,
   `.factory` à n'importe quel niveau ; un `.env` ou un `id_ed25519` dans n'importe quel dossier). Ils sont écartés en
   silence : c'est attendu. Règle de contenu en plus des noms : les 64 premiers Ko de chaque fichier texte sont lus, et une
-  clé privée PEM ou un compte de service Google (`"private_key"` et `"client_email"`) écarte le fichier (« clé privée »).
+  clé privée PEM avec son corps base64 (au moins 2 lignes de 40 caractères après l'en-tête ; un en-tête seul cité dans du
+  code n'en est pas une) ou un compte de service Google (`"client_email"` et un `"private_key"` qui contient une telle
+  clé) écarte le fichier (« clé privée »).
 - Écartés et nommés (une anomalie à dire) : nom dangereux (`nom_sur`) ; sous Windows, nom court 8.3 (`ENV~1` désigne
   `.env`), flux secondaire (`a:b`), périphérique (`nul.txt`), point ou espace final ; lien symbolique, jonction ou point
   d'analyse Windows inconnu sur le fichier OU sur un de ses dossiers parents ; lien dur (un lien dur peut désigner
@@ -62,7 +64,11 @@ EXTENSIONS_BINAIRES = frozenset(
     ".png .jpg .jpeg .gif .webp .bmp .ico .tif .tiff .psd .svgz .mp3 .mp4 .m4a .wav .ogg .flac .mov .avi .webm .mkv "
     ".zip .gz .tgz .bz2 .xz .7z .rar .zst .jar .aar .apk .aab .war .class .dex .so .dll .exe .dylib .a .lib .o .obj "
     ".pyc .pyd .whl .glb .fbx .blend .ttf .otf .woff .woff2 .eot .pdf .sqlite .db .bin".split())
-_CLE_PEM = re.compile(rb"-----BEGIN[^\r\n]{0,100}PRIVATE KEY-----")
+_CLE_PEM = re.compile(rb"-----BEGIN [A-Z0-9 ]{0,60}PRIVATE KEY-----")
+_FIN_PEM = re.compile(rb"-----END [A-Z0-9 ]{0,60}PRIVATE KEY-----")
+_SEPARATEUR_PEM = re.compile(rb"\r?\n|(?:\\r)?\\n")       # vrai retour à la ligne ou `\n` échappé (chaîne JSON)
+_LIGNE_BASE64 = re.compile(rb"[A-Za-z0-9+/=]{40,}")
+_CLE_GOOGLE = re.compile(rb'"private_key"\s*:\s*"(-----BEGIN[^"]{0,8192})')
 
 _ATTR_POINT_ANALYSE = 0x400                 # FILE_ATTRIBUTE_REPARSE_POINT
 _ETIQUETTE_SUBSTITUT = 0x20000000           # bit « substitut de nom » : liens symboliques, jonctions, montages
@@ -312,9 +318,29 @@ def _a_examiner(nom: str) -> bool:
     return os.path.splitext(nom)[1].lower() not in EXTENSIONS_BINAIRES
 
 
+def _pem_avec_corps(debut: bytes) -> bool:
+    """Un en-tête `-----BEGIN … PRIVATE KEY-----` suivi d'au moins 2 lignes de corps base64 (>= 40 caractères) avant
+    le `-----END … PRIVATE KEY-----` (ou la fin de la lecture bornée). Les lignes sont séparées par de vrais retours ou
+    par des `\\n` échappés (clé rangée dans une chaîne JSON). Un en-tête seul, cité comme motif, expression régulière ou
+    exemple dans du code source, n'est pas une clé."""
+    for m in _CLE_PEM.finditer(debut):
+        suite = debut[m.end():]
+        fin = _FIN_PEM.search(suite)
+        corps = suite[:fin.start()] if fin else suite
+        if sum(1 for ligne in _SEPARATEUR_PEM.split(corps) if _LIGNE_BASE64.fullmatch(ligne.strip())) >= 2:
+            return True
+    return False
+
+
 def _contenu_secret(debut: bytes) -> bool:
-    """Clé privée PEM/OpenSSH (`-----BEGIN … PRIVATE KEY-----` sur une ligne) ou compte de service Google."""
-    return bool(_CLE_PEM.search(debut)) or (b'"private_key"' in debut and b'"client_email"' in debut)
+    """Clé privée PEM/OpenSSH avec son corps base64, ou compte de service Google (`"private_key"` dont la valeur est
+    une clé PEM avec corps, et `"client_email"`). Un fichier qui ne fait que nommer ces champs ou l'en-tête PEM n'est
+    pas écarté."""
+    if _pem_avec_corps(debut):
+        return True
+    if b'"client_email"' not in debut:
+        return False
+    return any(_pem_avec_corps(m.group(1)) for m in _CLE_GOOGLE.finditer(debut))
 
 
 # ---------------------------------------------------------------- liste

@@ -3,6 +3,7 @@
 Un seul dépôt git réel, construit une fois dans `setUpClass` (git init, add, commit), et une seule liste réelle
 (`lister`) ; le reste passe par un faux `git` ou des dossiers temporaires de quelques fichiers."""
 import ast
+import base64
 import hashlib
 import io
 import os
@@ -329,18 +330,40 @@ class TestSansGit(unittest.TestCase):
         self.assertEqual((retenus, ecartes), (["sous/a.py"], []))
 
     def test_cle_privee_par_le_contenu(self):
-        _ecrire(self.tmp, "fixtures/cle.txt", b"x\n-----BEGIN OPENSSH PRIVATE KEY-----\nAAAA\n")
-        _ecrire(self.tmp, "src/rsa.py", b'CLE = """-----BEGIN RSA PRIVATE KEY-----\n"""\n')
-        _ecrire(self.tmp, "compte.json", b'{"type": "service_account", "private_key": "x", "client_email": "a@b"}')
-        _ecrire(self.tmp, "publique.txt", b"-----BEGIN PUBLIC KEY-----\nAAAA\n")
+        # Fausses clés : un corps base64 tiré au hasard à chaque essai (jamais une vraie clé dans le dépôt).
+        def corps(sep=b"\n"):
+            return sep.join(base64.b64encode(os.urandom(48)) for _ in range(3)) + sep
+        debut, fin = b"-----BEGIN %s PRIVATE KEY-----", b"-----END %s PRIVATE KEY-----"
+        _ecrire(self.tmp, "fixtures/cle.txt",
+                b"x\n" + debut % b"OPENSSH" + b"\n" + corps() + fin % b"OPENSSH" + b"\n")
+        _ecrire(self.tmp, "src/rsa.py", b'CLE = """' + debut % b"RSA" + b"\r\n" + corps(b"\r\n") + b'"""\n')
+        compte = (b'{"type": "service_account", "private_key": "-----BEGIN PRIVATE KEY-----\\n' + corps(b"\\n")
+                  + b'-----END PRIVATE KEY-----\\n", "client_email": "a@b"}')
+        _ecrire(self.tmp, "compte.json", compte)
+        _ecrire(self.tmp, "publique.txt", b"-----BEGIN PUBLIC KEY-----\n" + corps())
         _ecrire(self.tmp, "doc.md", b'Le champ "private_key" est lu par ...\n')
-        _ecrire(self.tmp, "loin.txt", b"x" * ti.LECTURE_CONTENU + b"-----BEGIN PRIVATE KEY-----\n")
-        git = _faux_git({"ls": (0, "fixtures/cle.txt\0src/rsa.py\0compte.json\0publique.txt\0doc.md\0loin.txt\0")})
+        _ecrire(self.tmp, "loin.txt", b"x" * ti.LECTURE_CONTENU + debut % b"RSA" + b"\n" + corps())
+        # Mentions dans du code : un motif, une expression régulière, une fixture sans corps, des noms de champs.
+        _ecrire(self.tmp, "motif.py", b'MOTIF = re.compile(rb"-----BEGIN[^\\r\\n]{0,100}PRIVATE KEY-----")\n'
+                                      b'X = b"-----BEGIN OPENSSH PRIVATE KEY-----\\nAAAA\\n"\n'
+                                      b'Y = """-----BEGIN RSA PRIVATE KEY-----\n"""\n-----END RSA PRIVATE KEY-----\n')
+        _ecrire(self.tmp, "champs.py", b'CHAMPS = ("private_key", "client_email")\n'
+                                       b'J = \'{"private_key": "-----BEGIN PRIVATE KEY-----\\\\nAAAA", '
+                                       b'"client_email": "a@b"}\'\n')
+        _ecrire(self.tmp, "court.txt", debut % b"EC" + b"\nAAAA\nBBBB\n" + fin % b"EC" + b"\n")
+        noms = ["fixtures/cle.txt", "src/rsa.py", "compte.json", "publique.txt", "doc.md", "loin.txt", "motif.py",
+                "champs.py", "court.txt"]
+        git = _faux_git({"ls": (0, "".join(n + "\0" for n in noms))})
         retenus, ecartes = ti.lister(self.tmp, git=git)
-        self.assertEqual(retenus, ["doc.md", "loin.txt", "publique.txt"])
+        self.assertEqual(retenus, ["champs.py", "court.txt", "doc.md", "loin.txt", "motif.py", "publique.txt"])
         self.assertEqual(sorted(ecartes), ["compte.json (clé privée)", "fixtures/cle.txt (clé privée)",
                                            "src/rsa.py (clé privée)"])
         self.assertIn("clé privée", self._refus_ecriture("fixtures/cle.txt"))
+
+    def test_le_code_de_l_instantane_part_vers_le_serveur(self):
+        # Le module et ses tests citent l'en-tête PEM comme motif : ils ne doivent pas s'écarter eux-mêmes.
+        for chemin in (RACINE / "outils" / "tests_instantane.py", Path(__file__)):
+            self.assertFalse(ti._contenu_secret(chemin.read_bytes()[:ti.LECTURE_CONTENU]), chemin.name)
 
     def test_doublons_refuses_par_ecrire_tar(self):
         _ecrire(self.tmp, "a.py")

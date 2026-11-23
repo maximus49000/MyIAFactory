@@ -559,13 +559,15 @@ if [ "$FLUTTER" = 1 ]; then                        # aucun SDK de l'hôte en bin
   # jour sur son appareil sans conflit de signature. Absente : rien de monté (AGP crée une clé jetable dans /maison).
   # Présente mais pas un fichier ordinaire (lien, dossier…) : refusée. Jamais lue ici. Montée en LECTURE SEULE sur
   # /maison/.android/debug.keystore, dont la cible (fichier vide) est créée d'abord par l'enveloppe, sous l'uid de l'hôte.
+  # /maison/.android : ANDROID_USER_HOME de l'agent (posé par l'entrée), créé ici sous l'uid de l'hôte, clé ou non.
+  [ ! -L "$DOSSIER/maison/.android" ] && mkdir -p -- "$DOSSIER/maison/.android" && chmod 700 "$DOSSIER/maison/.android" ||
+    echec "Android : ~/taches/$ID/maison/.android non créable (ou lien refusé)."
   CLE_DEBUG="$HOME/android-signature/debug.keystore"
   if [ -e "$CLE_DEBUG" ] || [ -L "$CLE_DEBUG" ]; then
     [ -f "$CLE_DEBUG" ] && [ ! -L "$CLE_DEBUG" ] ||
       echec "clé de debug refusée : ~/android-signature/debug.keystore n'est pas un fichier ordinaire (lien ou autre)."
     cible="$DOSSIER/maison/.android/debug.keystore"
-    { [ ! -L "$DOSSIER/maison/.android" ] && mkdir -p -- "$DOSSIER/maison/.android" && chmod 700 "$DOSSIER/maison/.android" &&
-      { [ ! -L "$cible" ] || rm -f -- "$cible"; } && { [ -f "$cible" ] || { [ ! -e "$cible" ] && : > "$cible"; }; }; } ||
+    { { [ ! -L "$cible" ] || rm -f -- "$cible"; } && { [ -f "$cible" ] || { [ ! -e "$cible" ] && : > "$cible"; }; }; } ||
       echec "clé de debug : cible ~/taches/$ID/maison/.android/debug.keystore non créable."
     COMMANDE+=(--mount "type=bind,src=$CLE_DEBUG,dst=/maison/.android/debug.keystore,readonly")
   fi

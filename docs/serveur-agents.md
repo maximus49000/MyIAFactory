@@ -371,14 +371,17 @@ conteneur des agents des projets Flutter.
   valeurs **fixes** :
   `PATH` (`/opt/flutter-sdk/bin` en tête), `FLUTTER_ROOT`, `PUB_CACHE=/maison/.pub-cache` (inscriptible, gardé à la
   reprise, compté dans les 8 Go de `travail/` + `maison/`), `ANDROID_HOME`, `JAVA_HOME` (JDK 17 de l'image),
-  `GRADLE_USER_HOME=/maison/.gradle`, `CI=true`, `FLUTTER_SUPPRESS_ANALYTICS=true`.
+  `GRADLE_USER_HOME=/maison/.gradle`, `CI=true`, `FLUTTER_SUPPRESS_ANALYTICS=true`, et `ANDROID_USER_HOME=/maison/.android`
+  (créé par l'enveloppe) avec `JAVA_TOOL_OPTIONS=-Duser.home=/maison` : la JVM prend sinon `user.home` dans `/etc/passwd`
+  (le `/home` de l'hôte, en lecture seule dans le conteneur) et Gradle/AGP échouaient sur `~/.android`.
   `flutter pub get` passe par le **réseau sortant ouvert** des agents (pub.dev).
 - **Le droit d'appeler `flutter`** n'est jamais donné par la capacité : c'est la règle `Bash(flutter:*)` de la fiche de
   l'agent (jamais `Bash` seul), ouverte par le Directeur (décision `outil_agent`, « Autoriser ce programme ») ou par
   `{"action": "ouvrir_outil", "cle": "<agent>", "outil": "Bash(flutter:*)"}` envoyé à `orchestrateur/outil.py --factory <F>
   lancer fiche`. La règle couvre une commande qui **commence** par `flutter` ; dans une commande composée (`cd x && flutter
   test`), chaque morceau doit être couvert : préférer `flutter pub get --directory android_app`, et pour `flutter test`
-  un `cd android_app` seul puis `flutter test`.
+  un `cd android_app` seul puis `flutter test`. La consigne de départ d'un agent serveur d'un projet Flutter le dit
+  (`depart.CONSIGNE_FLUTTER_SERVEUR` : commandes simples, ni `&&`, `;`, `|`, `timeout` ni variable en préfixe).
 - **Construire l'APK au serveur : JDK 17, SDK Android et Flutter en copie sur écriture par tâche.** L'image `agent`
   porte le JDK 17 de la distribution (`openjdk-17-jdk-headless`) : elle change, la capacité `agent` redevient
   « À mettre à jour » jusqu'à la réinstallation d'`agent-serveur`. `flutter build apk` est appelé par `flutter` (règle

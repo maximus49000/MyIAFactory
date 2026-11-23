@@ -953,7 +953,8 @@ class Moteur:
             self._garder_la_reponse(projet, tache, fiche, modele, reprendre, reponse)
         else:
             (mode, apk), base = self._mode_serveur(projet), {"projet": projet.nom}
-            depart = depart.rstrip() + "\n\n" + dp.consigne_serveur(mode, nom) + "\n"
+            depart = (depart.rstrip() + "\n\n"       # projet Flutter (vu sur le poste) : les commandes simples
+                      + dp.consigne_serveur(mode, nom, flutter=executeur_serveur._projet_flutter(projet.dossier)) + "\n")
         places = self._places_serveur(projet)
         if places:                          # les places serveur du projet ; sans réglage, le défaut du serveur (2)
             base["places"] = places

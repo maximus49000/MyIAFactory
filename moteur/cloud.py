@@ -483,6 +483,20 @@ RESERVES_PARTOUT = (".gitattributes", ".gitmodules", ".git", ".lfsconfig", *RESE
 _NOM_COURT = re.compile(r"~\d")          # nom court de Windows (FACTOR~1) : il pourrait désigner un dossier réservé
 
 
+PIECES_EXTENSIONS = (".png", ".jpg", ".jpeg", ".gif", ".webp", ".md", ".pdf", ".txt", ".html", ".mp3", ".ogg", ".wav",
+                     ".flac")
+
+
+def _piece_d_agent(parties):
+    """Vrai pour un fichier que le moteur demande lui-même à l'agent d'écrire : `.factory/pieces/<dossier>/…` avec une
+    extension de pièce (image, document, maquette HTML, son). Rien d'autre sous `.factory` (fiches, workflows, réglages,
+    scripts) : essai réel 2026-11-23, la branche d'un agent serveur était refusée pour le document de validation que le
+    moteur lui avait demandé."""
+    return (len(parties) >= 4 and parties[0] == ".factory" and parties[1] == "pieces"
+            and parties[-1].endswith(PIECES_EXTENSIONS)
+            and not any(p in RESERVES_PARTOUT and p != ".factory" for p in parties[1:]))
+
+
 def chemin_reserve(chemin):
     """Vrai si une branche d'agent serveur ne peut pas toucher `chemin` (chemin git, `/` ou `\\`) : sortie du dépôt
     (`..`, absolu, lecteur, `:`), dossier ou fichier réservé (casse ignorée, points et espaces finaux ignorés comme sous
@@ -492,6 +506,8 @@ def chemin_reserve(chemin):
     parties = [p.rstrip(" .").lower() if p not in (".", "..") else p for p in re.split(r"[\\/]", chemin)]
     if any(p in ("", ".", "..") for p in parties) or any(_NOM_COURT.search(p) for p in parties):
         return True
+    if _piece_d_agent(parties):
+        return False
     if parties[0] in RESERVES_RACINE:
         return True
     for k, p in enumerate(parties):

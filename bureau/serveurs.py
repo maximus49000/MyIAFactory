@@ -308,32 +308,32 @@ class Travaux:
         return self.lancer_tache(ident, travail)
 
     # -- les tâches ---------------------------------------------------------
-    def sonder(self, serveur, d):
+    def _sonder_et_enregistrer(self, serveur, d):
+        """La sonde, la charge (lecture seule, hors verrou) et le mot des capacités à états, rangés ensemble ; le message
+        d'erreur, ou None."""
         _, _, etat_mod, inst, _ = _modules()[:5]
+        mots = {}
+        etat = etat_mod.sonder(serveur, mots=mots, **self._options_ssh())
+        joint = not all(s == "inconnue" for s in etat.values())
+        charge = etat_mod.charge(serveur, **self._options_ssh()) if joint else None
+        inst.enregistrer_sonde(d, serveur, etat, charge=charge, mots=mots)
+        return None if joint else "Serveur injoignable : l'état de ses capacités est inconnu."
 
-        def travail():
-            etat = etat_mod.sonder(serveur, **self._options_ssh())
-            joint = not all(s == "inconnue" for s in etat.values())
-            charge = etat_mod.charge(serveur, **self._options_ssh()) if joint else None     # lecture seule, hors verrou
-            inst.enregistrer_sonde(d, serveur, etat, charge=charge)
-            if not joint:
-                return "Serveur injoignable : l'état de ses capacités est inconnu."
-            return None
-        return self.lancer("sonder", serveur, travail)
+    def sonder(self, serveur, d):
+        return self.lancer("sonder", serveur, lambda: self._sonder_et_enregistrer(serveur, d))
 
     def verifier_licence(self, serveur, d):
         """« Vérifier la licence » (autonome) : rétablit au serveur l'état d'avant d'une licence refusée si ses fichiers sont là
         (`tests_serveur.verifier_licence_unity`), puis la sonde. Le message est rendu comme une erreur de la carte s'il échoue."""
-        _, _, etat_mod, inst, _ = _modules()[:5]
+        _modules()
 
         def travail():
             import tests_serveur
             message = tests_serveur.verifier_licence_unity(d, serveur, **self._options_ssh())
-            etat = etat_mod.sonder(serveur, **self._options_ssh())
-            inst.enregistrer_sonde(d, serveur, etat)
-            if all(s == "inconnue" for s in etat.values()):
-                return "Serveur injoignable : l'état de ses capacités est inconnu."
-            return None if message.startswith(("Licence Unity rétablie", "Sonde relancée")) else message
+            erreur = self._sonder_et_enregistrer(serveur, d)       # la charge est rangée avec la sonde, jamais effacée
+            if erreur:
+                return erreur
+            return None if message.startswith("Sonde relancée") else message
         return self.lancer("verifier-licence", serveur, travail)
 
     def installer(self, serveur, actions, d):

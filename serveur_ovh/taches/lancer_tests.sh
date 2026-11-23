@@ -456,6 +456,17 @@ inodes_bas && echouer 76 "inodes presque épuisés : moins de ${INODES_MIN_PC} %
 if [ "$EXECUTEUR" = conteneur ]; then                  # l'exécuteur hôte n'a pas d'image (l'éditeur de l'hôte)
   dk 20 image inspect "$IMAGE" >/dev/null 2>&1 || echouer 77 "image $IMAGE absente : installez la capacité qui la fournit (tests-image, tests-android)."
 fi
+if [ "$EXECUTEUR" = hote_bac_a_sable ]; then
+  # Garde CÔTÉ SERVEUR (tâche 14i, relecture) : le poste ne fait jamais foi seul. Le bac à sable n'est permis qu'après l'audit
+  # J14 (marqueur non vide) ET si l'état de la licence noté par l'étape unity_licence_etat est « hote ». Rien n'est lu d'autre.
+  [ -s "$HOME/.myiafactory/unity-bac-a-sable.version" ] && [ ! -L "$HOME/.myiafactory/unity-bac-a-sable.version" ] ||
+    echouer 77 "bac à sable Unity non audité (~/.myiafactory/unity-bac-a-sable.version absent) : rien ne tourne sur l'hôte."
+  etat_licence=""
+  [ -f "$HOME/.myiafactory/unity-licence.etat" ] && [ ! -L "$HOME/.myiafactory/unity-licence.etat" ] &&
+    etat_licence=$(head -c 64 -- "$HOME/.myiafactory/unity-licence.etat" 2>/dev/null)
+  [ "${etat_licence%%[[:space:]]*}" = hote ] ||
+    echouer 77 "état de la licence Unity du serveur autre que « hote » : rien ne tourne sur l'hôte."
+fi
 if [ "$FAMILLE" = gradle-android ]; then
   [ -d "$HOME/android-sdk" ] || echouer 77 "SDK Android de l'hôte absent (~/android-sdk) : installez la capacité android-build."
 fi

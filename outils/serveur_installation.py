@@ -152,7 +152,7 @@ _DETAIL_SONDE = {"presente": "Constatée par la sonde.", "absente": "Absente (co
 
 
 def enregistrer_sonde(dossier, serveur, etat, vivant=pid_vivant, charge=None, horloge=time.time, sous_verrou=None,
-                      sur_echec=None):
+                      sur_echec=None, mots=None):
     """Écrit le résultat d'une sonde (`{capacité: statut}`) dans l'état, sous les mêmes verrous qu'une installation.
 
     `ErreurInstallation` (« déjà en cours ») si une installation tient le verrou. Une capacité non installable restée
@@ -175,7 +175,7 @@ def enregistrer_sonde(dossier, serveur, etat, vivant=pid_vivant, charge=None, ho
             try:
                 if sous_verrou is not None:
                     sous_verrou()       # exécuté verrou pris : aucune installation ne peut démarrer entre cette action et l'écriture
-                _enregistrer(dossier, serveur, etat, charge, horloge)
+                _enregistrer(dossier, serveur, etat, charge, horloge, mots)
             except BaseException:
                 if sur_echec is not None:
                     sur_echec()         # encore sous le verrou : personne ne peut écrire entre l'échec et le retour arrière
@@ -189,7 +189,7 @@ def enregistrer_sonde(dossier, serveur, etat, vivant=pid_vivant, charge=None, ho
         _VERROU_PROCESSUS.release()
 
 
-def _enregistrer(dossier, serveur, etat, charge, horloge):
+def _enregistrer(dossier, serveur, etat, charge, horloge, mots=None):
     """Écrit l'état constaté par une sonde (appelé verrou pris)."""
     avant = lire_etat(dossier).get(serveur.id, {})
     anciennes = avant.get("capacites") if isinstance(avant.get("capacites"), dict) else {}
@@ -201,6 +201,8 @@ def _enregistrer(dossier, serveur, etat, charge, horloge):
             caps[i] = ancienne
         else:
             caps[i] = _entree(s, _DETAIL_SONDE.get(s, ""))
+            if isinstance(mots, dict) and isinstance(mots.get(i), str):
+                caps[i]["mot"] = mots[i][:16]           # le mot d'une capacité à états (serveur_etat.MOTS), déjà filtré
     inst = avant.get("installation")
     debut = inst.get("debut", "") if isinstance(inst, dict) and isinstance(inst.get("debut"), str) else ""
     valide = _charge_valide(charge)

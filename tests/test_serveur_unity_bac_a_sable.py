@@ -152,6 +152,9 @@ class TestBacASable(D.Banc):
         _ecrire(self.ulf, FACTICE, 0o600)
         self.h, self.rm = E._msys(self.home), E._msys(r)
         self.env.update(BAC_A_SABLE_RACINE_TEST=self.rm, FAUX_BAC_A_SABLE=SCRIPT_RACINE.as_posix())
+        # garde du serveur (tâche 14i) : posée par demarrer_hote (audit J14 passé, état noté de la licence « hote »)
+        self.marqueur = self.home / ".myiafactory" / "unity-bac-a-sable.version"
+        self.etat_licence = self.home / ".myiafactory" / "unity-licence.etat"
 
     def editeur(self, version):
         _ecrire(self.r / "opt" / "unity" / "editors" / version / "Editor" / "Unity", "#!/bin/sh\nexit 0\n", 0o755)
@@ -160,7 +163,10 @@ class TestBacASable(D.Banc):
         return f"{self.rm}/var/lib/unity-tests/campagnes/{ident}"
 
     # --- enveloppe -----------------------------------------------------------------------------------------------------
-    def demarrer_hote(self, *plus, ident=ID, env=None, commande=json.dumps(U.COMMANDE_UNITY), licence="B1"):
+    def demarrer_hote(self, *plus, ident=ID, env=None, commande=json.dumps(U.COMMANDE_UNITY), licence="B1", garde=True):
+        if garde:
+            _ecrire(self.marqueur, "bac_a_sable=A;utilisateur=unity-tests;fichiers=0123456789abcdef\n", 0o600)
+            _ecrire(self.etat_licence, "hote\n", 0o600)
         entree = self.home / "tests" / ident / "entree"
         entree.mkdir(parents=True)
         (entree / "entree.tar").write_bytes(D.TAR_NODE)
@@ -399,6 +405,23 @@ class TestBacASable(D.Banc):
         r, etat = self.lancer_direct(E.ident(72), env={"FAUX_SANS_UNITY": "1"})
         self.assertEqual(r.returncode, 77, r.stderr)
         self.assertIsNone(self.unite(etat))
+
+    def test_garde_du_serveur_audit_et_licence_hote(self):
+        # Le poste ne fait jamais foi seul : sans marqueur d'audit, ou si l'état noté au serveur n'est pas « hote », 77 avant la file.
+        cas = (("marqueur absent", lambda: self.marqueur.unlink()),
+               ("marqueur vide", lambda: _ecrire(self.marqueur, "", 0o600)),
+               ("licence conteneur", lambda: _ecrire(self.etat_licence, "conteneur B1\n", 0o600)),
+               ("licence absente", lambda: _ecrire(self.etat_licence, "absente\n", 0o600)),
+               ("état absent", lambda: self.etat_licence.unlink()))
+        for i, (nom, preparer) in enumerate(cas):
+            _ecrire(self.marqueur, "bac_a_sable=A\n", 0o600)
+            _ecrire(self.etat_licence, "hote\n", 0o600)
+            preparer()
+            code, out, err, etat = self.hote(ident=E.ident(90 + i), garde=False)
+            self.assertEqual(code, 77, (nom, err))
+            self.assertEqual(err[-2], "#refus 77", nom)
+            self.assertIsNone(self.unite(etat), nom)
+            self.assertNotIn("unity-bac-a-sable.sh lancer", getattr(self, "journal", "") or "", nom)
 
     def test_avertissement_version_de_repli(self):
         self.editeur(REPLI)

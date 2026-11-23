@@ -66,6 +66,7 @@ class Route(Base):
         super().setUp()
         self.instantane = FauxInstantaneUnity()
         self.poses, self.notes_licence = [], []
+        self.etape_posee = True
 
     def unity(self, ssh, entree, profil=UNITY, commande=COMMANDE_UNITY, **k):
         def poser(dossier_etat, serveur_id, cle):
@@ -74,7 +75,7 @@ class Route(Base):
 
         def noter_licence(dossier_etat, serveur, etat_, **kw):
             self.notes_licence.append((etat_, kw))
-            return "fait", ""
+            return "fait", "", self.etape_posee
         options = dict(analyse=lambda racine, **o: profil, etat_serveurs=lambda d: {SERVEUR.id: entree},
                        poser_etape=poser, noter_licence=noter_licence, version_hote_de=lambda racine: None,
                        ressources_forcees=lambda racine: {})
@@ -199,7 +200,8 @@ class TestChoix(Route):
         # « Vérifier la licence » : l'état d'avant est réécrit (l'étape exige les fichiers de licence), l'étape humaine retirée
         self.assertEqual(tests_serveur.verifier_licence_unity(d, SERVEUR, ssh=SshEtape("a_faire"))[:23], "Licence Unity non rétab")
         self.assertEqual(serveur_installation.lire_etat_capacite(d, SERVEUR.id, "unity-licence")["etat"], "absente")
-        self.assertIn("rétablie", tests_serveur.verifier_licence_unity(d, SERVEUR, ssh=SshEtape()))
+        message = tests_serveur.verifier_licence_unity(d, SERVEUR, ssh=SshEtape())
+        self.assertEqual(message, "État rétabli ; la licence sera vérifiée à la prochaine campagne.")   # libellé honnête (I3)
         e = serveur_installation.lire_etat_capacite(d, SERVEUR.id, "unity-licence")
         self.assertEqual((e["etat"], e["variante"], e["etapes"]), ("conteneur", "B2", {}))
         # une étape refusée par le serveur n'écrit rien de local (sauf « absente »)
@@ -448,6 +450,131 @@ class Essai(unittest.TestCase):
         self.assertEqual(r["risque"], tests_serveur.RISQUE_A)
         with self.assertRaises(tests_unity_essai.Refus):
             tests_unity_essai.script_marqueur("x'; rm -rf ~; '")
+
+
+MIXTE = Profil(familles=("python", "unity"), outils={"unity": "6000.6.7f1"},
+               commandes=[["python3", "-m", "unittest"], UNITY.commandes[0]], ressources=dict(UNITY.ressources))
+
+
+class TestCorrectifs(Route):
+    """Relecture 14i : M1, M3, M6 (route) ; I3 vu plus haut."""
+
+    def test_profil_mixte_python_sans_licence_unity_avec(self):
+        # M1 : profil (« python », « unity ») de sur-la-route : la commande python part par tests-image, sans licence
+        for entree in (etat(None, statut_licence="absente"), etat("absente")):
+            ssh = FauxSsh()
+            self.requises = None
+            self.assertEqual(self.unity(ssh, entree, profil=MIXTE, commande=("python", "-m", "unittest")), 0)
+            self.assertEqual(self.requises, ("tests-image",))
+            self.assertNotIn("unity", self.distante(ssh))
+            self.assertNotIn("conteneur", self.distante(ssh))
+        self.assertEqual(self.poses, [])
+        # la commande Unity du même profil suit la règle (comme executeur_pour : « unity » dans les familles)
+        ssh = FauxSsh()
+        self.unity(ssh, etat("conteneur", "B1"), profil=MIXTE)
+        self.assertTrue(self.distante(ssh).endswith(" conteneur B1"), self.distante(ssh))
+        self.assertIn("myiafactory/tests-unity-6000.6.7f1 unity", self.distante(ssh))
+        ssh = FauxSsh()
+        self.unity(ssh, etat(None), profil=MIXTE)
+        self.assertEqual(ssh.appels_flux, [])
+        self.assertEqual(self.poses, ["unity-licence"])
+
+    def test_mot_de_la_sonde_discordant(self):
+        # M3 : le mot imprimé par la sonde (conteneur/hote) doit égaler l'état local, sinon absente, discordance dite
+        e = etat("conteneur", "B1")
+        e["capacites"]["unity-licence"]["mot"] = "hote"
+        lic = tests_serveur.licence_relevee(e)
+        self.assertEqual(lic["etat"], "absente")
+        self.assertIn("discordants", lic["raison"])
+        with self.assertRaises(tests_serveur.RepliUnity):
+            tests_serveur.executeur_pour(UNITY, e)
+        e["capacites"]["unity-licence"]["mot"] = "conteneur"
+        self.assertEqual(tests_serveur.executeur_pour(UNITY, e), ("conteneur", "B1"))
+        # la sonde rend ce mot (ligne « unity-licence.mot=… »), rangé avec la capacité par enregistrer_sonde
+        import serveur_etat
+
+        class SshSonde:
+            def executer(self, cible, commande, cle, stdin=None, delai=60):
+                self.script = stdin
+                return 0, "base=0\nunity-licence=0\nunity-licence.mot=hote\nunity-bac-a-sable=1\n", ""
+        s = SshSonde()
+        mots = {}
+        statuts = serveur_etat.sonder(SERVEUR, ssh=s, mots=mots)
+        self.assertEqual((statuts["unity-licence"], mots), ("presente", {"unity-licence": "hote"}))
+        self.assertIn('unity-licence.mot=', s.script)
+        d = Path(self._t.name) / "etat-sonde"
+        serveur_installation.enregistrer_sonde(d, SERVEUR, statuts, mots=mots, charge={"charge_par_coeur": 0.5,
+                                               "memoire_libre_ratio": 0.5, "conteneurs_outils": 1})
+        lu = serveur_installation.lire_etat(d)[SERVEUR.id]
+        self.assertEqual(lu["capacites"]["unity-licence"]["mot"], "hote")
+        self.assertIn("charge", lu)
+        mots = {}
+        s.executer = lambda *a, **k: (0, "unity-licence=0\nunity-licence.mot=hote;id\n", "")
+        serveur_etat.sonder(SERVEUR, ssh=s, mots=mots)
+        self.assertEqual(mots, {})                                              # un mot hors table est ignoré
+
+    def test_etape_dite_seulement_quand_posee(self):
+        # M6 : « étape posée » n'est dit que si elle vient de l'être
+        for posee in (True, False):
+            self.dits.clear()
+            self.etape_posee = posee
+            ssh = FauxSsh(sessions=[{"fin_serveur": (81, 100, 110, 0), "code": 81}])
+            self.unity(ssh, etat("conteneur", "B1"))
+            self.assertEqual(any("posée" in x for x in self.dits), posee, self.dits)
+            self.assertTrue(self.dit("licence Unity refusée"))
+
+    def test_sonde_et_charge_gardees(self):
+        # M2 : « Vérifier la licence » (bureau) et le rafraîchissement de J14 rangent la charge avec la sonde
+        from bureau import serveurs as carte
+        appels = []
+        with mock.patch.object(carte.Travaux, "_sonder_et_enregistrer", lambda self, s, d: appels.append(s.id) or None), \
+                mock.patch.object(tests_serveur, "verifier_licence_unity", lambda d, s, **k: "Sonde relancée."):
+            t = carte.Travaux(ssh=object())
+            self.assertTrue(t.verifier_licence(SERVEUR, Path(self._t.name)))
+            t.attendre(10)
+        self.assertEqual(appels, [SERVEUR.id])
+        import serveur_etat
+        ranges = []
+        with mock.patch.object(serveur_etat, "sonder", lambda s, mots=None, **k: {"base": "presente"}), \
+                mock.patch.object(serveur_etat, "charge", lambda s, **k: {"charge_par_coeur": 1.0}), \
+                mock.patch.object(serveur_installation, "enregistrer_sonde", lambda d, s, e, **k: ranges.append(k)):
+            tests_unity_essai._rafraichir(SERVEUR, Path(self._t.name))
+        self.assertEqual(ranges[0]["charge"], {"charge_par_coeur": 1.0})
+
+
+class TestCorrectifsEssai(Essai):
+    def test_hote_seulement_si_b1_et_b2_rendent_81(self):
+        # I2 : B1 seule (ou B2 seule) qui rend 81 ne prouve rien pour A : indéterminé, rien d'écrit
+        for variantes in (("B1",), ("B2",), ("B1", "B3")):
+            self.lances.clear()
+            r = self.essai(variantes, accord=True, hotes=["license.unity3d.com"])
+            self.assertEqual((r["verdict"], r["etat_ecrit"]), ("indetermine", None), variantes)
+        self.assertEqual((self.notes, self.poses), ([], []))
+        self.assertEqual(self.essai(("B1", "B2"))["verdict"], "hote")
+
+    def test_ecriture_impossible_releve_ecrit_quand_meme(self):
+        # M5 : une écriture locale refusée (installation en cours) n'interrompt pas l'essai : le relevé est écrit
+        def refuse(*a, **k):
+            raise serveur_installation.ErreurInstallation("Une installation est en cours.")
+        self.codes = {"B1": 0}
+        r = tests_unity_essai.essai(
+            SERVEUR.id, str(self.projet), "Jeu.Tests.UnTest", ("B1",), False, (), dossier_etat=self.t, bash=self.bash,
+            executer=self.executer, noter_licence=refuse, poser_etape=lambda *a: True, accord_b3=lambda r: False,
+            lire_serveurs=lambda d: [SERVEUR], etat_serveurs=lambda d: {SERVEUR.id: etat(None)}, analyse=lambda r, **o: UNITY,
+            horloge=lambda: 0.0, dire=lambda *a: None, releves=self.t / "tests-unity-essai.json")
+        self.assertEqual((r["verdict"], r["etat_ecrit"]), ("conteneur", "non_ecrit"))
+        self.assertTrue((self.t / "tests-unity-essai.json").exists())
+        # J14 : l'état local de l'audit d'abord ; refusé, le marqueur n'est PAS posé et rien ne tourne sur l'hôte
+        self.scripts.clear(), self.lances.clear()
+        r = tests_unity_essai.essai(
+            SERVEUR.id, str(self.projet), "Jeu.Tests.UnTest", ("B1", "B2"), True, (), dossier_etat=self.t, bash=self.bash,
+            executer=self.executer, lire_serveurs=lambda d: [SERVEUR],
+            etat_serveurs=lambda d: {SERVEUR.id: etat("hote")}, analyse=lambda r, **o: UNITY, modifier=refuse,
+            rafraichir=lambda s, d: self.rafraichis.append(s.id), empreinte_bac="bac_a_sable=A", nouvel_id=lambda: ID,
+            horloge=lambda: 0.0, dire=lambda *a: None, releves=self.t / "tests-unity-essai.json")
+        self.assertEqual(r["verdict"], "etat_non_ecrit")
+        self.assertFalse([s for s in self.scripts if "unity-bac-a-sable.version" in s])
+        self.assertEqual((self.lances, self.rafraichis), ([], []))
 
 
 if __name__ == "__main__":

@@ -306,13 +306,24 @@ def _profil_de_la_campagne(analyse, racine, commande):
     return profil
 
 
-def _image_de_la_campagne(profil, sdk_android):
+def _commande_unity(commande):
+    """Vrai si la commande lancée est celle de l'éditeur Unity (famille de son exécutable)."""
+    import tests_profil
+    return tests_profil._famille_lancee(commande_conteneur(list(commande))) == "unity"
+
+
+def _image_de_la_campagne(profil, sdk_android, commande=None):
     """(image, famille, capacités requises) d'après le catalogue ; `image` est None pour l'image par défaut (l'enveloppe la
     prend seule : la ligne de commande reste celle d'avant). `Repli` si aucune image du catalogue ne convient (les images
     dérivées ne sont pas encore construites) ou si le SDK Android du serveur ne couvre pas le projet.
     Unity (tâche 14i) : `myiafactory/tests-unity-<version exacte du projet>` (construite par construire_image_tests.sh ; absente,
     l'enveloppe refuse en 77 et la campagne revient au poste) ; l'exécuteur est choisi ensuite (`executeur_pour`)."""
-    if tuple(profil.familles) == ("unity",):
+    if "unity" in tuple(profil.familles) and commande is not None and not _commande_unity(commande):
+        # profil mixte (« python », « unity ») : une commande d'une autre famille ne voit ni Unity ni sa licence
+        from dataclasses import replace
+        profil = replace(profil, familles=tuple(f for f in profil.familles if f != "unity"),
+                         outils={k: v for k, v in (profil.outils or {}).items() if not k.startswith("unity")})
+    if "unity" in tuple(profil.familles):
         try:
             version = tests_images._version("unity", (profil.outils or {}).get("unity"))
         except ValueError:
@@ -480,6 +491,7 @@ CODE_AUCUN_TEST = 82
 RAISON_ABSENTE = "licence Unity absente"
 RAISON_BAC_ABSENT = "bac à sable Unity absent : rien ne tourne sur l'hôte sans lui"
 RAISON_DEPART = "expérience B non faite"
+MESSAGE_ETAT_RETABLI = "État rétabli ; la licence sera vérifiée à la prochaine campagne."
 RISQUE_A = ("Risque résiduel de l'option A : le code des tests tourne sur l'hôte (utilisateur unity-tests, unité confinée), "
             "moins isolé qu'un conteneur ; il peut lire la licence et tout fichier lisible par tous sur l'hôte.")
 
@@ -509,6 +521,13 @@ def licence_relevee(etat_serveur) -> dict:
     variante = e.get("variante") if e.get("variante") in LICENCES else None
     hotes = [h for h in e.get("hotes") or [] if _hote_de_licence(h)] if isinstance(e.get("hotes"), list) else []
     raison = e.get("raison") if isinstance(e.get("raison"), str) else ""
+    # le mot que la sonde a lu dans le marqueur du serveur (« conteneur » / « hote ») : une discordance avec l'état local n'est
+    # jamais tranchée en faveur du poste (absente, dite) ; une sonde d'avant (sans mot) laisse l'état local décider
+    caps = etat_serveur.get("capacites") if isinstance(etat_serveur, dict) else None
+    mot = caps.get(CAP_LICENCE, {}).get("mot") if isinstance(caps, dict) and isinstance(caps.get(CAP_LICENCE), dict) else None
+    if releve in ("conteneur", "hote") and mot in ETATS_LICENCE and mot != releve:
+        return {"etat": "absente", "variante": None, "hotes": [],
+                "raison": f"états discordants : serveur « {mot} », poste « {releve} » (refaites l'expérience J13)"}
     if releve in ("conteneur", "hote") and _statut(etat_serveur, CAP_LICENCE) in STATUTS_PRETS:
         return {"etat": releve, "variante": variante, "raison": "", "hotes": hotes}
     if releve in ("conteneur", "hote"):
@@ -604,7 +623,8 @@ def _etape_licence(serveur, ssh, ligne):
 def noter_licence_unity(dossier_etat, serveur, etat, variante=None, raison="", hotes=None, ssh=None, modifier=None):
     """Note l'état de la licence Unity : au serveur (étape `unity_licence_etat`, marqueur de la sonde) PUIS dans l'état local
     (`etats[unity-licence]` : état, variante, raison, hôtes de B3). `absente` garde l'état d'avant (`precedent`, pour « Vérifier
-    la licence ») et pose l'étape humaine une fois ; `conteneur`/`hote` retirent l'étape. Rend (statut de l'étape, détail).
+    la licence ») et pose l'étape humaine une fois ; `conteneur`/`hote` retirent l'étape. Rend (statut de l'étape, détail,
+    étape humaine posée à l'instant).
     L'état local n'est écrit que si l'étape a répondu `fait` (« absente » : toujours, rien ne tourne sans licence)."""
     import serveur_installation
     if etat not in ETATS_LICENCE or (etat == "conteneur") != (variante in LICENCES):
@@ -612,7 +632,8 @@ def noter_licence_unity(dossier_etat, serveur, etat, variante=None, raison="", h
     ligne = f"conteneur {variante}" if etat == "conteneur" else etat
     statut, detail = _etape_licence(serveur, ssh or plateforme_ssh, ligne)
     if statut != "fait" and etat != "absente":
-        return statut, detail
+        return statut, detail, False
+    posee = []
     etape = _bureau("releve").etape_humaine_serveur("unity-licence") if etat == "absente" else None
 
     def ecrire(ancien):
@@ -623,12 +644,14 @@ def noter_licence_unity(dossier_etat, serveur, etat, variante=None, raison="", h
             avant = ancien if ancien.get("etat") in ("conteneur", "hote") else ancien.get("precedent")
             if isinstance(avant, dict) and avant.get("etat") in ("conteneur", "hote"):
                 neuf["precedent"] = {k: avant.get(k) for k in ("etat", "variante", "hotes")}
-            etapes.setdefault("unity-licence", etape)
+            if "unity-licence" not in etapes:
+                etapes["unity-licence"] = etape
+                posee.append(True)
         else:
             etapes.pop("unity-licence", None)
         return neuf
     (modifier or serveur_installation.modifier_etat_capacite)(dossier_etat, serveur.id, CAP_LICENCE, ecrire)
-    return statut, detail
+    return statut, detail, bool(posee)
 
 
 def verifier_licence_unity(dossier_etat, serveur, ssh=None, lire=None, modifier=None):
@@ -645,9 +668,10 @@ def verifier_licence_unity(dossier_etat, serveur, ssh=None, lire=None, modifier=
     if p.get("etat") == "conteneur" and variante not in LICENCES:
         return "État d'avant illisible : refaites l'expérience J13."
     statut, detail = noter_licence_unity(dossier_etat, serveur, p["etat"], variante, hotes=p.get("hotes"), ssh=ssh,
-                                         modifier=modifier)
+                                         modifier=modifier)[:2]
     if statut == "fait":
-        return "Licence Unity rétablie : " + ("dans le conteneur" if p["etat"] == "conteneur" else "sur l'hôte, bac à sable") + "."
+        # honnête : seuls les fichiers de licence ont été constatés ; la licence elle-même l'est à la prochaine campagne
+        return MESSAGE_ETAT_RETABLI
     return f"Licence Unity non rétablie ({statut}) : {detail}"
 
 
@@ -903,7 +927,7 @@ def _au_serveur(commande, racine, attendre, places, dossier_etat, ssh, noter, ho
     suffixe = _arguments_executeur(executeur, licence, hotes_licence, reseau_licence, racine, version_hote)
     profil = _profil_de_la_campagne(analyse or _analyse_par_defaut, racine, commande)
     limites = limites_de(profil, (ressources_forcees or _limites_forcees_par_defaut)(racine))
-    image, famille, requises = _image_de_la_campagne(profil, sdk_android)
+    image, famille, requises = _image_de_la_campagne(profil, sdk_android, commande)
     if licence is not None and famille != "unity":
         raise Repli("refusé (licence Unity hors de la famille unity)")
     if executeur == "hote_bac_a_sable" and famille != "unity":
@@ -1057,9 +1081,11 @@ def _au_serveur(commande, racine, attendre, places, dossier_etat, ssh, noter, ho
         # 81 : la licence est notée absente (étape unity_licence_etat, puis l'état local) et l'étape humaine posée, une fois ;
         # pendant une évaluation (expérience J13), 81 est un résultat attendu : rien n'est noté
         try:
-            (noter_licence or noter_licence_unity)(dossier_etat, serveur, "absente",
-                                                   raison="licence refusée à la dernière campagne", ssh=ssh)
-            dire("Serveur : licence Unity refusée ; notée absente, étape « Reconnecter Unity Hub » posée au bureau.")
+            note = (noter_licence or noter_licence_unity)(dossier_etat, serveur, "absente",
+                                                          raison="licence refusée à la dernière campagne", ssh=ssh)
+            posee = isinstance(note, tuple) and len(note) > 2 and note[2] is True
+            dire("Serveur : licence Unity refusée ; notée absente"
+                 + (", étape « Reconnecter Unity Hub » posée au bureau." if posee else "."))
         except Exception:  # noqa: BLE001
             dire("Serveur : licence Unity refusée ; l'état n'a pas pu être noté (il le sera à la prochaine campagne).")
     if evaluation:

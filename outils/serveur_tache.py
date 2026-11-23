@@ -589,6 +589,9 @@ def choisir_serveur(dossier=plateforme_acces.DOSSIER, requises=CAPACITES_REQUISE
             v = caps[c].get("statut") if isinstance(caps.get(c), dict) else None
             if egal and v in STATUTS_PRETS:
                 releve = etats.get(c).get("etat") if isinstance(etats.get(c), dict) else None
+                mot = caps[c].get("mot")          # le mot lu par la sonde au serveur : une discordance n'est jamais prête
+                if isinstance(mot, str) and mot != releve:
+                    releve = f"{releve or 'inconnu'}, serveur {mot}"
                 if releve != voulu:
                     v = f"etat_{releve or 'inconnu'}"
             statuts[exigence] = v

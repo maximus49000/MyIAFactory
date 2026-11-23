@@ -105,7 +105,8 @@ _CATALOGUE = {
         "unity_bac_a_sable",
         "id -u unity-tests >/dev/null 2>&1 && test -x /usr/local/lib/myiafactory/unity-bac-a-sable.sh "
         "&& test -x /usr/local/lib/myiafactory/sonde-bac-a-sable.sh && test -s ~/.myiafactory/unity-bac-a-sable.version "
-        "&& find /opt/unity/editors -mindepth 3 -maxdepth 3 -path '*/Editor/Unity' -perm -005 2>/dev/null | grep -q .",
+        # un éditeur lisible et exécutable par les autres (« r-x » en fin des droits : unity-tests n'est ni propriétaire ni du groupe)
+        "&& stat -c %A /opt/unity/editors/*/Editor/Unity 2>/dev/null | grep -q 'r.x$'",
         0.0, 5),
     # Étape humaine : le jeton de l'abonnement est enregistré UNE fois par le Directeur ; la sonde ne lit jamais son contenu
     # (droits du dossier et du fichier, fichier non vide).

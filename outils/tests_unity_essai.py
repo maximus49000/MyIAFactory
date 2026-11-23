@@ -10,8 +10,8 @@ J13 (sans `--hote`) : lecture et conteneur seulement, aucun changement de l'hôt
   2. Une campagne `-testFilter <nom>` par variante, dans l'ordre B1, B2 (B3 seulement si `--variantes` la cite ET que la décision
      QU1 est `accorde`, avec les hôtes de licence relevés dans le journal du client à la main : jamais devinés), à froid puis à
      chaud, par `tests_serveur.executer(…, forcer=True, evaluation=True, executeur="conteneur", licence=<variante>)`.
-  3. Verdict : `conteneur` (première variante qui rend 0 : au moins un test exécuté, 82 sinon), `hote` (81 dans TOUTES les
-     variantes permises), `indetermine` (82, erreur de compilation, test en échec, refus, autre code : RIEN n'est écrit, jamais une
+  3. Verdict : `conteneur` (première variante qui rend 0 : au moins un test exécuté, 82 sinon), `hote` (81 en B1 ET en B2, et
+     dans toutes les variantes permises), `indetermine` (82, erreur de compilation, test en échec, refus, autre code : RIEN n'est écrit, jamais une
      conclusion pour A). L'état est écrit par l'étape `unity_licence_etat` (puis l'état local) ; `hote` pose aussi l'étape humaine
      « Installer 6000.6.7f1 par Hub » (QU2).
 J14 (`--hote`, seulement si l'état relevé est `hote`) : l'audit du bac à sable (`sudo -n unity-bac-a-sable.sh auditer …` : la
@@ -58,6 +58,11 @@ BAC_A_SABLE = "/usr/local/lib/myiafactory/unity-bac-a-sable.sh"
 MARQUEUR_BAC = "$HOME/.myiafactory/unity-bac-a-sable.version"
 _MOTIF_EMPREINTE = re.compile(r"[A-Za-z0-9=;_.,-]{1,200}", re.ASCII)
 AUDIT = {"cpus": 4, "memoire_mo": 10240, "duree_s": 900, "travail_go": 10}
+
+
+def _erreurs_ecriture():
+    import serveur_installation
+    return (serveur_installation.ErreurInstallation, OSError)
 
 
 class Refus(Exception):
@@ -166,9 +171,9 @@ def _passages(executer, commande, dossier, executeur, licence, hotes, horloge, d
 def essai(serveur_id, dossier, test, variantes=("B1", "B2"), hote=False, hotes_licence=(), *,
           dossier_etat=plateforme_acces.DOSSIER, bash=None, executer=None, noter_licence=None, poser_etape=None,
           accord_b3=None, lire_serveurs=None, etat_serveurs=None, rafraichir=None, empreinte_bac=None, analyse=None,
-          nouvel_id=None, horloge=time.monotonic, dire=print, releves=None):
+          nouvel_id=None, horloge=time.monotonic, dire=print, releves=None, modifier=None):
     """L'expérience J13 (ou J14 avec `hote`). Rend le relevé écrit (`verdict` : conteneur | hote | indetermine |
-    bac_a_sable_pret | audit_echoue | hote_echoue). `Refus` avant toute connexion pour un argument ou un état qui ne convient pas."""
+    bac_a_sable_pret | audit_echoue | etat_non_ecrit | hote_echoue). `Refus` avant toute connexion pour un argument ou un état qui ne convient pas."""
     racine = str(Path(dossier).resolve())
     serveurs = (lire_serveurs or _lire_serveurs)(dossier_etat)
     serveur = next((s for s in serveurs if getattr(s, "id", None) == serveur_id), None)
@@ -184,7 +189,7 @@ def essai(serveur_id, dossier, test, variantes=("B1", "B2"), hote=False, hotes_l
               "jalon": "J14" if hote else "J13", "passages": [], "messages": []}
     if hote:
         return _essai_hote(serveur, racine, commande, profil, etat_srv, releve, bash, executer, rafraichir, empreinte_bac,
-                           nouvel_id or serveur_tache.nouvel_id, horloge, dire, releves, dossier_etat)
+                           nouvel_id or serveur_tache.nouvel_id, horloge, dire, releves, dossier_etat, modifier)
     accord = (accord_b3 or tests_serveur._reseau_licence_par_defaut)(racine) is True
     hotes = [h for h in hotes_licence or () if tests_serveur._hote_de_licence(h)]
     if len(hotes) != len(list(hotes_licence or ())):
@@ -212,24 +217,34 @@ def essai(serveur_id, dossier, test, variantes=("B1", "B2"), hote=False, hotes_l
         raison = ("aucun test découvert (82)" if code == tests_serveur.CODE_AUCUN_TEST
                   else f"code {code} (erreur de compilation, test en échec, refus ou autre) : rien n'est conclu")
         break
+    tentees = {p["variante"] for p in releve["passages"]}
+    if verdict == "hote" and not {"B1", "B2"} <= tentees:
+        # A ne se conclut que si B1 ET B2 ont été tentées et refusées (81) : une seule variante ne prouve rien
+        verdict, raison = "indetermine", "B1 et B2 n'ont pas toutes deux été tentées : rien n'est conclu pour A"
     releve.update(verdict=verdict, variante=variante, raison=raison)
-    if verdict == "conteneur":
-        statut, detail = noter_licence(dossier_etat, serveur, "conteneur", variante, hotes=hotes if variante == "B3" else None)
-        releve["etat_ecrit"] = statut
-    elif verdict == "hote":
-        statut, detail = noter_licence(dossier_etat, serveur, "hote", None)
-        releve["etat_ecrit"] = statut
-        if poser_etape(dossier_etat, serveur.id, "unity-editeur-6000.6.7f1"):
-            dire("Étape humaine posée au bureau : « Installer 6000.6.7f1 par Hub » (QU2).")
-    else:
-        releve["etat_ecrit"] = None          # indéterminé : RIEN n'est écrit
+    try:
+        if verdict == "conteneur":
+            r = noter_licence(dossier_etat, serveur, "conteneur", variante, hotes=hotes if variante == "B3" else None)
+            releve["etat_ecrit"] = r[0]
+        elif verdict == "hote":
+            r = noter_licence(dossier_etat, serveur, "hote", None)
+            releve["etat_ecrit"] = r[0]
+            if poser_etape(dossier_etat, serveur.id, "unity-editeur-6000.6.7f1"):
+                dire("Étape humaine posée au bureau : « Installer 6000.6.7f1 par Hub » (QU2).")
+        else:
+            releve["etat_ecrit"] = None          # indéterminé : RIEN n'est écrit
+    except _erreurs_ecriture() as e:
+        # une écriture refusée (installation en cours) n'efface pas l'expérience : le relevé est écrit, l'état est à refaire
+        releve["etat_ecrit"] = "non_ecrit"
+        releve["messages"].append(f"état non écrit : {e} — relancez l'outil à la fin de l'installation")
+        dire(f"État non écrit : {e}")
     dire(f"Verdict : {verdict}" + (f" ({variante})" if variante else "") + (f" — {raison}" if raison else ""))
     _ecrire_releves(releves, releve)
     return releve
 
 
 def _essai_hote(serveur, racine, commande, profil, etat_srv, releve, bash, executer, rafraichir, empreinte_bac, nouvel_id,
-                horloge, dire, releves, dossier_etat):
+                horloge, dire, releves, dossier_etat, modifier=None):
     lic = tests_serveur.licence_relevee(etat_srv)
     if lic["etat"] != "hote":
         raise Refus("J14 seulement si J13 a rendu « hote » (état relevé : " + lic["etat"] + ")")
@@ -242,16 +257,31 @@ def _essai_hote(serveur, racine, commande, profil, etat_srv, releve, bash, execu
         dire("Audit du bac à sable : ÉCHEC ; aucun marqueur écrit, aucun test lancé sur l'hôte.")
         _ecrire_releves(releves, releve)
         return releve
+    import serveur_installation
     if empreinte_bac is None:
-        import serveur_installation
         empreinte_bac = serveur_installation.empreinte_etape("unity_bac_a_sable")
+    # l'état local de l'audit D'ABORD : refusé (installation en cours), le marqueur n'est PAS posé et rien ne tourne
+    try:
+        (modifier or serveur_installation.modifier_etat_capacite)(
+            dossier_etat, serveur.id, tests_serveur.CAP_BAC_A_SABLE,
+            lambda ancien: {**ancien, "audit": "passe", "date": releve["date"]})
+    except _erreurs_ecriture() as e:
+        releve.update(verdict="etat_non_ecrit", raison=f"état local non écrit ({e}) : marqueur non posé")
+        dire(f"Audit passé, mais l'état local n'a pas pu être écrit ({e}) : marqueur non posé, relancez.")
+        _ecrire_releves(releves, releve)
+        return releve
     code, _s, _e = bash(serveur, script_marqueur(empreinte_bac))
     if code != 0:
         releve.update(verdict="audit_echoue", raison=f"marqueur non écrit (code {code})")
         _ecrire_releves(releves, releve)
         return releve
     dire("Audit du bac à sable : tout passe ; marqueur écrit.")
-    (rafraichir or _rafraichir)(serveur, dossier_etat)
+    try:
+        (rafraichir or _rafraichir)(serveur, dossier_etat)
+    except _erreurs_ecriture() as e:
+        releve.update(verdict="hote_echoue", raison=f"sonde non rangée ({e}) : test non lancé, relancez")
+        _ecrire_releves(releves, releve)
+        return releve
     passages = _passages(executer, commande, racine, "hote_bac_a_sable", lic["variante"] or "B1", None, horloge, dire)
     releve["passages"] += passages
     ok = passages[0]["code"] == 0
@@ -283,7 +313,11 @@ def _executer_vers(serveur, dossier_etat):
 def _rafraichir(serveur, dossier_etat):
     import serveur_etat
     import serveur_installation
-    serveur_installation.enregistrer_sonde(dossier_etat, serveur, serveur_etat.sonder(serveur))
+    mots = {}
+    etat = serveur_etat.sonder(serveur, mots=mots)
+    joint = not all(s == "inconnue" for s in etat.values())
+    serveur_installation.enregistrer_sonde(dossier_etat, serveur, etat, mots=mots,
+                                           charge=serveur_etat.charge(serveur) if joint else None)   # la charge n'est pas effacée
 
 
 def _ecrire_releves(chemin, releve):

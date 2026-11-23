@@ -5,7 +5,13 @@ pures (ni SSH ni docker). Les images dérivées (Node 18, JDK 11, .NET, Go…) s
 `myiafactory/android` (Gradle 8.7, plateforme 34, root, curl) et `unityci/editor` ne sont PAS au catalogue des tests : le
 premier ne convient à aucun projet réel (compileSdk 36, wrapper Gradle 9), le second ne sert que de base à une image
 `myiafactory/tests-unity-<version>` (tâche 14g)."""
+import hashlib
+import json
+import os
 import re
+import tempfile
+from datetime import datetime
+from pathlib import Path
 from typing import Optional, Tuple
 
 IMAGE_DEFAUT = "myiafactory/tests"
@@ -99,14 +105,10 @@ def choisir_image(profil, sdk_android: Optional[dict] = None) -> dict:
 # Racine de confiance de chaque téléchargement = TLS vers l'hôte officiel (voir le commentaire « Source » de chaque bloc) ; aucune
 # vérification de signature GPG (clés non connues ici sans téléchargement).
 # =====================================================================================================================
-import hashlib
-import json
-import os
-import tempfile
-from datetime import datetime
-from pathlib import Path
-from typing import Tuple
-
+# Version du gabarit : change l'etiquette ET la somme du Dockerfile rendu (un gabarit corrige ne reutilise jamais l'ancienne image).
+# La reproductibilite est celle du RENDU (memes octets a profil egal), pas du resultat de la construction : les sources officielles
+# (dernieres versions, paquets apt) evoluent.
+GABARIT_VERSION = "1"
 REGISTRE = Path.home() / "MyIAFactory" / "tests-images.json"
 ETIQUETTE_DERIVEE = re.compile(r"myiafactory/tests-[0-9a-f]{12}", re.ASCII)
 EMPREINTE_64 = re.compile(r"[0-9a-f]{64}", re.ASCII)
@@ -121,7 +123,9 @@ _IGNORES = _FOURNIS_AILLEURS + ("unity_revision",)
 MOTIFS_VERSION = {
     "jdk": re.compile(r"[0-9]{1,2}", re.ASCII),                                   # majeur : paquet Ubuntu openjdk-<N>
     "node": re.compile(r"[0-9]{1,3}(\.[0-9]{1,4}\.[0-9]{1,4})?", re.ASCII),       # majeur ou X.Y.Z
-    "python": re.compile(r"3\.[0-9]{1,2}(\.[0-9]{1,2})?", re.ASCII),
+    # X.Y seulement (dernier correctif de la derniere publication de python-build-standalone : un correctif precis ne peut pas
+    # etre garanti) ; 3.12.N passe, la base le porte deja et aucun bloc n'est rendu.
+    "python": re.compile(r"3\.12(\.[0-9]{1,2})?|3\.[0-9]{1,2}", re.ASCII),
     "maven": re.compile(r"[0-9]{1,2}\.[0-9]{1,2}\.[0-9]{1,2}", re.ASCII),         # version complète (dossier d'archive)
     "dotnet": re.compile(r"[0-9]{1,2}\.[0-9]{1,2}(\.[0-9]{1,4})?", re.ASCII),     # canal X.Y (dernier SDK) ou SDK X.Y.Z
     "go": re.compile(r"[0-9]{1,2}\.[0-9]{1,3}(\.[0-9]{1,3})?", re.ASCII),
@@ -193,7 +197,7 @@ def _bloc_node(v: str) -> str:
 def _bloc_python(v: str) -> str:
     # Source : github.com/astral-sh/python-build-standalone, fichier SHA256SUMS de la dernière version publiée.
     depot = "https://github.com/astral-sh/python-build-standalone/releases"
-    nom = f"cpython-{_re_points(v)}" + ("" if v.count(".") == 2 else r"\.[0-9]+")
+    nom = f"cpython-{_re_points(v)}" + r"\.[0-9]+"
     dest = f"{OPT}/python-{v}"
     mm = ".".join(v.split(".")[:2])
     return _telechargement(
@@ -377,6 +381,7 @@ def rendre_dockerfile(profil, base_digest: Optional[str] = None) -> Tuple[str, s
     else:
         base = f"{IMAGE_DEFAUT}@{base_digest}" if base_digest else IMAGE_DEFAUT
     lignes = ["# Image derivee des campagnes de tests : rendue par outils/tests_images.py (gabarit ferme), jamais ecrite a la main.",
+              f"# gabarit {GABARIT_VERSION}",
               f"FROM {base}",
               'SHELL ["/bin/bash", "-euo", "pipefail", "-c"]',
               "USER root",
@@ -394,7 +399,7 @@ def rendre_dockerfile(profil, base_digest: Optional[str] = None) -> Tuple[str, s
 def etiquette_derivee(profil) -> str:
     """`myiafactory/tests-<12 hexa de empreinte_image>` : ne dépend que des outils (jamais du verrou ni du code)."""
     from tests_profil import empreinte_image
-    return f"{IMAGE_DEFAUT}-{empreinte_image(profil)[:12]}"
+    return f"{IMAGE_DEFAUT}-{hashlib.sha256(f'{empreinte_image(profil)}:{GABARIT_VERSION}'.encode()).hexdigest()[:12]}"
 
 
 def estimation(profil) -> Tuple[int, int]:
@@ -433,6 +438,22 @@ def _lire_registre(registre) -> dict:
     return x if isinstance(x, dict) else {}
 
 
+def _lire_pour_ecrire(registre) -> dict:
+    """Comme `_lire_registre`, mais un fichier existant illisible est mis de cote (`<registre>.abime`) avant d'etre remplace :
+    il n'est jamais reecrit a vide en silence."""
+    chemin = Path(registre)
+    if chemin.exists():
+        try:
+            x = json.loads(chemin.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            x = None
+        if not isinstance(x, dict):
+            os.replace(chemin, str(chemin) + ".abime")
+            return {}
+        return x
+    return {}
+
+
 def _ecrire_registre(registre, donnees: dict) -> None:
     registre = Path(registre)
     registre.parent.mkdir(parents=True, exist_ok=True)
@@ -463,7 +484,7 @@ def noter_image(serveur_id: str, etiquette: str, empreinte: str, taille_mo: int,
         raise ValueError("taille refusée")
     quand = _horodatage(maintenant)
     registre = registre or REGISTRE
-    donnees = _lire_registre(registre)
+    donnees = _lire_pour_ecrire(registre)
     entrees = dict(_entrees(donnees, str(serveur_id)))
     entrees[etiquette] = {"empreinte": empreinte, "construite_le": quand, "utilisee_le": quand, "taille_mo": taille_mo}
     donnees[str(serveur_id)] = entrees
@@ -482,7 +503,7 @@ def noter_usage(serveur_id: str, etiquette: str, maintenant, registre=None) -> b
     """Date d'usage de l'image (une campagne l'a prise) ; faux si l'image n'est pas au registre."""
     quand = _horodatage(maintenant)
     registre = registre or REGISTRE
-    donnees = _lire_registre(registre)
+    donnees = _lire_pour_ecrire(registre)
     e = _entrees(donnees, str(serveur_id)).get(etiquette)
     if not isinstance(e, dict):
         return False
@@ -494,6 +515,6 @@ def noter_usage(serveur_id: str, etiquette: str, maintenant, registre=None) -> b
 def oublier_image(serveur_id: str, etiquette: str, registre=None) -> None:
     """Retire l'image du registre (ligne `#ramassee`)."""
     registre = registre or REGISTRE
-    donnees = _lire_registre(registre)
+    donnees = _lire_pour_ecrire(registre)
     if _entrees(donnees, str(serveur_id)).pop(etiquette, None) is not None:
         _ecrire_registre(registre, donnees)

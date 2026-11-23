@@ -82,8 +82,9 @@ class TestDockerfileTests(unittest.TestCase):
         self.assertNotRegex(self.texte.lower(), r"[:=\"' ]latest\b")
 
     def test_paquets_utilisateur_et_entree(self):
-        for paquet in ("python3", "nodejs", "git", "bash", "util-linux", "tar", "build-essential", "ca-certificates"):
+        for paquet in ("python3", "git", "bash", "util-linux", "tar", "build-essential", "ca-certificates"):
             self.assertRegex(self.code, rf"(?<![\w-]){re.escape(paquet)}(?![\w-])", paquet)
+        self.assertIn("test -x /usr/local/bin/node", self.code)                    # Node vient de l'archive, plus d'un paquet nodejs
         self.assertIn("--no-install-recommends", self.code)
         self.assertIn("\nUSER 1000:1000\n", self.code)
         self.assertIn('\nENTRYPOINT ["/usr/local/bin/entree-tests.sh"]', self.code)

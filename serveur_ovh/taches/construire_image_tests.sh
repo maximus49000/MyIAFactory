@@ -66,38 +66,50 @@ if [ "${1:-}" = "--ramasser" ]; then
   [ $# -eq 2 ] || echouer 2 "usage : --ramasser <budget_go>"
   [[ $2 =~ ^[1-9][0-9]{0,3}$ ]] || echouer 2 "budget refusé (1 à 9999 Go)."
   budget_mo=$(($2 * 1024))
-  noms=$(dk 60 image ls --filter label=myiafactory.genre=tests-derivee --format '{{.Repository}}') \
+  # Par identifiant, sans tag compris : une reconstruction sous la même étiquette laisse l'ancienne image sans tag (<none>),
+  # qui porte encore le label et doit pouvoir être ramassée.
+  ids=$(dk 60 image ls --filter label=myiafactory.genre=tests-derivee --format '{{.ID}}') \
     || echouer 1 "liste des images impossible (docker)."
-  vivantes=$(dk 60 ps -a --format '{{.Image}}') || echouer 1 "liste des conteneurs impossible (docker) : rien n'est supprimé."
+  vivantes=$(dk 60 ps -a --format '{{.Image}} {{.ImageID}}') || echouer 1 "liste des conteneurs impossible (docker) : rien n'est supprimé."
+  vivantes=$(tr ' ' '\n' <<< "$vivantes" | sed -e 's/^sha256://' -e 's/^\([0-9a-f]\{12\}\)[0-9a-f]*$/\1/')
   maintenant=$(date +%s)
   lignes=""; total_mo=0
-  while IFS= read -r nom; do
-    [[ $nom =~ $MOTIF_ETIQUETTE ]] || continue
-    grep -Fq -- " $nom " <<< "$lignes" && continue                    # une image par nom
-    octets=$(dk 60 image inspect --format '{{.Size}}' "$nom") || continue
+  while IFS= read -r id; do
+    id="${id#sha256:}"; id="${id:0:12}"
+    [[ $id =~ ^[0-9a-f]{12}$ ]] || continue
+    grep -Eq -- " $id\$" <<< "$lignes" && continue                   # une image par identifiant
+    octets=$(dk 60 image inspect --format '{{.Size}}' "$id") || continue
     [[ $octets =~ ^[0-9]{1,15}$ ]] || continue
     mo=$((octets / 1048576))
-    usage="$CONSTRUCTION/usage/${nom#myiafactory/}"
-    if [ -f "$usage" ] && [ ! -L "$usage" ]; then
+    cible="$id"
+    for tag in $(dk 60 image inspect --format '{{range .RepoTags}}{{.}} {{end}}' "$id" 2>/dev/null); do
+      tag="${tag%:latest}"
+      [[ $tag =~ $MOTIF_ETIQUETTE ]] && cible="$tag" && break
+    done
+    usage="$CONSTRUCTION/usage/${cible#myiafactory/}"
+    quand=""
+    if [ "$cible" != "$id" ] && [ -f "$usage" ] && [ ! -L "$usage" ]; then
       quand=$(stat -c %Y -- "$usage" 2>/dev/null)
     else
-      cree=$(dk 60 image inspect --format '{{.Created}}' "$nom" 2>/dev/null)
+      cree=$(dk 60 image inspect --format '{{.Created}}' "$id" 2>/dev/null)
       quand=$(date -d "$cree" +%s 2>/dev/null)
     fi
     [[ ${quand:-} =~ ^[0-9]{1,12}$ ]] || quand="$maintenant"          # date illisible : jamais « ancienne »
-    lignes+="$quand $nom $mo"$'\n'
+    lignes+="$quand $cible $mo $id"$'\n'
     total_mo=$((total_mo + mo))
-  done <<< "$noms"
-  while read -r quand nom mo; do
-    [ -n "${nom:-}" ] || continue
+  done <<< "$ids"
+  while read -r quand cible mo id; do
+    [ -n "${id:-}" ] || continue
     ancienne=0
     [ $((maintenant - quand)) -gt $((JOURS_INUTILISEE * 86400)) ] && ancienne=1
     [ "$ancienne" = 1 ] || [ "$total_mo" -gt "$budget_mo" ] || continue
-    if grep -Fxq -- "$nom" <<< "$vivantes" || grep -Fxq -- "$nom:latest" <<< "$vivantes"; then continue; fi
-    if dk 120 rmi "$nom" >/dev/null 2>&1; then
-      rm -f -- "$CONSTRUCTION/usage/${nom#myiafactory/}"
+    if grep -Fxq -- "$id" <<< "$vivantes" || grep -Fxq -- "$cible" <<< "$vivantes" || grep -Fxq -- "$cible:latest" <<< "$vivantes"; then
+      continue
+    fi
+    if dk 120 rmi "$cible" >/dev/null 2>&1; then
+      rm -f -- "$CONSTRUCTION/usage/${cible#myiafactory/}"
       total_mo=$((total_mo - mo))
-      printf '#ramassee %s\n' "$nom"
+      printf '#ramassee %s\n' "$cible"
     fi
   done < <(sort -n -k1,1 -k2,2 <<< "$lignes")
   exit 0
@@ -124,20 +136,32 @@ for f in "${contenu[@]}"; do
   [ "$base" = Dockerfile ] || [ "$base" = entree-tests.sh ] || echouer 2 "fichier inattendu dans le contexte."
   [ -f "$f" ] && [ ! -L "$f" ] || echouer 2 "$base n'est pas un fichier ordinaire."
 done
-DOCKERFILE="$CONTEXTE/Dockerfile"
-[ -f "$DOCKERFILE" ] || echouer 2 "Dockerfile absent du contexte."
-taille=$(stat -c %s -- "$DOCKERFILE" 2>/dev/null)
+DEPOT="$CONTEXTE/Dockerfile"
+[ -f "$DEPOT" ] || echouer 2 "Dockerfile absent du contexte."
+taille=$(stat -c %s -- "$DEPOT" 2>/dev/null)
 [[ ${taille:-} =~ ^[0-9]{1,9}$ ]] && [ "$taille" -le "$DOSSIER_MAX_OCTETS" ] || echouer 2 "Dockerfile trop gros (64 Ko au plus)."
+# Copie privée à l'enveloppe : c'est CETTE copie qui est hachée, contrôlée et construite (le dossier déposé peut changer entre
+# le contrôle et la construction ; la copie, non).
+PRIVE=$(mktemp -d "$CONSTRUCTION/ctx.XXXXXX") || echouer 1 "contexte privé impossible."
+trap 'rm -rf -- "$PRIVE"' EXIT
+cp -- "$DEPOT" "$PRIVE/Dockerfile" || echouer 1 "copie du Dockerfile impossible."
+DOCKERFILE="$PRIVE/Dockerfile"
 reelle=$(sha256sum -- "$DOCKERFILE" | cut -d' ' -f1)
 [ "$reelle" = "$SOMME" ] || echouer 2 "le SHA-256 du Dockerfile n'est pas celui qui a été approuvé : construction refusée."
 # Défense en profondeur (la somme approuvée suffit, ceci borne ce qu'un gabarit trafiqué pourrait demander).
 [ "$(grep -Eic '^[[:space:]]*FROM[[:space:]]' "$DOCKERFILE")" = 1 ] || echouer 2 "une seule instruction FROM est permise."
 BASE=$(awk 'toupper($1) == "FROM" { print $2; exit }' "$DOCKERFILE")
-if [[ $BASE =~ $MOTIF_BASE_LOCALE ]]; then PULL=(); elif [[ $BASE =~ $MOTIF_BASE_UNITY ]]; then PULL=(--pull)
+if [[ $BASE =~ $MOTIF_BASE_LOCALE ]]; then
+  PULL=()
+  # Base locale : elle doit exister ici, sinon docker irait chercher un espace « myiafactory » sur le Docker Hub.
+  dk 20 image inspect "$BASE" >/dev/null 2>&1 || echouer 2 "image de base $BASE absente du serveur (installez la capacité qui la fournit)."
+elif [[ $BASE =~ $MOTIF_BASE_UNITY ]]; then PULL=(--pull)
 else echouer 2 "image de base refusée."; fi
 if grep -Eiq '^[[:space:]]*(ADD|VOLUME|ONBUILD)[[:space:]]' "$DOCKERFILE" \
-   || grep -Eiq -- '(^|[[:space:]])--(mount|network|security|privileged)([=[:space:]]|$)' "$DOCKERFILE"; then
-  echouer 2 "instruction ou option interdite dans le Dockerfile."
+   || grep -Eiq -- '(^|[[:space:]])--(mount|network|security|privileged)([=[:space:]]|$)' "$DOCKERFILE" \
+   || grep -Eiq -- '--from=' "$DOCKERFILE" \
+   || grep -Eq '^#[[:space:]]*[A-Za-z]+[[:space:]]*=' "$DOCKERFILE"; then   # --from= ; directives d'analyse (# syntax=, # escape=)
+  echouer 2 "instruction, option ou directive interdite dans le Dockerfile."
 fi
 [ -f "$SERVEUR_OVH/images/tests/entree-tests.sh" ] && [ ! -L "$SERVEUR_OVH/images/tests/entree-tests.sh" ] \
   || echouer 1 "entree-tests.sh introuvable dans le dépôt du serveur."
@@ -145,17 +169,16 @@ libre=$(df -Pk -- "$HOME" 2>/dev/null | awk 'NR == 2 { print $4 }')
 [[ ${libre:-} =~ ^[0-9]{1,15}$ ]] || echouer 76 "espace disque libre illisible (df)."
 [ "$libre" -ge "$DISQUE_MIN_KO" ] || echouer 76 "disque presque plein : $((libre / 1024)) Mo libres, 10 Go au moins."
 
-# À partir d'ici le contexte est à nous : effacé à la sortie, quoi qu'il arrive.
-trap 'rm -rf -- "$CONTEXTE"' EXIT
-rm -f -- "$CONTEXTE/entree-tests.sh"
-cp -- "$SERVEUR_OVH/images/tests/entree-tests.sh" "$CONTEXTE/entree-tests.sh" || echouer 1 "copie de entree-tests.sh impossible."
+# À partir d'ici le dossier déposé est à nous : effacé à la sortie, quoi qu'il arrive.
+trap 'rm -rf -- "$CONTEXTE" "$PRIVE"' EXIT
+cp -- "$SERVEUR_OVH/images/tests/entree-tests.sh" "$PRIVE/entree-tests.sh" || echouer 1 "copie de entree-tests.sh impossible."
 mkdir -p -- "$CONSTRUCTION/journaux" "$CONSTRUCTION/usage" || echouer 1 "dossiers de journaux impossibles."
 JOURNAL="$CONSTRUCTION/journaux/$NOM.log"
 
-# Seuls arguments : le réseau de construction par défaut, les deux étiquettes, l'étiquette de l'image et le contexte.
-timeout "$DUREE_MAX" sudo -n docker build "${PULL[@]}" \
+# Seuls arguments : le réseau de construction par défaut, les deux étiquettes, l'étiquette de l'image et la copie privée.
+timeout -k 30 "$DUREE_MAX" sudo -n docker build "${PULL[@]}" \
   --label myiafactory.genre=tests-derivee --label "myiafactory.empreinte=$SOMME" \
-  -t "$ETIQUETTE" "$CONTEXTE" </dev/null 2>&1 | tail -c "$JOURNAL_OCTETS" > "$JOURNAL"
+  -t "$ETIQUETTE" "$PRIVE" </dev/null 2>&1 | tail -c "$JOURNAL_OCTETS" > "$JOURNAL"
 code=${PIPESTATUS[0]}
 if [ "$code" != 0 ]; then
   tail -n 20 -- "$JOURNAL" 2>/dev/null | une_ligne >&2

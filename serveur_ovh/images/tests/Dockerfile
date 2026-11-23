@@ -36,6 +36,7 @@ RUN python3 -c 'import sys; assert sys.version_info[:2] == (3, 12), sys.version'
     && node --version | grep "^v${NODE_MAJEUR}\." >/dev/null \
     && npm --version >/dev/null \
     && command -v flock >/dev/null \
+    && test -x /usr/local/bin/node \
     && ! command -v curl && ! command -v wget && ! command -v ssh && ! command -v sudo
 
 # Entrée du conteneur : propriétaire root, lecture seule (les tests tournent sous l'utilisateur 1000).

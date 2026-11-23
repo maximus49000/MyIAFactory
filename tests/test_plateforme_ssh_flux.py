@@ -145,6 +145,11 @@ class TestFlux(unittest.TestCase):
             b"x" * 10000 + b"#fin 0 1 2 0\n",    # ligne démesurée qui finit par une fausse marque
             b"#fin 0 1 2 0\nConnection to h closed by remote host.\n",
             b"#fin\t0 1 2 0\n", b"#FIN 0 1 2 0\n", "#fin ٠ 1 2 0\n".encode("utf-8"),
+            b"#fin 0 1 2 0\r\n",                  # aucun `\r` toléré : la marque est exacte
+            b"x\r#fin 0 1 2 0\n",                 # découpe sur b"\n" seulement : une seule ligne, pas une marque
+            b"| a\x0c#fin 0 1 2 0\n", b"| a\x0b#fin 0 1 2 0\n", b"| a\x1c#fin 0 1 2 0\n",
+            "| a\x85#fin 0 1 2 0\n".encode("latin-1"), "| a\u0085#fin 0 1 2 0\n".encode("utf-8"),
+            "| a #fin 0 1 2 0\n".encode("utf-8"), "| a #fin 0 1 2 0\n".encode("utf-8"),
         ]
         for erreur in hostiles:
             with self.subTest(erreur=erreur[:40]):
@@ -155,7 +160,7 @@ class TestFlux(unittest.TestCase):
         r, _, _ = lancer(FauxProcessus([b"#fin 0 1 2 0\n"], [], code=1))
         self.assertEqual((r["fin_serveur"], r["code"]), (None, 1))
         # Vraies marques : lignes vides après, retour Windows, marque coupée en deux morceaux de lecture.
-        for erreur in ([b"#fin 0 1 2 0\n\n"], [b"#fin 0 1 2 0\r\n"], [b"| #fin 0 9 9 9\n#fin 3 1", b"0 20 0\n"]):
+        for erreur in ([b"#fin 0 1 2 0\n\n"], [b"| #fin 0 9 9 9\n#fin 3 1", b"0 20 0\n"]):
             with self.subTest(vraie=erreur):
                 r, _, _ = lancer(FauxProcessus([], erreur, code=0))
                 self.assertIsNotNone(r["fin_serveur"])
@@ -268,11 +273,51 @@ class TestFlux(unittest.TestCase):
         self.assertEqual(r["raison"], "perdue")
         for code in (2, 70, 76, 77, 130):
             with self.subTest(code=code):
-                r, _, _ = lancer(FauxProcessus([], [b"lancer_tests : refus\n#fin %d 1 1 0\n" % code], code=code))
-                self.assertEqual((r["code"], r["raison"], r["code_ssh"]), (code, "fin", code))
+                r, _, _ = lancer(FauxProcessus(
+                    [], [b"lancer_tests : refus\n#refus %d\n#fin %d 1 1 0\n" % (code, code)], code=code))
+                self.assertEqual((r["code"], r["raison"], r["code_ssh"], r["refus"]), (code, "refus", code, code))
+                # Les tests qui rendent eux-mêmes ce code : aucune ligne `#refus`, ce n'est pas un refus.
+                r, _, _ = lancer(FauxProcessus([], [b"| sortie\n#fin %d 1 1 0\n" % code], code=code))
+                self.assertEqual((r["code"], r["raison"], r["refus"]), (code, "fin", None))
         # La marque de l'enveloppe fait foi : la session a pu tomber après elle (ssh rend 255).
         r, _, _ = lancer(FauxProcessus([], [b"#fin 1 1 2 0\n"], code=255))
         self.assertEqual((r["code"], r["code_ssh"], r["fin_serveur"]), (1, 255, (1, 1, 2, 0)))
+
+    def test_refus_seulement_juste_avant_la_fin(self):
+        r, _, _ = lancer(FauxProcessus([], [b"lancer_tests : disque\n#refus 76\n", b"\n#fin 76 1 2 0\n"], code=76))
+        self.assertEqual((r["refus"], r["raison"], r["fin_serveur"]), (76, "refus", (76, 1, 2, 0)))
+        self.assertNotIn("#refus", r["erreur"])
+        aucun = [
+            b"#refus 77\n#fin 76 1 2 0\n",                          # code différent
+            b"#refus 76\nautre\n#fin 76 1 2 0\n",                   # pas juste avant
+            b"#refus 76\n#attente 1 1\n#fin 76 1 2 0\n",
+            b"#refus 76\n",                                         # seul, sans marque de fin
+            b"#refus 76\n#fin 76 1 2 0\nfin\n",                     # marque de fin pas en dernier
+            b"| #refus 76\n#fin 76 1 2 0\n",                        # forgé par le conteneur (préfixé)
+            b"| x\n| #refus 76\n| #fin 76 1 2 0\n",
+            b"x\r#refus 76\r#fin 76 1 2 0\n",                       # `\r` : une seule ligne
+            b"#refus 76\r\n#fin 76 1 2 0\n", b" #refus 76\n#fin 76 1 2 0\n", b"#refus 76 \n#fin 76 1 2 0\n",
+            b"#refus 076x\n#fin 76 1 2 0\n", b"#refus 999\n#fin 76 1 2 0\n",
+            b"#refus 76\x0c#fin 76 1 2 0\n", "#refus 76\u0085#fin 76 1 2 0\n".encode("utf-8"),
+            "#refus 76 #fin 76 1 2 0\n".encode("utf-8"),
+            b"x" * 10000 + b"#refus 76\n#fin 76 1 2 0\n",           # ligne démesurée : jamais une marque
+        ]
+        for erreur in aucun:
+            with self.subTest(erreur=erreur[-40:]):
+                r, _, _ = lancer(FauxProcessus([], [erreur], code=76))
+                self.assertIsNone(r["refus"])
+                self.assertNotEqual(r["raison"], "refus")
+        r, _, _ = lancer(FauxProcessus([b"#refus 76\n"], [b"#fin 76 1 2 0\n"], code=76))   # sur la sortie standard
+        self.assertEqual((r["refus"], r["raison"]), (None, "fin"))
+        r, _, _ = lancer(FauxProcessus([], [b"#refus 76\n"], code=255))
+        self.assertEqual((r["refus"], r["raison"]), (None, "perdue"))
+
+    def test_decoupe_sur_retour_seulement(self):
+        erreur = Sortie()
+        texte = "| a\x0cb\x0bc\x1cd\u0085e f g\rh\n".encode("utf-8")
+        r, _, _ = lancer(FauxProcessus([], [texte, b"#fin 1 1 2 0\n"], code=1), sortie_erreur=erreur)
+        self.assertEqual(erreur.tout, texte)          # une seule ligne, montrée telle quelle
+        self.assertEqual(r["fin_serveur"], (1, 1, 2, 0))
 
     def test_ecriture_impossible(self):
         p = FauxProcessus([], [b"ssh: Could not resolve hostname\n"], code=255, echec_ecriture=BrokenPipeError())

@@ -215,6 +215,8 @@ def executer_vers_fichier(hote, commande, cle, destination, maximum, entree=None
 # sortie d'erreur, entière (terminée par un retour) et exactement de la forme `#fin <code> <debut> <fin> <attente>` :
 # une ligne des tests qui imite `#fin 0 …` (préfixée, ou suivie d'autre chose) ne peut pas changer un échec en succès.
 MOTIF_FIN = re.compile(rb"#fin ([0-9]{1,3}) ([0-9]{1,12}) ([0-9]{1,12}) ([0-9]{1,12})")
+# Un code rendu par l'ENVELOPPE elle-même (refus, disque, image, laisse…) : `#refus <code>` juste avant `#fin <code>`.
+MOTIF_REFUS = re.compile(rb"#refus ([0-9]{1,3})")
 MOTIF_ATTENTE = re.compile(rb"#attente ([0-9]{1,6}) ([0-9]{1,6})(?: [0-9]{1,6})?")
 LIGNE_MAX = 4096           # une ligne de la sortie d'erreur au-delà : gardée tronquée, jamais une marque
 ERREUR_GARDEE = 65536      # la fin de la sortie d'erreur gardée pour le diagnostic
@@ -226,6 +228,14 @@ def _marque_de_fin(ligne):
     if m is None or int(m.group(1)) > 255:
         return None
     return tuple(int(x) for x in m.groups())
+
+
+def _refus(precedente, fin_serveur):
+    """Le code de l'enveloppe si la ligne non vide juste avant la marque de fin est exactement `#refus <même code>`."""
+    m = MOTIF_REFUS.fullmatch(precedente) if (precedente and fin_serveur is not None) else None
+    if m is None or int(m.group(1)) != fin_serveur[0]:
+        return None
+    return fin_serveur[0]
 
 
 class _Erreurs:
@@ -240,6 +250,7 @@ class _Erreurs:
         self.ligne = bytearray()
         self.trop_long = False
         self.derniere = None     # dernière ligne non vide complète ; b"" : une ligne qui ne peut pas être une marque
+        self.precedente = None   # la ligne non vide d'avant (`#refus` attendu juste avant `#fin`)
         self.vu = False          # quelque chose de l'enveloppe (place, sortie du conteneur, marque) est arrivé
 
     def lire(self, flux):
@@ -255,7 +266,10 @@ class _Erreurs:
             pass
         if self.ligne.strip() or self.trop_long:   # ligne finale sans retour : session coupée, jamais une marque
             self._montrer(bytes(self.ligne))
-            self.derniere = b""
+            self._noter(b"")
+
+    def _noter(self, ligne):
+        self.precedente, self.derniere = self.derniere, ligne
 
     def _morceau(self, b):
         debut = 0
@@ -279,17 +293,18 @@ class _Erreurs:
             self.ligne += part
 
     def _ligne_finie(self):
-        brute, trop_long = bytes(self.ligne), self.trop_long
+        # Découpe sur b"\n" SEULEMENT (jamais splitlines) ; aucun `\r` toléré dans une marque : elle doit être exacte.
+        ligne, trop_long = bytes(self.ligne), self.trop_long
         self.ligne, self.trop_long = bytearray(), False
-        ligne = brute[:-1] if brute.endswith(b"\r") else brute
         if trop_long:
-            self.derniere = b""
-            self._montrer(brute + b"...\n")
+            self._noter(b"")
+            self._montrer(ligne + b"...\n")
             return
         if not ligne.strip():
-            self._montrer(brute + b"\n")
+            self._montrer(ligne + b"\n")
             return
-        self.derniere = ligne
+        self._noter(ligne)
+        brute = ligne
         if ligne.startswith(b"| "):
             self.vu = True
         m = MOTIF_ATTENTE.fullmatch(ligne)
@@ -301,7 +316,7 @@ class _Erreurs:
                 except Exception:   # noqa: BLE001 — un affichage cassé ne doit jamais bloquer la lecture (tuyau plein)
                     pass
             return
-        if MOTIF_FIN.fullmatch(ligne):
+        if MOTIF_FIN.fullmatch(ligne) or MOTIF_REFUS.fullmatch(ligne):
             self.vu = True
             return
         self._montrer(brute + b"\n")
@@ -392,10 +407,12 @@ def executer_en_flux(hote, commande, cle, premiere_ligne, sortie, sur_attente=No
     donnée, montré en direct (c'est là que unittest écrit, préfixé `| `). `delai_total` / `delai_silence` (secondes,
     facultatifs) : au-delà, laisse fermée et ssh tué, code 124. Ctrl-C : laisse fermée, ssh arrêté, exception relevée.
 
-    Rend {"code", "octets", "fin", "fin_serveur", "erreur", "code_ssh", "raison"} : `fin_serveur` = les quatre entiers de
-    `#fin` seulement si c'est la dernière ligne non vide de la sortie d'erreur ; `code` = celui de la marque s'il y en a
-    une, 124 après un délai, sinon celui de ssh ; `raison` : "fin" (marque lue), "delai", "silence", "connexion" (ssh 255
-    sans rien reçu de l'enveloppe) ou "perdue" (session finie sans marque)."""
+    Rend {"code", "octets", "fin", "fin_serveur", "erreur", "code_ssh", "raison", "refus"} : `fin_serveur` = les quatre
+    entiers de `#fin` seulement si c'est la dernière ligne non vide de la sortie d'erreur ; `refus` = ce code seulement si
+    la ligne non vide juste avant est exactement `#refus <même code>` (code rendu par l'enveloppe elle-même, jamais par
+    les tests) ; `code` = celui de la marque s'il y en a une, 124 après un délai, sinon celui de ssh ; `raison` : "refus"
+    (marque + `#refus`), "fin" (marque : code des tests), "delai", "silence", "connexion" (ssh 255 sans rien reçu de
+    l'enveloppe) ou "perdue" (session finie sans marque)."""
     import campagne
     _verifier_hote(hote)
     if not isinstance(commande, str) or not commande.strip() or any(c in commande for c in "\r\n\0"):
@@ -470,15 +487,16 @@ def executer_en_flux(hote, commande, cle, premiere_ligne, sortie, sur_attente=No
     finally:
         fini.set()
     fin_serveur = _marque_de_fin(erreurs.derniere) if not lecteur.is_alive() else None
+    refus = _refus(erreurs.precedente, fin_serveur)
     if fin_serveur is not None:
-        code, raison = fin_serveur[0], "fin"
+        code, raison = fin_serveur[0], ("refus" if refus is not None else "fin")
     elif etat["coupure"] is not None:
         code, raison = 124, etat["coupure"]
     else:
         code = code_ssh
         raison = "connexion" if code_ssh == 255 and octets == 0 and not erreurs.vu else "perdue"
     return {"code": code, "octets": octets, "fin": fin, "fin_serveur": fin_serveur, "erreur": erreurs.texte(),
-            "code_ssh": code_ssh, "raison": raison}
+            "code_ssh": code_ssh, "raison": raison, "refus": refus}
 
 
 def executer_octets_silencieux(hote, commande, cle, entree=None, delai=60, runner=subprocess.run):

@@ -8,8 +8,6 @@ import {prenomAgent} from "./detail.js";
 import {demandeLecon, demandeToutes, demandeChallengeLecon, demandeAnomalie, enregistrerReglage,
   enregistrerCloudDossierApprouve} from "./actions.js";
 import {contenuDecisionsV4, boutonDemande} from "./decisions.js";
-import {sectionLieux} from "./lieux.js";
-import {blocDeport} from "./deport.js";
 import {blocPoint, listeEchanges, marquerVu, TACHE_DU_CHEF} from "./point.js";
 import {coutsDesTaches, libelleCout, libelleDuree, totalDesTaches, libelleTotal} from "./couts.js";
 import {prefixesDeRepetition, titreAffiche} from "./repetitions.js";
@@ -295,6 +293,10 @@ function sectionAnciensAgents(ctx) {
 export function contenuDirecteur(ctx, contenu) {
   const e = ctx.etat;
   contenu.append(el("h2", "", "Direction"));
+  const reglages = el("button", "secondaire", "Réglages");   // lieux d'exécution et automatisations : la page Réglages
+  reglages.type = "button";
+  reglages.addEventListener("click", () => ctx.ouvrirReglages?.());
+  contenu.append(reglages);
   if (!listeDisponible(e)) {  // relevé en version 1 : le panneau d'avant
     for (const p of phrasesDirectionV1(e)) contenu.append(el("p", p.classe, p.texte));
     return;
@@ -305,14 +307,11 @@ export function contenuDirecteur(ctx, contenu) {
       : `${n} décisions attendent le Directeur (comptées par le projet).`));
   }
   if ((e.version ?? 1) >= 4) contenuDecisionsV4(ctx, contenu);
-  const lieux = (e.version ?? 1) >= 4 ? sectionLieux(ctx, boutonDemande) : null;   // absent : le relevé ne le publie pas
-  if (lieux) contenu.append(lieux);
   const menus = new Map();   // id de leçon -> son menu d'étage
   const cartes = (e.lecons || []).map((l) => carteLecon(ctx, l, menus));
   const section = partie("Leçons à valider", "Aucune leçon à valider", cartes);
   if ((e.version ?? 1) >= 4 || e.lecons_auto === true) {
-    section.querySelector("h3").after(caseLeconsAuto(ctx), caseAnalyseBlocages(ctx), caseLivraisonSurDemande(ctx), caseUneSessionMoyenne(ctx), caseCloudDossier(ctx),
-      ...(e.deport ? [blocDeport(ctx)] : []));
+    section.querySelector("h3").after(caseLeconsAuto(ctx), caseAnalyseBlocages(ctx), caseLivraisonSurDemande(ctx), caseUneSessionMoyenne(ctx), caseCloudDossier(ctx));
   }
   if (e.agir && (e.version ?? 1) >= 4) contenu.append(sectionPartage());   // un réglage de tout le bureau
   const enAttente = (e.lecons || []).filter((l) => !l.verdict_demande);

@@ -15,6 +15,7 @@ import {contenuQuestions} from "./questions.js";
 import {contenuCatalogue} from "./catalogue.js";
 import {ouvrirKanban} from "./kanban-plein.js";
 import {contenuPartenaires, creerVue} from "./partenaires.js";
+import {contenuReglages} from "./reglages.js";
 import {monterCarteServeur} from "./plateforme.js";
 import {monterEcranServeurs} from "./serveurs.js";
 import {envoyer as envoyerDemande} from "./actions.js";
@@ -55,6 +56,7 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat: etatBr
         (e.taches || []).map((t) => [t.id, t.titre, t.agent, t.etape, t.active, t.colonne, t.service, t.modele_depart, cleTravail(t)])]));
     }
     if (type === "partenaires") return JSON.stringify([e.partenaires, e.agir]);
+    if (type === "reglages") return JSON.stringify([e.reglages_page, e.reglages_page_erreur, e.deport, e.etapes_lieux, e.agir]);
     if (type === "tache") {
       const t = (e.taches || []).find((x) => x.id === id);
       return JSON.stringify([t, cleTravail(t), e.colonnes, e.types, e.agir, e.images_ok,
@@ -176,6 +178,7 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat: etatBr
     ouvrirAttente: () => ouvrirPanneau("attente", null),
     ouvrirTache: (id) => { retourListe = false; ouvrirPanneau("tache", id); },
     ouvrirAgent: (id) => ouvrirPanneau("agent", id),
+    ouvrirReglages: () => ouvrirPanneau("reglages", null),
     ouvrirTacheDepuisListe: (id) => { retourListe = true; ouvrirPanneau("tache", id); },
     changerFiltre: (changement) => { Object.assign(filtreListe, changement); ouvrirPanneau("liste", null); },
   });
@@ -252,6 +255,12 @@ export function creerPanneaux({conteneur, carte, panneau, sc, plan, etat: etatBr
     } else if (type === "partenaires") {
       if (!e.partenaires) { fermerPanneau(); return; }
       contenuPartenaires(contexte(), contenu, envoyerDemande);
+    } else if (type === "reglages") {
+      const retour = el("button", "secondaire", "← Direction");
+      retour.type = "button";
+      retour.addEventListener("click", () => ouvrirPanneau("direction", null));
+      contenu.append(el("h2", "", "Réglages"), retour);
+      contenuReglages(contexte(), contenu);
     } else if (type === "agent") {
       const a = (e.agents || []).find((x) => x.id === id) || ficheAncienAgent(e, id);
       if (!a) { fermerPanneau(); return; }

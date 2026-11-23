@@ -13,6 +13,9 @@ import {sectionPartage} from "./partage.js";
 let niveauEdite = "projet";
 export const definirNiveauEdite = (n) => { niveauEdite = ["global", "type", "projet"].includes(n) ? n : "projet"; };
 export const niveauEditeActuel = () => niveauEdite;
+// La dernière confirmation ou le dernier refus : l'écriture réussie redessine la page, le message doit y survivre.
+// Il s'efface à l'action suivante (écriture ou changement de niveau).
+let dernierMessage = "";
 
 const LIEUX = {poste: "Poste", github: "GitHub", serveur: "Serveur"};
 const SECTIONS = [["actions", "Où tournent les actions"], ["automatisations", "Automatisations"]];
@@ -76,6 +79,7 @@ function ligneReglage(ctx, l, niveau, message, groupe, fetchFn) {
     controles.forEach((c) => { if (c.type === "checkbox") c.checked = v === true; else c.checked = c.value === v; });
   };
   const ecrire = async (voulu) => {
+    dernierMessage = "";
     message.textContent = "";
     groupe.forEach((x) => { x.disabled = true; });
     const rep = await enregistrerNiveau(niveau, l.id, voulu, fetchFn);
@@ -84,9 +88,10 @@ function ligneReglage(ctx, l, niveau, message, groupe, fetchFn) {
       if (rep.ligne && typeof rep.ligne === "object" && rep.ligne.id === l.id) Object.assign(l, rep.ligne);
       else if (voulu === null) { if (l.valeurs) delete l.valeurs[niveau]; }
       else (l.valeurs ||= {})[niveau] = voulu;
-      ctx.rouvrir?.();
     } else redire();
+    dernierMessage = rep.message;
     message.textContent = rep.message;
+    if (rep.ok) ctx.rouvrir?.();   // la page se redessine : elle relit `dernierMessage`
   };
 
   if (l.forme === "booleen") {
@@ -149,7 +154,7 @@ function barreNiveaux(ctx, page) {
     b.type = "button";
     b.disabled = grise;
     b.setAttribute("aria-pressed", niveau === niveauEdite ? "true" : "false");
-    b.addEventListener("click", () => { definirNiveauEdite(niveau); ctx.rouvrir?.(); });
+    b.addEventListener("click", () => { dernierMessage = ""; definirNiveauEdite(niveau); ctx.rouvrir?.(); });
     barre.append(b);
   }
   return barre;
@@ -165,10 +170,10 @@ export function contenuReglages(ctx, contenu, fetchFn = fetch) {
   // un type sans genre ne s'édite pas : on retombe sur le projet
   if (niveauEdite === "type" && !page.type_disponible) niveauEdite = "projet";
   const lignes = Array.isArray(page.lignes) ? page.lignes : [];
-  const message = el("p", "note", "");
+  const message = el("p", "note reglages-message", dernierMessage);
   message.setAttribute("aria-live", "polite");
   const groupe = [];
-  contenu.append(barreNiveaux(ctx, page));
+  contenu.append(message, barreNiveaux(ctx, page));
 
   for (const [section, titre] of SECTIONS) {
     const de = lignes.filter((l) => l.section === section);
@@ -194,6 +199,5 @@ export function contenuReglages(ctx, contenu, fetchFn = fetch) {
     bloc.append(el("h4", "", "Partage des connaissances"), sectionPartage(null, fetchFn));
     contenu.append(bloc);
   }
-  contenu.append(message);
   return contenu;
 }

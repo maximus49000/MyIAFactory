@@ -16,7 +16,7 @@ class Noeud {
 globalThis.document = {createElement: (t) => new Noeud(t), createTextNode: (t) => { const n = new Noeud("#texte"); n._texte = t; return n; }};
 globalThis.window = globalThis.window || {confirm: () => true};
 
-const {enregistrerNiveau, contenuReglages, definirNiveauEdite} = await import("../ui/reglages.js");
+const {enregistrerNiveau, contenuReglages, definirNiveauEdite, niveauEditeActuel} = await import("../ui/reglages.js");
 
 const ligne = (id, extra = {}) => ({id, section: "actions", libelle: id.replace("deport.", ""), aide: "", forme: "lieu",
   choix: ["poste", "github", "serveur"], niveaux: ["global", "type", "projet"], valeur: "poste", origine: "defaut", valeurs: {},
@@ -233,4 +233,32 @@ test("sans état ou en erreur : le message seul", () => {
   const {bloc} = rendre(page([ligne("deport.apk")]), undefined, {reglages_page_erreur: "Page Réglages indisponible : boum"});
   assert.equal(bloc.textContent, "Page Réglages indisponible : boum");
   assert.equal(radios(bloc).length, 0);
+});
+
+test("la confirmation survit au redessin de la page, puis s'efface à l'action suivante", async () => {
+  definirNiveauEdite("projet");
+  const racine = {bloc: null};
+  const fetchFn = ok(ligne("deport.apk", {valeur: "github", origine: "projet", valeurs: {projet: "github"}}));
+  const ctx = {etat: {reglages_page: page([ligne("deport.apk")]), agir: true, version: 4}};
+  // le vrai `rouvrir` redessine dans un contenu neuf
+  ctx.rouvrir = () => { racine.bloc = contenuReglages(ctx, new Noeud("div"), fetchFn); };
+  const premier = contenuReglages(ctx, new Noeud("div"), fetchFn);
+  await changer(radios(premier, "deport.apk").find((r) => r.value === "github"));
+  assert.match(racine.bloc.textContent, /Réglage enregistré\./);
+  // l'action suivante efface d'abord l'ancien message : un refus le remplace
+  const refus = async () => ({ok: false, status: 400, json: async () => ({erreur: "non"})});
+  const second = contenuReglages(ctx, new Noeud("div"), refus);
+  await changer(radios(second, "deport.apk").find((r) => r.value === "serveur"));
+  assert.doesNotMatch(second.textContent, /Réglage enregistré\./);
+  assert.match(second.textContent, /Refusé : non/);
+});
+
+test("le niveau « type » retombe sur « projet » quand le projet n'a pas de genre", () => {
+  definirNiveauEdite("type");
+  const {bloc} = rendre(page([ligne("deport.apk")], {type_disponible: false, genre: null}));
+  assert.equal(niveauEditeActuel(), "projet");
+  const actif = boutons(bloc).filter((b) => /\bactif\b/.test(b.className));
+  assert.equal(actif.length, 1);
+  assert.match(actif[0].textContent, /^Projet/);
+  definirNiveauEdite("projet");
 });

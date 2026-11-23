@@ -1478,3 +1478,14 @@ html.mobile .question-actions .bouton { min-height: 44px; }
 .tache-statut-ok { background: #dcefdc; color: #2f6b3f; }
 .tache-statut-plantage, .tache-statut-erreur { background: #f6d9d4; color: #9a2f22; }
 .tache-statut-limite { background: #f6e6c8; color: #7a5410; }
+
+/* Page Réglages : onglets de niveau, ligne de réglage, pastille d'origine, confirmation */
+.reglages-niveaux { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+.onglet-niveau { padding: 4px 10px; border: 1px solid var(--fond-2); border-radius: 12px; background: var(--papier); color: var(--encre); font: inherit; cursor: pointer; }
+.onglet-niveau.actif { background: var(--fond-2); font-weight: 700; }
+.onglet-niveau:disabled { opacity: 0.5; cursor: not-allowed; }
+.ligne-reglage { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin: 6px 0; }
+.ligne-reglage.herite .lecons-auto-label { opacity: 0.6; }
+.ligne-reglage.verrouille, .ligne-reglage.inapplicable { opacity: 0.55; }
+.pastille-origine { padding: 1px 8px; border-radius: 10px; background: var(--fond-2); font-size: 0.8em; }
+.reglages-message:empty { display: none; }

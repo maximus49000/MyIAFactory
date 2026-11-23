@@ -210,6 +210,21 @@ du bureau (onglet de facturation) ou dans `.factory/factory.json` du projet :
 du lieu) **et une fiche d'agent libre**. Un lieu imposé (le `lieu` écrit de l'étape de la tâche, ou le métier réservé à un lieu) l'emporte sur l'ordre. Un projet sans place
 serveur, sans ordre réglé et sans plafond garde le comportement d'avant, à l'identique.
 
+**Le choix de l'agent par le moteur** (`moteur/regles.py`, `_demarrer_en_attente` et `_choisir_agent`) applique cette règle à toute tâche qui part d'elle-même
+(prototype, étape du flux, correction...) :
+- les places serveur sont **comptées à part** (`agents_serveur_max` moins les tâches actives d'agents serveur) : un agent serveur ne prend jamais une place locale,
+  et la charge du poste ne retient pas le serveur ;
+- les lieux sont essayés dans l'ordre du projet (ou du métier) ; un lieu sans place libre, hors ligne ou sans fiche libre passe au suivant ; un lieu absent de
+  l'ordre n'est jamais utilisé, même avec une place libre ;
+- une étape au `lieu` écrit (`local` : `dev-local`, `livraison`...) ou un métier réservé reste à son lieu : jamais au serveur ;
+- une tâche dont Fable est accordé reste au poste (comme pour le cloud, par prudence).
+
+**L'agent attitré ou repris.** L'agent attitré du **cadrage** est choisi au poste et le reste (la discussion avec le Directeur). Une tâche **reprise** (déjà commencée)
+revient de préférence au même agent polyvalent, **à son lieu**, s'il est libre et que ce lieu a une place et convient à l'étape ; sinon n'importe quel agent la reprend
+selon l'ordre des lieux : elle repart d'un contexte neuf (le départ ordinaire ne reprend jamais une session). La reprise d'une session (`--resume`, réponse aux
+questions d'un agent) ne passe pas par ce choix : elle repart toujours là où la session est née (un agent serveur sur le serveur, un agent local au poste).
+Une installation d'outils garde le choix d'avant (le poste, puis le cloud).
+
 **Le plafond d'abonnement** est **au-dessus** des places par lieu : c'est le nombre total d'agents actifs, **tous lieux et tous projets du bureau**,
 que l'abonnement supporte. Atteint, la tâche attend : « plafond d'abonnement atteint (n/n) ». Un fichier du bureau illisible ou un plafond invalide ferme
 aussi la porte (« plafond d'abonnement : réglage illisible (chemin) ») : on ne retire pas la garde en silence.

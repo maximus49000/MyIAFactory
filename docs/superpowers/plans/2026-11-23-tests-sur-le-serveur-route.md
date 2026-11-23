@@ -844,6 +844,18 @@ N1–N6) ou par choix du Directeur, toujours dit.
 - [ ] **Step 5: Commit** : chemins ci-dessus ; « Tests au serveur : adoption par projet, tout type de projet ». Code
   sensible : relecture (elle décide quels projets envoient leur code au serveur et quand le réseau est demandé).
 
+### Task 15c (ajoutée le 2026-11-23, demande du Directeur) : le serveur comme poste de développement — build et test pilotés par un agent du serveur
+
+Objectif : qu'un agent qui travaille AU SERVEUR (tranche B) puisse compiler, lancer les tests et bâtir un APK/une build avec le même moteur
+que la route des tests (profils 14a, images 14b/14c, caches 14d, jetons 14e, Unity 14g–14i), sans retomber au poste. Limites assumées :
+pas de GPU (rendu PlayMode, captures) ni de macOS/iOS : ces cas restent au poste, raison dite.
+**Files (à préciser à l'écriture du brief, après 14g–15b) :** outils de l'agent serveur (`outils/serveur_agent.py`, consigne de départ),
+`serveur_ovh/taches/pont_hote.py` (verbes `construire`/`tester` côté hôte), `moteur/executeur_serveur.py`.
+**Produces :** verbes du pont `tester <commande>` et `construire <cible>` qui réutilisent `tests_serveur`/`lancer_tests.sh` depuis le
+serveur (sans repasser par le poste), profil + image + cache + jetons identiques ; sortie en flux à l'agent ; APK/artefacts rapatriés
+par le chemin existant ; mêmes durcissements et même consentement par projet.
+**Tests :** faux pont/faux docker ; essai réel J15 (build Android depuis un agent du serveur) puis J16 (Unity, après 14g–14i).
+
 ### Task 16: Documentation, CLAUDE.md et suite complète (contrôleur)
 
 **Files:**

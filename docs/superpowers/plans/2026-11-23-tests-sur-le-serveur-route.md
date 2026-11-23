@@ -31,6 +31,13 @@ premier plan et relaie sa sortie ; l'entrée standard de la session sert de lais
   `lancer_tests.sh` (T4) sont **facultatifs et en fin de ligne** (absents = comportement de T4) : les tests de T4 restent
   valides. Fixtures de profils : petits dossiers sous `tests/fixtures/profils/<cas>/` (quelques fichiers texte, aucun
   binaire, aucun `gradlew` réel).
+- **Amendement Unity du 2026-11-23** (conception § 5.16, Q3 = « B puis A ») : tâches **14f** (profil Unity et
+  exclusions), **14g** (enveloppe à exécuteurs et exécuteur `conteneur` Unity), **14h** (exécuteur `hote_bac_a_sable` et son
+  confinement), **14i** (capacités `unity-licence` / `unity-bac-a-sable`, choix automatique, bureau, outil de l'expérience) ;
+  jalons J12 (réécrit), J13, J14. Aucune autre tâche renumérotée. Code sensible (relecture séparée) : 14f (secrets exclus),
+  14g (licence montée, journal filtré), 14h (code non fiable sur l'hôte), 14i (choix de l'exécuteur). Aucun test ne lance
+  Unity, `systemd-run`, `sudo` ni `setfacl` réels : faux dans `PATH`. Licence factice des tests : un texte sans valeur
+  (`LICENCE-FACTICE-<n>`), jamais un vrai fichier.
 - **Tests uniquement par le lanceur** : `py -3.12 outils/tests_paralleles.py <module>` ; jamais `unittest` ni `pytest`
   directement ; une campagne à la fois sur le poste.
 - **Des tests économes** : aucun appel au vrai serveur, aucun `ssh` réel, aucun `docker` réel, aucun `sleep` ; `ssh`,
@@ -76,6 +83,15 @@ premier plan et relaie sa sortie ; l'entrée standard de la session sert de lais
    `test_code_du_projet_jamais_en_bridge`, `test_seul_l_echauffement_a_le_reseau`).
 8. **Un projet qui ne peut pas partir** : il reste au poste avec sa raison, jamais en silence (15b :
    `test_non_deportable_n_envoie_rien_et_dit_la_raison`).
+9. **La licence Unity ou la session de Hub dans un instantané ou sur une sortie** : `Unity_lic.ulf`,
+   `UnityEntitlementLicense.xml`, `.config/unityhub/…` suivis par erreur → jamais dans l'archive ; une ligne de journal qui
+   cite la licence → jamais relayée (14f : `test_licence_unity_exclue` ; 14g : `test_journal_unity_filtre`,
+   `test_jamais_unityhub_ni_socket_montes`).
+10. **L'option A choisie sans son bac à sable** : `unity-licence = hote` sans `unity-bac-a-sable` → rien sur l'hôte, repli
+    dit (14i : `test_hote_jamais_sans_bac_a_sable`) ; l'unité systemd a toutes ses protections et ne voit pas
+    `~/agent-identifiants` (14h : `test_proprietes_figees_de_l_unite`, `test_arguments_hostiles_refuses` ; audit réel J14).
+11. **Zéro test exécuté pris pour une réussite** (tests sans `.asmdef` non découverts) : code 82, jamais `passe`, jamais
+    un verdict `conteneur` (14g : `test_zero_test_n_est_pas_un_succes` ; 14i : `test_essai_indetermine_n_ecrit_rien`).
 
 ---
 
@@ -101,6 +117,10 @@ premier plan et relaie sa sortie ; l'entrée standard de la session sert de lais
 | `outils/tests_mesure_places.py` (nouveau) | protocole de mesure des places | 13 |
 | `orchestrateur/depart.py`, `bureau/deport_types.py` (affichage), installation | consigne, lieu « Serveur » pour les tests | 15, 15b |
 | `outils/tests_adoption.py` (nouveau) | adoption par projet : analyse → image → échauffement → évaluation → verdict | 15b |
+| `outils/tests_instantane.py`, `outils/tests_profil.py`, `tests/fixtures/profils/unity*/` | exclusions de licence, profil Unity | 14f |
+| `serveur_ovh/images/tests-unity/` (nouveau), `serveur_ovh/taches/lancer_tests.sh`, `entree-tests.sh` | exécuteurs, Unity en conteneur | 14g |
+| `serveur_ovh/unity-bac-a-sable.sh` (nouveau, déposé en `/usr/local/lib/myiafactory/`), `serveur_ovh/mise_en_place.sh` | bac à sable de l'option A | 14h |
+| `outils/serveur_capacites.py`, `outils/serveur_tache.py`, `outils/tests_unity_essai.py` (nouveau), `bureau/web/ui/` | capacités Unity, choix, expérience, affichage | 14i |
 | `docs/serveur-tests.md` (nouveau), `docs/deport.md`, `docs/serveur-taches.md`, `CLAUDE.md` | documentation | 16 |
 
 ---
@@ -455,7 +475,8 @@ L'ancienne tâche 14 (cache Node seul) est remplacée par cinq tâches (concepti
 - Produces :
   - Capacité `Capacite("tests-android", "Image des tests Gradle/Android (SDK de l'hôte en lecture seule)", ("tests-image", "android-build"), "tests_android_image", "test -s ~/.myiafactory/tests-android-image.version", 0.5, 4)` ; `BESOINS["tests-serveur-android"] = ("tests-android",)`.
   - Image `myiafactory/tests-android` : `FROM myiafactory/tests`, `openjdk-17-jdk-headless` et `openjdk-21-jdk-headless` (distribution), `ANDROID_HOME=/opt/android-sdk`, `GRADLE_USER_HOME=/deps/gradle`, utilisateur 1000 ; vérifié à la construction : `java -version` 17, ni `curl` ni `wget`.
-  - `CATALOGUE_IMAGES` : `{"myiafactory/tests": {"capacite": "tests-image", "familles": ("python", "node", "make"), "outils": {"python": "3.12", "node": "22"}}, "myiafactory/tests-android": {"capacite": "tests-android", "familles": ("gradle-android", "gradle-jvm"), "outils": {"jdk": ("17", "21")}}}` ; `myiafactory/android` (Gradle 8.7, plateforme 34) et `unityci/editor` ne sont **pas** au catalogue des tests (conception § 5.12) ; l'image GameCI n'y entre que par 14c, à Q3 = oui.
+  - `CATALOGUE_IMAGES` : `{"myiafactory/tests": {"capacite": "tests-image", "familles": ("python", "node", "make"), "outils": {"python": "3.12", "node": "22"}}, "myiafactory/tests-android": {"capacite": "tests-android", "familles": ("gradle-android", "gradle-jvm"), "outils": {"jdk": ("17", "21")}}}` ; `myiafactory/android` (Gradle 8.7, plateforme 34) et `unityci/editor` ne sont **pas** au catalogue des tests (conception § 5.12) ; l'image GameCI n'y entre que comme base de
+    `myiafactory/tests-unity-<version>` (14g, Q3 = B puis A).
   - `choisir_image(profil, sdk_android=None) -> dict` : `{"image", "capacites", "derivee": bool, "manque": [..]}` ; une image de catalogue convient si chaque outil du profil y est à la même version majeure (Python majeur.mineur) ; pour `gradle-android`, `sdk_android` (relevé de la sonde `android-build` : plateformes et build-tools présents) doit contenir `compileSdk` et `build_tools`, sinon `manque = ["platforms;android-N"]`.
   - `lancer_tests.sh … <deps> [<image> [<famille>]]` : `image` motif `^myiafactory/tests(-[a-z0-9]{1,24})?$` (défaut `myiafactory/tests`) ; `famille` dans `FAMILLES` (défaut `python`) ; table fermée par famille dans l'enveloppe : montages (`gradle-android` : `-v ~/android-sdk:/opt/android-sdk:ro`) et variables (`GRADLE_OPTS`, `ANDROID_HOME`) ; jamais une valeur venue du poste hors motif.
 - [ ] **Step 1: Write the failing tests** : `test_capacite_tests_android` (`verifier_catalogue`, `manquantes_pour(["tests-serveur-android"], {"base", "tests-image"}) == ["android-build", "tests-android"]`) ; `test_choix_catalogue` (Python 3.12 → `myiafactory/tests` ; Node 18 → dérivée ; MyFridgeCleaner + SDK android-36/36.0.0 → `tests-android` ; même projet + SDK sans android-36 → `manque`) ; `test_enveloppe_image_et_famille` (motifs refusés → 2 ; `gradle-android` monte le SDK en `:ro` ; sans les deux arguments : identique à T4) ; `test_etape_simulee` (`--etape tests_android_image --simuler`, aucun `docker`).
@@ -530,6 +551,207 @@ L'ancienne tâche 14 (cache Node seul) est remplacée par cinq tâches (concepti
 - [ ] **Step 3: Implement**.
 - [ ] **Step 4: Run to verify they pass** : `py -3.12 outils/tests_paralleles.py test_tests_jetons test_serveur_tests_enveloppe test_tests_places` → ok.
 - [ ] **Step 5: Commit** : chemins ci-dessus ; « Tests au serveur : places pondérées et limites par profil ».
+
+### Tasks 14f–14i (amendement Unity) : licence de Hub, option B puis option A
+
+Conception § 5.16. Ordre : 14f (après 14a, indépendante du reste : elle peut passer tôt) → 14g (après 14c, 14d, 14e) →
+14i (après 14g ; la partie A de 14i attend 14h) ; 14h après 14g. Les tests Python de `sur-la-route` n'attendent aucune de
+ces tâches (profil `python`, jalon J12).
+
+### Task 14f: Le profil Unity et les exclusions de licence (code sensible : secrets exclus)
+
+**Files:**
+- Modify: `outils/tests_instantane.py` (`EXCLUS_EN_PLUS`, comparaison des motifs à plusieurs segments, exclusions par
+  famille), `outils/tests_profil.py` (famille `unity`), docstring de `tests_instantane` (liste des motifs)
+- Create: `tests/fixtures/profils/unity-asmdef/`, `tests/fixtures/profils/unity-sans-asmdef/` (copie réduite des en-têtes de
+  `sur-la-route` : `ProjectSettings/ProjectVersion.txt`, `Packages/manifest.json` avec une dépendance git, un
+  `Assets/Editor/Tests/X.cs` vide, `Tools/factory/tests/test_x.py`) ; la fixture `unity` de 14a devient `unity-asmdef`
+- Test: `tests/test_tests_unity_profil.py` (≈ 0,5 s ; un vrai `git init` seulement pour l'exclusion, dans `setUpClass`)
+
+**Interfaces:**
+- Produces (`tests_instantane`, Python 3.9) :
+  - `EXCLUS_EN_PLUS` += `"*.ulf"`, `"Unity_lic*"`, `"UnityEntitlementLicense*"`, `"Unity.Licensing.Client*"`, `"unityhub/"`,
+    et `EXCLUS_SEGMENTS = (".config/unity3d/", ".local/share/unity3d/")` : suites de segments consécutifs à n'importe quel
+    niveau, sans tenir compte de la casse (un `Assets/Unity3D/` reste admis).
+  - `exclus_de_famille(famille) -> Tuple[str, ...]` : `unity` → `("Library/", "Temp/", "Logs/", "UserSettings/", "obj/",
+    "Build/", "Builds/")`, appliqués **à la racine du projet Unity seulement** ; autres familles → `()`. `limites_pour("unity")`
+    garde 1 Go (14a).
+- Produces (`tests_profil`, Python 3.12) :
+  - Famille `unity` : `outils["unity"] = "6000.6.7f1"`, `outils["unity_revision"] = "b22767f04f04"` (motif
+    `^[0-9]{4}\.[0-9]{1,2}\.[0-9]{1,3}[abfp][0-9]{1,2}$` et `^[0-9a-f]{12}$`, sinon refus dit) ; `deps = {"gestionnaire":
+    "upm", "verrou": "Packages/packages-lock.json", "reseau": True, "execute_du_code": True, "git": [hôtes des dépendances
+    git du manifeste, ex. "github.com"]}` ; `commandes` = le tableau du § 5.11 ; `isolement = "licence"` ;
+    `ressources_par_defaut("unity")` = 4 cpus, 10 240 Mo, 3 600 s, `/tmp` 6 Go.
+  - `tests_unity(racine, lire) -> dict` : `{"asmdef": bool, "dossiers": [..], "confiance": "haute"|"moyenne"|"basse"}` :
+    `.asmdef` qui cite `nunit.framework.dll` ou `UNITY_INCLUDE_TESTS` → `haute` ; dossiers `Editor/**/Tests` sans `.asmdef`
+    → `moyenne` ; rien → `basse` (« aucun test EditMode repéré »). `.asmdef` lus comme JSON borné (ajoutés à `LUS`).
+  - PlayMode : un `.asmdef` de tests sans `"Editor"` dans `includePlatforms` → commande PlayMode **non** proposée,
+    `non_deportable` de cette commande = N3 (« Unity PlayMode : rendu requis »).
+  - Projet mixte (`Tools/factory/tests` + Unity) : deux familles, `python` et `unity`, deux commandes ; la famille `python`
+    ne porte **aucun** besoin de licence.
+- [ ] **Step 1: Write the failing tests** : `test_licence_unity_exclue` (dépôt où sont suivis de force `Unity_lic.ulf`,
+  `x/UnityEntitlementLicense.xml`, `.config/unity3d/Unity/licenses/a.xml`, `.config/unityhub/session.json`,
+  `.local/share/unity3d/Unity/Unity_lic.ulf`, `Unity.Licensing.Client.log` → aucun retenu ; `Assets/Unity3D/a.cs` retenu) ;
+  `test_exclus_de_famille_unity` (`Library/`, `Temp/` de la racine Unity écartés ; `Assets/Library/x.cs` gardé ; famille
+  `python` : rien d'écarté de plus) ; `test_profil_sur_la_route` (fixture `unity-sans-asmdef` → familles `python` et
+  `unity`, version et révision lues, `deps.git == ["github.com"]`, confiance `moyenne`) ; `test_asmdef_confiance_haute` ;
+  `test_playmode_n3` ; `test_version_unity_hostile_refusee` (`m_EditorVersion: 6000.6.7f1; rm -rf /` → refus dit, rien
+  dans le profil) ; `test_python_du_projet_sans_licence` (la commande `python` du profil mixte a `isolement == "standard"`).
+- [ ] **Step 2: Run to verify they fail** : `py -3.12 outils/tests_paralleles.py test_tests_unity_profil` → ÉCHEC.
+- [ ] **Step 3: Implement**.
+- [ ] **Step 4: Run to verify they pass** : `py -3.12 outils/tests_paralleles.py test_tests_unity_profil test_tests_instantane test_tests_profil` → ok.
+- [ ] **Step 5: Commit** : chemins ci-dessus ; « Tests au serveur : profil Unity et exclusions de licence ». Relecture séparée.
+
+### Task 14g: L'enveloppe à exécuteurs et Unity dans le conteneur (option B ; code sensible : licence montée)
+
+**Files:**
+- Create: `serveur_ovh/images/tests-unity/Dockerfile.gabarit` (bloc `unity` du gabarit de 14c : `FROM` l'image GameCI
+  par digest local, `entree-tests.sh`, utilisateur 1000, `git` vérifié), `serveur_ovh/images/tests/entree-unity.sh`
+  (appelé par `entree-tests.sh` pour la famille `unity`)
+- Modify: `serveur_ovh/taches/lancer_tests.sh` (exécuteurs, table des montages Unity, codes 81/82), `outils/tests_images.py`
+  (bloc `unity`, taille propre pour le ramassage), `outils/tests_serveur.py` (arguments `executeur`, `licence`),
+  `serveur_ovh/taches/construire_image_tests.sh` (taille propre)
+- Test: `tests/test_serveur_tests_unity.py` (≈ 3 s ; faux `docker`, faux `unity-editor` qui écrit un XML de résultats et
+  un journal choisis par le test)
+
+**Interfaces:**
+- Produces (`lancer_tests.sh`) : deux arguments facultatifs de plus, **après** ceux de 14b–14e (`reseau_code` compris),
+  dans cet ordre : `<executeur>` `^(conteneur|hote_bac_a_sable)$` (défaut `conteneur`) et `<licence>` `^(-|B1|B2|B3)$`
+  (défaut `-`) ; absents = comportement actuel (tests de T4, 14b, 14d, 14e inchangés). L'implémenteur fixe les positions
+  exactes après relecture de l'état livré de l'enveloppe et les écrit dans son en-tête.
+  - Exécuteurs : fonctions `executeur_conteneur_lancer`/`_arreter` (le `docker run`/`docker kill` actuels) et
+    `executeur_hote_lancer`/`_arreter` (14h ; d'ici là : code 2 « exécuteur hôte non installé ») ; places, jetons, file,
+    laisse, `timeout`, coupe à 50 Mo, préfixe `| `, `#fin`, nettoyage : **communs**, jamais dupliqués.
+  - Famille `unity`, exécuteur `conteneur` : image `myiafactory/tests-unity-<version>` (motif) ; `licence` ≠ `-` exigée
+    (sinon 2) ; montages de la table fermée : `$HOME/.config/unity3d/Unity/licenses:/licence/droits:ro`, et
+    `$HOME/.local/share/unity3d/Unity/Unity_lic.ulf:/licence/ulf:ro` s'il existe ; B2 ajoute `/etc/machine-id:/etc/machine-id:ro`
+    et `--hostname "$(hostname)"` ; B3 : réseau `--internal` du mandataire (14d) avec la liste des hôtes de licence passée
+    par le poste **et** validée par motif de nom d'hôte, accepté seulement si `tests.adoption.reseau_licence == "accorde"`
+    (route) ; jamais `unityhub`, jamais une socket ; `--tmpfs /tmp:size=6g`.
+- Produces (`entree-unity.sh`, dans le conteneur) : copie `/licence/*` vers `$HOME/.config/unity3d/Unity/licenses/` et
+  `$HOME/.local/share/unity3d/Unity/` (0600) ; lance le tableau de la commande ; le journal reste dans `/tmp/unity.log` ;
+  relaie un résumé : lignes filtrées (motif `licen|entitlement|serial|token|ulf`, sans casse, retirées) et bilan du XML
+  (`total`, `passed`, `failed`, 20 noms d'échecs) ; code : celui de l'éditeur (0, 2, 3), **81** si un motif de licence
+  refusée est trouvé (`grep -qiE`, jamais affiché), **82** si le XML est absent ou `total == 0`.
+- Produces (`tests_images`) : bloc `unity` (`FROM <image GameCI>@<digest>` ; digest lu par la sonde, motif
+  `^sha256:[0-9a-f]{64}$`) ; `taille_propre_mo(image)` pour le budget (couches non partagées), utilisée par `--ramasser`.
+- [ ] **Step 1: Write the failing tests** : `test_sans_executeur_comme_avant` (arguments de 14e seuls → mêmes appels
+  `docker` qu'avant) ; `test_executeur_inconnu_refuse` (→ 2, rien écrit) ; `test_unity_montages_de_licence_en_lecture_seule`
+  (B1 : les deux `:ro`, `--network none`, aucun `machine-id`) ; `test_b2_identifiants_de_machine` ;
+  `test_b3_refuse_sans_accord` ; `test_jamais_unityhub_ni_socket_montes` (aucun argument `docker` ne contient `unityhub`,
+  `.sock`, `/run/user`) ; `test_journal_unity_filtre` (journal factice avec `LICENCE-FACTICE-1` sur une ligne « license »
+  → absente de la sortie relayée) ; `test_licence_refusee_code_81` ; `test_zero_test_n_est_pas_un_succes` (XML
+  `total="0"`, éditeur rend 0 → 82) ; `test_bilan_des_resultats` (3 tests dont 1 échec → code 2, nom de l'échec relayé) ;
+  `test_hote_non_installe_code_2` ; `test_taille_propre_pour_le_budget` (image dérivée de 27 Go apparents, 40 Mo propres →
+  40 Mo comptés) ; `test_rendu_unity_par_digest` (aucun `FROM` par étiquette seule).
+- [ ] **Step 2: Run to verify they fail** : `py -3.12 outils/tests_paralleles.py test_serveur_tests_unity` → ÉCHEC.
+- [ ] **Step 3: Implement**.
+- [ ] **Step 4: Run to verify they pass** : `py -3.12 outils/tests_paralleles.py test_serveur_tests_unity test_serveur_tests_enveloppe test_serveur_tests_deps test_tests_jetons test_tests_images_derivees` → ok.
+- [ ] **Step 5: Commit** : chemins ci-dessus ; « Tests au serveur : exécuteurs de l'enveloppe et Unity en conteneur ».
+  Relecture séparée.
+
+### Task 14h: L'exécuteur `hote_bac_a_sable` et son confinement (option A ; code sensible : code non fiable sur l'hôte)
+
+Implémentée à l'avance (tests avec faux seulement) mais **installée au serveur seulement si J13 rend `hote`** (J14).
+
+**Files:**
+- Create: `serveur_ovh/unity-bac-a-sable.sh` (script racine, déposé en `/usr/local/lib/myiafactory/unity-bac-a-sable.sh`
+  par l'étape), `serveur_ovh/sonde-bac-a-sable.sh` (sonde d'audit de J14, lancée **dans** l'unité à la place de l'éditeur)
+- Modify: `serveur_ovh/mise_en_place.sh` (étape `unity_bac_a_sable`, usage et liste des étapes), `outils/serveur_installation.py`
+  (`FICHIERS_ETAPE`, `EMPREINTE_FICHIERS`, `MARQUEURS`), `serveur_ovh/taches/lancer_tests.sh` (`executeur_hote_lancer`/`_arreter`)
+- Test: `tests/test_serveur_unity_bac_a_sable.py` (≈ 3 s ; faux `systemd-run`, `systemctl`, `sudo`, `setfacl`, `useradd`,
+  `visudo`, `id` dans `PATH`)
+
+**Interfaces:**
+- Produces (étape `unity_bac_a_sable`, `--simuler` connu) : utilisateur système `unity-tests` (sans shell, sans mot de passe,
+  hors `docker`/`kvm`/`sudo`), `/var/lib/unity-tests` 0700 ; script racine 0755 propriété root ; règle
+  `/etc/sudoers.d/myiafactory-unity` limitée à `/usr/local/lib/myiafactory/unity-bac-a-sable.sh` (vérifiée par `visudo -c`,
+  retirée si refus) ; ACL `u:unity-tests:r` sur les **seuls** fichiers de licence et ACL par défaut sur `licenses/` ;
+  vérifie que `~/agent-identifiants`, `~/.ssh`, `~/taches` sont 0700 (sinon `bloque` avec la raison) ; marqueur
+  `~/.myiafactory/unity-bac-a-sable.version` **écrit par l'audit J14 seulement**, pas par l'étape.
+- Produces (`unity-bac-a-sable.sh`, root) : `lancer <id> <cpus> <memoire_mo> <duree_s> <version> <reseau>` et `arreter <id>` ;
+  motifs sur chaque argument (id de la tranche A, version Unity, `reseau` `^(aucun|licence)$`) ; refuse si l'éditeur
+  `/opt/unity/editors/<version>/Editor/Unity` (ou la version de repli décidée) est absent ; crée
+  `/var/lib/unity-tests/campagnes/<id>/` ; `systemd-run --pipe --wait --collect --unit unity-tests-<id>` avec la liste
+  **figée** de propriétés de la conception § 5.16 (`User=unity-tests`, `ProtectHome=tmpfs`, `ProtectSystem=strict`,
+  `PrivateTmp`, `PrivateDevices`, `NoNewPrivileges`, `CapabilityBoundingSet=`, `ProtectProc=invisible`, `ProcSubset=pid`,
+  `RestrictNamespaces`, `SystemCallFilter=@system-service`, `InaccessiblePaths` des sockets Docker, `ReadWritePaths` de la
+  campagne seule, `BindReadOnlyPaths` de l'éditeur et des fichiers de licence vers le `HOME` de l'unité, `PrivateNetwork=yes`
+  ou, avec `reseau=licence`, `IPAddressDeny=any` + `IPAddressAllow=<mandataire>`, `MemoryMax`, `MemorySwapMax=0`,
+  `CPUQuota`, `TasksMax=2048`, `LimitNOFILE=8192`, `RuntimeMaxSec`) ; l'archive est extraite **dans** l'unité ; `Library/`
+  par overlay dans un espace de montage privé, à défaut `cp --reflink=auto` ; dossier effacé à la fin ; balaie les unités
+  `unity-tests-*` de plus de 6 h.
+- Produces (`lancer_tests.sh`) : `executeur_hote_*` = `sudo -n /usr/local/lib/myiafactory/unity-bac-a-sable.sh lancer|arreter …`,
+  sortie traitée par le chemin commun ; la version d'éditeur du profil, ou la version de repli décidée par le Directeur
+  (`tests.profil_force.unity_version_hote`) avec la ligne d'avertissement « Éditeur <v> au lieu de <v projet> : résultats
+  indicatifs » en tête de la sortie.
+- [ ] **Step 1: Write the failing tests** : `test_proprietes_figees_de_l_unite` (le faux `systemd-run` journalise ses
+  `-p` : chacune de la liste présente, `User=unity-tests`, `ProtectHome=tmpfs`, aucun `BindPaths` hors campagne) ;
+  `test_arguments_hostiles_refuses` (id `../x`, version `6000.6.7f1;id`, `reseau=bridge` → 2, aucun `systemd-run`) ;
+  `test_licence_liee_jamais_copiee` (aucun `cp` de `licenses/` ni d'`.ulf` vers la campagne ; liaison en lecture seule) ;
+  `test_reseau_prive_par_defaut` ; `test_arreter_arrete_l_unite` (laisse fermée → `arreter <id>` → `systemctl stop
+  unity-tests-<id>`) ; `test_version_absente_refusee` ; `test_avertissement_version_de_repli` ; `test_etape_simulee`
+  (`--etape unity_bac_a_sable --simuler` : JSON, aucun `useradd`) ; `test_etape_refuse_dossiers_lisibles`
+  (`~/agent-identifiants` en 0755 → `bloque`) ; `test_sudoers_verifie` (faux `visudo -c` en échec → règle retirée, `bloque`).
+- [ ] **Step 2: Run to verify they fail** : `py -3.12 outils/tests_paralleles.py test_serveur_unity_bac_a_sable` → ÉCHEC.
+- [ ] **Step 3: Implement**.
+- [ ] **Step 4: Run to verify they pass** : `py -3.12 outils/tests_paralleles.py test_serveur_unity_bac_a_sable test_serveur_tests_unity test_serveur_installation` → ok.
+- [ ] **Step 5: Commit** : chemins ci-dessus ; « Tests au serveur : bac à sable Unity sur l'hôte (option A) ». Relecture
+  séparée (le code des tests tourne sur l'hôte).
+
+### Task 14i: Capacités `unity-licence` et `unity-bac-a-sable`, choix automatique, expérience et bureau (code sensible : choix de l'exécuteur)
+
+**Files:**
+- Create: `outils/tests_unity_essai.py` (outil du contrôleur pour J13/J14), `tests/test_tests_unity_choix.py` (≈ 1 s)
+- Modify: `outils/serveur_capacites.py` (deux capacités), `outils/serveur_tache.py` (`choisir_serveur` : exigence `nom=etat`),
+  `serveur_ovh/mise_en_place.sh` (étape `unity_licence_etat` : lit un état sur l'entrée standard, écrit le marqueur),
+  `outils/tests_serveur.py` (choix de l'exécuteur), `outils/tests_adoption.py` (verdict Unity, code 82), `bureau/web/ui/`
+  (carte du serveur), `orchestrateur/consignes.md` et `bureau/releve.py` (étape humaine « Reconnecter Unity Hub »,
+  « Installer 6000.6.7f1 par Hub »)
+
+**Interfaces:**
+- Produces (`serveur_capacites`) :
+  - `Capacite("unity-licence", "Licence Unity de Hub pour les tests", ("base",), "unity_licence_etat",
+    "<sonde : lit ~/.myiafactory/unity-licence.etat ; test -s des fichiers de licence ; imprime conteneur|hote|absente>", …,
+    installable=False, raison_non_installable="licence de Unity Hub : reconnecter Hub par la session graphique")` ; état et
+    variante (`B1`/`B2`/`B3`) gardés dans l'état local du serveur.
+  - `Capacite("unity-bac-a-sable", "Bac à sable de l'hôte pour les tests Unity (option A)", ("unity-licence", "session-graphique"),
+    "unity_bac_a_sable", "<sonde : utilisateur, script racine, règle sudoers, marqueur d'audit, éditeur lisible>", …)`.
+- Produces (`serveur_tache.choisir_serveur`) : une exigence `"unity-licence=conteneur"` n'est satisfaite que par cet état
+  relevé ; les exigences sans `=` gardent leur sens.
+- Produces (`tests_serveur.executeur_pour(profil, etat_serveur) -> Tuple[str, Optional[str]]`, pur) : règle exacte du § 5.16 :
+  `conteneur` + variante ; `hote_bac_a_sable` seulement si `unity-licence=hote` **et** `unity-bac-a-sable` présente ;
+  sinon `Repli` (« licence Unity absente » / « bac à sable Unity absent : rien ne tourne sur l'hôte sans lui ») ; code 81 au
+  retour → état `absente` noté (étape `unity_licence_etat`) et étape humaine posée, une fois.
+- Produces (`tests_unity_essai.py`) : `py -3.12 outils/tests_unity_essai.py --serveur-id <id> --dossier <projet> --test <nom>
+  [--variantes B1,B2[,B3]] [--hote]` : inventaire des **noms** et tailles (`find … -printf '%p %s\n'` sur les dossiers de
+  licence, `ss -xl` filtré sur le client de licence ; jamais un contenu), puis une campagne `-testFilter <nom>` par
+  variante, à froid puis à chaud, par `tests_serveur.executer(…, forcer=True, evaluation=True, executeur=…, licence=…)` ;
+  verdict : `conteneur` (première variante réussie, ≥ 1 test exécuté), `hote` (81 dans toutes les variantes permises),
+  `indetermine` (82, erreur de compilation, autre code : **rien n'est écrit**) ; écrit l'état par `unity_licence_etat` ; B3
+  seulement si `--variantes` la cite et que la décision QU1 est `accorde` ; `--hote` (J14) lance d'abord
+  `sonde-bac-a-sable.sh` par l'exécuteur hôte et n'écrit le marqueur d'audit que si toutes ses vérifications passent ;
+  relevés (durées, pic mémoire, taille de `Library/`) écrits dans `~/MyIAFactory/tests-unity-essai.json`.
+- Produces (bureau) : carte du serveur « Licence Unity : dans le conteneur (B1) / sur l'hôte, bac à sable / absente —
+  raison » et « Bac à sable Unity : prêt / absent » (`textContent`) ; décision `environnement` non autonome « Reconnecter
+  Unity Hub sur le serveur » (`lien` vers la page de gestion des licences de la documentation de Unity Hub, vérifié par
+  l'implémenteur ; `mode_operatoire` de 5 étapes du § 5.16 ; `releve.mode_operatoire_ok`) avec le bouton « Vérifier la
+  licence » (sonde, autonome) ; même forme pour « Installer 6000.6.7f1 par Hub » (QU2) ; verdict d'adoption d'un projet
+  Unity qui nomme l'exécuteur et, pour A, le risque résiduel en une ligne.
+- [ ] **Step 1: Write the failing tests** : `test_conteneur_choisi` ; `test_hote_jamais_sans_bac_a_sable` (`hote` sans la
+  capacité → `Repli` dit, aucun appel d'exécuteur hôte) ; `test_hote_avec_bac_a_sable` ; `test_absente_repli_et_etape_humaine`
+  (décision posée une fois, `mode_operatoire_ok` vrai) ; `test_code_81_rend_la_licence_absente` ; `test_exigence_nom_etat`
+  (`choisir_serveur(requises=("unity-licence=conteneur",))` refuse un serveur `hote`) ; `test_essai_ordre_des_variantes`
+  (B1 rend 81, B2 rend 0 avec 1 test → `conteneur`, variante B2, B3 jamais tentée) ; `test_essai_indetermine_n_ecrit_rien`
+  (82 → aucune écriture d'état) ; `test_b3_jamais_sans_accord` ; `test_inventaire_noms_seulement` (aucune commande
+  `cat`, `head`, `base64`, `xxd`, `cp` dans le `_bash` de l'inventaire) ; `test_marqueur_audit_seulement_si_tout_passe` ;
+  `test_python_du_projet_ne_demande_pas_la_licence` (la commande `python` de `sur-la-route` part par `tests-image` même
+  avec `unity-licence=absente`).
+- [ ] **Step 2: Run to verify they fail** : `py -3.12 outils/tests_paralleles.py test_tests_unity_choix` → ÉCHEC.
+- [ ] **Step 3: Implement**.
+- [ ] **Step 4: Run to verify they pass** : `py -3.12 outils/tests_paralleles.py test_tests_unity_choix test_serveur_capacites test_serveur_tache test_tests_adoption test_releve` → ok.
+- [ ] **Step 5: Commit** : chemins ci-dessus ; « Tests au serveur : licence Unity, choix de l'exécuteur et bureau ».
+  Relecture séparée.
 
 ### Task 15: La consigne des agents et le lieu « Serveur » des tests
 
@@ -627,7 +849,8 @@ N1–N6) ou par choix du Directeur, toujours dit.
 **Files:**
 - Create: `docs/serveur-tests.md` (route, repli R1–R5, places, limites, sécurité, protocole et N mesuré, dépannage :
   `--local`, `--serveur`, fichier d'injoignable ; amendement : profils par famille, catalogue d'images et images dérivées,
-  caches et échauffement, jetons de mémoire, liste N1–N6 des non déportables, adoption et ses décisions)
+  caches et échauffement, jetons de mémoire, liste N1–N6 des non déportables, adoption et ses décisions ; Unity : fichiers
+  de licence, options B et A, états de `unity-licence`, bac à sable et son risque résiduel, étapes humaines)
 - Modify: `docs/deport.md` (le lieu serveur des tests), `docs/serveur-taches.md` (places `.creneau-tests-*`, `~/tests/`),
   `CLAUDE.md` (« Une seule campagne de tests à la fois **sur le poste** » ; « avec l'accord, le lanceur les envoie au
   serveur, plusieurs en parallèle ; `--local` pour forcer le poste » ; commandes inchangées), `lancer.py` (docstring)
@@ -651,24 +874,35 @@ sur le serveur ensuite.
 - [ ] **J9** (après 14c, décision `tests_image_derivee` du Directeur) : une image dérivée (Godot 4.7 pour ZooRunner, ou Node d'un autre majeur) : construction (durée, taille), seconde demande à empreinte égale → aucune construction ; `--ramasser` avec un budget abaissé → l'image inutilisée part, celle d'un conteneur vivant reste.
 - [ ] **J10** (après 14d) : échauffement puis campagne hors ligne sur un projet du J5 ou J8 : le volume `overlay` fonctionne (sinon : bascule sur la lecture seule et `GRADLE_RO_DEP_CACHE`, notée) ; somme du cache identique avant et après la campagne.
 - [ ] **J11** (après 14e) : `tests_mesure_places.py --mixte gradle:2,python:2` puis la même pendant une émulation de recette → pics mémoire, durées ; `budget_tests_mo` confirmé ou corrigé au bureau, écrit dans `docs/serveur-tests.md`.
-- [ ] **J12** (seulement si Q3 = oui et un projet Unity existe) : projet Unity de test à la version de l'image GameCI, EditMode, licence montée ; sinon jalon reporté, dit dans la note de reprise.
+- [ ] **J12** (réécrit, après J1–J2, aucune licence) : `sur-la-route` enregistré au bureau ; ses tests Python par le profil `python` : `python lancer.py tests --serveur --dossier <sur-la-route> -- python3 -m unittest discover -s Tools/factory/tests` (ou la commande de son catalogue) → durée, verdict ; l'instantané ne contient aucun fichier de licence (liste des noms relevée).
+- [ ] **J13 — expérience B** (après 14f, 14g, 14i ; feu vert du Directeur ; aucun changement de l'hôte hors l'image dérivée) : construire `myiafactory/tests-unity-6000.6.7f1` (décision `tests_image_derivee`, base GameCI présente, aucun tirage de 27 Go) ; échauffement de `Library/` (réseau UPM de Q4 avec `github.com` pour UniVRM, accord du projet) ; `py -3.12 outils/tests_unity_essai.py --serveur-id <id> --dossier <sur-la-route> --test <un test de Assets/Editor/Tests> --variantes B1,B2` → inventaire des noms, durées à froid et à chaud, pic mémoire, taille de `Library/`, verdict écrit dans `unity-licence`. Si B1 et B2 rendent 81 et que le journal (filtré) montre un appel aux serveurs d'Unity : **poser QU1** au Directeur ; si oui, `--variantes B3`. Verdict `indetermine` (82, compilation) : corriger puis refaire, jamais conclure à A. Rien ne reste hors image et cache voulus.
+- [ ] **J14 — confinement A** (**seulement si J13 rend `hote`** ; après 14h ; feu vert du Directeur) : poser QU2 et faire l'étape humaine d'installation de 6000.6.7f1 par Hub dans `/opt/unity/editors` (ou décision de repli 6000.6.10f1) ; `plateforme serveurs installer <id> unity-bac-a-sable --accord` ; `tests_unity_essai.py … --hote` : audit par `sonde-bac-a-sable.sh` (lecture refusée de `~/agent-identifiants`, `~/.ssh`, `~/taches`, d'une autre campagne, de `~/.config/unityhub`, de `/run/docker.sock` ; connexion sortante refusée ; `TasksMax`, `MemoryMax`, `RuntimeMaxSec` effectifs ; laisse qui arrête l'unité ; ACL limitées aux fichiers de licence, gardées après un rafraîchissement par Hub) ; puis le même test EditMode par l'exécuteur hôte, durée relevée ; marqueur d'audit posé seulement si tout passe ; sinon `unity-bac-a-sable` reste absente et les tests Unity restent au poste, dit au bureau.
 
 ## Auto-relecture
 
 1. **Couverture de la conception** : § 5.1 → T7, T8 ; § 5.2 → T2, T4 (extraction, nettoyage) ; § 5.3 → T3 ; § 5.4 → T4,
    T5, T6 ; § 5.5 → T4 (places, file, limites), T13 (N, protocole) ; § 5.6 → T6 (note d'attente, mesure) ; § 5.7 → T7 ;
    § 5.8 → T14d ; § 5.9 → T1, T9–T12 ; § 5.10 → T15, T16 ; § 5.11 → T14a ; § 5.12 → T14b, T14c ; § 5.13 → T14d ;
-   § 5.14 → T14a (ressources, N1/N2/N6), T14e (jetons, limites) ; § 5.15 → T15b ; § 6 → T3, T4, T14c, T14d ;
-   § 8 → T17 (J1–J12).
+   § 5.14 → T14a (ressources, N1/N2/N6), T14e (jetons, limites), T14f (PlayMode en N3) ; § 5.15 → T15b ; § 5.16 → T14f
+   (profil, exclusions), T14g (exécuteurs, option B), T14h (option A), T14i (capacités, choix, expérience, bureau) ;
+   § 6 → T3, T4, T14c, T14d, T14g, T14h ; § 8 → T17 (J1–J14).
 2. **Pas** : chaque étape nomme le fichier, la signature et les valeurs ; aucun corps de fonction ; T9–T12 partagent une
    forme et nomment leurs modules et le correctif attendu.
 3. **Noms** : `refus_route`, `routee_au_serveur`, `executer_en_flux`, `fin_serveur`, `tests_serveur.executer(…, forcer)`,
    `LIMITES`, `module_pas_encore_linux`, `places_tests` sont les mêmes partout ; amendement : `Profil`, `analyser`,
    `empreinte_profil`, `empreinte_image`, `empreinte_deps`, `choisir_image`, `rendre_dockerfile`, `etiquette_derivee`,
-   `budget_tests_mo`, `budget_images_go`, `budget_caches_go`, `tests.adoption.empreinte_profil` idem.
-4. **Review Focus** : chaque ligne a son test dans la tâche qui possède le code (T2, T4, T5, T6, T7 ; 14a, 14c, 14d, 15b).
+   `budget_tests_mo`, `budget_images_go`, `budget_caches_go`, `tests.adoption.empreinte_profil` idem ; amendement Unity :
+   `unity-licence` (états `conteneur`/`hote`/`absente`), `unity-bac-a-sable`, exécuteurs `conteneur`/`hote_bac_a_sable`,
+   variantes `B1`/`B2`/`B3`, codes 81/82, `executeur_pour`, `exclus_de_famille`, `EXCLUS_SEGMENTS` idem.
+4. **Review Focus** : chaque ligne a son test dans la tâche qui possède le code (T2, T4, T5, T6, T7 ; 14a, 14c, 14d, 15b ;
+   14f, 14g, 14h, 14i).
 5. **Proportion** : plan plus long que la conception, sans code ; les tests sont des noms et des assertions.
 6. **Amendement « qu'importe le projet »** : plus de `non_supporte` ; chaque famille a un chemin (catalogue ou image
    dérivée) ; seuls N1–N6 restent au poste, raison dite ; les tests instrumentés restent aux actions de l'émulateur ; les
-   arguments ajoutés à l'enveloppe de T4 sont facultatifs, ses tests restent valides ; Q1, Q2 décidées, Q3–Q5 ouvertes
-   (J8 attend Q4, J12 attend Q3, les budgets de 14c/14d prennent les défauts de Q5 tant qu'elle n'est pas tranchée).
+   arguments ajoutés à l'enveloppe de T4 sont facultatifs, ses tests restent valides ; Q1 à Q5 décidées (Q3 = B puis A,
+   Q4 = réseau limité projet par projet, Q5 = 30 Go et 40 Go, valeurs par défaut de 14c/14d).
+7. **Amendement Unity** : la licence ne part jamais (14f) et n'est jamais affichée (14g) ; B est essayée d'abord et son
+   verdict vient d'une expérience réelle (J13), jamais d'une supposition ; A n'est jamais choisie sans `unity-bac-a-sable`
+   ni sans l'audit J14 ; 0 test n'est jamais une réussite ; les tests Python de `sur-la-route` partent tout de suite, sans
+   licence (J12) ; PlayMode reste en N3. Restent au Directeur, au moment venu : QU1 (sortie vers les hôtes de licence si B
+   l'exige) et QU2 (installer 6000.6.7f1 par Hub si A).

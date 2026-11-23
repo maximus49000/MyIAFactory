@@ -15,7 +15,7 @@
   python lancer.py deporter recette-emulateur [--mode scenario|pilote] [--scenario <nom>] [--apk <fichier>] [--dossier <dossier>] [--reglages <fichier>]
       (l'APK sur un émulateur du serveur, sans défaut au poste : le projet doit être enregistré au bureau et l'action
       réglée sur serveur ; voir docs/serveur-taches.md)
-  py -3.12 lancer.py signer-release --artefact <apk non signé ou aab> --keystore <coffre> --alias <alias> --sortie <fichier> [--sdk <SDK>]
+  py -3.12 lancer.py signer-release (--artefact <apk non signé ou aab> | --dossier <projet>) --keystore <coffre> --alias <alias> --sortie <fichier> [--sdk <SDK>]
       (« Release signé » : le serveur compile, le poste signe ; mot de passe saisi au poste, jamais par un agent : voir `outils/signature_locale.py`)
   py -3.12 lancer.py plateforme <etat|installer|verifier|bureau-distant> [--accord-reinstallation] [--bureau-distant] [--dossier <dossier>]
       (le serveur dédié OVH : voir `outils/plateforme.py`)

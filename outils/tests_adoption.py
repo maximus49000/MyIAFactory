@@ -241,6 +241,56 @@ def evaluer(racine, commande=None, route=None, construire=None, delai_s=None, li
                   raison=f"code {code}", marqueur=marqueur_pour(famille), **commun)
 
 
+# --- construction d'une image dérivée approuvée (réponse `construire` du Directeur ; moteur ou bureau, jamais un agent) --
+
+CONSTRUCTION_S = 1900          # l'enveloppe s'arrête d'elle-même à 1 800 s (code 124)
+DEPOT_DOCKERFILE_S = 60
+_LIGNE_IMAGE = re.compile(rb"^#image (myiafactory/tests-[0-9a-f]{12}) ([0-9]{1,7})$", re.MULTILINE)
+
+
+def _contexte_distant(etiquette):
+    return f"\"$HOME/tests/.construction/{etiquette}\""
+
+
+def construire_image(profil, sha_approuve, serveur=None, ssh=None, noter=None, maintenant=None, dire=None) -> bool:
+    """Construit au serveur l'image dérivée de `profil` si son Dockerfile rendu est EXACTEMENT celui que le Directeur a
+    approuvé (`sha_approuve`) : dépôt du seul `Dockerfile` dans `~/tests/.construction/<étiquette>/`, puis
+    `construire_image_tests.sh <étiquette> <sha256>` (qui revérifie la somme), puis la ligne `#image` notée au registre
+    local. Rend vrai si l'image est construite et notée ; faux sinon (dit par `dire`). Le Dockerfile vient du gabarit
+    (`tests_images.rendre_dockerfile`), jamais d'un texte reçu."""
+    dire = dire or (lambda _m: None)
+    texte, sha = tests_images.rendre_dockerfile(profil)
+    etiquette = tests_images.etiquette_derivee(profil)
+    if sha != sha_approuve or not tests_images.ETIQUETTE_DERIVEE.fullmatch(etiquette):
+        dire("Construction refusée : le Dockerfile du profil n'est pas celui que vous avez approuvé (nouvelle évaluation).")
+        return False
+    ssh = ssh or tests_serveur.plateforme_ssh
+    d = _contexte_distant(etiquette)
+    depot = (f"umask 077 && rm -rf -- {d} && mkdir -p -- {d} && set -C && cat > {d}/Dockerfile")
+    try:
+        if serveur is None:
+            serveur = tests_serveur.serveur_tache.choisir_serveur(tests_serveur.plateforme_acces.DOSSIER,
+                                                                  requises=tests_serveur.REQUISES)
+        cible = tests_serveur.serveur_etat.cible(serveur)
+        code, _s, erreur = ssh.executer_octets(cible, depot, serveur.cle, entree=texte.encode("utf-8"),
+                                               delai=DEPOT_DOCKERFILE_S)
+        if code != 0:
+            dire(f"Dépôt du Dockerfile au serveur impossible (code {code}).")
+            return False
+        commande = f"bash \"{tests_serveur.DOSSIER_DISTANT}/taches/construire_image_tests.sh\" {etiquette} {sha}"
+        code, sortie, erreur = ssh.executer_octets(cible, commande, serveur.cle, entree=None, delai=CONSTRUCTION_S)
+    except Exception as e:  # noqa: BLE001
+        dire(f"Construction impossible ({type(e).__name__}).")
+        return False
+    lue = _LIGNE_IMAGE.search(sortie or b"")
+    if code != 0 or lue is None or lue.group(1).decode() != etiquette:
+        dire(f"Construction de l'image en échec (code {code}) : {str(erreur or '')[-300:]}".strip())
+        return False
+    (noter or tests_images.noter_image)(serveur.id, etiquette, tests_profil.empreinte_image(profil),
+                                        int(lue.group(2)), maintenant or time.strftime("%Y-%m-%dT%H:%M:%S"))
+    return True
+
+
 # --- réglages : `tests.adoption`, écrit par le bureau / l'outil seulement ----------------------------------------------
 
 def adoption_lue(racine) -> Optional[dict]:

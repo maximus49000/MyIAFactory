@@ -453,6 +453,16 @@ conteneur des agents des projets Flutter.
   sur l'hôte reste vide (le montage le recouvre). Limite : un agent qui **copierait** la clé dans le dépôt et la commiterait
   la ferait entrer dans le paquet ; aucun contrôle ne le détecte aujourd'hui (contrairement au jeton de l'abonnement) :
   relire les branches rapatriées (un fichier `*.keystore` ne doit jamais y apparaître).
+- **« Release signé » : le serveur compile, le poste signe** (réglage « Signature des APK » = `poste_signe`, action
+  `release-signe` du catalogue Android). L'enveloppe écrit le choix de signature dans `~/taches/<id>/signature`, monté en
+  lecture seule sur `/opt/outils/signature`. Avec `poste_signe`, `construire-apk` (release) pose le temps de la
+  construction un script d'init Gradle figé (`$GRADLE_USER_HOME/init.d/myiafactory-release-non-signee.gradle` :
+  `androidComponents.finalizeDsl`, `signingConfig = null` pour la release ; le projet n'a rien à changer), puis range
+  l'APK sous `build/app/outputs/flutter-apk/app-release-unsigned.apk` (jamais sous le nom `app-release.apk`) : l'agent le
+  déclare livrable, il est rapatrié au poste. La signature se fait au poste, par le Directeur : `py -3.12 lancer.py
+  signer-release --dossier <projet> --keystore <coffre> --alias <alias> --sortie <fichier>` (`zipalign`, `apksigner` du
+  SDK du poste ; mot de passe saisi au terminal, jamais par un agent ; `outils/signature_locale.py`). `lancer.py deporter
+  release-signe` ne lance rien : il dit cette marche à suivre. Non vérifié sur un vrai serveur (essai J15b sur FM_Stats).
 - **Limites** : les tests routés au serveur (`lancer.py tests`) ne connaissent pas encore la famille `flutter`.
 
 <a id="connexion-a-l-abonnement"></a>

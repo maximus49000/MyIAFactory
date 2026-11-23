@@ -7,7 +7,7 @@ import {nomAgent} from "./detail.js";
 import {decisionsDirecteur, demandeGenre, demandeSession, lireSession, issuesGenreFonctionnalite, demandeGenreFonctionnalite,
   demandeEnvironnement, demandeElargirGenre, demandeInstallerOutil, demandeOutilAgent, demandeAccordAgent,
   demandeRegleProjet, regleProposee, regleSelonLaReponse, MAX_REGLE_PROJET, demandeSerieArretee, demandeFinVue, demandeFableTache,
-  demandeBlocageAnalyse, demandeTestsServeur, demandeRelancerSession, enregistrerCloudDossierApprouve} from "./actions.js";
+  demandeBlocageAnalyse, demandeTestsServeur, demandeEvaluerTestsServeur, demandeRelancerSession, enregistrerCloudDossierApprouve} from "./actions.js";
 import {blocOutil} from "./outils.js";
 import {decoupageEnAttente, carteDecoupage} from "./lieux.js";
 import {decisionChezPartenaire} from "./chez-partenaire.js";
@@ -497,6 +497,19 @@ function decisionTestsServeur(ctx, d) {
   return li;
 }
 
+// « Évaluer les tests sur le serveur » : le bouton dit ce qu'il fait (le code du projet part au serveur) ; le clic vaut la
+// demande du Directeur (`confirme`), sans lui aucune campagne ne part. Le verdict revient en décision dans cette partie.
+function evaluerTestsServeur(ctx) {
+  const li = el("li", "decision-tests-serveur");
+  li.append(el("div", "lecon-meta", "Une campagne de tests au serveur, sans repli au poste : rien n'est activé sans votre "
+    + "réponse au verdict."));
+  const rangee = el("div", "lecon-boutons");
+  rangee.append(boutonDemande(ctx, "Évaluer les tests sur le serveur (envoie le code du projet au serveur)",
+    "bouton secondaire", () => demandeEvaluerTestsServeur()));
+  li.append(rangee);
+  return li;
+}
+
 // « Demandes d'accord des agents » : l'agent, ce qu'il veut faire et pourquoi, ce que ça implique (fenêtres, branchement,
 // coût), le rappel de la règle quand il vise un appareil physique ; « J'accepte », « Je refuse » et une consigne facultative.
 function decisionAccordAgent(ctx, d) {
@@ -768,9 +781,6 @@ export function contenuDecisionsV4(ctx, contenu) {
   if (d.fables.length) {     // seulement quand il y en a : une tâche attend l'accord pour Fable
     contenu.append(partie("Tâches qui demandent Fable", "", d.fables.map((x) => decisionFableTache(ctx, x))));
   }
-  if (d.testsServeur.length) {     // seulement quand une évaluation attend votre réponse
-    contenu.append(partie("Tests au serveur", "", d.testsServeur.map((x) => decisionTestsServeur(ctx, x))));
-  }
   contenu.append(partie("Demandes d'accord des agents", "Aucun agent n'attend votre accord",
     d.accords.map((x) => decisionAccordAgent(ctx, x))));
   if (d.blocages.length) {     // seulement quand il y en a : le Chef n'a pas pu débloquer une tâche seul
@@ -779,5 +789,10 @@ export function contenuDecisionsV4(ctx, contenu) {
   contenu.append(partie("Outils à ouvrir à un agent", "Aucun agent n'attend un outil",
     d.outils.map((x) => decisionOutilAgent(ctx, x))));
   contenu.append(partie("Sessions cloud à créer", "Aucune session à créer", d.sessions.map((x) => decisionSession(ctx, x))));
+  // en fin de page : le bouton n'attend rien ; une évaluation qui attend votre réponse y figure aussi
+  if (d.testsServeur.length || ctx.etat.agir) {     // une évaluation attend votre réponse, ou le bouton pour en lancer une
+    contenu.append(partie("Tests au serveur", "", [...d.testsServeur.map((x) => decisionTestsServeur(ctx, x)),
+      ...(ctx.etat.agir ? [evaluerTestsServeur(ctx)] : [])]));
+  }
   if (Array.isArray(ctx.etat.regles_projet)) contenu.append(reglesDuProjet(ctx));   // absent : le projet ne les gère pas
 }

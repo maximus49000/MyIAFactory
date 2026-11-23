@@ -22,6 +22,7 @@ import base64
 import json
 import os
 import re
+import sys
 import time
 import unicodedata
 from datetime import datetime
@@ -6322,6 +6323,68 @@ def _sur_publier_livrable(projet, demande, etat):
 
 
 _SUR["publier_livrable"] = _sur_publier_livrable
+
+
+# --- L'adoption des tests au serveur (conception § 5.15, tâche 15b) : le moteur, jamais un agent, lance l'évaluation (qui
+# envoie le code du projet au serveur) et la construction d'une image approuvée, détachées : une campagne ou une
+# construction dure jusqu'à 45 min, le moteur ne l'attend pas ; leur verdict revient en décision (`evaluer-tests-serveur`).
+
+EVALUATION_TESTS = "evaluation-tests-serveur"
+
+
+def _lancer_evaluation_tests(projet, entree, lancer_processus=None):
+    """Lance `outil.py lancer evaluer-tests-serveur` détaché avec `entree` ; rend un texte pour le Directeur. Une évaluation
+    déjà en cours pour ce projet : rien de plus (une seule à la fois)."""
+    from moteur import verrou
+    d = detache.dossier(projet.factory.parent)
+    d.mkdir(parents=True, exist_ok=True)
+    marque = d / f"{EVALUATION_TESTS}.json"
+    try:
+        pid = json.loads(marque.read_text(encoding="utf-8")).get("pid")
+    except (OSError, ValueError, AttributeError):
+        pid = None
+    if verrou.pid_vivant(pid):
+        return "Une évaluation des tests au serveur est déjà en cours pour ce projet : son verdict arrivera ici."
+    fichier_entree = d / f"{EVALUATION_TESTS}.entree.json"
+    fichier_entree.write_text(json.dumps(entree), encoding="utf-8")
+    argv = [sys.executable, str(Path(outil.__file__).resolve()), "--factory", str(projet.factory),
+            "lancer", "evaluer-tests-serveur"]
+    p = (lancer_processus or detache.lancer_processus)(
+        argv, fichier_entree, d / f"{EVALUATION_TESTS}.sortie.json", d / f"{EVALUATION_TESTS}.erreurs.txt",
+        dict(os.environ), str(Path(outil.__file__).resolve().parent.parent))
+    marque.write_text(json.dumps({"pid": p.pid, "debut": time.time(), "entree": entree}), encoding="utf-8")
+    if entree.get("construire"):
+        return ("La construction de l'image approuvée part au serveur (jusqu'à 30 min), puis l'évaluation des tests : "
+                "le verdict arrivera dans « Tests au serveur ».")
+    return ("L'évaluation des tests part au serveur (le code du projet y est envoyé, une campagne, sans repli) : "
+            "le verdict arrivera dans « Tests au serveur ».")
+
+
+def _sur_evaluer_tests_serveur(projet, demande, etat):
+    """Le clic « Évaluer les tests sur le serveur » (`confirme: true`, vérifié par le bureau) : l'évaluation part, détachée."""
+    if demande.get("confirme") is not True:
+        raise Refus("l'évaluation n'envoie le code au serveur que sur votre clic (« confirme »).")
+    _terminer(projet, {"demande": demande["id"]}, _lancer_evaluation_tests(projet, {"confirme": True}))
+    return []
+
+
+def _sur_tests_serveur(projet, demande, etat):
+    """La réponse du Directeur à une décision `tests_*` : l'outil l'applique et lève la décision ; puis, selon la `suite`,
+    une nouvelle évaluation (`evaluer`) ou la construction de l'image approuvée suivie de l'évaluation (`construire`)."""
+    r = lancer(projet, "evaluer-tests-serveur", {"decision": demande["decision"], "verdict": demande["verdict"]})
+    textes = [r.get("fait") or "C'est noté."]
+    if r.get("suite") == "evaluer":
+        textes.append(_lancer_evaluation_tests(projet, {"confirme": True}))
+    elif r.get("suite") == "construire":
+        textes.append(_lancer_evaluation_tests(projet, {"confirme": True, "construire": True}))
+    elif r.get("suite") == "marquer":
+        textes.append("Le marquage des tests échoués reste à proposer comme tâche (" + str(r.get("marqueur") or "") + ").")
+    _terminer(projet, {"demande": demande["id"]}, " ".join(textes))
+    return []
+
+
+_SUR["evaluer_tests_serveur"] = _sur_evaluer_tests_serveur
+_SUR["tests_serveur"] = _sur_tests_serveur
 
 
 # --- Les jugements : leur décision revient ici.

@@ -183,11 +183,54 @@ class AdoptionTest(unittest.TestCase):
         self.assertTrue(ta.profil_change("x", p, {"empreinte_profil": "autre"}))
         self.assertFalse(ta.profil_change("x", p, None))
         # la route : empreinte différente -> poste une fois, en le disant ; jamais de campagne au serveur sur un profil non évalué
+        signales = []
         with self.assertRaises(tests_serveur.Repli) as c:
-            tests_serveur._controler_adoption(p, "x", lambda racine: {"empreinte_profil": "autre"})
+            tests_serveur._controler_adoption(p, "x", lambda racine: {"empreinte_profil": "autre"}, signales.append)
         self.assertIn("profil changé", c.exception.raison)
-        tests_serveur._controler_adoption(p, "x", lambda racine: {"empreinte_profil": p.empreinte})
-        tests_serveur._controler_adoption(p, "x", lambda racine: None)         # jamais évalué : comportement d'avant
+        self.assertEqual(signales, ["x"])          # la décision `tests_profil` est posée (par l'outil du projet)
+        tests_serveur._controler_adoption(p, "x", lambda racine: {"empreinte_profil": p.empreinte}, signales.append)
+        tests_serveur._controler_adoption(p, "x", lambda racine: None, signales.append)  # jamais évalué : comportement d'avant
+        self.assertEqual(signales, ["x"])
+        # le signal par défaut ne fait jamais échouer la campagne (dossier sans projet)
+        with tempfile.TemporaryDirectory() as d:
+            tests_serveur._signaler_profil_par_defaut(d)
+
+    def test_construire_image_seulement_la_somme_approuvee(self):
+        p = analyse(str(FIXTURES / "go"))
+        texte, sha = ta.tests_images.rendre_dockerfile(p)
+        etiquette = ta.tests_images.etiquette_derivee(p)
+        serveur = type("S", (), {"id": "ovh-1", "cle": "cle"})()
+
+        class Ssh:
+            def __init__(self, sortie=b"", code=0):
+                self.appels, self.sortie, self.code = [], sortie, code
+
+            def executer_octets(self, cible, commande, cle, entree=None, delai=60):
+                self.appels.append((commande, entree, delai))
+                return (0, b"", "") if "cat >" in commande else (self.code, self.sortie, "journal")
+
+        notees, ssh = [], Ssh(f"construit\n#image {etiquette} 812\n".encode())
+        orig = ta.tests_serveur.serveur_etat.cible
+        ta.tests_serveur.serveur_etat.cible = lambda s: "u@h"
+        self.addCleanup(setattr, ta.tests_serveur.serveur_etat, "cible", orig)
+        ok = ta.construire_image(p, sha, serveur=serveur, ssh=ssh, noter=lambda *a: notees.append(a),
+                                 maintenant="2026-11-23T10:00:00")
+        self.assertTrue(ok)
+        depot, construction = ssh.appels
+        self.assertEqual(depot[1], texte.encode("utf-8"))              # le seul Dockerfile du gabarit, déposé
+        self.assertIn(f"\"$HOME/tests/.construction/{etiquette}\"/Dockerfile", depot[0])
+        self.assertIn(f"construire_image_tests.sh\" {etiquette} {sha}", construction[0])
+        self.assertIsNone(construction[1])
+        self.assertEqual(notees, [("ovh-1", etiquette, tp.empreinte_image(p), 812, "2026-11-23T10:00:00")])
+        # une autre somme que celle approuvée : rien n'est envoyé
+        ssh2, dits = Ssh(), []
+        self.assertFalse(ta.construire_image(p, "0" * 64, serveur=serveur, ssh=ssh2, noter=notees.append, dire=dits.append))
+        self.assertEqual((ssh2.appels, len(notees)), ([], 1))
+        self.assertIn("approuvé", dits[0])
+        # construction en échec ou ligne #image absente : rien n'est noté
+        for faux in (Ssh(b"#image x 1\n", code=1), Ssh(b"rien\n")):
+            self.assertFalse(ta.construire_image(p, sha, serveur=serveur, ssh=faux, noter=notees.append))
+        self.assertEqual(len(notees), 1)
 
     def test_android_tests_lieu_serveur(self):
         self.assertIn("serveur", ANDROID["tests"]["lieux"])

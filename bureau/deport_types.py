@@ -22,6 +22,15 @@ SERVIES_AU_SERVEUR = ("recette-emulateur",)
 # leurs autres lieux (le repli au poste existe) ; l'accord se lit dans les réglages enregistrés du projet, sinon dans
 # le défaut du bureau (`refus_route`).
 ROUTEES_AU_SERVEUR = ("tests",)
+# « Release signé » (tâche 15d) : la release NON signée se construit au serveur (un agent du serveur, `construire-apk` quand le
+# projet a choisi « le serveur construit, le poste signe »), la signature au poste par le Directeur (`lancer.py
+# signer-release`) ; `deporter` ne la lance jamais (aucun agent ne signe) : il dit la marche à suivre.
+SIGNEES_AU_POSTE = ("release-signe",)
+MSG_RELEASE_SIGNE = ("« Release signé » : la release NON signée se construit au serveur, par un agent du serveur avec "
+                     "`construire-apk` (réglage « Signature des APK » du projet : le serveur construit, le poste signe), "
+                     "puis elle est rapatriée dans le projet (livrable déclaré) ; la signature se fait au poste, par le "
+                     "Directeur, jamais par un agent : « py -3.12 lancer.py signer-release --dossier <projet> --keystore "
+                     "<coffre> --alias <alias> --sortie <fichier> » (mot de passe saisi au poste).")
 
 # Le fichier du bureau du Directeur : ses `projets[].chemin` (fichiers de réglages) disent quels projets existent.
 BUREAU = os.path.join(os.path.expanduser("~"), "MyIAFactory", "bureau.json")
@@ -59,6 +68,9 @@ ANDROID = {
     "release": _entree("APK signé (release)", "./gradlew assembleRelease", produit="apk-release", lieux=("poste",),
                        bientot="demande vos clés de signature dans les secrets GitHub, que vous devez saisir "
                                "vous-même"),
+    # le serveur compile la release non signée, le poste la signe (la clé ne quitte jamais le poste)
+    "release-signe": _entree("Release signé", produit="apk-release", lieux=("serveur",),
+                             bientot="le serveur compile la release non signée, le poste la signe (lancer.py signer-release)"),
     # l'APK installé sur un émulateur du serveur, piloté par un scénario (recette) ou par l'agent ; `emulateur` (les
     # tests instrumentés Gradle) reste au poste
     "recette-emulateur": _entree("Recette sur émulateur", consomme=["apk"], lieux=("serveur",), bientot=_SERVEUR_SEUL),

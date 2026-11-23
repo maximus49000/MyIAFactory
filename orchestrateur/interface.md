@@ -602,7 +602,7 @@ d'elle-même. Le relevé publie les 50 derniers fils (`questions`).
 
 ### `evaluer-tests-serveur`
 
-Entrée : `{"confirme": true}` (évaluation) ou `{"decision", "verdict"}` (réponse du Directeur). L'évaluation (conception § 5.15)
+Entrée : `{"confirme": true}` (évaluation ; `"construire": true` en plus : d'abord la construction au serveur de l'image dont la somme a été approuvée), `{"decision", "verdict"}` (réponse du Directeur) ou `{"profil_change": true}` (posée par la route quand l'empreinte du profil n'est plus celle de `tests.adoption` : la décision `tests_profil` seule, rien n'est envoyé). L'évaluation (conception § 5.15)
 analyse le projet, vérifie l'image et le réseau d'échauffement, lance UNE campagne d'évaluation par la route (sans repli ni
 nouvelle tentative), écrit `tests.adoption` (`date`, `statut`, `empreinte_profil`, `image`, `reseau_echauffement`, `duree_s`,
 `nb_tests`) dans les réglages du projet, et pose la décision de projet qui suit le verdict : `tests_serveur_adoption`
@@ -612,9 +612,9 @@ nouvelle tentative), écrit `tests.adoption` (`date`, `statut`, `empreinte_profi
 `construire` / `plus_tard` / `garder_poste`) ou `tests_reseau_echauffement` (`accorder` / `refuser`) ; `tests_profil` : profil
 changé (`reevaluer` / `plus_tard`). Toutes portent `charge` (un objet) et `reponses`. Sans `confirme` rien ne part au
 serveur. La réponse (demande `tests_serveur`) est appliquée par la même commande et rend `{fait, suite}` : `suite` vaut
-`evaluer` (relancer avec `confirme`), `construire` (le contrôleur ou le bureau construisent l'image, jamais un agent),
+`evaluer` (relancer avec `confirme`), `construire` (la somme du Dockerfile est notée dans `tests.adoption.image_approuvee` ; le moteur relance avec `{confirme, construire}`, jamais un agent),
 `marquer` (la tâche de marquage est proposée, jamais créée seule) ou null. Seule la réponse `activer` règle l'action « tests »
-du projet sur le serveur.
+du projet sur le serveur. Le moteur lance ces évaluations et constructions détachées (demandes `evaluer_tests_serveur`, le bouton « Évaluer les tests sur le serveur » du bureau, et `tests_serveur`) : une seule à la fois par projet.
 
 ### `lieux`
 

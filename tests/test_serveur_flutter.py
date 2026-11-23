@@ -422,7 +422,7 @@ class TestEnveloppeFlutter(unittest.TestCase):
             suite_dans(self, a, "--network", "myiafactory-agents")
             self.assertNotIn("--privileged", a)
             self.assertEqual(a[-2:], ["myiafactory/agent", "entree-agent"])
-            self.assertEqual(len([a[i + 1] for i in range(len(a) - 1) if a[i] == "--mount"]), 5)     # + les trois commandes uniques
+            self.assertEqual(len([a[i + 1] for i in range(len(a) - 1) if a[i] == "--mount"]), 6)     # + 3 commandes uniques, signature
             self.assertEqual(b.appels("docker volume rm"), [])
             b.arreter()
             b.attendre_final()

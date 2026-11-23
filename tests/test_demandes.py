@@ -801,6 +801,12 @@ class TestVerifierGenreEtWorkflow(unittest.TestCase):
         del sans_charge["decisions_projet"][-1]["charge"]
         self.assertNotEqual(de_la_decision(sans_charge), [])
 
+    def test_evaluer_tests_serveur_sur_le_clic_seulement(self):
+        r = copy.deepcopy(R5)
+        self.assertIsNone(demandes.verifier({"type": "evaluer_tests_serveur", "confirme": True}, r, frozenset(), None))
+        for mauvais in ({"type": "evaluer_tests_serveur"}, {"type": "evaluer_tests_serveur", "confirme": "oui"}):
+            self.assertIsNotNone(demandes.verifier(mauvais, r, frozenset(), None), mauvais)
+
     def test_serie_arretee_et_fin_vue(self):
         r = copy.deepcopy(R5)
         r["decisions_projet"].append({"id": "s1", "genre": "serie_arretee", "texte": "La série ne progresse plus",

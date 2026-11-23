@@ -87,7 +87,7 @@ TYPES_DEMANDE = ("bouton", "deplacer", "retour", "lecon", "challenge", "solution
                  "partenaires_maj", "installer_outil", "parallelisme", "recruter", "depot_git", "outil_agent", "accord_agent", "regle_projet",
                  "serie_arretee", "fin_vue", "fable_tache", "passer_polyvalent", "proposer_decoupage", "decoupage_lieux",
                  "lieu_etape", "regroupement_etape", "blocage_analyse", "anomalie", "livrer_maintenant", "publier_livrable",
-                 "question", "question_approfondir", "tests_serveur")
+                 "question", "question_approfondir", "tests_serveur", "evaluer_tests_serveur")
 AGENT_ORCHESTRATEUR = "orchestrateur"   # les appels de jugement du moteur : connu de chaque projet, sans fiche
 MODELES_INTERDITS = ("Fable",)   # un outil ne choisit jamais Fable
 
@@ -4251,12 +4251,30 @@ def _poser_adoption(ctx, resultat):
                               "texte": proposee["texte"], "charge": proposee["charge"]})["id"]
 
 
+def _poser_profil_change(ctx, fichier, racine):
+    """La décision `tests_profil` si le profil courant n'est plus celui de `tests.adoption` (relu ici, jamais cru de
+    l'appelant) ; `None` sinon. Poser deux fois la même décision n'en crée qu'une."""
+    import tests_adoption
+    import tests_profil
+    try:
+        notee = adoption_tests._adoption_de(adoption_tests._lire_reglages(fichier))[1]
+        profil = tests_profil.analyser(str(racine))
+    except Exception:  # noqa: BLE001 — réglages ou projet illisibles : rien à décider
+        return None
+    if not tests_adoption.profil_change(racine, profil, notee):
+        return None
+    proposee = adoption_tests.decision_profil_change(profil.empreinte, notee.get("empreinte_profil"))
+    return cmd_decision(ctx, {"action": "poser", "portee": "projet", **proposee})["id"]
+
+
 def cmd_evaluer_tests_serveur(ctx, e):
     """`{"confirme": true}` : évalue les tests du projet au serveur (une campagne, sans repli), écrit `tests.adoption` dans les
     réglages du projet et pose la décision qui convient (jamais d'activation automatique). `{"decision": id, "verdict": …}` :
     applique la réponse du Directeur (demande `tests_serveur`) et lève la décision ; `suite` dit ce qui vient ensuite
-    (`evaluer` : relancer cette commande ; `construire` : le contrôleur ou le bureau construisent l'image, jamais un agent).
-    Sans `confirme` aucune campagne ne part : le code du projet n'est envoyé qu'à la demande du Directeur."""
+    (`evaluer` : relancer cette commande ; `construire` : le moteur relance avec `{"confirme": true, "construire": true}`,
+    qui construit au serveur l'image de la somme approuvée puis évalue ; jamais un agent). `{"profil_change": true}` (la
+    route, profil changé) : pose la décision `tests_profil`, rien n'est envoyé. Sans `confirme` aucune campagne ne part :
+    le code du projet n'est envoyé qu'à la demande du Directeur (son clic au bureau)."""
     fichier, racine = _chemin_tests_serveur(ctx)
     if e.get("decision") is not None:
         i = texte(e, "decision")
@@ -4274,11 +4292,20 @@ def cmd_evaluer_tests_serveur(ctx, e):
             raise Refus(str(ex)[:300])
         cmd_decision(ctx, {"action": "lever", "id": i})
         return rendu
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "outils"))
+    if e.get("profil_change") is True:      # la route a vu un profil changé : la décision seule, rien n'est envoyé
+        return {"decision": _poser_profil_change(ctx, fichier, racine)}
     if e.get("confirme") is not True:
         raise Refus("« confirme » vaut true : le code du projet n'est envoyé au serveur que sur demande du Directeur.")
-    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "outils"))
     import tests_adoption
-    resultat = tests_adoption.evaluer(racine, accord=lambda _racine: None, serveur_id=_serveur_des_tests())
+    construire = None
+    if e.get("construire") is True:         # après la réponse `construire` : seule la somme approuvée se construit
+        approuvee = adoption_tests.image_approuvee(fichier)
+        if approuvee is None:
+            raise Refus("Aucune image approuvée par le Directeur (réponse « construire » à « tests_image_derivee »).")
+        construire = lambda profil: tests_adoption.construire_image(profil, approuvee["sha256"])  # noqa: E731
+    resultat = tests_adoption.evaluer(racine, accord=lambda _racine: None, serveur_id=_serveur_des_tests(),
+                                      construire=construire)
     anterieure = (tests_adoption.adoption_lue(racine) or {}).get("reseau_echauffement")
     try:
         tests_adoption.noter_adoption(fichier, resultat, reseau_echauffement=anterieure)

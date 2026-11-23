@@ -3547,7 +3547,7 @@ def releve_recrutement(ctx, s, fiches):
     par_lieu = {k: rc.proposer(ctx.f, s, fiches, places_c, d["github"], lieu=k) for k in ("cloud", "local")}
     try:
         essai = json.loads(_fichier_depot(ctx).read_text(encoding="utf-8"))
-        essai = {k: essai[k] for k in ("t", "fait", "texte", "url") if k in essai} if isinstance(essai, dict) else None
+        essai = {k: essai[k] for k in ("t", "fait", "texte", "url", "allegement") if k in essai} if isinstance(essai, dict) else None
     except (OSError, ValueError):
         essai = None
     roles = rc.roles_du_projet(ctx.f, fiches)
@@ -3590,14 +3590,16 @@ def cmd_recruter(ctx, e):
 
 
 def cmd_depot(ctx, e):
-    """`{action: creer, confirme: true}` : le clic « Créer le dépôt Git » du Directeur (jamais sans lui). Dépôt git
+    """`{action: creer, confirme: true, allegement?: true}` : le clic « Créer le dépôt Git » du Directeur (jamais sans lui) ;
+    `allegement` : son accord aux exclusions proposées pour un dossier trop lourd. Dépôt git
     local si besoin, puis dépôt GitHub privé et poussée (`creation.depot_github`). Le résultat est noté pour le
     bureau et rendu `{fait, url, texte}`."""
     from installation import creation
     if e.get("action") != "creer" or e.get("confirme") is not True:
         raise Refus("« depot » demande action: creer et confirme: vrai (le clic du Directeur).")
     projet = _projet(ctx)
-    r = creation.depot_github(projet, rc.nom_de_depot(ctx.f.get("nom") or projet.name), GIT, GH or creation.executer_gh)
+    r = creation.depot_github(projet, rc.nom_de_depot(ctx.f.get("nom") or projet.name), GIT, GH or creation.executer_gh,
+                              allegement=e.get("allegement") is True)
     ecrire_json_atomique(_fichier_depot(ctx), {"t": su.maintenant(), **r})
     return r
 

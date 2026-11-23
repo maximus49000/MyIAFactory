@@ -413,7 +413,7 @@ export function ouvrirDefinition(options = {}, deps = {}) {
     rangee.append(valider, annuler);
     form.append(el("h2", "", "Nouveau projet — 1. Les informations"), champ("Dossier parent", parent), suggestions,
                 champ("Nom du projet", nom),
-                champ("Répertoire existant à scanner", repertoire, "Le code déjà présent est lu une fois (inventaire et résumé) : le chef en tient compte pour définir le workflow."),
+                champ("Répertoire existant à scanner", repertoire, "Ce dossier de code devient le dossier du projet, sur place (rien n'est copié ni déplacé) ; le dossier parent est alors ignoré. Il est lu une fois (inventaire et résumé) : le chef en tient compte pour définir le workflow."),
                 champ("Mots interdits (le nom du projet est ajouté)", mots),
                 champ("Description du projet", description, "Obligatoire : le chef s'en sert pour vous poser les bonnes questions."),
                 cocheFacturation, cocheGithub, erreur, rangee);

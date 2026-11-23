@@ -213,7 +213,9 @@ Sur un bureau qui suit plusieurs projets (fichier de bureau commun), la dernièr
 1. **Fenêtre 1, les informations.** Dossier parent, nom (il devient le nom du dossier), mots interdits (le nom du projet
    y est ajouté), description (obligatoire : le chef s'en sert pour vous poser les bonnes questions), « suivre les coûts »
    (un objectif de facturation) et « dépôt GitHub privé ». Un champ facultatif, **« Répertoire existant à scanner »**,
-   désigne un dossier de code déjà présent : au premier tour, le bureau en fait l'inventaire (`examiner`) et un agent Haiku en
+   désigne un dossier de code déjà présent, **qui devient le dossier du projet, sur place** (le dossier parent est alors
+   ignoré ; rien n'est copié ni déplacé, seul `.factory/` s'y ajoute avec les règles du `.gitignore` ; un dossier qui a déjà
+   un `.factory` est refusé, c'est le travail de la réparation ; un échec rend le dossier tel qu'il était). Au premier tour, le bureau en fait l'inventaire (`examiner`) et un agent Haiku en
    lecture seule en rédige un résumé de 300 mots (`installation/scan.py`) ; le chef les reçoit (`connaissance`) et le scan
    n'est refait que si le répertoire change. Si la connexion à Claude est perdue, l'erreur du tour offre un bouton
    « Se connecter » (`claude auth login`) à côté de « Renvoyer ». **Valider** contrôle le nom et le dossier tout de suite :

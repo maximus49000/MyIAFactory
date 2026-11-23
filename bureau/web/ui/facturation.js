@@ -626,8 +626,9 @@ export function demandeRecrutementAuto(apercu, lieu = "mieux") {
 }
 
 // Le clic « Créer le dépôt Git » : le seul consentement à la création du dépôt GitHub privé.
-export function demandeDepot() {
-  return {type: "depot_git", confirme: true};
+// `allegement` : l'accord aux exclusions proposées pour un dossier trop lourd (elles sont écrites au .gitignore).
+export function demandeDepot(allegement = false) {
+  return allegement === true ? {type: "depot_git", confirme: true, allegement: true} : {type: "depot_git", confirme: true};
 }
 
 function choix(options, valeur) {
@@ -687,6 +688,16 @@ export function partieRecrutement(ctx) {
     }
   }
   if (r.essai && !r.github) bloc.append(el("p", r.essai.fait ? "note" : "avertissement", r.essai.texte || ""));
+  const allegement = r.essai?.allegement;
+  if (allegement && !r.github && r.creable && agir) {      // dossier trop lourd : exclusions proposées, à accepter
+    const regles = Array.isArray(allegement.regles) ? allegement.regles : [];
+    const liste = el("ul", "note");
+    for (const x of regles) liste.append(el("li", "", x));
+    const erreurAllegement = el("p", "saisie-erreur", "");
+    bloc.append(el("p", "note", `Exclusions proposées (${allegement.avant_mo ?? "?"} Mo → ${allegement.apres_mo ?? "?"} Mo) :`), liste,
+                boutonDemande(ctx, "Accepter l'allègement et créer le dépôt", () => demandeDepot(true), erreurAllegement),
+                erreurAllegement);
+  }
   if (!r.roles.length) {
     bloc.append(el("p", "note", "Le projet n'a pas encore de workflow : rien à recruter."));
     return bloc;

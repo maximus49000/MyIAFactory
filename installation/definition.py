@@ -412,10 +412,17 @@ def _verifier_les_infos(infos, bureau_json):
     le dossier parent disparaître, le bureau se remplir). `InfosAChanger` sinon ; rien n'est écrit."""
     try:
         nom = creation.verifier_nom(infos.get("nom"))
-        parent = creation.verifier_parent(infos.get("parent"))
-        if (parent / nom).exists():
-            raise Echec(f"« {nom} » existe déjà dans {parent} : choisissez un autre nom.")
-        mep._controler_bureau(Path(bureau_json), parent / nom / ".factory" / "reglages.json")
+        if (infos.get("repertoire") or "").strip():     # un dossier de code existant : il devient le projet, sur place
+            projet = scan.verifier_repertoire(infos["repertoire"])
+            if (projet / ".factory").exists():
+                raise Echec(f"« {projet} » a déjà un dossier .factory : c'est un projet MyIAFactory, la réparation de "
+                            "l'installateur s'en charge.")
+        else:
+            parent = creation.verifier_parent(infos.get("parent"))
+            if (parent / nom).exists():
+                raise Echec(f"« {nom} » existe déjà dans {parent} : choisissez un autre nom.")
+            projet = parent / nom
+        mep._controler_bureau(Path(bureau_json), projet / ".factory" / "reglages.json")
     except Echec as e:
         raise InfosAChanger(str(e)) from None
 
@@ -473,7 +480,8 @@ def valider(b, *, fable=(), installer=False, genre_description=None, bureau_json
     organisation = _organisation(p, infos, installer, list(fable or []), t.date().isoformat())
     nouveau = p["genre"]["nouveau"]
     fait = creation.creer_projet(
-        infos["parent"], infos["nom"], mots_interdits=infos.get("mots_interdits") or [],
+        infos["parent"], infos["nom"], adopter=(infos.get("repertoire") or "").strip() or None,
+        mots_interdits=infos.get("mots_interdits") or [],
         facturation=bool(infos.get("facturation")), github=False, description=infos.get("description"),
         genre=None if nouveau else p["genre"]["id"], organisation=organisation, bureau_json=bureau_json, git=git,
         gh=gh, maintenant=t, **({"calibrer": calibrer} if calibrer else {}))
@@ -534,7 +542,7 @@ def valider(b, *, fable=(), installer=False, genre_description=None, bureau_json
         if sortie_github != "fait":
             notes.append(sortie_github)
     brouillons.retirer(b["id"], dossier=dossier)
-    message = f"Le projet est créé dans {fait['projet']}, avec son workflow « {p['workflow']['id']} »."
+    message = f"Le projet est {'repris sur place' if infos.get('repertoire') else 'créé'} dans {fait['projet']}, avec son workflow « {p['workflow']['id']} »."
     if installation:
         message += " L'installation du poste démarre au premier passage du moteur."
     return {"reglages": fait["reglages"], "id": fait["id"], "projet": fait["projet"], "github": sortie_github,

@@ -2431,7 +2431,8 @@ def _sur_passer_polyvalent(projet, demande, etat):
 
 def _sur_depot_git(projet, demande, etat):
     """Le clic « Créer le dépôt Git » : dépôt local si besoin, dépôt GitHub privé et poussée (`lancer depot`)."""
-    r = lancer(projet, "depot", {"action": "creer", "confirme": True})
+    r = lancer(projet, "depot", {"action": "creer", "confirme": True,
+                                  **({"allegement": True} if demande.get("allegement") is True else {})})
     _terminer(projet, {"demande": demande["id"]}, r["texte"])
     projet._cloud_raison = (None, 0.0)
     return []

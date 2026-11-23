@@ -547,6 +547,32 @@ class TestValider(Base):
         self.assertEqual(code, 0, r)
         return r
 
+    def test_un_repertoire_existant_devient_le_projet_sur_place(self):
+        code = self.base / "mon code"
+        code.mkdir()
+        (code / "main.py").write_text("print('x')", encoding="utf-8")
+        infos = dict(INFOS, parent=str(self.parent), repertoire=str(code))
+        b = brouillons.creer(infos, dossier=self.d, maintenant=T0)
+        b = definition.tour(b, genres_connus=GENRES, couche="api", appeler=Faux(proposition()),
+                            verifier_environnement=a_installer, maintenant=T0)
+        brouillons.ecrire(b, dossier=self.d, maintenant=T0)
+        r = self.valider(b, executer=Pont({"genre": (0, {"genre": "jeu-android", "cree": True})}))
+        self.assertEqual(Path(r["projet"]).resolve(), code.resolve())
+        self.assertTrue((code / ".factory" / "factory.json").is_file())
+        self.assertEqual((code / "main.py").read_text(encoding="utf-8"), "print('x')")
+        self.assertFalse((self.parent / "Casse-briques").exists())
+        self.assertIn("repris sur place", r["message"])
+
+    def test_un_repertoire_deja_installe_est_refuse_a_la_validation(self):
+        code = self.base / "mon code"
+        (code / ".factory").mkdir(parents=True)
+        infos = dict(INFOS, parent=str(self.parent), repertoire=str(code))
+        b = brouillons.creer(infos, dossier=self.d, maintenant=T0)
+        b = definition.tour(b, genres_connus=GENRES, couche="api", appeler=Faux(proposition()),
+                            verifier_environnement=a_installer, maintenant=T0)
+        with self.assertRaises(definition.InfosAChanger):
+            self.valider(b)
+
     def test_rien_tant_que_rien_n_est_valide(self):
         b = self.pret()
         self.assertFalse((self.parent / "Casse-briques").exists())

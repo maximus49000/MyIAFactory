@@ -243,3 +243,8 @@ test("la pièce Facturation montre en tête le coût de tout le projet", () => {
   assert.deepEqual(teteFacturation(f, "developpement"), {central: false, tete: {total: 11.5}});
   assert.deepEqual(teteFacturation(f, "qualite"), {central: false, tete: null});
 });
+
+test("demandeDepot : l'accord à l'allègement n'est envoyé que s'il est donné", () => {
+  assert.deepEqual(demandeDepot(true), {type: "depot_git", confirme: true, allegement: true});
+  assert.deepEqual(demandeDepot(false), {type: "depot_git", confirme: true});
+});

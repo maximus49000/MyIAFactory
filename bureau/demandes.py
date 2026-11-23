@@ -48,7 +48,7 @@ FACULTATIFS = {"parallelisme": ("agents_serveur_max", "ordre_lieux", "ordre_lieu
                "question": ("images", "fichiers", "fil", "fonctionnalite"), "message": ("images", "fichiers"),
                "cahier": ("texte",), "methode": ("texte",), "genre": ("description",), "lecon": ("etage",),
                "organisation": ("texte", "fable", "installer"), "valider_etape": ("texte", "reponses"), "accord_agent": ("texte", "regle", "choix"), "regle_projet": ("id", "texte"), "environnement": ("fonctionnalite", "outil"),
-               "installer_outil": ("fonctionnalite",), "recruter": ("lieu",), "blocage_analyse": ("texte",), "elargir_genre": ("description",), "genre_fonctionnalite": ("genre", "description", "projet_cree")}
+               "installer_outil": ("fonctionnalite",), "depot_git": ("allegement",), "recruter": ("lieu",), "blocage_analyse": ("texte",), "elargir_genre": ("description",), "genre_fonctionnalite": ("genre", "description", "projet_cree")}
 DEMANDES_V4 = ("fonctionnalite", "message", "cahier", "methode", "genre", "session_cloud", "retour_element",
                "organisation", "genre_fonctionnalite", "environnement", "elargir_genre", "valider_etape", "installer_outil",
                "parallelisme", "recruter", "depot_git", "passer_polyvalent", "outil_agent", "accord_agent", "regle_projet",
@@ -413,6 +413,8 @@ def _verifier_depot(demande, r):
     """`depot_git` : le clic « Créer le dépôt Git » (`confirme` vrai) sur un projet qui n'est pas encore sur GitHub."""
     if demande.get("confirme") is not True:
         return "« confirme » doit être vrai : le dépôt n'est créé que sur votre clic."
+    if "allegement" in demande and demande["allegement"] is not True:
+        return "« allegement » ne vaut que vrai : votre accord aux exclusions proposées."
     depot = (r.get("recrutement") or {}).get("depot")
     if not isinstance(depot, dict):
         return "Le relevé de ce projet ne permet pas encore de créer le dépôt (mettez à jour l'orchestrateur)."

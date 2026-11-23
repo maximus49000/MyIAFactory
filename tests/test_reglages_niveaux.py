@@ -106,7 +106,7 @@ class TestNiveauxBureau(unittest.TestCase):
 
     def test_fixer_niveau_efface_une_cle_absente_sans_rien_creer(self):
         avant = self._ecrire()
-        reglages.fixer_niveau_bureau(self.bureau, ("types", "android", "reglages", "x"), None)
+        reglages.fixer_niveau_bureau(self.bureau, ("types", "android", "reglages", "lecons_auto"), None)
         self.assertEqual(self._lire_json(), avant)
 
     def test_ecritures_concurrentes(self):

@@ -318,3 +318,16 @@ test("le niveau « type » retombe sur « projet » quand le projet n'a pas de g
   assert.match(actif[0].textContent, /^Projet/);
   definirNiveauEdite("projet");
 });
+
+test("une case « projet seulement » est verrouillée au global et au type, active au projet", () => {
+  const l = {id: "livraison_github", section: "automatisations", libelle: "Livrer automatiquement sur GitHub", aide: "",
+    forme: "booleen", niveaux: ["projet"], valeur: false, origine: "defaut", valeurs: {}, applicable: true, defaut: false};
+  for (const niveau of ["global", "type"]) {
+    definirNiveauEdite(niveau);
+    const bloc = rendre(page([l], {global_disponible: true, type_disponible: true, genre: "x"})).bloc;
+    assert.equal(bloc.tous((n) => n.type === "checkbox")[0].disabled, true, niveau);
+    assert.match(bloc.textContent, /Projet seulement/);
+  }
+  definirNiveauEdite("projet");
+  assert.equal(rendre(page([l])).bloc.tous((n) => n.type === "checkbox")[0].disabled, false);
+});

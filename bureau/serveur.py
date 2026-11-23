@@ -213,6 +213,7 @@ class Projet:
         self._verrou_demandes = threading.Lock()
         self._verrou_vus = threading.Lock()
         self._derniere_creation = None  # (empreinte, heure monotone) de la dernière fonctionnalité ou du dernier message
+        self._ecrivains()   # un réglage déclaré sans écrivain échoue ici, au démarrage, pas à la première écriture
         self._challenges_envoyes = {}  # (type, id) de la cible -> heure d'envoi (monotone)
         self._reponses_envoyees = {}   # (type, décision) répondue -> heure d'envoi (monotone) : une seule réponse
         self._arret = threading.Event()
@@ -362,6 +363,9 @@ class Projet:
         table = {"deport." + a: (lambda n, v, a=a: self._poser_lieu(a, n, v), lambda ctx, a=a: self._ligne_lieu(a, ctx))
                  for a in deport_types.catalogue_union()}
         for r in registre.REGISTRE:
+            if not callable(getattr(reglages, "fixer_" + r.cle, None)):
+                raise ValueError("Réglage « %s » déclaré sans écrivain « fixer_%s » dans bureau/reglages.py."
+                                 % (r.id, r.cle))
             table[r.id] = (lambda n, v, r=r: self._poser_reglage_declare(r, n, v),
                            lambda ctx, r=r: self._ligne_reglage(r, ctx))
         return table
@@ -423,8 +427,7 @@ class Projet:
 
     def _poser_reglage_declare(self, r, niveau, valeur):
         genre = self._niveau_permis(niveau, list(r.niveaux), r.libelle)
-        if valeur is not None and r.forme == "booleen" and type(valeur) is not bool:
-            raise ValueError("« %s » doit valoir vrai ou faux." % r.libelle)
+        registre.verifier_valeur(r, valeur)
         if niveau == "projet":
             if valeur is None:
                 reglages.effacer_cle(self.chemin_reglages, r.cle)

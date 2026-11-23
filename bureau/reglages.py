@@ -8,7 +8,7 @@ from pathlib import Path
 
 from .deport import LIEUX_PAR_DEFAUT, valider_lieux
 from .deport_types import catalogue_union
-from .registre import REGISTRE
+from .registre import REGISTRE, verifier_valeur
 from .releve import MOTIF_GENRE  # un id de projet suit le même motif qu'un genre
 # Le verrou d'écriture d'un fichier partagé vit dans `verrou_fichier` (compatible Python 3.9 : le lanceur des agents
 # l'importe aussi pour le sceau des tests) ; ses réglages d'attente s'y trouvent (`VERROU_ATTENTE_S`, `VERROU_PERIME_S`).
@@ -334,6 +334,26 @@ def _modifier_bureau(chemin, fonction):
         raise ReglagesInvalides(str(e)) from None
 
 
+def _verifier_chemin_reglage(chemin_cle, valeur):
+    """Un réglage du registre (`("reglages", id)` ou `("types", genre, "reglages", id)`) n'est écrit que si l'id est
+    connu, le niveau permis pour lui et la valeur de la bonne forme (`None` efface). Les autres chemins (lieux du
+    déport) sont validés par leurs appelants."""
+    if chemin_cle[0] == "reglages":
+        niveau, motif = "global", len(chemin_cle) == 2
+    elif len(chemin_cle) >= 3 and chemin_cle[0] == "types" and chemin_cle[2] == "reglages":
+        niveau, motif = "type", len(chemin_cle) == 4
+    else:
+        return
+    if not motif:
+        raise ValueError("Chemin de réglage invalide dans le fichier du bureau : %s." % ".".join(map(str, chemin_cle)))
+    r = next((x for x in REGISTRE if x.id == chemin_cle[-1]), None)
+    if r is None:
+        raise ValueError("Réglage inconnu : « %s »." % (chemin_cle[-1],))
+    if niveau not in r.niveaux:
+        raise ValueError("« %s » se règle seulement au niveau %s." % (r.libelle, " ou ".join(r.niveaux)))
+    verifier_valeur(r, valeur)
+
+
 def fixer_niveau_bureau(chemin_bureau, chemin_cle, valeur):
     """Pose `valeur` au chemin imbriqué `chemin_cle` du fichier du bureau (ex. `("deport", "lieux", "tests")`,
     `("types", "android", "reglages", "lecons_auto")`) ; `None` supprime la clé et élague les objets laissés vides.
@@ -341,6 +361,7 @@ def fixer_niveau_bureau(chemin_bureau, chemin_cle, valeur):
     chemin_cle = tuple(chemin_cle)
     if not chemin_cle:
         raise ValueError("Le chemin de la clé du bureau est vide.")
+    _verifier_chemin_reglage(chemin_cle, valeur)
 
     def poser(donnees):
         if valeur is None:

@@ -59,7 +59,9 @@ class TestReglagesPage(AvecFichierDuBureau):
         self.assertEqual((page["genre"], page["type_disponible"]), (None, False))
         lignes = {l["id"]: l for l in page["lignes"]}
         self.assertEqual(list(lignes), ["deport.apk", "deport.tests", "deport.emulateur", "deport.charge",
-                                        "deport.recette-emulateur"])
+                                        "deport.recette-emulateur", "lecons_auto", "analyse_blocages",
+                                        "une_session_moyenne", "livraison_sur_demande", "cloud_dossier_approuve",
+                                        "livraison_github"])
         apk = lignes["deport.apk"]
         self.assertEqual((apk["valeur"], apk["origine"], apk["valeurs"]), ("github", "global", {"global": "github"}))
         self.assertEqual((apk["section"], apk["forme"], apk["applicable"]), ("actions", "lieu", True))
@@ -133,6 +135,7 @@ class TestReglagesPage(AvecFichierDuBureau):
         self.assertEqual(r.status, 200, ligne)
         self.assertIs(ligne["applicable"], False)
         self.assertEqual(self.bureau_brut()["deport"]["lieux"], {"lint": "github"})
+        self.assertEqual(reglages.lire_bureau(self.bureau)["deport_lieux_explicites"], {"lint": "github"})
         e = self.etat()
         self.assertNotIn("deport.lint", {l["id"] for l in e["reglages_page"]["lignes"]})
         self.assertNotIn("lint", e["deport"]["lieux"])
@@ -307,6 +310,142 @@ class TestReglageBooleenParLaTable(AvecFichierDuBureau):
     def test_la_ligne_booleenne_porte_son_defaut(self):
         ligne = {l["id"]: l for l in self.etat()["reglages_page"]["lignes"]}["lecons_auto"]
         self.assertIs(ligne["defaut"], False)
+
+
+TROIS = ("lecons_auto", "analyse_blocages", "une_session_moyenne", "livraison_sur_demande")
+PROJET_SEUL = ("cloud_dossier_approuve", "livraison_github")
+
+
+class TestReglagesACases(AvecFichierDuBureau):
+    """Les six réglages à cases du registre, avec les vraies déclarations."""
+
+    def defaut(self, id_):
+        return next(r for r in registre.REGISTRE if r.id == id_).defaut
+
+    def test_le_registre_declare_les_six(self):
+        self.assertEqual({r.id for r in registre.REGISTRE}, set(TROIS + PROJET_SEUL))
+        for r in registre.REGISTRE:
+            self.assertEqual((r.cle, r.section, r.forme), (r.id, "automatisations", "booleen"))
+            self.assertEqual(r.niveaux, ("projet",) if r.id in PROJET_SEUL else registre.NIVEAUX)
+
+    def test_cascade_complete_par_reglage(self):
+        self.en_android()
+        for id_ in TROIS:
+            with self.subTest(id_):
+                d = self.defaut(id_)
+                ligne = self.lignes()[id_]
+                self.assertEqual((ligne["valeur"], ligne["origine"], ligne["defaut"], ligne["section"]),
+                                 (d, "defaut", d, "automatisations"))
+                r, ligne = self.poster("global", id_, not d)
+                self.assertEqual((r.status, ligne["valeur"], ligne["origine"]), (200, not d, "global"))
+                r, ligne = self.poster("type", id_, d)
+                self.assertEqual((ligne["valeur"], ligne["origine"]), (d, "type:" + ANDROID))
+                r, ligne = self.poster("projet", id_, not d)
+                self.assertEqual((ligne["valeur"], ligne["origine"]), (not d, "projet"))
+                self.assertEqual(self.projet_brut()[id_], not d)
+                r, ligne = self.poster("projet", id_, None)
+                self.assertEqual((ligne["valeur"], ligne["origine"]), (d, "type:" + ANDROID))
+                self.assertNotIn(id_, self.projet_brut())
+                r, ligne = self.poster("type", id_, None)
+                self.assertEqual((ligne["valeur"], ligne["origine"]), (not d, "global"))
+                r, ligne = self.poster("global", id_, None)
+                self.assertEqual((ligne["valeur"], ligne["origine"]), (d, "defaut"))
+                self.assertNotIn("reglages", self.bureau_brut())
+                self.assertNotIn("types", self.bureau_brut())
+
+    def test_projet_seul_refuse_global_et_type(self):
+        self.en_android()
+        for id_ in PROJET_SEUL:
+            for niveau in ("global", "type"):
+                with self.subTest(id_ + niveau):
+                    avant = self.bureau.read_text(encoding="utf-8")
+                    r, rep = self.poster(niveau, id_, True)
+                    self.assertEqual(r.status, 400, rep)
+                    self.assertEqual(self.bureau.read_text(encoding="utf-8"), avant)
+            r, ligne = self.poster("projet", id_, True)
+            self.assertEqual((r.status, ligne["valeur"], ligne["origine"]), (200, True, "projet"))
+            self.assertEqual(ligne["niveaux"], ["projet"])
+
+    def test_valeurs_actuelles_conservees(self):
+        self.regl.write_text(json.dumps({"lecons_auto": True, "analyse_blocages": False}), encoding="utf-8")
+        lignes = self.lignes()
+        self.assertEqual((lignes["lecons_auto"]["valeur"], lignes["lecons_auto"]["origine"]), (True, "projet"))
+        self.assertEqual((lignes["analyse_blocages"]["valeur"], lignes["analyse_blocages"]["origine"]),
+                         (False, "projet"))
+        self.assertEqual((lignes["une_session_moyenne"]["valeur"], lignes["une_session_moyenne"]["origine"]),
+                         (False, "defaut"))
+        self.assertIs(lignes["lecons_auto"]["applicable"], True)
+        self.assertEqual(lignes["lecons_auto"]["forme"], "booleen")
+
+    def test_projet_garde_sa_valeur_si_global_change(self):
+        self.regl.write_text(json.dumps({"lecons_auto": False}), encoding="utf-8")
+        r, ligne = self.poster("global", "lecons_auto", True)
+        self.assertEqual((ligne["valeur"], ligne["origine"]), (False, "projet"))
+        self.assertIs(self.projet_brut()["lecons_auto"], False)
+        self.assertEqual(self.bureau_brut()["reglages"], {"lecons_auto": True})
+
+    def test_valeur_de_mauvaise_forme_refusee(self):
+        for valeur in ("oui", 1, [True]):
+            r, rep = self.poster("global", "lecons_auto", valeur)
+            self.assertEqual(r.status, 400, valeur)
+        self.assertNotIn("reglages", self.bureau_brut())
+
+
+class TestValidationDuBureau(unittest.TestCase):
+    """`fixer_niveau_bureau` valide avant d'écrire : un fichier du bureau n'est jamais rendu suspect."""
+
+    def setUp(self):
+        import tempfile
+        from pathlib import Path
+        self.dossier = tempfile.TemporaryDirectory()
+        self.addCleanup(self.dossier.cleanup)
+        (Path(self.dossier.name) / "p").mkdir()
+        (Path(self.dossier.name) / "p" / "reglages.json").write_text("{}", encoding="utf-8")
+        self.chemin = Path(self.dossier.name) / "bureau.json"
+        self.chemin.write_text(json.dumps({"projets": ["p/reglages.json"]}), encoding="utf-8")
+
+    def refuse(self, chemin_cle, valeur):
+        avant = self.chemin.read_text(encoding="utf-8")
+        with self.assertRaises(ValueError):
+            reglages.fixer_niveau_bureau(self.chemin, chemin_cle, valeur)
+        self.assertEqual(self.chemin.read_text(encoding="utf-8"), avant)
+
+    def test_refus_avant_ecriture(self):
+        self.refuse(("reglages", "inconnu"), True)
+        self.refuse(("types", "android", "reglages", "inconnu"), True)
+        self.refuse(("reglages", "livraison_github"), True)
+        self.refuse(("types", "android", "reglages", "cloud_dossier_approuve"), True)
+        self.refuse(("reglages", "lecons_auto"), "oui")
+        self.refuse(("types", "android", "reglages", "lecons_auto"), 1)
+        self.refuse(("reglages",), True)
+        self.refuse(("reglages", "lecons_auto", "x"), True)
+
+    def test_ecriture_valide_et_effacement(self):
+        reglages.fixer_niveau_bureau(self.chemin, ("reglages", "lecons_auto"), True)
+        reglages.fixer_niveau_bureau(self.chemin, ("types", "android", "reglages", "lecons_auto"), False)
+        lu = reglages.lire_bureau(self.chemin)
+        self.assertEqual((lu["reglages"], lu["types"]["android"]["reglages"]),
+                         ({"lecons_auto": True}, {"lecons_auto": False}))
+        reglages.fixer_niveau_bureau(self.chemin, ("reglages", "lecons_auto"), None)
+        self.assertEqual(reglages.lire_bureau(self.chemin)["reglages"], {})
+
+    def test_lieux_inchanges(self):
+        reglages.fixer_niveau_bureau(self.chemin, ("deport", "lieux", "tests"), "github")
+        self.assertEqual(reglages.lire_bureau(self.chemin)["deport_lieux_explicites"], {"tests": "github"})
+
+
+class TestEcrivainManquant(AvecServeur):
+    def test_reglage_sans_fixer_echoue_a_la_construction(self):
+        sans = registre.Reglage("zzz", "automatisations", "Zzz", "", "booleen", registre.NIVEAUX, False, "zzz")
+        with mock.patch.object(registre, "REGISTRE", (sans,)):
+            with self.assertRaises(ValueError) as e:
+                serveur.Projet("demo", self.regl)
+        self.assertIn("fixer_zzz", str(e.exception))
+
+    def test_forme_inconnue_refusee(self):
+        bizarre = registre.Reglage("lecons_auto", "s", "Bizarre", "", "couleur", registre.NIVEAUX, None, "lecons_auto")
+        with self.assertRaises(ValueError):
+            registre.verifier_valeur(bizarre, "rouge")
 
 
 if __name__ == "__main__":

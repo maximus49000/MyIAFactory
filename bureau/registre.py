@@ -23,8 +23,56 @@ class Reglage:
     cle: str            # clé à plat dans le JSON du projet (« lecons_auto »)
 
 
-# les réglages booléens sont déclarés ici (phase suivante) ; les lieux sont dérivés du catalogue
-REGISTRE = ()
+FORMES = ("booleen", "lieu")
+
+_TROIS = ("global", "type", "projet")
+
+
+def _case(id_, libelle, aide, defaut, niveaux=_TROIS):
+    return Reglage(id_, "automatisations", libelle, aide, "booleen", niveaux, defaut, id_)
+
+
+# les réglages à cases sont déclarés ici ; les lieux sont dérivés du catalogue du déport.
+# `cloud_dossier_approuve` et `livraison_github` : accord permanent propre au projet, jamais hérité.
+REGISTRE = (
+    _case("lecons_auto", "Valider les leçons automatiquement",
+          "Cochée, chaque leçon proposée est validée d'elle-même au niveau proposé (projet, genre ou skill). Les "
+          "leçons genre et skill vont au partage des connaissances (s'il est activé).", False),
+    _case("analyse_blocages", "Analyse intelligente des blocages",
+          "Cochée, le Chef analyse chaque tâche bloquée par un échec d'agent : il la relance avec une consigne, "
+          "confie une correction, ou vous pose la question avec sa recommandation, et en tire une leçon. Il n'ouvre "
+          "jamais un outil et ne dépense rien sans vous.", True),
+    _case("une_session_moyenne", "Évolution moyenne : une seule session",
+          "Cochée, une évolution moyenne (dont vous validez le cahier ensuite) n'a plus de session de tests et de "
+          "revue à part : l'agent qui programme relit et teste lui-même. Moins cher et plus court (3 à 7 minutes, "
+          "0,12 à 0,17 €), mais sans regard neuf d'un second agent. Décochée : comme avant.", False),
+    _case("livraison_sur_demande", "Livrer seulement sur demande",
+          "Cochée, l'apk (8 à 14 minutes de construction) ne se fabrique pas tout seul quand le travail est "
+          "conforme : il attend « Livrer maintenant » dans l'avis qui s'affiche. Décochée, la livraison part dès que "
+          "plus rien n'est en cours.", False),
+    _case("cloud_dossier_approuve", "Dossier approuvé pour les sessions cloud",
+          "Le moteur répond lui-même « Yes, I trust this folder » quand Claude Code le demande pour lancer une "
+          "session cloud dans ce projet.", False, ("projet",)),
+    _case("livraison_github", "Livrer automatiquement sur GitHub",
+          "Cochée, chaque livrable téléchargeable terminé (apk, zip…) est publié en release GitHub privée du projet "
+          "(v121, v122…), sans entrer dans l'historique git ; son lien est rangé dans le livrable. Décochée, rien "
+          "n'est publié seul.", False, ("projet",)),
+)
+
+
+def verifier_valeur(r, valeur):
+    """Refuse (ValueError, français) une valeur qui n'a pas la forme du réglage ; `None` (effacer) passe toujours.
+    Une forme inconnue est refusée."""
+    if valeur is None:
+        return
+    if r.forme == "booleen":
+        if type(valeur) is not bool:
+            raise ValueError("« %s » doit valoir vrai ou faux." % r.libelle)
+    elif r.forme == "lieu":
+        if not isinstance(valeur, str) or valeur not in deport.LIEUX:
+            raise ValueError("« %s » doit être un lieu connu (%s)." % (r.libelle, ", ".join(deport.LIEUX)))
+    else:
+        raise ValueError("« %s » : forme de réglage inconnue (« %s »)." % (r.libelle, r.forme))
 
 _ABSENT = object()
 

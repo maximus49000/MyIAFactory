@@ -37,6 +37,80 @@ def ecrire_origine(dossier, url):
     (Path(dossier) / ".git" / "config").write_text(corps, encoding="utf-8")
 
 
+def poly(cle, lieu, **extra):
+    return {"cle": cle, "prenom": cle.title(), "role": None, "lieu": lieu, "session": None, **extra}
+
+
+class EquipeParLieu(unittest.TestCase):
+    """`ajuster_equipe` : le lieu `serveur` suit les mêmes règles que `local` et `cloud`."""
+
+    def test_ajuster_equipe_cree_et_retire_des_places_serveur(self):
+        fiches = [poly("agent-1", "local")]
+        plan = rc.ajuster_equipe(fiches, set(), 1, 0, serveur=2)
+        self.assertEqual(plan["creer"], ["serveur", "serveur"])
+        self.assertEqual(plan["retirer"], [])
+        fiches = [poly("agent-1", "local"), poly("agent-2", "serveur"), poly("agent-3", "serveur"),
+                  poly("agent-4", "serveur")]
+        plan = rc.ajuster_equipe(fiches, {"agent-4"}, 1, 0, serveur=1)
+        self.assertEqual(plan["retirer"], ["agent-3", "agent-2"])     # les libres partent, l'occupé n'est jamais retiré
+        self.assertEqual(plan["marquer"], [])
+        plan = rc.ajuster_equipe(fiches, {"agent-3", "agent-4"}, 1, 0, serveur=1)
+        self.assertEqual((plan["retirer"], plan["marquer"]), (["agent-2"], ["agent-4"]))
+        # une place serveur remontée réactive d'abord un agent serveur retiré, jamais un agent d'un autre lieu
+        fiches = [poly("agent-1", "local"), poly("agent-5", "local", retire=True), poly("agent-6", "serveur", retire=True)]
+        plan = rc.ajuster_equipe(fiches, set(), 1, 0, serveur=1)
+        self.assertEqual((plan["reactiver"], plan["creer"]), (["agent-6"], []))
+        # une marque de retrait prévu se lève avant de créer
+        fiches = [poly("agent-1", "local"), poly("agent-7", "serveur", retrait_prevu=True)]
+        plan = rc.ajuster_equipe(fiches, {"agent-7"}, 1, 0, serveur=1)
+        self.assertEqual((plan["demarquer"], plan["creer"]), (["agent-7"], []))
+
+    def test_ajuster_equipe_sans_serveur_inchange(self):
+        fiches = [poly("agent-1", "local"), poly("agent-2", "local"), poly("agent-3", "cloud", session="s")]
+        for args in ((fiches, set(), 1, 2), (fiches, {"agent-2"}, 1, 0), (fiches, set(), 3, 1),
+                     (fiches, set(), 0, 0, False)):
+            self.assertEqual(rc.ajuster_equipe(*args), rc.ajuster_equipe(*args, serveur=0))
+        self.assertEqual(rc.ajuster_equipe(fiches, set(), 2, 1),
+                         {"creer": [], "retirer": [], "marquer": [], "demarquer": [], "reactiver": []})
+        self.assertEqual(rc.ajuster_equipe(fiches, set(), 3, 2)["creer"], ["local", "cloud"])
+        # sans place serveur, un agent serveur libre est retiré comme un autre
+        plan = rc.ajuster_equipe(fiches + [poly("agent-4", "serveur")], set(), 2, 1)
+        self.assertEqual(plan["retirer"], ["agent-4"])
+
+
+class EquipeServeurOutil(AvecProjet):
+    """`synchroniser_equipe` : les places serveur lues bornées (0 à 4, 0 sinon) ; la reprise (`cloud_aussi` faux) ne
+    crée que des agents locaux."""
+
+    def setUp(self):
+        super().setUp()
+        for nom in ("lea.md", "hugo.md"):
+            (self.dossier / "fiches" / nom).unlink()
+        (self.dossier / "fiches" / "agent-1.md").write_text("Clé : agent-1\nPrénom : Léa\nLieu : local\n", encoding="utf-8")
+
+    def contexte(self, places):
+        from orchestrateur import outil
+        ctx = outil.Contexte(self.factory)
+        ctx.f["agents_locaux_max"] = 1
+        if places is not None:
+            ctx.f["agents_serveur_max"] = places
+        return outil, ctx
+
+    def test_places_serveur_bornees(self):
+        for places, attendu in ((None, 0), (0, 0), (2, 2), (4, 4), (5, 0), (-1, 0), (True, 0), ("2", 0), (2.0, 0)):
+            outil, ctx = self.contexte(places)
+            self.assertEqual(outil.places_serveur_du_projet(ctx), attendu, places)
+        outil, ctx = self.contexte(9)
+        self.assertEqual(outil.synchroniser_equipe(ctx)["crees"], [])
+
+    def test_reprise_ne_cree_pas_d_agent_serveur(self):
+        outil, ctx = self.contexte(2)
+        self.assertEqual(outil.synchroniser_equipe(ctx, cloud_aussi=False)["crees"], [])
+        r = outil.synchroniser_equipe(ctx)
+        self.assertEqual(len(r["crees"]), 2)
+        self.assertEqual({x["lieu"] for x in ctx.fiches() if x["cle"] in r["crees"]}, {"serveur"})
+
+
 class Depot(unittest.TestCase):
     def test_lu_dans_la_config_sans_lancer_git(self):
         import tempfile

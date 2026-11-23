@@ -31,6 +31,7 @@ MAX_TACHES = 100         # tâches rendues par `GET /api/serveurs/taches`
 TEXTE_MAX = 80           # un texte de l'index (projet, serveur) rendu au plus à cette longueur
 ERREUR_MAX = 300         # un message d'arrêt rendu au plus à cette longueur
 CAPTURES_MAX = 9999
+ATTENTE_REPONSE_S = 25   # l'arrêt d'un agent est attendu au plus ce temps avant de répondre : sinon 202 et le suivi lit l'état
 LIBELLES_ETATS_TACHE = {"en_attente": "en attente", "en_cours": "en cours", "terminee": "terminée", "echouee": "échouée",
                         "arretee": "arrêtée"}
 ROUTES_MIGRATION = {"/api/serveurs/migration/apercu": "migration_apercu", "/api/serveurs/migration/confirmer": "migration_confirmer"}
@@ -82,6 +83,13 @@ def _tache():
     _modules()
     import serveur_tache
     return serveur_tache
+
+
+def _agent():
+    """Les tâches d'agent (`serveur_agent`) : modes et motifs ; l'import ne se connecte à rien."""
+    _modules()
+    import serveur_agent
+    return serveur_agent
 
 
 def _tache_cli():
@@ -169,6 +177,8 @@ class Travaux:
         self._cible = None          # (genre, id du serveur) de la tâche en cours
         self.erreurs = {}           # id du serveur -> message de la dernière tâche interrompue
         self.erreurs_taches = {}    # id de la tâche d'émulation -> message de son dernier arrêt non confirmé
+        self.etats_arret = {}       # id de la tâche -> état final lu au dernier arrêt demandé (borné : ETATS_ARRET_MAX)
+        self.emulations_arret = {}  # id de l'agent -> « arretee » / « non_confirmee » pour son émulation liée (borné aussi)
         self._places_apercu = threading.BoundedSemaphore(MAX_APERCUS)
         self._migrations = 0        # migrations (aperçu, confirmation) dont le fil tourne encore
 
@@ -230,22 +240,48 @@ class Travaux:
         if erreur:
             self.erreurs_taches[ident] = str(erreur)
 
-    def arreter_tache(self, ident, d):
+    def arreter_tache(self, ident, d, agent=None, marques=None):
         """Demande l'arrêt de la tâche `ident` (déjà validée et connue de l'index) dans le fil de fond : `arreter` fait foi de
-        l'état, rappelé tant qu'il n'est pas final (3 fois au plus). Faux si une autre opération tourne."""
+        l'état, rappelé tant qu'il n'est pas final (3 fois au plus). Faux si une autre opération tourne. `agent` : la fiche
+        d'une tâche d'agent serveur ; `marques()` pose d'abord les marques d'arrêt du moteur, puis l'émulation liée à l'agent
+        (lue dans l'index, sinon sur le serveur) est arrêtée à son tour. L'état final de l'agent est rangé dans `etats_arret`."""
         moteur = self._tache or _tache()
         options = self._options_ssh()
 
-        def travail():
+        def arreter(cible):
             # Le même arrêt que la commande serveur-tache, sans réessayer un état « inconnu » (serveur muet : jusqu'à
             # 150 s par appel) : le fil unique du bureau n'est pas tenu des minutes, la raison est affichée.
-            r = _tache_cli()._terminer(moteur, ident, False, d, options, reessayer_inconnu=False)
-            if isinstance(r, dict) and r.get("etat") in moteur.FINAUX:
-                return None
+            return _tache_cli()._terminer(moteur, cible, False, d, options, reessayer_inconnu=False)
+
+        def travail():
+            if marques is not None:
+                marques()
+            emulation = _emulation_liee(ident, agent, d, options) if agent is not None else None   # lue avant l'arrêt
+            r = arreter(ident)
             r = r if isinstance(r, dict) else {}
-            etat = LIBELLES_ETATS_TACHE.get(r.get("etat"), "inconnu")
-            raison = " ".join(str(r.get("raison") or "").split())[:200]
-            return f"L'arrêt n'est pas confirmé (état : {etat})." + (f" {raison}" if raison else "")
+            _ranger(self.etats_arret, ident, r.get("etat") if isinstance(r.get("etat"), str) else "inconnu")
+            erreurs = []
+            if r.get("etat") not in moteur.FINAUX:
+                etat = LIBELLES_ETATS_TACHE.get(r.get("etat"), "inconnu")
+                raison = " ".join(str(r.get("raison") or "").split())[:200]
+                erreurs.append(f"L'arrêt n'est pas confirmé (état : {etat})." + (f" {raison}" if raison else ""))
+            if emulation:
+                # l'émulation est arrêtée sur le SERVEUR DE L'AGENT : sa fiche d'index (créée si absente) le désigne,
+                # jamais le premier serveur prêt que choisirait un lancement
+                chez_l_agent = _noter_emulation_liee(emulation, ident, agent, d)
+                confirme = False
+                if chez_l_agent is not None:
+                    e = arreter(emulation)
+                    e = e if isinstance(e, dict) else {}
+                    # « aucune tâche » ne vaut arrêt que si la question a été posée au serveur de l'agent
+                    absente = (chez_l_agent and e.get("etat") == "inconnu"
+                               and e.get("raison") == getattr(moteur, "RAISON_AUCUNE_TACHE", None))
+                    confirme = e.get("etat") in moteur.FINAUX or absente
+                if not confirme:
+                    erreurs.append("L'arrêt de l'émulation liée n'est pas confirmé.")
+                _ranger(self.emulations_arret, ident, "arretee" if confirme else "non_confirmee")
+            return " ".join(erreurs) or None
+        self.emulations_arret.pop(ident, None)
         return self.lancer_tache(ident, travail)
 
     # -- les tâches ---------------------------------------------------------
@@ -332,6 +368,75 @@ class Travaux:
             time.sleep(0.01)
 
 
+_EMULATION_LIEE = """# tache:emulation_liee @ID@
+set -u
+d="$HOME/taches/@ID@"
+e=""; [ -f "$d/emulation" ] && IFS= read -r e < "$d/emulation"
+printf '%s\\n' "$e" | grep -Eqx 't[0-9]{8}-[0-9]{6}-[0-9a-f]{4}' || exit 0
+f="$HOME/taches/$e/demande.json"
+[ -f "$f" ] && [ ! -L "$f" ] && grep -Fq '"type": "emulation"' "$f" || exit 0
+a=""; [ -f "$HOME/taches/$e/agent" ] && IFS= read -r a < "$HOME/taches/$e/agent"
+printf 'emulation=%s\\nagent=%s\\n' "$e" "$a"
+"""
+
+
+ETATS_ARRET_MAX = 200    # états d'arrêt gardés en mémoire (les plus anciens sont oubliés)
+
+
+def _ranger(dico, cle, valeur, maximum=ETATS_ARRET_MAX):
+    """Range `valeur` sous `cle` en gardant au plus `maximum` entrées (la plus ancienne part la première)."""
+    dico.pop(cle, None)
+    dico[cle] = valeur
+    while len(dico) > maximum:
+        dico.pop(next(iter(dico)), None)
+
+
+def _noter_emulation_liee(emulation, agent_id, fiche_agent, d):
+    """Avant d'arrêter l'émulation liée : sa fiche d'index doit désigner son serveur. Absente, elle est créée avec le
+    serveur de l'agent (`serveur_tache.arreter` ira là, jamais au premier serveur prêt). Vrai si l'arrêt s'adresse au
+    serveur de l'agent, Faux si l'index en désigne un autre, None si l'index ne peut ni se lire ni s'écrire (rien n'est
+    alors arrêté : on ne saurait pas où)."""
+    serveur_id = fiche_agent.get("serveur_id") if isinstance(fiche_agent, dict) else None
+    try:
+        tache = _tache()
+        index = tache.Index(d)
+        lue = index.lire().get(emulation)
+        if lue is None:
+            if not isinstance(serveur_id, str) or not serveur_id:
+                return None
+            index.enregistrer(emulation, {"etat": "en_cours", "mode": "pilote", "serveur_id": serveur_id,
+                                          "projet": fiche_agent.get("projet"), "agent": agent_id})
+            return True
+        return lue.get("serveur_id") == serveur_id
+    except Exception:       # noqa: BLE001 - index illisible : rien n'est affirmé
+        return None
+
+
+def _emulation_liee(ident, fiche, d, options):
+    """L'identifiant de l'émulation liée à l'agent `ident` (mode pilote), ou None : celui de l'index, sinon celui que le
+    pont hôte a écrit sur le serveur (`~/taches/<agent>/emulation`), reconnu seulement si cette émulation porte bien
+    l'identifiant de l'agent (`~/taches/<émulation>/agent`). Ne lève jamais."""
+    try:
+        tache = _tache()
+        if fiche.get("mode") != "pilote":
+            return None
+        lie = fiche.get("emulation")
+        if isinstance(lie, str) and tache.MOTIF_ID.fullmatch(lie):
+            return lie
+        serveur = next((s for s in _modules()[4].lire(d) if s.id == fiche.get("serveur_id")), None)
+        if serveur is None:
+            return None
+        import plateforme_ssh
+        _code, sortie, _erreur = tache._bash(serveur, options.get("ssh", plateforme_ssh), tache._script(_EMULATION_LIEE, ident), delai=60)
+        lu = tache._cles(sortie)
+        emulation = lu.get("emulation")
+        if isinstance(emulation, str) and tache.MOTIF_ID.fullmatch(emulation) and lu.get("agent") == ident:
+            return emulation
+    except Exception:       # noqa: BLE001 - l'arrêt de l'agent ne dépend jamais de cette lecture
+        pass
+    return None
+
+
 # ---------------------------------------------------------------- lectures (fichiers seulement)
 
 def lire(travaux, d=None):
@@ -365,6 +470,7 @@ def _texte_index(valeur, secrets, borne=TEXTE_MAX):
 
 
 def _fiche_tache(ident, fiche, secrets, tache, maintenant):
+    agent = fiche.get("type") == "agent"
     etat = fiche.get("etat") if fiche.get("etat") in tache.ETATS else "inconnu"
     debut = fiche.get("debut") if isinstance(fiche.get("debut"), str) and tache.MOTIF_ISO.fullmatch(fiche["debut"]) else None
     fin = fiche.get("fin") if isinstance(fiche.get("fin"), str) and tache.MOTIF_ISO.fullmatch(fiche["fin"]) else None
@@ -374,12 +480,18 @@ def _fiche_tache(ident, fiche, secrets, tache, maintenant):
         t1 = tache._epoch(fin) if fin is not None else (maintenant if etat == "en_cours" else None)
         if t0 is not None and t1 is not None and t1 >= t0:
             duree = int(t1 - t0)
+    statut = fiche.get("statut") if fiche.get("statut") in tache.STATUTS_RAPPORT else None
+    if agent:       # une tâche d'agent : l'index seul, jamais la session, la raison ni rien de ce que l'agent a écrit
+        modes = _agent().MODES_AGENT
+        return {"id": ident, "type": "agent", "etat": etat, "mode": fiche.get("mode") if fiche.get("mode") in modes else None,
+                "projet": _texte_index(fiche.get("projet"), secrets), "tache": _texte_index(fiche.get("tache"), secrets),
+                "serveur_id": _texte_index(fiche.get("serveur_id"), secrets), "debut": debut, "duree_s": duree, "statut": statut,
+                "branche": _texte_index(fiche.get("branche"), secrets)}
     captures = fiche.get("captures_prises")
     captures = min(captures, CAPTURES_MAX) if isinstance(captures, int) and not isinstance(captures, bool) and captures > 0 else 0
     return {"id": ident, "etat": etat, "mode": fiche.get("mode") if fiche.get("mode") in tache.MODES else None,
             "projet": _texte_index(fiche.get("projet"), secrets), "serveur_id": _texte_index(fiche.get("serveur_id"), secrets),
-            "debut": debut, "duree_s": duree, "captures": captures,
-            "statut": fiche.get("statut") if fiche.get("statut") in tache.STATUTS_RAPPORT else None}
+            "debut": debut, "duree_s": duree, "captures": captures, "statut": statut}
 
 
 def lire_taches(travaux, d=None):
@@ -564,7 +676,7 @@ def _actions(corps):
 MSG_ARRET_EN_COURS = "Un arrêt de tâche d'émulation est en cours : réessayez à sa fin."
 
 
-def poster(travaux, cible, corps, d=None):
+def poster(travaux, cible, corps, d=None, projets=None):
     """(code, objet) d'une demande POST déjà contrôlée (en-têtes, taille, JSON objet)."""
     d = Path(d) if d else dossier()
     genre, ident = cible
@@ -572,7 +684,7 @@ def poster(travaux, cible, corps, d=None):
     if genre in ("migration_apercu", "migration_confirmer"):
         return _poster_migration(travaux, genre, corps, d)
     if genre == "tache_arreter":
-        return _poster_tache(travaux, ident, d)
+        return _poster_tache(travaux, ident, d, projets)
 
     def occupe(message):
         """409 : un arrêt de tâche qui tient le fil de fond est nommé comme tel (pas « une installation »)."""
@@ -636,9 +748,32 @@ def poster(travaux, cible, corps, d=None):
     return 202, {"demarre": True}
 
 
-def _poster_tache(travaux, ident, d):
-    """Arrêt d'une tâche d'émulation : l'identifiant suit le motif des tâches ET se retrouve dans l'index local ; il ne sert
-    jamais à construire un chemin. Le corps de la demande est ignoré."""
+def _marques(fiche, projets):
+    """Les marques d'arrêt du moteur pour un agent serveur : `detache.demander_arret(<factory>, <tâche>)` (`<tâche>.reponse` pour
+    une réponse aux questions) dans le dossier du projet dont le NOM DE DOSSIER est celui de la tâche (le nom que le moteur
+    lui a donné). Posée seulement si exactement UN projet du bureau porte ce nom : deux projets homonymes, aucune marque
+    (l'arrêt sur le serveur a lieu quand même). Ne lève jamais."""
+    def poser():
+        try:
+            from moteur import detache
+            tache = fiche.get("tache")
+            if not isinstance(tache, str) or not tache:
+                return
+            cle = tache + (".reponse" if fiche.get("genre") == "reponse" else "")
+            trouves = [factory for nom, factory in list(projets() if projets else []) if nom == fiche.get("projet")]
+            if len(trouves) == 1:
+                detache.demander_arret(trouves[0], cle)
+            elif len(trouves) > 1:
+                print("Marque d'arrêt non posée : plusieurs projets portent ce nom.", file=sys.stderr)
+        except Exception as e:      # noqa: BLE001
+            print(f"Marque d'arrêt non posée ({type(e).__name__}).", file=sys.stderr)
+    return poser
+
+
+def _poster_tache(travaux, ident, d, projets=None):
+    """Arrêt d'une tâche (d'émulation ou d'agent) : l'identifiant suit le motif des tâches ET se retrouve dans l'index local ; il
+    ne sert jamais à construire un chemin. Le corps de la demande est ignoré. Un agent serveur : marque du moteur, arrêt de
+    l'agent et de son émulation liée, réponse avec l'état final (202 si l'arrêt dépasse `ATTENTE_REPONSE_S`)."""
     tache = _tache()
     if not isinstance(ident, str) or not tache.MOTIF_ID.fullmatch(ident):
         return 404, {"erreur": "Tâche inconnue."}
@@ -647,9 +782,25 @@ def _poster_tache(travaux, ident, d):
         return 404, {"erreur": "Tâche inconnue."}
     if fiche.get("etat") in tache.FINAUX:
         return 409, {"erreur": "Cette tâche est déjà terminée."}
-    if travaux.en_cours() or not travaux.arreter_tache(ident, d):
-        return 409, {"erreur": "Une opération est déjà en cours : réessayez dans un instant."}
-    return 202, {"demarre": True}
+    agent = fiche.get("type") == "agent"
+    occupe = (409, {"erreur": "Une opération est déjà en cours : réessayez dans un instant."})
+    if travaux.en_cours():
+        return occupe
+    travaux.etats_arret.pop(ident, None)
+    lance = travaux.arreter_tache(ident, d, fiche, _marques(fiche, projets)) if agent else travaux.arreter_tache(ident, d)
+    if not lance:
+        return occupe
+    if not agent:
+        return 202, {"demarre": True}
+    travaux.attendre(ATTENTE_REPONSE_S)
+    if travaux.en_cours("arreter_tache", ident):
+        return 202, {"demarre": True}
+    reponse = {"demarre": True, "etat": travaux.etats_arret.get(ident, "inconnu")}
+    if travaux.emulations_arret.get(ident):          # « arretee » ou « non_confirmee » : une émulation était liée
+        reponse["emulation"] = travaux.emulations_arret[ident]
+    if travaux.erreurs_taches.get(ident):
+        reponse["erreur"] = _texte_index(travaux.erreurs_taches[ident], _secrets(d, []), ERREUR_MAX)
+    return 200, reponse
 
 
 def _poster_migration(travaux, genre, corps, d):

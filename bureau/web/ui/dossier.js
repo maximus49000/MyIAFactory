@@ -2,7 +2,7 @@
 // Onglet et période choisis sont gardés le temps de la session.
 
 import {el} from "./dom.js";
-import {tronquer, ilYA, PERIODES, PERIODE_DEFAUT, libellePeriode} from "./texte.js";
+import {tronquer, ilYA, PERIODES, PERIODE_DEFAUT, libellePeriode, marqueLieuAgent} from "./texte.js";
 import {contenuFacturation} from "./facturation.js";
 import {challengesDuService} from "./actions.js";
 import {contenuConnaissances} from "./connaissances.js";
@@ -164,7 +164,7 @@ export function contenuDossier(ctx, conteneur, service, onglet) {
     const li = el("li", "");
     const puce = el("span", "puce");
     puce.style.background = a.couleur || "#999";
-    li.append(puce, el("span", "nom", a.prenom + (a.lieu === "cloud" ? " ☁" : "")),
+    li.append(puce, el("span", "nom", a.prenom + marqueLieuAgent(a.lieu)),
               el("span", "detail", `${modeleAffiche(e, a)} · ${STATUTS[a.statut] || a.statut || "—"}`));
     liste.append(li);
   }

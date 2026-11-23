@@ -88,8 +88,15 @@ def executer(hote, commande, cle, stdin=None, delai=60, runner=subprocess.run):
 
 
 def _lancer_octets(runner, args, delai, entree=None):
-    """Comme `_lancer`, mais l'entrée reste des octets bruts (APK, image) : aucun encodage ni conversion."""
-    options = {"input": entree} if entree is not None else {"stdin": subprocess.DEVNULL}
+    """Comme `_lancer`, mais l'entrée reste des octets bruts (APK, image) : aucun encodage ni conversion. `entree` peut
+    aussi être un FICHIER binaire ouvert (archive d'un paquet Git de 500 Mo) : il devient l'entrée standard de ssh, lue par
+    le système depuis sa position courante, sans copie en mémoire."""
+    if entree is None:
+        options = {"stdin": subprocess.DEVNULL}
+    elif hasattr(entree, "fileno"):
+        options = {"stdin": entree}
+    else:
+        options = {"input": entree}
     try:
         return runner(args, capture_output=True, timeout=delai, **options)
     except FileNotFoundError:
@@ -110,6 +117,94 @@ def executer_octets(hote, commande, cle, entree=None, delai=60, runner=subproces
         return 124, b"", f"délai dépassé ({delai} s)"
     sortie = r.stdout if isinstance(r.stdout, bytes) else (r.stdout or "").encode("utf-8")
     return r.returncode, sortie, _texte(r.stderr)
+
+
+def executer_vers_fichier(hote, commande, cle, destination, maximum, entree=None, delai=60, popen=subprocess.Popen):
+    """Exécute `commande` et écrit sa sortie standard DROIT dans le fichier `destination`, par blocs de 1 Mo (un fichier de
+    500 Mo n'est jamais en mémoire) ; renvoie (code, taille écrite, erreur texte). Plus de `maximum` octets : ssh est tué,
+    code 99 (le serveur ne peut pas remplir le disque du poste). Délai dépassé : code 124. Erreur gardée sur 64 Ko au plus.
+    `entree` : octets (le script) écrits sur l'entrée standard par un fil à part (aucun interblocage)."""
+    import threading
+    _verifier_hote(hote)
+    args = ["ssh", *_options(cle), "-o", f"ConnectTimeout={max(1, min(int(delai), 30))}", "--", hote, commande]
+    try:
+        p = popen(args, stdin=subprocess.PIPE if entree is not None else subprocess.DEVNULL, stdout=subprocess.PIPE,
+                  stderr=subprocess.PIPE)
+    except FileNotFoundError:
+        raise ErreurSsh(f"« {args[0]} » est introuvable : le client OpenSSH de Windows est requis "
+                        "(Paramètres > Applications > Fonctionnalités facultatives > Client OpenSSH).") from None
+    etat = {"taille": 0, "trop": False, "ecriture": None}
+    erreurs = []
+
+    def ecrire():
+        try:
+            p.stdin.write(entree)
+        except (OSError, ValueError):
+            pass
+        finally:
+            try:
+                p.stdin.close()
+            except (OSError, ValueError):
+                pass
+
+    def copier():
+        try:
+            with open(destination, "wb") as f:
+                while True:
+                    bloc = p.stdout.read1(1 << 20)
+                    if not bloc:
+                        return
+                    if etat["taille"] + len(bloc) > maximum:
+                        etat["trop"] = True
+                        return
+                    f.write(bloc)
+                    etat["taille"] += len(bloc)
+        except OSError as e:
+            etat["ecriture"] = f"{type(e).__name__} : {e}"
+        except ValueError:
+            return
+
+    def lire_erreur():
+        garde = 0
+        try:
+            while True:
+                bloc = p.stderr.read1(1 << 16)
+                if not bloc:
+                    return
+                if garde < 65536:
+                    erreurs.append(bloc[:65536 - garde])
+                    garde += len(erreurs[-1])
+        except (OSError, ValueError):
+            return
+
+    fils = [threading.Thread(target=copier, daemon=True), threading.Thread(target=lire_erreur, daemon=True)]
+    if entree is not None:
+        fils.append(threading.Thread(target=ecrire, daemon=True))
+    for f in fils:
+        f.start()
+    fin = time.monotonic() + delai
+    fils[0].join(max(0.0, fin - time.monotonic()))
+    depasse = fils[0].is_alive()
+    if not depasse and not etat["trop"] and etat["ecriture"] is None:
+        try:
+            p.wait(timeout=max(0.0, fin - time.monotonic()))
+        except subprocess.TimeoutExpired:
+            depasse = True
+    if p.poll() is None:
+        p.kill()
+        try:
+            p.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            pass
+    fils[1].join(2)
+    erreur = _texte(b"".join(erreurs))
+    if depasse:
+        return 124, etat["taille"], f"délai dépassé ({delai} s)"
+    if etat["trop"]:
+        return 99, etat["taille"], f"plus de {maximum} octets reçus : transfert coupé"
+    if etat["ecriture"] is not None:
+        return 98, etat["taille"], f"écriture sur le poste impossible ({etat['ecriture']})"
+    return p.returncode, etat["taille"], erreur
 
 
 def executer_octets_silencieux(hote, commande, cle, entree=None, delai=60, runner=subprocess.run):

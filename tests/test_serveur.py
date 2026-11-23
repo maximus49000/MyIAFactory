@@ -96,6 +96,12 @@ class TestServeur(AvecServeur):
     def test_ecoute_seulement_en_local(self):
         self.assertEqual(self.srv.server_address[0], "127.0.0.1")
 
+    def test_plafond_d_abonnement_demande_un_fichier_du_bureau(self):
+        r, data = self.req("POST", "/api/reglages", json.dumps({"agents_abonnement_max": 3}), self.ENT)
+        self.assertEqual(r.status, 400)                      # un bureau lancé sur un seul fichier de réglages n'a pas de fichier du bureau
+        self.assertIn("fichier du bureau", json.loads(data)["erreur"])
+        self.assertNotIn("agents_abonnement_max", self.json("/api/etat"))
+
     def test_reglages_seul_inchange(self):
         # Lancé sur un fichier de réglages : un projet, pas de sélecteur, toutes les routes sans `projet`.
         self.assertEqual(self.json("/api/projets"), {"multi": False, "projets": [

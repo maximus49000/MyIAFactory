@@ -255,6 +255,7 @@ export function contenuTache(ctx, contenu, t) {
   const lot = libelleLot(t, e.taches);
   if (lot) contenu.append(ligne("Lot", lot));
   if (t.lieu === "local") contenu.append(ligne("Lieu", "Sur le poste local"));
+  else if (t.lieu === "serveur") contenu.append(ligne("Lieu", "Sur le serveur"));
   else if (t.lieu === "cloud") contenu.append(ligne("Lieu", "Dans le cloud"));
   for (const n of notesValides(t)) {
     const p = el("p", "note-tache");

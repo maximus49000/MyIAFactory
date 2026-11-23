@@ -870,6 +870,29 @@ class TestSuivi(AvecProjet):
         self.assertEqual(self.ok("actions", entree={"type": "parallelisme", "agents_locaux_max": 2,
                                                     "agents_cloud_max": 0})["id"][0], "r")
 
+    def test_parallelisme_ecrit_les_places_serveur_et_l_ordre_des_lieux(self):
+        r = self.releve()
+        self.assertEqual((r["agents_serveur_max"], r["ordre_lieux"], r["ordre_lieux_par_metier"]),
+                         (0, ["local", "serveur", "cloud"], {}))
+        entree = {"agents_locaux_max": 3, "agents_cloud_max": 1, "agents_serveur_max": 2, "ordre_lieux": ["serveur", "local"],
+                  "ordre_lieux_par_metier": {" qa ": ["cloud"]}}
+        self.assertEqual(self.ok("parallelisme", entree=entree),
+                         {**entree, "ordre_lieux_par_metier": {"qa": ["cloud"]}})
+        r = self.releve()
+        self.assertEqual((r["agents_serveur_max"], r["ordre_lieux"], r["ordre_lieux_par_metier"]),
+                         (2, ["serveur", "local"], {"qa": ["cloud"]}))
+        self.assertEqual(releve.valider(r), [])
+        for mauvais in ({"agents_serveur_max": 5}, {"ordre_lieux": ["local", "local"]}, {"ordre_lieux": []},
+                        {"ordre_lieux_par_metier": {"qa": ["local"], "qa ": ["cloud"]}}):
+            self.assertEqual(self.outil("parallelisme", entree={"agents_locaux_max": 2, "agents_cloud_max": 0, **mauvais})[0], 1, mauvais)
+        self.assertEqual(self.releve()["agents_locaux_max"], 3)            # un refus n'écrit rien
+        for champ, valeur in (("agents_serveur_max", 9), ("ordre_lieux", ["local", "local"]), ("ordre_lieux", []),
+                              ("ordre_lieux_par_metier", {"qa": ["x"]}), ("ordre_lieux_par_metier", ["local"]),
+                              ("ordre_lieux_par_metier", {"qa": ["local"], " qa": ["cloud"]}),       # doublon nettoyé
+                              ("ordre_lieux_par_metier", {f"r{i}": ["local"] for i in range(51)})):   # plus de 50
+            with self.subTest(champ=champ, valeur=valeur):
+                self.assertTrue(releve.valider({**self.releve(), champ: valeur}))
+
     def test_file_prendre_un_element_precis(self):
         # Un « deplacer » du bureau sur un élément de la file (id « f1/e2 ») : l'orchestrateur prend cet élément-là.
         f = self.nouvelle()

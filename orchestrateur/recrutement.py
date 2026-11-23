@@ -475,19 +475,20 @@ def equipe_pure(fiches):
     return [x for x in agents if not x.get("retire")]      # un agent retiré n'est plus de l'équipe
 
 
-def ajuster_equipe(fiches, occupes, locaux, cloud, creer=True, avec_taches=frozenset()):
+def ajuster_equipe(fiches, occupes, locaux, cloud, creer=True, avec_taches=frozenset(), serveur=0):
     """Ce qu'il faut faire pour que l'équipe soit égale aux places : `{creer: [lieu…], retirer: [clé…], marquer: [clé…],
     demarquer: [clé…], reactiver: [clé…]}`. Un agent au travail (`occupes`) n'est jamais retiré : il est marqué (`retrait_prevu`), plus
     choisi, et retiré une fois sa tâche finie. Les agents libres partent d'abord (sans session cloud d'abord, les
     derniers de la liste d'abord) ; une place remontée annule d'abord les retraits prévus avant de créer un agent.
     `creer` faux : rien n'est créé ni démarqué (le moteur ne fait que retirer). Rejouable sans effet. Les agents déjà
     retirés (`Retrait : fait`) ne comptent pas, mais une place qui manque en réactive un du même lieu avant d'en créer un. `avec_taches` : les clés qui ont au moins une tâche au suivi ; on retire
-    d'abord ceux qui n'en ont aucune (leur fiche part), puis les autres (gardés, retirés)."""
+    d'abord ceux qui n'en ont aucune (leur fiche part), puis les autres (gardés, retirés). `serveur` : les places du
+    lieu `serveur` (agents sur le serveur OVH), mêmes règles ; sans place serveur, un agent serveur libre est retiré."""
     plan = {"creer": [], "retirer": [], "marquer": [], "demarquer": [], "reactiver": []}
     agents = equipe_pure(fiches)
     if agents is None:
         return plan
-    for lieu, voulu in (("local", locaux), ("cloud", cloud)):
+    for lieu, voulu in (("local", locaux), ("cloud", cloud), ("serveur", serveur)):
         siens = [x for x in agents if x["lieu"] == lieu]
         plan["retirer"] += [x["cle"] for x in siens if x.get("retrait_prevu") and x["cle"] not in occupes]
         restants = [x for x in siens if x["cle"] not in plan["retirer"]]

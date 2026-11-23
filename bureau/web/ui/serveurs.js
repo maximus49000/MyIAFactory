@@ -24,7 +24,12 @@ const STATUTS = {presente: "présente", absente: "absente", inconnue: "inconnue"
   a_faire: "à faire", en_cours: "en cours"};
 const LIBELLES_CAPACITES = {base: "Base du serveur", durcissement: "Durcissement SSH", "android-build": "Construction Android",
   "android-emulateur": "Émulateur Android", "emulateur-image": "Image de l'émulateur", "unity-cli": "Unity CLI", "unity-editeur": "Éditeur Unity",
-  "session-graphique": "Session graphique distante", agent: "Agent de développement"};
+  "session-graphique": "Session graphique distante", agent: "Agent de développement", "agent-abonnement": "Connexion à l'abonnement"};
+
+// La procédure de connexion à l'abonnement (faite une fois par le Directeur sur le serveur) : une adresse fixe du dépôt public.
+export const LIEN_CONNEXION_ABONNEMENT = "https://github.com/maximus49000/MyIAFactory/blob/main/docs/serveur-agents.md#connexion-a-l-abonnement";
+export const MESSAGE_ABONNEMENT_A_FAIRE = "Connexion à l'abonnement à faire";
+const ABONNEMENT_A_FAIRE = new Set(["absente", "a_faire", "bloquee"]);
 
 export const LIBELLE_ACCORD = "J'autorise cette installation sur le serveur";
 export const AVERTISSEMENT_CONSEIL = "Ce n'est qu'un conseil : le choix reste au Directeur.";
@@ -128,7 +133,8 @@ export async function confirmerMigration(accord, fetchFn = globalThis.fetch) {
 // Les tâches d'émulation du serveur : `GET /api/serveurs/taches` (index local, jamais de réseau) et l'arrêt par POST.
 const LIBELLES_ETATS_TACHE = {en_attente: "en attente", en_cours: "en cours", terminee: "terminée", echouee: "échouée", arretee: "arrêtée", inconnu: "état inconnu"};
 const LIBELLES_STATUTS_RAPPORT = {ok: "ok", plantage: "plantage", limite: "limite atteinte", erreur: "erreur"};
-const LIBELLES_MODES = {scenario: "scénario", pilote: "pilote"};
+const LIBELLES_MODES = {scenario: "scénario", pilote: "pilote", seul: "seul"};
+const ETATS_FINAUX = new Set(["terminee", "echouee", "arretee"]);
 const TACHES_ACTIVES = new Set(["en_attente", "en_cours"]);
 const estActive = (t) => TACHES_ACTIVES.has(t.etat);
 
@@ -144,7 +150,17 @@ export async function arreterTache(id, fetchFn = globalThis.fetch) {
   if (r.injoignable) return {ok: false, message: "Arrêt impossible : le bureau est injoignable."};
   if (r.status === 409) return {ok: false, occupe: true, message: texte(r.d.erreur) || "Une opération est déjà en cours : réessayez dans un instant."};
   if (!r.ok) return {ok: false, message: refus(r)};
-  return {ok: true};
+  // l'arrêt d'un agent répond avec l'état final (absent : l'arrêt tourne encore) et, pour un agent pilote, celui de son
+  // émulation liée (`arretee`, `non_confirmee` ; absent : pas d'émulation liée)
+  return {ok: true, etat: texte(r.d.etat), emulation: texte(r.d.emulation)};
+}
+
+// Le message de fin d'un arrêt d'agent : il ne parle d'émulation que s'il y en avait une, et dit si son arrêt a échoué.
+export function messageArretAgent(r) {
+  if (!ETATS_FINAUX.has(r.etat)) return `L'arrêt n'est pas confirmé (état : ${LIBELLES_ETATS_TACHE[r.etat] || "état inconnu"}).`;
+  if (r.emulation === "arretee") return "Arrêt confirmé : l'agent et son émulation sont arrêtés.";
+  if (r.emulation === "non_confirmee") return "Arrêt de l'agent confirmé ; l'arrêt de son émulation n'est pas confirmé.";
+  return "Arrêt confirmé : l'agent est arrêté.";
 }
 
 function duree(s) {
@@ -206,6 +222,7 @@ export function ecranServeurs(etat, options = {}) {
   const lignesTaches = new Map(); // id de la tâche -> éléments mis à jour en place à chaque relevé
   const envois = new Set();       // tâches dont un POST d'arrêt est parti et n'a pas encore reçu sa réponse
   const refusArret = new Map();   // id de la tâche -> message du dernier arrêt refusé ou impossible
+  const noteArret = new Map();    // id de la tâche -> ce que la réponse de l'arrêt a dit de l'état final
   let idsTaches = "";             // les tâches dessinées, dans l'ordre
   const cartes = new Map();     // id du serveur -> éléments mis à jour en place à chaque relevé
   let affiches = "";            // les serveurs dessinés
@@ -385,9 +402,10 @@ export function ecranServeurs(etat, options = {}) {
       el("span", "ligne-detail serveurs-adresse", `${texte(serveur.utilisateur)}@${texte(serveur.hote)}${texte(serveur.fournisseur) ? ` (${serveur.fournisseur})` : ""}`));
     c.append(tete);
     const encours = el("p", "serveurs-encours");
+    const abonnement = el("p", "ligne-detail serveurs-abonnement");
     const erreur = el("p", "reglage-message serveurs-erreur");
     erreur.setAttribute("role", "alert");
-    c.append(encours, erreur);
+    c.append(encours, erreur, abonnement);
     const cle = ligneCle(serveur, i);
     if (cle) c.append(cle);
     const tester = el("button", "bouton serveurs-tester", "Tester la connexion");
@@ -400,7 +418,7 @@ export function ecranServeurs(etat, options = {}) {
     const msg = el("p", "reglage-message serveurs-message-serveur");
     msg.setAttribute("aria-live", "polite");
     const zone = el("div", "serveurs-installation-zone");
-    const refs = {encours, erreur, tester, verifier, installer, capacites, msg, zone};
+    const refs = {encours, erreur, abonnement, tester, verifier, installer, capacites, msg, zone};
     cartes.set(serveur.id, refs);
     majServeur(serveur);
     const sonde = async (b) => {
@@ -452,6 +470,15 @@ export function ecranServeurs(etat, options = {}) {
     const occupe = serveur.installation_en_cours === true;
     r.encours.textContent = occupe ? "Installation en cours …" : "";
     r.erreur.textContent = texte(serveur.erreur);
+    const aFaire = ABONNEMENT_A_FAIRE.has(statutCapacite(objet(serveur.capacites)["agent-abonnement"]).statut);
+    if (!aFaire) r.abonnement.replaceChildren();
+    else if (!r.abonnement.textContent) {       // le texte et le lien sont fixes : jamais ce que le serveur en dit
+      const lien = el("a", "serveurs-abonnement-lien", "Voir la procédure");
+      lien.href = LIEN_CONNEXION_ABONNEMENT;
+      lien.target = "_blank";
+      lien.rel = "noopener noreferrer";
+      r.abonnement.append(el("strong", "", `${MESSAGE_ABONNEMENT_A_FAIRE}. `), lien);
+    }
     r.tester.disabled = occupe;
     r.verifier.disabled = occupe;
     r.installer.disabled = occupe || lance === "installer";
@@ -480,7 +507,8 @@ export function ecranServeurs(etat, options = {}) {
     const refs = {ligne: racineLigne, etat: el("span", "serveur-badge tache-etat"), statut: el("span", "serveur-badge tache-statut"),
       detail: el("span", "ligne-detail serveurs-tache-detail"), actions: el("div", "serveurs-tache-actions"), msg: el("p", "reglage-message serveurs-tache-message"), bouton: null};
     refs.msg.setAttribute("role", "alert");
-    tete.append(el("strong", "serveurs-tache-id", t.id), refs.etat, refs.statut, refs.detail);
+    tete.append(el("strong", "serveurs-tache-id", t.id), ...(t.type === "agent" ? [el("span", "serveur-badge tache-type", "agent serveur")] : []),
+      refs.etat, refs.statut, refs.detail);
     racineLigne.append(tete, refs.actions, refs.msg);
     return refs;
   }
@@ -497,6 +525,7 @@ export function ecranServeurs(etat, options = {}) {
       let r;
       try { r = await arreterTache(id, fetchFn); } finally { envois.delete(id); }
       if (!r.ok) refusArret.set(id, r.message);
+      else if (r.etat) noteArret.set(id, messageArretAgent(r));
       await relireTaches();
       majTaches();
       planifierTaches();
@@ -511,13 +540,15 @@ export function ecranServeurs(etat, options = {}) {
     refs.etat.textContent = LIBELLES_ETATS_TACHE[t.etat];
     refs.statut.textContent = LIBELLES_STATUTS_RAPPORT[t.statut] ? `rapport : ${LIBELLES_STATUTS_RAPPORT[t.statut]}` : "";
     refs.statut.className = `serveur-badge tache-statut tache-statut-${LIBELLES_STATUTS_RAPPORT[t.statut] ? t.statut : "aucun"}`;
-    refs.detail.textContent = [LIBELLES_MODES[t.mode], texte(t.projet), texte(t.serveur_id) && `serveur ${t.serveur_id}`, duree(t.duree_s), compte(t.captures)].filter(Boolean).join(" · ");
+    const agent = t.type === "agent";
+    refs.detail.textContent = [LIBELLES_MODES[t.mode], texte(t.projet), agent && texte(t.tache) && `tâche ${t.tache}`, agent && texte(t.branche) && `branche ${t.branche}`,
+      texte(t.serveur_id) && `serveur ${t.serveur_id}`, duree(t.duree_s), agent ? "" : compte(t.captures)].filter(Boolean).join(" · ");
     if (estActive(t)) {
       if (!refs.bouton) { refs.bouton = boutonArret(refs, id); refs.actions.append(refs.bouton); }
       refs.bouton.disabled = arretEnCours;
       refs.bouton.textContent = arretEnCours ? "Arrêt en cours…" : "Arrêter";
     } else if (refs.bouton) { refs.actions.replaceChildren(); refs.bouton = null; refusArret.delete(id); }
-    refs.msg.textContent = envois.has(id) ? "Arrêt demandé…" : arretEnCours ? "Arrêt en cours : un instant." : texte(refusArret.get(id)) || texte(t.erreur);
+    refs.msg.textContent = envois.has(id) ? "Arrêt demandé…" : arretEnCours ? "Arrêt en cours : un instant." : texte(refusArret.get(id)) || texte(t.erreur) || texte(noteArret.get(id));
   }
 
   function majTaches() {

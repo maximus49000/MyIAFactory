@@ -50,6 +50,22 @@ class TestFiches(unittest.TestCase):
         self.assertTrue(fi.est_polyvalente(relue))
         self.assertEqual([x["cle"] for x in fi.lire_toutes(self.d)], ["agent-1"])
 
+    def test_fiche_lieu_serveur_acceptee_et_autre_refusee(self):
+        f = fi.nouvelle_fiche("agent-2", "Yann", "serveur")
+        f["chemin"] = self.d / "agent-2.md"
+        fi.ecrire_fiche(f)
+        relue = fi.lire_fiche(f["chemin"])
+        self.assertEqual((relue["cle"], relue["lieu"]), ("agent-2", "serveur"))
+        self.assertTrue(fi.est_polyvalente(relue))
+        ancienne = fi.lire_fiche(self.ecrire("dev-1.md", "Clé : dev-1\nRôle : dev\nModèle : Sonnet\nLieu : serveur\n"))
+        self.assertEqual(ancienne["lieu"], "serveur")
+        for lieu in ("ailleurs", "Serveur", "serveur-ovh", ""):
+            with self.assertRaises(fi.FicheInvalide):
+                fi.lire_fiche(self.ecrire("x.md", f"Clé : x\nPrénom : X\nLieu : {lieu}\n"))
+        with self.assertRaises(fi.FicheInvalide) as e:
+            fi.lire_fiche(self.ecrire("y.md", "Clé : y\nLieu : lune\n"))
+        self.assertIn("serveur", str(e.exception))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -757,5 +757,27 @@ class TestMain(Base):
         self.assertEqual(self.statuts(etat)["lecture"], "bloque")
 
 
+class TestImagesDeposees(unittest.TestCase):
+    def test_cache_python_jamais_depose(self):
+        """Un `__pycache__` laissé par un test (import d'entree-agent.py) n'arrête plus le dépôt des images."""
+        from types import SimpleNamespace
+        from unittest import mock
+        with tempfile.TemporaryDirectory() as t:
+            racine = Path(t)
+            agent = racine / "images" / "agent"
+            (agent / "__pycache__").mkdir(parents=True)
+            (agent / "Dockerfile").write_text("FROM x\n", encoding="utf-8")
+            (agent / "__pycache__" / "entree-agent.cpython-312.pyc").write_bytes(b"\x89\xff\xfe binaire")
+            (agent / "vieux.pyc").write_bytes(b"\xff\xfe")
+            ssh = SshFactice()
+            c = SimpleNamespace(ssh=ssh, hote="h", cle="k", masquer=lambda s: s)
+            with mock.patch.object(plateforme, "RACINE_SERVEUR", racine):
+                self.assertIsNone(plateforme._envoyer_images(c))
+        envoyes = [cmd for cmd, _ in ssh.commandes]
+        self.assertEqual(len(envoyes), 1)
+        self.assertIn("images/agent/Dockerfile", envoyes[0])
+        self.assertFalse(any("pyc" in cmd or "__pycache__" in cmd for cmd in envoyes))
+
+
 if __name__ == "__main__":
     unittest.main()

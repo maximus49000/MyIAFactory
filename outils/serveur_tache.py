@@ -482,6 +482,8 @@ IMAGES_FILM_MAX = VIDEOS_MAX * IMAGES_PAR_FILM
 TAILLE_ARCHIVE_MARGE = 4 * JOURNAL_MAX_OCTETS + LOGCAT_MAX_OCTETS + 2 * 1024 * 1024
 ENVELOPPE = "taches/lancer_emulation.sh"
 ENVELOPPE_DISTANTE = f"{DOSSIER_DISTANT}/{ENVELOPPE}"
+COMMUN = "taches/commun.sh"          # sourcé par l'enveloppe : déposé avec elle, juste avant elle
+COMMUN_DISTANT = f"{DOSSIER_DISTANT}/{COMMUN}"
 # Délai SSH de chaque verbe relayé, au-dessus de la borne propre du pont : `arreter` (adb + attentes 10 + 5 + 5 s, jusqu'à
 # ~80 s, plus la fin d'un film resté en cours), `installer` (4 appels adb, jusqu'à ~180 s), `demarrer` (PONT_DEMARRAGE_S
 # 300 s), `finfilm` (verrou, SIGINT et attente 10 s, adb pull, ffmpeg 120 s : jusqu'à ~250 s), `filmer` (1 s d'attente).
@@ -564,9 +566,10 @@ def _noter(dossier, ident, champs):
 
 # --- choix du serveur et appels distants
 
-def choisir_serveur(dossier=plateforme_acces.DOSSIER):
-    """Premier serveur déclaré, joignable à la dernière sonde, avec `android-emulateur` et `emulateur-image` présentes
-    (état local `serveurs-etat.json` : aucune connexion) ; `RefusLancement` avec la raison sinon."""
+def choisir_serveur(dossier=plateforme_acces.DOSSIER, requises=CAPACITES_REQUISES):
+    """Premier serveur déclaré, joignable à la dernière sonde, avec les capacités `requises` présentes (par défaut
+    `android-emulateur` et `emulateur-image` : tranche A ; état local `serveurs-etat.json` : aucune connexion) ;
+    `RefusLancement` avec la raison sinon."""
     serveurs = serveur_modele.lire(dossier)
     if not serveurs:
         raise RefusLancement("Aucun serveur déclaré : déclarez-en un dans le bureau (Serveurs) ou par "
@@ -576,7 +579,7 @@ def choisir_serveur(dossier=plateforme_acces.DOSSIER):
     for s in serveurs:
         caps = (connu.get(s.id) or {}).get("capacites")
         caps = caps if isinstance(caps, dict) else {}
-        statuts = {c: caps[c].get("statut") if isinstance(caps.get(c), dict) else None for c in CAPACITES_REQUISES}
+        statuts = {c: caps[c].get("statut") if isinstance(caps.get(c), dict) else None for c in requises}
         if all(v in STATUTS_PRETS for v in statuts.values()):
             return s
         if not caps:
@@ -590,7 +593,8 @@ def choisir_serveur(dossier=plateforme_acces.DOSSIER):
                 return f"{c} périmée (à mettre à jour)" if ("mettre à jour" in detail or "périm" in detail) else c
             raisons.append(f"{s.id} : capacité(s) absente(s) ou périmée(s) : "
                            + ", ".join(libelle(c) for c, v in statuts.items() if v not in STATUTS_PRETS))
-    raise RefusLancement("Aucun serveur prêt pour l'émulation (" + " ; ".join(raisons) + ").")
+    usage = "l'émulation" if tuple(requises) == CAPACITES_REQUISES else "un agent (" + ", ".join(requises) + ")"
+    raise RefusLancement(f"Aucun serveur prêt pour {usage} (" + " ; ".join(raisons) + ").")
 
 
 def _serveur_de(ident, dossier):
@@ -654,7 +658,7 @@ vivant() {
   tr '\0' ' ' < "/proc/$p/cmdline" 2>/dev/null | grep -qF -e "$2"
 }
 v=absent; [ -f "$d/veilleur.pid" ] && v=mort; vivant "$d/veilleur.pid" "--veilleur @ID@" && v=vivant
-e=absent; [ -f "$d/enveloppe.pid" ] && e=mort; vivant "$d/enveloppe.pid" "lancer_emulation.sh @ID@" && e=vivant
+e=absent; [ -f "$d/enveloppe.pid" ] && e=mort; { vivant "$d/enveloppe.pid" "lancer_emulation.sh @ID@" || vivant "$d/enveloppe.pid" "lancer_agent.sh @ID@"; } && e=vivant
 """
 _ETAT = """# tache:etat @ID@
 set -u
@@ -687,7 +691,7 @@ d="$HOME/taches/@ID@"
 [ -d "$d" ] || exit 3
 umask 077
 if [ ! -e "$d/etat.json" ] || grep -q '"etat": "en_attente"' "$d/etat.json" 2>/dev/null; then
-  rm -f -- "$d/entree/app.apk"
+  rm -f -- "$d/entree/app.apk" "$d/entree/projet.bundle"
   cat > "$d/etat.json.lanceur.tmp" <<'FIN_ETAT'
 @JSON@
 FIN_ETAT
@@ -701,7 +705,12 @@ elif grep -q '"etat": "en_cours"' "$d/etat.json" 2>/dev/null; then
   i=0
   while [ "$i" -lt 30 ] && grep -q '"etat": "en_cours"' "$d/etat.json" 2>/dev/null; do sleep 1; i=$((i + 1)); done
 fi
-timeout 60 sudo -n docker stop -t 10 tache-@ID@ >/dev/null 2>&1
+# Une tâche d'AGENT (entree/demande.json : "type": "agent") : son veilleur tient l'arrêt (docker stop -t 60, le temps que
+# l'entrée conclue) ; un docker stop -t 10 ici l'écourterait. Les autres tâches (émulation) : comme avant.
+a="$d/entree/demande.json"
+if ! { [ -f "$a" ] && [ ! -L "$a" ] && head -c 65536 -- "$a" 2>/dev/null | grep -Eq '"type"[[:space:]]*:[[:space:]]*"agent"'; }; then
+  timeout 60 sudo -n docker stop -t 10 tache-@ID@ >/dev/null 2>&1
+fi
 exit 0
 """
 # Préparation (commande, shell POSIX : l'entrée standard porte l'archive) : le dossier de la tâche est créé par mkdir
@@ -731,9 +740,10 @@ umask 077
 mkdir -p "$HOME/myiafactory" || exit 1
 d=$(mktemp -d "$HOME/myiafactory/.depot.XXXXXX") || exit 1
 f="$d/{ENVELOPPE}"
+c="$d/{COMMUN}"
 r=1
-if tar -x --no-same-owner -C "$d" -f - && [ -f "$f" ] && [ ! -L "$f" ] && [ -s "$f" ]; then
-  mkdir -p "{DOSSIER_DISTANT}/taches" && mv -f "$f" "{ENVELOPPE_DISTANTE}" && r=0
+if tar -x --no-same-owner -C "$d" -f - && [ -f "$f" ] && [ ! -L "$f" ] && [ -s "$f" ] && [ -f "$c" ] && [ ! -L "$c" ] && [ -s "$c" ]; then
+  mkdir -p "{DOSSIER_DISTANT}/taches" && mv -f "$c" "{COMMUN_DISTANT}" && mv -f "$f" "{ENVELOPPE_DISTANTE}" && r=0
 fi
 rm -rf "$d"
 exit $r
@@ -974,12 +984,15 @@ def _envoyer(serveur, ssh, demande, apk):
 
 
 def _deposer_enveloppe(serveur, ssh):
-    """Dépose lancer_emulation.sh dans $HOME/myiafactory/serveur_ovh/taches/ (`_DEPOSER` : temporaire privé puis mv).
-    None si réussi, sinon le message."""
-    source = RACINE_SERVEUR / ENVELOPPE
-    if source.is_symlink() or not source.is_file():
-        return f"Fichier du dépôt introuvable : serveur_ovh/{ENVELOPPE}."
-    donnees = _archive([(ENVELOPPE, source.read_bytes(), 0o755)])
+    """Dépose lancer_emulation.sh et commun.sh (qu'il source) dans $HOME/myiafactory/serveur_ovh/taches/ (`_DEPOSER` :
+    temporaire privé puis mv, commun.sh d'abord). None si réussi, sinon le message."""
+    fichiers = []
+    for rel, mode in ((ENVELOPPE, 0o755), (COMMUN, 0o644)):
+        source = RACINE_SERVEUR / rel
+        if source.is_symlink() or not source.is_file():
+            return f"Fichier du dépôt introuvable : serveur_ovh/{rel}."
+        fichiers.append((rel, source.read_bytes(), mode))
+    donnees = _archive(fichiers)
     code, _o, erreur = _octets(serveur, ssh, _DEPOSER, donnees, delai=120, silencieux=True)
     if code != 0:
         return f"Dépôt de l'enveloppe sur le serveur impossible (code {code}) : {_court(erreur, 200)}"

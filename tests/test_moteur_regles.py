@@ -2564,6 +2564,25 @@ class Validation(Base):
         self.assertIn("agents_locaux_max", self.statut(d["id"])["reponse"])
         self.assertEqual(fa.lire(self.factory)["agents_locaux_max"], 3)
 
+    def test_reglage_du_parallelisme_serveur_et_ordre_des_lieux(self):
+        d, _ = self.traiter(type="parallelisme", agents_locaux_max=3, agents_cloud_max=2, agents_serveur_max=2,
+                            ordre_lieux=["serveur", "local", "cloud"], ordre_lieux_par_metier={"qa": ["cloud"]})
+        reponse = self.statut(d["id"])["reponse"]
+        self.assertIn("au plus 3 agents locaux et 2 agents cloud", reponse)
+        self.assertIn("Places sur le serveur : 2.", reponse)
+        self.assertIn("Ordre des lieux : serveur, local, cloud.", reponse)
+        f = fa.lire(self.factory)
+        self.assertEqual((f["agents_locaux_max"], f["agents_cloud_max"], f["agents_serveur_max"], f["ordre_lieux"],
+                          f["ordre_lieux_par_metier"]), (3, 2, 2, ["serveur", "local", "cloud"], {"qa": ["cloud"]}))
+        for champs in ({"ordre_lieux": ["local", "local"]}, {"agents_serveur_max": 9},
+                       {"ordre_lieux_par_metier": {"qa": ["local"], "qa ": ["cloud"]}}):
+            d, _ = self.traiter(type="parallelisme", agents_locaux_max=4, agents_cloud_max=2, **champs)
+            self.assertIn(next(iter(champs)), self.statut(d["id"])["reponse"])
+            self.assertEqual(fa.lire(self.factory)["agents_locaux_max"], 3)          # un refus n'écrit rien
+        d, _ = self.traiter(type="parallelisme", agents_locaux_max=4, agents_cloud_max=2)        # sans ces champs : ils restent
+        f = fa.lire(self.factory)
+        self.assertEqual((f["agents_locaux_max"], f["agents_serveur_max"], f["ordre_lieux"]), (4, 2, ["serveur", "local", "cloud"]))
+
     def test_relecture_sans_relecteur_ignore_la_validation(self):
         self.projet_avec_validation(flux=[
             {"id": "dev", "nom": "Programmation", "role": "dev", "service": "dev"}, self.VAL,

@@ -61,7 +61,7 @@ class FauxSsh:
         statut, detail = self.etapes.get(etape, ("fait", f"{etape} ok"))
         if statut == "fait":
             self.presentes |= {c.id for c in CATALOGUE.values() if c.etape == etape and c.installable}
-            if etape == "emulateur_image" and not self.marqueur_fige:
+            if etape in ("emulateur_image", "agent_image") and not self.marqueur_fige:
                 self.marqueur = inst.empreinte_etape(etape)                  # l'étape réécrit le marqueur
         return 0, "log\n" + json.dumps({"etape": etape, "statut": statut, "detail": detail}) + "\n", ""
 
@@ -389,16 +389,14 @@ class TestEtatPerime(Base):
         self.assertIn("injoignable", r["erreur"])
 
     def test_agent_refuse_avec_sa_raison(self):
-        ssh = FauxSsh()
-        # `agent` n'est requis par aucune action réelle : action de test dont le besoin est non installable
-        from unittest import mock
-        import serveur_capacites
-        besoins = dict(serveur_capacites.BESOINS, agent_test=("agent",))
-        with mock.patch.object(serveur_capacites, "BESOINS", besoins):
-            r = self.installer(ssh, actions=["agent_test"])
+        ssh = FauxSsh(presentes=("base", "agent"))
+        ssh.marqueur = inst.empreinte_etape("agent_image")             # image à jour : seule l'étape humaine manque
+        # `agent-abonnement` est une étape humaine : jamais lancée par le moteur, refusée avec le geste du Directeur
+        r = self.installer(ssh, actions=["agent-serveur"])
         self.assertEqual(ssh.lancees, [])
-        self.assertEqual(r["capacites"]["agent"]["statut"], "bloque")
-        self.assertIn("morceau 3", r["capacites"]["agent"]["detail"])
+        self.assertEqual(r["capacites"]["agent-abonnement"]["statut"], "bloque")
+        self.assertIn("enregistrer_jeton.sh", r["capacites"]["agent-abonnement"]["detail"])
+        self.assertIn("docs/serveur-agents.md#connexion-a-l-abonnement", r["capacites"]["agent-abonnement"]["detail"])
         self.assertFalse(r["ok"])
 
     def test_capacite_non_installable_jamais_lancee(self):
@@ -486,6 +484,40 @@ class TestEtatPerime(Base):
                 self.assertEqual(len(ssh.archives), 1 if perime else 0)
                 if perime:
                     self.assertEqual(r["capacites"]["emulateur-image"]["statut"], "fait")
+
+    def test_empreinte_perimee_rend_agent_a_mettre_a_jour(self):
+        import tarfile
+        import io
+        from unittest import mock
+        import serveur_capacites
+        attendue = inst.empreinte_etape("agent_image")
+        self.assertRegex(attendue, r"^ubuntu=ubuntu:24\.04;node=22;claude_code=2\.1\.328;fichiers=[0-9a-f]{16}$")
+        # le jeton enregistré par le Directeur se dépose avec l'étape mais n'entre pas dans l'empreinte de l'image
+        self.assertIn("taches/enregistrer_jeton.sh", inst.FICHIERS_ETAPE["agent_image"])
+        self.assertEqual(inst.EMPREINTE_FICHIERS["agent_image"],
+                         ("images/agent/Dockerfile", "images/agent/entree-agent.py", "images/agent/pont"))
+        besoins = dict(serveur_capacites.BESOINS, agent_test=("agent",))
+        presentes = ("base", "agent")
+        for contenu, perime in ((attendue, False), ("ubuntu=ubuntu:24.04;node=22;claude_code=2.1.328;fichiers=0000000000000000", True),
+                                (None, True), (255, False)):
+            with self.subTest(marqueur=contenu), mock.patch.object(serveur_capacites, "BESOINS", besoins):
+                ssh = FauxSsh(presentes=presentes)
+                ssh.marqueur = contenu
+                ap = inst.apercu(SERVEUR, ["agent_test"], ssh=ssh, dossier=self.dossier)
+                self.assertEqual(ap["manquantes"], ["agent"] if perime else [], ap)
+                self.assertEqual(ap["perimees"], ["agent"] if perime else [])
+                lectures = [a["commande"] for a in ssh.appels if "agent-image.version" in a["commande"]]
+                self.assertEqual(len(lectures), 1)
+                self.assertTrue(lectures[0].startswith("head -c 256 "), lectures[0])
+                ssh = FauxSsh(presentes=presentes)
+                ssh.marqueur = contenu
+                r = self.installer(ssh, actions=["agent_test"])
+                self.assertEqual("agent_image" in ssh.lancees, perime)
+                if perime:
+                    self.assertEqual(r["capacites"]["agent"]["statut"], "fait", r)
+                    commande, octets = ssh.archives[0]
+                    with tarfile.open(fileobj=io.BytesIO(octets)) as tar:
+                        self.assertEqual(sorted(tar.getnames()), sorted(inst.FICHIERS_ETAPE["agent_image"]))
 
     def test_lecture_du_marqueur_bornee_et_apercu_marque_la_capacite_perimee(self):
         ssh = FauxSsh(presentes=self.PRESENTES_IMAGE)
@@ -589,7 +621,8 @@ class TestEtatPerime(Base):
 
     def test_les_delais_par_etape_sont_ceux_du_module(self):
         self.assertEqual(inst.DELAIS_ETAPE_S, {"docker": 1200, "durcissement": 900, "android_build": 1800,
-                                               "android_emulateur": 1800, "emulateur_image": 900, "unity_cli": 300})
+                                               "android_emulateur": 1800, "emulateur_image": 900, "agent_image": 900,
+                                               "unity_cli": 300})
         self.assertEqual(inst.DELAI_DEFAUT_S, 600)
         ssh = FauxSsh()
         self.installer(ssh, actions=["emulateur"])

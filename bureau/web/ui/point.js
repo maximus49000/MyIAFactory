@@ -3,7 +3,7 @@
 // immédiate à « où en est-on ? ». `pointAtelier` est pur (testé avec node).
 
 import {el} from "./dom.js";
-import {auTravail, tronquer} from "./texte.js";
+import {auTravail, tronquer, marqueLieuAgent} from "./texte.js";
 import {urlProjet} from "./projets.js";
 import {creerBoutonConnexion} from "./abonnement.js";
 
@@ -22,10 +22,12 @@ export function pointAtelier(etat, maintenant = new Date()) {
       const travail = auTravail(t.travail, maintenant);
       agents.push({prenom: a.prenom || a.id || "?", tache: t.id, titre: tronquer(t.titre || "", MAX_TITRE),
                    resume: t.resume ? tronquer(t.resume, 90) : null, cloud: a.lieu === "cloud",
+                   serveur: a.lieu === "serveur",
                    etat: travail ? `au travail depuis ${travail.depuis}` + (travail.action ? ` · ${travail.action}` : "")
                      : t.attente ? t.attente
                      : a.statut === "sans_nouvelles" ? (a.bulle || "sans nouvelles")
-                     : a.lieu === "cloud" ? "en cours dans sa session cloud" : "en cours"});
+                     : a.lieu === "cloud" ? "en cours dans sa session cloud"
+                     : a.lieu === "serveur" ? "en cours sur le serveur" : "en cours"});
     }
   }
   const decisions = liste(etat?.decisions_projet).length
@@ -45,7 +47,7 @@ export function blocPoint(etat, ouvrirTache, maintenant = new Date()) {
   if (!p.agents.length) ul.append(el("li", "vide", "Aucun agent au travail"));
   for (const a of p.agents) {
     const li = el("li", "");
-    const lien = el("button", "lien-tache", `${a.prenom}${a.cloud ? " ☁" : ""} — ${a.titre}`);
+    const lien = el("button", "lien-tache", `${a.prenom}${marqueLieuAgent(a.cloud ? "cloud" : a.serveur ? "serveur" : "local")} — ${a.titre}`);
     lien.type = "button";
     lien.addEventListener("click", () => ouvrirTache(a.tache));
     li.append(lien);

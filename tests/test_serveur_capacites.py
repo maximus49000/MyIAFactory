@@ -26,7 +26,7 @@ class CatalogueTests(unittest.TestCase):
 
     def test_contenu_du_catalogue(self):
         self.assertEqual(set(sc.CATALOGUE), {"base", "durcissement", "android-build", "android-emulateur", "emulateur-image",
-                                             "unity-cli", "unity-editeur", "session-graphique", "agent"})
+                                             "unity-cli", "unity-editeur", "session-graphique", "agent", "agent-abonnement"})
         self.assertEqual(sc.CATALOGUE["durcissement"].depend, ("base",))
         self.assertEqual(sc.CATALOGUE["android-emulateur"].depend, ("android-build",))
         self.assertEqual(sc.CATALOGUE["base"].etape, "docker")
@@ -104,13 +104,75 @@ class CatalogueTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             sc.verifier_catalogue({"a": _cap("a", ["fantome"])})
 
-    def test_agent_non_installable_avec_sa_raison(self):
+    def test_agent_installable_par_l_etape_agent_image(self):
         agent = sc.CATALOGUE["agent"]
-        self.assertFalse(agent.installable)
-        self.assertEqual(agent.raison_non_installable, "non installable avant le morceau 3")
-        self.assertEqual(sc.ordre_installation(["agent"], set()), ["agent"])
-        self.assertEqual(sc.bloquees(["agent", "base"]),
-                         [{"id": "agent", "raison": "non installable avant le morceau 3"}])
+        self.assertEqual((agent.etape, agent.depend, agent.installable), ("agent_image", ("base",), True))
+        self.assertEqual(agent.sonde, "test -s ~/.myiafactory/agent-image.version")
+        self.assertGreater(agent.taille_go, 0)
+        self.assertEqual(sc.ordre_installation(["agent"], set()), ["base", "agent"])
+        self.assertEqual(sc.bloquees(["agent", "base"]), [])
+        script = (Path(__file__).resolve().parent.parent / "serveur_ovh" / "mise_en_place.sh").read_text(encoding="utf-8")
+        self.assertIn(f"  {agent.etape}) etape_{agent.etape} ;;", script)         # l'étape nommée par le catalogue existe dans le script
+        self.assertIn("agent-image.version", script)                              # et écrit le marqueur que la sonde teste
+        import serveur_installation as inst
+        self.assertEqual(inst.DELAIS_ETAPE_S[agent.etape], 900)
+        self.assertEqual(inst.MARQUEURS["agent"], ("agent_image", "$HOME/.myiafactory/agent-image.version"))
+
+    def test_agent_abonnement_non_installable_avec_le_geste(self):
+        cap = sc.CATALOGUE["agent-abonnement"]
+        self.assertEqual(cap.depend, ("agent",))
+        self.assertFalse(cap.installable)
+        self.assertEqual(sc.ordre_installation(["agent-abonnement"], {"base", "agent"}), ["agent-abonnement"])
+        self.assertEqual(sc.bloquees(["agent-abonnement"]), [{"id": "agent-abonnement", "raison": cap.raison_non_installable}])
+        raison = cap.raison_non_installable
+        self.assertIn("enregistrer_jeton.sh", raison)                              # le geste du Directeur...
+        self.assertIn("docs/serveur-agents.md#connexion-a-l-abonnement", raison)  # ... et le renvoi au mode opératoire
+        self.assertNotIn("\n", raison)
+        self.assertNotIn("sk-", raison)
+
+    def test_besoins_agent_serveur_et_pilote(self):
+        self.assertEqual(sc.BESOINS["agent-serveur"], ("agent", "agent-abonnement"))
+        self.assertEqual(sc.BESOINS["agent-pilote"], ("agent", "agent-abonnement", "emulateur-image"))
+        self.assertEqual(sc.manquantes_pour(["agent-serveur"], {"base"}), ["agent", "agent-abonnement"])
+        self.assertEqual(sc.manquantes_pour(["agent-pilote"], set()),
+                         ["base", "agent", "agent-abonnement", "android-build", "android-emulateur", "emulateur-image"])
+        self.assertEqual([b["id"] for b in sc.bloquees(sc.manquantes_pour(["agent-serveur"], {"base", "agent"}))], ["agent-abonnement"])
+
+    @unittest.skipUnless(shutil.which("bash"), "bash absent")
+    def test_sondes_agent_et_abonnement_en_lecture_seule(self):
+        agent = sc.CATALOGUE["agent"].sonde
+        abo = sc.CATALOGUE["agent-abonnement"].sonde
+        self.assertEqual(abo, '[ "$(stat -c %a ~/agent-identifiants)" = 700 ] && [ "$(stat -c %a ~/agent-identifiants/jeton)" = 600 ] '
+                              '&& test -s ~/agent-identifiants/jeton')
+        for sonde in (agent, abo):
+            self.assertNotRegex(sonde, r"sudo|docker|[<>]")
+        for mot in ("cat", "head", "tail", "grep", "read", "source", "eval"):    # le contenu du jeton n'est jamais lu
+            self.assertIsNone(re.search(r"(?<![\w./-])" + mot + r"(?![\w-])", abo), mot)
+        with tempfile.TemporaryDirectory() as t:
+            home, faux = Path(t) / "home", Path(t) / "bin"
+            (home / ".myiafactory").mkdir(parents=True)
+            (home / "agent-identifiants").mkdir()
+            faux.mkdir()
+            (faux / "stat").write_text('#!/bin/sh\ncase "$3" in */jeton) echo "$MODE_F";; *) echo "$MODE_D";; esac\n', newline="\n")
+            (faux / "stat").chmod(0o755)
+
+            def code(sonde, mode_d="700", mode_f="600"):
+                env = dict(os.environ, HOME=home.as_posix(), PATH=faux.as_posix() + os.pathsep + os.environ["PATH"], MODE_D=mode_d, MODE_F=mode_f)
+                return subprocess.run(["bash", "-c", f"( {sonde} ) </dev/null >/dev/null 2>&1"], env=env, timeout=30).returncode
+            self.assertNotEqual(code(agent), 0)
+            (home / ".myiafactory" / "agent-image.version").write_text("", encoding="utf-8")
+            self.assertNotEqual(code(agent), 0)                                    # marqueur vide
+            (home / ".myiafactory" / "agent-image.version").write_text("ubuntu=ubuntu:24.04", encoding="utf-8")
+            self.assertEqual(code(agent), 0)
+            self.assertNotEqual(code(abo), 0)                                      # pas de jeton
+            (home / "agent-identifiants" / "jeton").write_text("", encoding="utf-8")
+            self.assertNotEqual(code(abo), 0)                                      # jeton vide
+            (home / "agent-identifiants" / "jeton").write_text("x", encoding="utf-8")
+            self.assertEqual(code(abo), 0)
+            self.assertNotEqual(code(abo, mode_d="755"), 0)                        # dossier trop ouvert
+            self.assertNotEqual(code(abo, mode_f="644"), 0)                        # fichier trop ouvert
+            self.assertEqual((home / "agent-identifiants" / "jeton").read_text(encoding="utf-8"), "x")   # rien modifié
+            self.assertEqual(sorted(x.name for x in (home / "agent-identifiants").iterdir()), ["jeton"])
 
     def test_session_graphique_non_installable_par_le_moteur_generique(self):
         cap = sc.CATALOGUE["session-graphique"]

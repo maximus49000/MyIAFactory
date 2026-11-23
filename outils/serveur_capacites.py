@@ -73,9 +73,18 @@ _CATALOGUE = {
         installable=False,
         raison_non_installable="installer par `lancer.py plateforme installer --bureau-distant`"),
     "agent": Capacite(
-        "agent", "Agent de développement sur le serveur", (), "agent",
-        "command -v claude >/dev/null", 1.0, 5,
-        installable=False, raison_non_installable="non installable avant le morceau 3"),
+        "agent", "Agent de développement sur le serveur (image myiafactory/agent, réseau des agents)", ("base",), "agent_image",
+        "test -s ~/.myiafactory/agent-image.version", 1.0, 8),
+    # Étape humaine : le jeton de l'abonnement est enregistré UNE fois par le Directeur ; la sonde ne lit jamais son contenu
+    # (droits du dossier et du fichier, fichier non vide).
+    "agent-abonnement": Capacite(
+        "agent-abonnement", "Connexion de l'agent à l'abonnement (jeton enregistré par le Directeur)", ("agent",), "agent_abonnement",
+        '[ "$(stat -c %a ~/agent-identifiants)" = 700 ] && [ "$(stat -c %a ~/agent-identifiants/jeton)" = 600 ] '
+        '&& test -s ~/agent-identifiants/jeton', 0.0, 3,
+        installable=False,
+        # courte, lien en tête : le détail affiché au Directeur est tronqué à 200 caractères
+        raison_non_installable="voir docs/serveur-agents.md#connexion-a-l-abonnement : le Directeur lance `bash enregistrer_jeton.sh` "
+                               "sur le serveur et y colle le jeton de son abonnement"),
 }
 
 _BESOINS = {
@@ -88,6 +97,9 @@ _BESOINS = {
     # et `lancer.py plateforme serveurs apercu|installer <id> recette-emulateur` installent emulateur-image (et sa chaîne)
     "recette-emulateur": ("emulateur-image",),
     "charge": (),
+    # un agent du projet tourne sur le serveur : seul (branche et rapport) ou pilote (il conduit l'émulateur par le pont fermé)
+    "agent-serveur": ("agent", "agent-abonnement"),
+    "agent-pilote": ("agent", "agent-abonnement", "emulateur-image"),
 }
 
 CATALOGUE = MappingProxyType(_CATALOGUE)

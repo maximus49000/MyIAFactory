@@ -5,7 +5,7 @@
     Rôle : dev
     Service : dev
     Modèle : Sonnet
-    Lieu : local
+    Lieu : local      (local, cloud ou serveur)
     Session : (cloud seulement)
     Spécialité : écrans et mise en page
     Outils : Read, Write, Edit, Bash(py:*)   (facultatif : les outils d'un agent lancé par le moteur)
@@ -34,6 +34,8 @@ ENTETES = ("Clé", "Prénom", "Rôle", "Service", "Modèle", "Lieu", "Session", 
 OUTILS_PAR_DEFAUT = ["Read", "Write", "Edit", "Glob", "Grep", "Bash(py:*)", "Bash(python:*)", "Bash(python3:*)",
                      "Bash(mkdir:*)", "Bash(git:*)"]
 MODELES = ("Haiku", "Sonnet", "Opus")
+# Où travaille l'agent : le poste (`local`), une session cloud (`cloud`), un conteneur du serveur OVH (`serveur`, tranche B).
+LIEUX = ("local", "cloud", "serveur")
 # Fable n'est jamais choisi par le moteur ni par un outil : une fiche l'a seulement si le Directeur l'a accordé, pour
 # cet agent seulement, et la fiche le dit (ligne `Fable :`).
 ACCORD_FABLE = re.compile(r"^accordé par le Directeur le \d{4}-\d{2}-\d{2}\Z")
@@ -98,8 +100,8 @@ def lire_fiche(chemin):
     if not polyvalente and champs["Modèle"] not in MODELES and not (champs["Modèle"] == "Fable" and accord):
         raise FicheInvalide(f"Fiche {chemin.name} : « Modèle » doit valoir Haiku, Sonnet ou Opus (Fable seulement "
                             "avec l'accord du Directeur, ligne « Fable : »).")
-    if champs["Lieu"] not in ("local", "cloud"):
-        raise FicheInvalide(f"Fiche {chemin.name} : « Lieu » doit valoir local ou cloud.")
+    if champs["Lieu"] not in LIEUX:
+        raise FicheInvalide(f"Fiche {chemin.name} : « Lieu » doit valoir local, cloud ou serveur.")
     retrait = champs.get("Retrait") or None
     if retrait is not None and retrait not in (RETRAIT_PREVU, RETRAIT_FAIT):
         raise FicheInvalide(f"Fiche {chemin.name} : « Retrait » doit dire « {RETRAIT_PREVU} » ou « {RETRAIT_FAIT} ».")

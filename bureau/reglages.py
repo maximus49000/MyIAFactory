@@ -1,8 +1,11 @@
 """Réglages d'un projet : lecture et écriture."""
+import contextlib
 import json
 import os
 import re
 import tempfile
+import threading
+import time
 import unicodedata
 from pathlib import Path
 
@@ -33,6 +36,7 @@ DEFAUTS = {"port": 8770, "charge_max": 75, "fraicheur_min": 30, "releve": {}, "p
 _HEURE = re.compile(r"^([01][0-9]|2[0-3]):[0-5][0-9]$")
 COUCHES_MOTEUR = ("claude", "api")   # `claude -p` (l'abonnement) ou l'API Messages (clé facturée à part)
 AGENTS_CLOUD_MAX = (1, 16)
+AGENTS_ABONNEMENT_MAX = (1, 32)   # le plafond des tâches d'agent actives sur l'abonnement, tous projets et tous lieux
 
 
 class ReglagesInvalides(Exception):
@@ -170,7 +174,12 @@ def lire_bureau(chemin):
                 id_ = base[:40 - len(suffixe)].rstrip("-") + suffixe
             pris.add(id_)
         sortie.append({"id": id_, "chemin": c})
+    plafond = donnees.get("agents_abonnement_max")
+    if "agents_abonnement_max" in donnees and (type(plafond) is not int or not
+                                                AGENTS_ABONNEMENT_MAX[0] <= plafond <= AGENTS_ABONNEMENT_MAX[1]):
+        raise ReglagesInvalides("Fichier du bureau : « agents_abonnement_max » doit être un entier de 1 à 32 (ou absent).")
     return {"port": port, "projets": sortie, "acces": lire_acces(donnees.get("acces", {})),
+            "agents_abonnement_max": plafond,
             "moteur": lire_moteur_du_bureau(donnees.get("moteur", {})),
             "deport": normaliser_deport(donnees.get("deport", {}), "Fichier du bureau")}
 
@@ -214,6 +223,79 @@ def fixer_deport(chemin, deport, catalogue=None):
     complet = normaliser_deport(deport, "Réglages", catalogue)
     explicites = {a: complet["lieux"][a] for a in deport.get("lieux", {})}
     return _ecrire_cle(chemin, "deport", {**complet, "lieux": explicites})
+
+
+_VERROU_ECRITURE = threading.Lock()     # lecture-modification-écriture d'un fichier de réglages : une à la fois ici
+VERROU_ATTENTE_S = 10                   # attente au plus d'un autre processus qui écrit le même fichier
+VERROU_PERIME_S = 60                    # un verrou plus vieux (processus mort) est repris
+
+
+@contextlib.contextmanager
+def _verrou_fichier(chemin):
+    """Une écriture à la fois sur `chemin` : verrou du processus, plus un fichier `<nom>.verrou` créé en exclusif pour
+    les autres processus (le bureau et l'installation écrivent le même fichier du bureau). Attente bornée ; un verrou
+    périmé est repris. `TimeoutError` si l'autre écriture ne finit pas."""
+    marque = Path(str(chemin) + ".verrou")
+    with _VERROU_ECRITURE:
+        fin = time.monotonic() + VERROU_ATTENTE_S
+        while True:
+            try:
+                os.close(os.open(str(marque), os.O_CREAT | os.O_EXCL | os.O_WRONLY))
+                break
+            except FileExistsError:
+                try:
+                    if time.time() - marque.stat().st_mtime > VERROU_PERIME_S:
+                        marque.unlink()
+                        continue
+                except OSError:
+                    continue
+                if time.monotonic() >= fin:
+                    raise TimeoutError(f"Fichier en cours d'écriture par un autre programme : {chemin}")
+                time.sleep(0.05)
+        try:
+            yield
+        finally:
+            try:
+                marque.unlink()
+            except OSError:
+                pass
+
+
+def fixer_agents_abonnement_max(chemin, valeur):
+    """Note, dans le fichier du bureau, le plafond des agents actifs sur l'abonnement (entier de 1 à 32 ; `None` : plus de
+    plafond, la clé disparaît). Le reste du fichier est gardé (relu SOUS VERROU : une autre écriture du fichier du bureau
+    n'est jamais perdue). Rend la valeur écrite."""
+    if valeur is not None and (type(valeur) is not int or not AGENTS_ABONNEMENT_MAX[0] <= valeur <= AGENTS_ABONNEMENT_MAX[1]):
+        raise ValueError("« agents_abonnement_max » doit être un entier de 1 à 32 (ou nul : aucun plafond).")
+    chemin = Path(chemin)
+    try:
+        with _verrou_fichier(chemin):
+            return _fixer_plafond(chemin, valeur)
+    except TimeoutError as e:
+        raise ReglagesInvalides(str(e)) from None
+
+
+def _fixer_plafond(chemin, valeur):
+    try:
+        donnees = json.loads(chemin.read_text(encoding="utf-8-sig"))
+    except (ValueError, OSError) as e:
+        raise ReglagesInvalides(f"Fichier du bureau illisible ({chemin}) : {e}")
+    if not isinstance(donnees, dict):
+        raise ReglagesInvalides(f"Fichier du bureau illisible ({chemin}) : un objet JSON est attendu")
+    if valeur is None:
+        donnees.pop("agents_abonnement_max", None)
+    else:
+        donnees["agents_abonnement_max"] = valeur
+    fd, tmp = tempfile.mkstemp(dir=str(chemin.parent), suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(donnees, f, ensure_ascii=False, indent=2)
+        os.replace(tmp, chemin)
+    except BaseException:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+        raise
+    return valeur
 
 
 def fixer_analyse_blocages(chemin, valeur):

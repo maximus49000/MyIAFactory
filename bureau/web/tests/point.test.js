@@ -26,6 +26,15 @@ test("le point dit qui fait quoi, depuis quand, et ce qui attend", () => {
   assert.equal(p.retenue, "Le poste est chargé.");
 });
 
+test("un agent du serveur est dit « sur le serveur », jamais comme un agent local", () => {
+  const etat = {agents: [{id: "s1", prenom: "Ana", lieu: "serveur", statut: "travail", taches: ["t5"]}],
+                taches: [{id: "t5", titre: "Écran", colonne: "dev"}]};
+  const p = pointAtelier(etat, maintenant);
+  assert.equal(p.agents[0].etat, "en cours sur le serveur");
+  assert.equal(p.agents[0].serveur, true);
+  assert.equal(p.agents[0].cloud, false);
+});
+
 test("un état vide ne casse rien", () => {
   assert.deepEqual(pointAtelier({}, maintenant), {agents: [], decisions: 0, bloquees: [], retenue: null, connexion: false});
 });

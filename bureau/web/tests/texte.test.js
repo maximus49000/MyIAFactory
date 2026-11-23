@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {COLS} from "./donnees.js";
-import {tronquer, voyant, libelleCharge, dureeEnClair, ilYA, auTravail, cleTravail,filtrer, imagesUrl, imageLegendee, imagesLegendees, altImage, dateFr, imagesVisibles, listeDisponible, phrasesDirectionV1, notesValides, filtresEtat, filtreEtatEffectif, filtreDeListe, elementsDeFile, fileDepliable, resteNonListe, resteApresVisibles} from "../ui/texte.js";
+import {tronquer, voyant, libelleCharge, dureeEnClair, ilYA, auTravail, cleTravail,filtrer, imagesUrl, imageLegendee, imagesLegendees, altImage, dateFr, imagesVisibles, listeDisponible, phrasesDirectionV1, notesValides, filtresEtat, filtreEtatEffectif, filtreDeListe, elementsDeFile, fileDepliable, resteNonListe, resteApresVisibles, libelleLieuAgent, marqueLieuAgent} from "../ui/texte.js";
 
 const MAINTENANT = new Date("2026-11-10T12:00:00Z");
 const ilYa = (minutes) => new Date(MAINTENANT.getTime() - minutes * 60000).toISOString();
@@ -268,4 +268,10 @@ test("libellePeriode", () => {
   assert.equal(libellePeriode("7j"), "7 jours");
   assert.equal(libellePeriode("30j"), "30 jours");
   assert.equal(libellePeriode("x"), "7 jours");
+});
+
+test("le lieu d'un agent : local, serveur et cloud distingués (tranche B)", () => {
+  assert.deepEqual(["local", "serveur", "cloud", undefined, "lune"].map(libelleLieuAgent),
+                   ["local", "serveur ⛁", "cloud ☁", "local", "local"]);
+  assert.deepEqual(["local", "serveur", "cloud", undefined].map(marqueLieuAgent), ["", " ⛁", " ☁", ""]);
 });

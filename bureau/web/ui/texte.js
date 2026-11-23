@@ -9,6 +9,16 @@ export function tronquer(texte, n) {
   return t.length > n ? t.slice(0, n) + "…" : t;
 }
 
+// Le lieu d'un agent en clair (fiches) : « local », « serveur ⛁ », « cloud ☁ » ; tout autre lieu vaut local.
+export function libelleLieuAgent(lieu) {
+  return lieu === "cloud" ? "cloud ☁" : lieu === "serveur" ? "serveur ⛁" : "local";
+}
+
+// La marque accolée au prénom d'un agent qui ne travaille pas sur le poste : « ☁ » (cloud), « ⛁ » (serveur), rien sinon.
+export function marqueLieuAgent(lieu) {
+  return lieu === "cloud" ? " ☁" : lieu === "serveur" ? " ⛁" : "";
+}
+
 // Même format que côté serveur : « 45 min » sous 60 min, « 2 h » sous 48 h, « 3 j » au-delà (arrondi inférieur).
 export function dureeEnClair(minutes) {
   if (minutes < 60) return `${Math.floor(minutes)} min`;

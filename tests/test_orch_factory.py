@@ -180,6 +180,28 @@ class TestFactory(unittest.TestCase):
                 factory.ecrire_parallelisme(chemin, locaux, cloud)
         self.assertEqual(factory.lire(chemin)["agents_locaux_max"], 4)
 
+    def test_ecrire_parallelisme_serveur_et_ordre_des_lieux(self):
+        chemin = self.ecrire(description="Un jeu")
+        factory.ecrire_parallelisme(chemin, 2, 1, serveur=3, ordre=["serveur", "local"], par_metier={" qa ": ["cloud", "local"]})
+        f = factory.lire(chemin)
+        self.assertEqual((f["agents_serveur_max"], f["ordre_lieux"], f["ordre_lieux_par_metier"], f["description"]),
+                         (3, ["serveur", "local"], {"qa": ["cloud", "local"]}, "Un jeu"))
+        factory.ecrire_parallelisme(chemin, 4, 1)                  # sans ces réglages : ils restent tels quels
+        f = factory.lire(chemin)
+        self.assertEqual((f["agents_locaux_max"], f["agents_serveur_max"], f["ordre_lieux"]), (4, 3, ["serveur", "local"]))
+        for mauvais in ({"serveur": 5}, {"serveur": -1}, {"serveur": True}, {"serveur": "1"}, {"ordre": []},
+                        {"ordre": ["local", "local"]}, {"ordre": ["x"]}, {"ordre": "local"},
+                        {"par_metier": {"qa": ["local"], "qa ": ["cloud"]}}, {"par_metier": {"": ["local"]}},
+                        {"par_metier": ["local"]}, {"par_metier": {"qa": ["local", "local"]}},
+                        {"par_metier": {f"r{i}": ["local"] for i in range(51)}}):
+            with self.assertRaises(factory.FactoryInvalide, msg=repr(mauvais)):
+                factory.ecrire_parallelisme(chemin, 2, 1, **mauvais)
+        f = factory.lire(chemin)
+        self.assertEqual((f["agents_locaux_max"], f["agents_serveur_max"], f["ordre_lieux"], f["ordre_lieux_par_metier"]),
+                         (4, 3, ["serveur", "local"], {"qa": ["cloud", "local"]}))     # un refus n'écrit rien
+        factory.ecrire_parallelisme(chemin, 4, 1, par_metier={})   # l'ordre par métier se vide
+        self.assertEqual(factory.lire(chemin)["ordre_lieux_par_metier"], {})
+
     def test_places_cloud(self):
         from orchestrateur import depart
         self.assertEqual(depart.places_cloud(2, 3, False), 2)                   # réglé : la valeur du projet

@@ -4,6 +4,7 @@ import unittest
 from pathlib import Path
 
 from bureau import reglages
+from orchestrateur import factory
 
 
 class TestReglages(unittest.TestCase):
@@ -39,6 +40,90 @@ class TestReglages(unittest.TestCase):
             (self.tmp / "r.json").write_text(json.dumps({"agents_cloud_max": v}), encoding="utf-8")
             with self.assertRaises(reglages.ReglagesInvalides, msg=repr(v)):
                 reglages.charger(self.tmp / "r.json")
+
+    def factory_avec(self, **extra):
+        chemin = self.tmp / "factory.json"
+        chemin.write_text(json.dumps({"skill": "skill", **extra}), encoding="utf-8")
+        return chemin
+
+    def bureau_avec(self, **extra):
+        (self.tmp / "r.json").write_text("{}", encoding="utf-8")
+        chemin = self.tmp / "bureau.json"
+        chemin.write_text(json.dumps({"projets": ["r.json"], **extra}), encoding="utf-8")
+        return chemin
+
+    def test_reglages_bornes_et_permutation(self):
+        # les défauts : aucune place serveur, local puis serveur puis cloud, aucun ordre par métier
+        f = factory.lire(self.factory_avec())
+        self.assertEqual((f["agents_serveur_max"], f["ordre_lieux"], f["ordre_lieux_par_metier"]),
+                         (0, ["local", "serveur", "cloud"], {}))
+        for v in (0, 1, 4):
+            self.assertEqual(factory.lire(self.factory_avec(agents_serveur_max=v))["agents_serveur_max"], v)
+        for v in (-1, 5, "2", True, 1.5, None):
+            with self.assertRaises(factory.FactoryInvalide, msg=repr(v)):
+                factory.lire(self.factory_avec(agents_serveur_max=v))
+        for ordre in (["serveur"], ["cloud", "local"], ["serveur", "cloud", "local"]):
+            self.assertEqual(factory.lire(self.factory_avec(ordre_lieux=ordre))["ordre_lieux"], ordre)
+        for mauvais in ([], "local", ["local", "local"], ["local", "ailleurs"], ["local", 1], ["local", "serveur", "cloud", "local"],
+                        None, {"local": 1}):
+            with self.assertRaises(factory.FactoryInvalide, msg=repr(mauvais)):
+                factory.lire(self.factory_avec(ordre_lieux=mauvais))
+        par = {"qa": ["cloud", "local"], "dev": ["serveur"]}
+        self.assertEqual(factory.lire(self.factory_avec(ordre_lieux_par_metier=par))["ordre_lieux_par_metier"], par)
+        for mauvais in ([], {"qa": []}, {"qa": ["x"]}, {"qa": ["local", "local"]}, {"": ["local"]}, {"qa": "local"}):
+            with self.assertRaises(factory.FactoryInvalide, msg=repr(mauvais)):
+                factory.lire(self.factory_avec(ordre_lieux_par_metier=mauvais))
+        # les clés de l'ordre par métier sont nettoyées ; au plus 50 rôles
+        self.assertEqual(factory.lire(self.factory_avec(ordre_lieux_par_metier={" qa ": ["local"]}))["ordre_lieux_par_metier"],
+                         {"qa": ["local"]})
+        factory.lire(self.factory_avec(ordre_lieux_par_metier={f"r{i}": ["local"] for i in range(50)}))
+        with self.assertRaises(factory.FactoryInvalide):
+            factory.lire(self.factory_avec(ordre_lieux_par_metier={f"r{i}": ["local"] for i in range(51)}))
+        with self.assertRaises(factory.FactoryInvalide):                      # deux clés qui n'en font qu'une
+            factory.lire(self.factory_avec(ordre_lieux_par_metier={"qa": ["local"], " qa": ["cloud"]}))
+        # le plafond de l'abonnement, dans le fichier du bureau : 1 à 32 ou absent
+        self.assertIsNone(reglages.lire_bureau(self.bureau_avec())["agents_abonnement_max"])
+        for v in (1, 5, 32):
+            self.assertEqual(reglages.lire_bureau(self.bureau_avec(agents_abonnement_max=v))["agents_abonnement_max"], v)
+        for v in (0, 33, -1, "4", True, 2.5, None):
+            with self.assertRaises(reglages.ReglagesInvalides, msg=repr(v)):
+                reglages.lire_bureau(self.bureau_avec(agents_abonnement_max=v))
+
+    def test_fixer_agents_abonnement_max(self):
+        bureau = self.bureau_avec(port=9100)
+        avant = json.loads(bureau.read_text(encoding="utf-8"))
+        self.assertEqual(reglages.fixer_agents_abonnement_max(bureau, 6), 6)
+        lu = reglages.lire_bureau(bureau)
+        self.assertEqual((lu["agents_abonnement_max"], lu["port"]), (6, 9100))
+        self.assertEqual(json.loads(bureau.read_text(encoding="utf-8")), {**avant, "agents_abonnement_max": 6})   # le reste est gardé
+        for v in (1, 32):
+            reglages.fixer_agents_abonnement_max(bureau, v)
+            self.assertEqual(reglages.lire_bureau(bureau)["agents_abonnement_max"], v)
+        self.assertIsNone(reglages.fixer_agents_abonnement_max(bureau, None))          # plus de plafond : la clé disparaît
+        self.assertNotIn("agents_abonnement_max", json.loads(bureau.read_text(encoding="utf-8")))
+        for v in (0, 33, -1, True, "4", 2.5):
+            with self.assertRaises(ValueError, msg=repr(v)):
+                reglages.fixer_agents_abonnement_max(bureau, v)
+        self.assertNotIn("agents_abonnement_max", json.loads(bureau.read_text(encoding="utf-8")))
+        (self.tmp / "abime.json").write_text("{pas du json", encoding="utf-8")
+        with self.assertRaises(reglages.ReglagesInvalides):
+            reglages.fixer_agents_abonnement_max(self.tmp / "abime.json", 3)
+
+    def test_plafond_ecrit_sous_verrou(self):
+        import os
+        import time
+        from unittest import mock
+        bureau = self.bureau_avec(port=9100)
+        marque = Path(str(bureau) + ".verrou")
+        marque.write_text("", encoding="utf-8")                  # un autre programme écrit le fichier du bureau
+        with mock.patch.object(reglages, "VERROU_ATTENTE_S", 0.2):
+            with self.assertRaises(reglages.ReglagesInvalides):
+                reglages.fixer_agents_abonnement_max(bureau, 4)
+        self.assertNotIn("agents_abonnement_max", json.loads(bureau.read_text(encoding="utf-8")))
+        vieux = time.time() - 3600
+        os.utime(marque, (vieux, vieux))                         # verrou d'un programme mort : repris
+        self.assertEqual(reglages.fixer_agents_abonnement_max(bureau, 4), 4)
+        self.assertFalse(marque.exists())                        # rendu après l'écriture
 
     def test_lecons_auto_faux_par_defaut_et_booleen_seulement(self):
         self.assertIs(reglages.charger(self.tmp / "absent.json")["lecons_auto"], False)

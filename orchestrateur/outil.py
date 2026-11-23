@@ -2492,6 +2492,8 @@ def construire_releve(ctx):
          "genre": ctx.f["genre"], "livrable": s["livrable"], "fonctionnalites": fonctionnalites,
          "decisions_projet": [_decision_au_releve(d, s) for d in s["decisions_projet"]],
          "agents_locaux_max": ctx.f["agents_locaux_max"], "agents_cloud_max": places_cloud_du_projet(ctx),
+         "agents_serveur_max": places_serveur_du_projet(ctx), "ordre_lieux": list(ctx.f["ordre_lieux"]),
+         "ordre_lieux_par_metier": {r: list(o) for r, o in ctx.f["ordre_lieux_par_metier"].items()},
          "orchestrateur_present": guetteur.present(_presence(ctx), datetime.now().astimezone()),
          "regles_projet": rp.lire(ctx.f),
          "anomalies_logiciel": anomalies_logiciel.lire(ctx.f)[-ANOMALIES_AU_RELEVE:],
@@ -3383,6 +3385,15 @@ def places_cloud_du_projet(ctx):
                                any(x["lieu"] == "cloud" for x in ctx.fiches()))
 
 
+AGENTS_SERVEUR = (0, 4)     # les places serveur d'un projet (0 par défaut)
+
+
+def places_serveur_du_projet(ctx):
+    """Les places serveur du projet (`agents_serveur_max`) : un entier de 0 à 4, sinon 0 (absent ou invalide)."""
+    v = ctx.f.get("agents_serveur_max", 0)
+    return v if isinstance(v, int) and not isinstance(v, bool) and AGENTS_SERVEUR[0] <= v <= AGENTS_SERVEUR[1] else 0
+
+
 def retirer_l_agent(fiche, a_des_taches):
     """Retire un agent de l'équipe : avec au moins une tâche au suivi, sa fiche est gardée, inactive (`Retrait : fait`),
     pour l'historique de ses tâches ; sans tâche, elle est supprimée. Rejouable."""
@@ -3396,7 +3407,7 @@ def synchroniser_equipe(ctx, creer=True, cloud_aussi=True):
     """Ramène l'équipe d'un projet polyvalent aux places (voir `recrutement.ajuster_equipe`) : crée des fiches polyvalentes
     (prénom et clé libres), retire les agents libres en trop, marque (`Retrait : prévu`) ceux qui travaillent encore.
     Rend `{crees, retires, retraits_prevus}` (clés) ; rien pour un projet à l'ancienne ou mixte. Rejouable sans effet.
-    `cloud_aussi` faux : aucun agent cloud n'est créé (la reprise d'un projet ne crée que des agents locaux)."""
+    `cloud_aussi` faux : aucun agent cloud ni serveur n'est créé (la reprise d'un projet ne crée que des agents locaux)."""
     vide = {"crees": [], "retires": [], "retraits_prevus": [], "reactives": []}
     with ctx.suivi.transaction() as suivi:     # un seul écrivain à la fois (l'outil, le moteur et le bureau)
         fiches_ = ctx.fiches()
@@ -3405,10 +3416,11 @@ def synchroniser_equipe(ctx, creer=True, cloud_aussi=True):
         occupes = {t["agent"] for t in suivi["taches"] if t.get("active") and t.get("agent")}
         avec_taches = {t["agent"] for t in suivi["taches"] if t.get("agent")}
         plan = rc.ajuster_equipe(fiches_, occupes, ctx.f["agents_locaux_max"], places_cloud_du_projet(ctx), creer,
-                                 avec_taches)
-        plan["creer"] = [lieu for lieu in plan["creer"] if cloud_aussi or lieu != "cloud"]
+                                 avec_taches, serveur=places_serveur_du_projet(ctx))
+        # la reprise d'un projet (`cloud_aussi` faux) ne crée ni ne réactive que des agents locaux
+        plan["creer"] = [lieu for lieu in plan["creer"] if cloud_aussi or lieu == "local"]
         par_cle = {x["cle"]: x for x in fiches_}
-        plan["reactiver"] = [c for c in plan["reactiver"] if cloud_aussi or par_cle[c]["lieu"] != "cloud"]
+        plan["reactiver"] = [c for c in plan["reactiver"] if cloud_aussi or par_cle[c]["lieu"] == "local"]
         for cle in plan["reactiver"]:      # un agent retiré revient (historique, clé et prénom gardés) avant tout agent neuf
             par_cle[cle]["retire"] = False
             fi.ecrire_fiche(par_cle[cle])
@@ -3466,14 +3478,17 @@ def cmd_parallelisme(ctx, e):
     ajoutée, un agent libre de moins par place retirée (un agent au travail finit sa tâche, voir `synchroniser_equipe`).
     Rend les valeurs écrites et, pour un projet polyvalent seulement, `{crees, retires, retraits_prevus}`."""
     locaux, cloud = e.get("agents_locaux_max"), e.get("agents_cloud_max")
+    plus = [c for c in ("agents_serveur_max", "ordre_lieux", "ordre_lieux_par_metier") if e.get(c) is not None]
     try:
-        fa.ecrire_parallelisme(ctx.f["chemin"], locaux, cloud)
+        fa.ecrire_parallelisme(ctx.f["chemin"], locaux, cloud, serveur=e.get("agents_serveur_max"), ordre=e.get("ordre_lieux"),
+                               par_metier=e.get("ordre_lieux_par_metier"))
     except fa.FactoryInvalide as ex:
         raise Refus(str(ex))
     ctx.f = fa.lire(ctx.f["chemin"])     # les places qui viennent d'être écrites
+    ecrit = {"agents_locaux_max": locaux, "agents_cloud_max": cloud, **{c: ctx.f[c] for c in plus}}
     if rc.equipe_pure(ctx.fiches()) is None:      # un projet à l'ancienne (ou mixte) : la réponse d'avant, rien d'autre
-        return {"agents_locaux_max": locaux, "agents_cloud_max": cloud}
-    return {"agents_locaux_max": locaux, "agents_cloud_max": cloud, **synchroniser_equipe(ctx)}
+        return ecrit
+    return {**ecrit, **synchroniser_equipe(ctx)}
 
 
 # --- Le recrutement depuis le bureau (conception 2026-11-12-recrutement-design.md).
@@ -3625,6 +3640,111 @@ def lieu_de_la_tache(ctx, s, t, fiches_):
     return mn.lieu_impose(lieu_de_l_etape(ctx, s, t), lieu_reserve(ctx, t.get("role"), fiches_))
 
 
+DOSSIER_PLATEFORME = None     # le dossier de la plateforme (serveurs.json, serveurs-etat.json) ; remplacé par les tests
+
+
+SONDE_PERIMEE_S = 24 * 3600     # une sonde plus vieille que 24 h ne dit plus que le serveur est en ligne
+
+
+def serveur_hors_ligne(dossier=None, maintenant=None):
+    """Vrai si aucun serveur déclaré n'a, à la dernière sonde, les capacités `agent` et `agent-abonnement` présentes et
+    constatées il y a moins de 24 h (état local `serveurs-etat.json` : aucune connexion). Une date de sonde illisible, ou
+    la moindre erreur de lecture, vaut hors ligne ; une capacité sans date (état ancien) n'est pas jugée périmée."""
+    try:
+        outils = str(Path(__file__).resolve().parent.parent / "outils")
+        if outils not in sys.path:
+            sys.path.append(outils)
+        import serveur_capacites
+        import serveur_installation
+        import serveur_modele
+        import serveur_tache
+        args = (dossier or DOSSIER_PLATEFORME,) if (dossier or DOSSIER_PLATEFORME) else ()
+        connu = serveur_installation.lire_etat_vivant(*args)
+        limite = (maintenant or datetime.now().astimezone()).timestamp() - SONDE_PERIMEE_S
+        for serveur in serveur_modele.lire(*args):
+            caps = (connu.get(serveur.id) or {}).get("capacites")
+            caps = caps if isinstance(caps, dict) else {}
+            pret = True
+            for c in serveur_capacites.BESOINS["agent-serveur"]:
+                e = caps.get(c) if isinstance(caps.get(c), dict) else {}
+                if e.get("statut") not in serveur_tache.STATUTS_PRETS:
+                    pret = False
+                elif e.get("maj") is not None:
+                    quand = datetime.fromisoformat(str(e["maj"]))
+                    if quand.tzinfo is None:
+                        quand = quand.astimezone()
+                    pret = pret and quand.timestamp() >= limite
+            if pret:
+                return False
+        return True
+    except Exception:       # tout souci de lecture : on ne peut pas dire qu'il est en ligne
+        return True
+
+
+def actifs_abonnement(ctx, s, bureau=None):
+    """`(actifs, refus)` : les tâches actives tenues par un agent, tous lieux, dans tous les projets du bureau (le suivi de
+    ce projet est `s`). `refus` : le texte à rendre quand le compte est impossible (bureau ou projet illisible) : le
+    plafond l'exige, la tâche attend plutôt que de compter de moins."""
+    total = sum(1 for t in s.get("taches") or [] if t.get("active") and t.get("agent"))
+    fichier = Path(bureau or BUREAU_DEPORT).expanduser()
+    try:
+        from bureau import reglages as rg
+        projets = rg.lire_bureau(fichier)["projets"]
+    except Exception:
+        return total, f"plafond d'abonnement : projets du bureau illisibles ({fichier})"
+    ici = Path(ctx.suivi.chemin).resolve()
+    for p in projets:
+        nom = Path(p["chemin"]).resolve().parent
+        nom = (nom.parent if nom.name == ".factory" else nom).name
+        try:
+            suivi = Path(fa.lire(Path(p["chemin"]).parent / "factory.json")["suivi"]).resolve()
+            if suivi == ici:
+                continue
+            taches = su.Suivi(suivi).lire().get("taches") or []
+        except Exception:
+            return total, f"plafond d'abonnement : suivi illisible pour le projet {nom}"
+        total += sum(1 for t in taches if isinstance(t, dict) and t.get("active") and t.get("agent"))
+    return total, None
+
+
+REFUS_PLAFOND = "plafond d'abonnement : réglage illisible"
+
+
+def plafond_abonnement(bureau=None):
+    """`(plafond, refus)` : `agents_abonnement_max` du fichier du bureau (1 à 32). Fichier absent, ou réglage absent :
+    `(None, None)`, rien ne limite. Fichier illisible (même son existence), ou réglage invalide : `(None, refus)`, le refus
+    commençant par `REFUS_PLAFOND` et nommant le fichier (on ne retire pas la garde en silence)."""
+    chemin = Path(bureau or BUREAU_DEPORT).expanduser()
+    refus = f"{REFUS_PLAFOND} ({chemin})"
+    try:
+        if not chemin.exists():
+            return None, None
+        donnees = json.loads(chemin.read_text(encoding="utf-8-sig"))
+    except (OSError, ValueError):
+        return None, refus
+    if not isinstance(donnees, dict):
+        return None, refus
+    if "agents_abonnement_max" not in donnees:
+        return None, None
+    v = donnees["agents_abonnement_max"]
+    if type(v) is not int or not 1 <= v <= 32:
+        return None, refus
+    return v, None
+
+
+def _bascule_des_lieux(ctx, role, garde=False):
+    """Les paramètres de la bascule entre lieux (`ordre_lieux`, `places`, `hors_ligne`), ou `None` pour un projet à
+    l'ancienne : aucune place serveur, ni ordre ni ordre par métier réglés, ni plafond d'abonnement (`garde`) : le
+    comportement d'avant, inchangé."""
+    serveur = places_serveur_du_projet(ctx)
+    regle = (ctx.f.get("ordre_lieux") not in (None, depart.ORDRE_PAR_DEFAUT)) or bool(ctx.f.get("ordre_lieux_par_metier"))
+    if not serveur and not regle and not garde:
+        return None
+    return {"ordre_lieux": depart.ordre_du_metier(ctx.f, role),
+            "places": {"local": ctx.f["agents_locaux_max"], "serveur": serveur, "cloud": places_cloud_du_projet(ctx)},
+            "hors_ligne": frozenset({"serveur"}) if serveur and serveur_hors_ligne() else frozenset()}
+
+
 def cmd_agent_libre(ctx, e):
     """`{role, modele?, lieu?, tache?}` : l'agent libre ; `tache` (son id) fait lire le `lieu` de son étape."""
     role, modele, lieu = texte(e, "role"), texte(e, "modele", obligatoire=False), texte(e, "lieu", obligatoire=False)
@@ -3634,11 +3754,19 @@ def cmd_agent_libre(ctx, e):
     t = su.tache(s, tid) if tid else None
     if tid and t is None:
         raise Refus(f"Tâche inconnue : {tid}")
+    plafond, refus = plafond_abonnement()
+    garde = plafond is not None or refus is not None
+    bascule = _bascule_des_lieux(ctx, role, garde) or {}
+    if garde:
+        actifs = 0
+        if plafond is not None:
+            actifs, refus = actifs_abonnement(ctx, s)
+        bascule["abonnement"], bascule["abonnement_refus"] = (actifs, plafond), refus
     cle, raison = depart.agent_libre(fiches_, s["taches"], role, modele, lieu,
                                      ctx.f["agents_locaux_max"], lieu_reserve=lieu_reserve(ctx, role, fiches_),
-                                     lieu_etape=lieu_de_l_etape(ctx, s, t))
+                                     lieu_etape=lieu_de_l_etape(ctx, s, t), **bascule)
     sortie = {"agent": cle, "raison": raison}
-    if cle is None and lieu == "cloud":   # la fiche qui attend sa session : la clé de la décision session_cloud
+    if cle is None and (lieu == "cloud" or (bascule and "session à créer" in raison)):   # la fiche qui attend sa session : la clé de la décision session_cloud
         sortie["sans_session"] = depart.sans_session(fiches_, role, modele)
     return sortie
 

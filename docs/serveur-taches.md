@@ -2,7 +2,8 @@
 
 Un agent (ou vous) peut faire installer et jouer l'APK d'un projet sur un **émulateur Android qui tourne sur le serveur**,
 sans charger le poste : les captures d'écran, le journal et un rapport reviennent dans le projet. Cette première tranche ne
-fait que cela (une tâche de type « émulation ») ; l'agent qui travaille *sur* le serveur est la tranche B (voir « Suite »).
+fait que cela (une tâche de type « émulation ») ; l'agent qui travaille *sur* le serveur est la tranche B, décrite dans
+[`serveur-agents.md`](serveur-agents.md) (en mode pilote, il réutilise le pont d'ici par un pont hôte ; l'émulation prend le même créneau que vos tâches).
 Conception : [`2026-11-19-agents-serveur-design.md`](superpowers/specs/2026-11-19-agents-serveur-design.md). Le serveur lui-même
 (déclaration, capacités, installation) : [`serveur.md`](serveur.md).
 
@@ -36,7 +37,8 @@ Sur le serveur (tout sous l'utilisateur déclaré, jamais root) :
     enveloppe.pid, veilleur.pid      les deux processus de l'hôte (voir plus bas)
     veilleur.log, docker-run.log     journaux de l'hôte (jamais rapatriés)
 ~/myiafactory/serveur_ovh/...        les fichiers du dépôt déposés sur le serveur : images/emulateur/{Dockerfile,entree-tache.sh},
-                                     taches/{pont.sh,lancer_emulation.sh}, versions.json (dossier `$HOME/myiafactory`, en minuscules)
+                                     taches/{pont.sh,lancer_emulation.sh,commun.sh}, versions.json (dossier `$HOME/myiafactory`,
+                                     en minuscules) ; commun.sh (fonctions partagées des enveloppes) est déposé avec l'enveloppe
 ~/.myiafactory/emulateur-image.version    le marqueur de l'image (voir « Maintenance »)
 ~/android-sdk                        le SDK Android de l'hôte, monté en lecture seule dans le conteneur
 ```
@@ -402,7 +404,9 @@ Le reste est vérifié par des tests simulés (faux SSH, dossiers jetables), pas
   fin demandée par le lanceur : rien ne montre si ce suivi a servi ou si `inspect` a pris le relais) ;
 - les **tâches longues** (échéance, inactivité, taille de `sortie/`) ;
 - **deux tâches à la suite** et la **concurrence pour le créneau** ;
-- le **nettoyage** de `~/taches` : chaque dossier de tâche garde ~12 Mo, rien ne les efface encore automatiquement.
+- le **nettoyage** de `~/taches` : chaque dossier de tâche garde ~12 Mo, rien ne les efface encore automatiquement ;
+- l'**émulation liée à un agent pilote** (tranche B) : son premier `demarrer` par le pont hôte, le partage du créneau avec les tâches ci-dessus
+  et son arrêt avec l'agent (voir [`serveur-agents.md`](serveur-agents.md)).
 
 **Installer l'image avant un essai** : l'action `recette-emulateur` demande la capacité `emulateur-image` (et sa chaîne
 `base`, `android-build`, `android-emulateur`). Dans le bureau : écran Serveurs, « Installer », cocher « Recette sur émulateur »,
@@ -416,7 +420,9 @@ y être).
 
 ## Suite
 
-- **Tranche B** : l'agent qui travaille sur le serveur (image d'agent, abonnement, pont hôte, bascule entre lieux, file visible).
-  Son plan suivra le premier essai réel de la tranche A.
+- **Tranche B** : l'agent qui travaille sur le serveur (image d'agent, abonnement, pont hôte, bascule entre lieux, file visible) est **écrite**
+  et documentée dans [`serveur-agents.md`](serveur-agents.md), mais **jamais exécutée sur un vrai serveur** : il reste la connexion à l'abonnement
+  par le Directeur puis les essais réels (liste dans « Essais réels » et « Non vérifié sur un vrai serveur » de ce guide-là). Le créneau
+  d'émulation est partagé entre vos tâches et l'émulation liée d'un agent pilote.
 - **Passer l'accord côté bureau** (registre que les agents ne peuvent pas écrire), pour lever la principale limite de l'accord permanent.
 - **Nettoyage** des tâches terminées (disque du serveur, index du poste) et choix d'un serveur précis par action.

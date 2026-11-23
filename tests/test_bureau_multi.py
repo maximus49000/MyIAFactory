@@ -186,6 +186,25 @@ class TestBureauMulti(AvecBureau):
         self.assertEqual(b["nom"], "b")
         self.assertIn("projet", b["erreur"])
 
+    def test_plafond_d_abonnement_se_regle_dans_le_fichier_du_bureau(self):
+        self.assertIsNone(self.json("/api/etat?projet=a")["agents_abonnement_max"])         # pas réglé : rien ne limite (mais réglable)
+        statut, corps = self.post("/api/reglages?projet=a", {"agents_abonnement_max": 5})
+        self.assertEqual((statut, corps), (200, {"agents_abonnement_max": 5}))
+        ecrit = json.loads(self.fichier.read_text(encoding="utf-8"))
+        self.assertEqual(ecrit["agents_abonnement_max"], 5)
+        self.assertEqual(ecrit["projets"], ["a/.factory/reglages.json", "b/.factory/reglages.json"])
+        for p in ("a", "b"):                                         # tous les projets : c'est un réglage du bureau
+            self.assertEqual(self.json(f"/api/etat?projet={p}")["agents_abonnement_max"], 5)
+        self.assertNotIn("agents_abonnement_max", (self.dossier("a") / "reglages.json").read_text(encoding="utf-8"))
+        for mauvais in (0, 33, True, "4", 2.5, [1]):
+            statut, _ = self.post("/api/reglages?projet=a", {"agents_abonnement_max": mauvais})
+            self.assertEqual(statut, 400, mauvais)
+        self.assertEqual(json.loads(self.fichier.read_text(encoding="utf-8"))["agents_abonnement_max"], 5)
+        statut, corps = self.post("/api/reglages?projet=a", {"agents_abonnement_max": None})      # le plafond est retiré
+        self.assertEqual((statut, corps), (200, {"agents_abonnement_max": None}))
+        self.assertIsNone(self.json("/api/etat?projet=a")["agents_abonnement_max"])
+        self.assertNotIn("agents_abonnement_max", json.loads(self.fichier.read_text(encoding="utf-8")))
+
     def test_isolation_des_projets(self):
         avant_a = (self.dossier("a") / "reglages.json").read_bytes()
         # Une demande pour B ne lance que la commande de B.

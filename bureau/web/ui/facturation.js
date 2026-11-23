@@ -290,21 +290,64 @@ export function dessinerFacturation(conteneur, donnees, service, periode, etat, 
 }
 
 // Les places du projet (le parallélisme) : bornes de la factory, vérifiées de nouveau par le serveur et l'outil.
-export const BORNES_PLACES = {locaux: [1, 16], cloud: [0, 16]};
+export const BORNES_PLACES = {locaux: [1, 16], cloud: [0, 16], serveur: [0, 4]};
 
 // La demande « parallelisme » ; null si une valeur sort des bornes ou n'est pas un entier.
-export function demandeParallelisme(locaux, cloud) {
+// `plus` (facultatif) : `serveur` (places serveur, 0 à 4), `ordre` (ordre des lieux du projet) et `parMetier` (ordre par métier) :
+// ils ne partent que s'ils sont donnés, et une valeur hors bornes fait tout refuser.
+export function demandeParallelisme(locaux, cloud, plus = {}) {
   const n = (v) => (typeof v === "string" && /^\s*\d+\s*$/.test(v) ? Number(v) : v);
   const l = n(locaux), c = n(cloud);
   const dans = (v, [bas, haut]) => Number.isInteger(v) && v >= bas && v <= haut;
   if (!dans(l, BORNES_PLACES.locaux) || !dans(c, BORNES_PLACES.cloud)) return null;
-  return {type: "parallelisme", agents_locaux_max: l, agents_cloud_max: c};
+  const d = {type: "parallelisme", agents_locaux_max: l, agents_cloud_max: c};
+  if (plus.serveur !== undefined) {
+    const s = n(plus.serveur);
+    if (!dans(s, BORNES_PLACES.serveur)) return null;
+    d.agents_serveur_max = s;
+  }
+  if (plus.ordre !== undefined) d.ordre_lieux = plus.ordre;
+  if (plus.parMetier !== undefined) d.ordre_lieux_par_metier = plus.parMetier;
+  return d;
+}
+
+// L'ordre des lieux : les valeurs des trois rangs (vides ignorées). Refuse un lieu inconnu ou répété ; `facultatif` (un métier) :
+// aucun lieu veut dire « comme le projet » (`ordre: null`). Rend {ordre} ou {erreur}.
+export const LIEUX_ORDRE = ["local", "serveur", "cloud"];
+export const LIBELLES_LIEUX_ORDRE = {local: "poste (local)", serveur: "serveur", cloud: "cloud"};
+export function ordreDeLieux(valeurs, facultatif = false) {
+  if (!Array.isArray(valeurs)) return {erreur: "L'ordre des lieux est illisible."};
+  const lieux = valeurs.filter((v) => v !== "");
+  if (!lieux.every((v) => LIEUX_ORDRE.includes(v))) return {erreur: "Lieu inconnu : poste, serveur ou cloud."};
+  if (new Set(lieux).size !== lieux.length) return {erreur: "Un lieu ne peut figurer qu'une fois dans l'ordre."};
+  if (!lieux.length) return facultatif ? {ordre: null} : {erreur: "Choisissez au moins un lieu."};
+  return {ordre: lieux};
+}
+
+// Le plafond des agents actifs sur l'abonnement, tous projets et tous lieux (réglage du bureau : 1 à 32, vide = aucun plafond).
+export async function enregistrerPlafondAbonnement(valeur, fetchFn = fetch) {
+  const texte = String(valeur ?? "").trim();
+  const v = texte === "" ? null : /^\d+$/.test(texte) ? Number(texte) : NaN;
+  if (v !== null && !(Number.isInteger(v) && v >= 1 && v <= 32)) return {ok: false, message: "Le plafond est un nombre entier de 1 à 32 (vide : aucun)."};
+  try {
+    const r = await fetchFn(urlProjet("/api/reglages"), {method: "POST", headers: {"X-Bureau": "1", "Content-Type": "application/json"},
+      body: JSON.stringify({agents_abonnement_max: v})});
+    if (r.ok) return {ok: true, message: v === null ? "Plus de plafond d'abonnement." : `Plafond d'abonnement : ${v} agents actifs au plus.`};
+    let erreur = "";
+    try { erreur = (await r.json())?.erreur || ""; } catch { /* corps illisible */ }
+    return {ok: false, message: `Refusé : ${erreur || "le serveur a répondu " + r.status}`};
+  } catch {
+    return {ok: false, message: "Serveur du bureau injoignable."};
+  }
 }
 
 // Ce que dit la partie « Parallélisme du projet » : les réglages, les agents recrutés de chaque lieu, et ce qui retient.
 export function resumeParallelisme(etat) {
   const agents = (etat?.agents || []).filter((a) => !a.fixe && !a.chef && a.id !== "chef" && a.id !== "directeur");
-  const recrutes = {locaux: agents.filter((a) => a.lieu !== "cloud").length, cloud: agents.filter((a) => a.lieu === "cloud").length};
+  // Un agent du serveur (tranche B) se compte à part : il ne tient pas une place du poste.
+  const recrutes = {locaux: agents.filter((a) => a.lieu !== "cloud" && a.lieu !== "serveur").length,
+                    serveur: agents.filter((a) => a.lieu === "serveur").length,
+                    cloud: agents.filter((a) => a.lieu === "cloud").length};
   const locaux = Number.isInteger(etat?.agents_locaux_max) ? etat.agents_locaux_max : 2;
   const cloud = Number.isInteger(etat?.agents_cloud_max) ? etat.agents_cloud_max : 0;
   // Un projet d'agents polyvalents : l'équipe est exactement les places, rien ne se recrute par rôle.
@@ -328,12 +371,90 @@ export function resumeParallelisme(etat) {
   return {locaux, cloud, recrutes, notes, polyvalent, attente: typeof attente === "string" && attente.trim() ? attente : null};
 }
 
+// Trois rangs de lieux (le premier est tenté d'abord) pour le projet, puis une ligne par métier (« comme le projet » : vide).
+// Les noms de métier passent par textContent ; `lire()` rend {ordre, parMetier} ou {erreur} (un lieu répété est refusé ici
+// comme sur le serveur).
+function partieOrdreDesLieux(ctx) {
+  const etat = ctx.etat || {};
+  const bloc = el("div", "ordre-lieux");
+  bloc.append(el("div", "carte-sous-titre", "Ordre des lieux"));
+  bloc.append(el("p", "note", "Un agent part au premier lieu qui a une place libre ; un lieu que vous retirez de la liste n'est jamais utilisé."));
+  const rangs = (nom, actuel, facultatif) => {
+    const ligne = el("div", "ordre-lieux-ligne");
+    const menus = [0, 1, 2].map((i) => {
+      const m = choix([["", facultatif ? "comme le projet" : "—"], ...LIEUX_ORDRE.map((k) => [k, LIBELLES_LIEUX_ORDRE[k]])], actuel[i] || "");
+      m.setAttribute("data-ordre", nom);
+      m.setAttribute("data-rang", String(i + 1));
+      m.disabled = !etat.agir;
+      ligne.append(m);
+      return m;
+    });
+    return {ligne, menus};
+  };
+  const projet = rangs("projet", Array.isArray(etat.ordre_lieux) ? etat.ordre_lieux : LIEUX_ORDRE, false);
+  const l0 = el("label", "parallelisme-champ");
+  l0.append(el("span", "", "Ordre du projet"), projet.ligne);
+  bloc.append(l0);
+  const parMetier = etat.ordre_lieux_par_metier && typeof etat.ordre_lieux_par_metier === "object" ? etat.ordre_lieux_par_metier : {};
+  const roles = [...new Set([...(etat.metiers || []).map((m) => m?.role), ...(etat.recrutement?.roles || []).map((m) => m?.role), ...Object.keys(parMetier)])]
+    .filter((x) => typeof x === "string" && x.trim());
+  const metiers = roles.map((role) => {
+    const g = rangs(`metier:${role}`, Array.isArray(parMetier[role]) ? parMetier[role] : [], true);
+    const lm = el("label", "parallelisme-champ");
+    lm.append(el("span", "", `Ordre pour le métier « ${role} »`), g.ligne);
+    bloc.append(lm);
+    return {role, menus: g.menus};
+  });
+  const lire = () => {
+    const p = ordreDeLieux(projet.menus.map((m) => m.value));
+    if (p.erreur) return {erreur: p.erreur};
+    const resultat = {};
+    for (const m of metiers) {
+      const o = ordreDeLieux(m.menus.map((x) => x.value), true);
+      if (o.erreur) return {erreur: `Métier « ${m.role} » : ${o.erreur}`};
+      if (o.ordre) resultat[m.role] = o.ordre;
+    }
+    return {ordre: p.ordre, parMetier: resultat};
+  };
+  return {bloc, lire};
+}
+
+// Le plafond de l'abonnement : seulement quand le bureau a un fichier à lui (l'état porte alors `agents_abonnement_max`, nul si aucun).
+function partiePlafond(ctx) {
+  if (ctx.etat?.agents_abonnement_max === undefined) return null;
+  const bloc = el("div", "plafond-abonnement");
+  const label = el("label", "parallelisme-champ");
+  const input = document.createElement("input");
+  input.type = "number";
+  input.min = "1";
+  input.max = "32";
+  input.step = "1";
+  input.value = Number.isInteger(ctx.etat.agents_abonnement_max) ? String(ctx.etat.agents_abonnement_max) : "";
+  input.setAttribute("data-champ", "agents_abonnement_max");
+  input.disabled = !ctx.etat?.agir;
+  label.append(el("span", "", "Plafond d'agents actifs sur l'abonnement, tous projets (1 à 32 ; vide : aucun)"), input);
+  bloc.append(label);
+  if (ctx.etat?.agir) {
+    const message = el("p", "saisie-erreur", "");
+    const b = el("button", "bouton", "Enregistrer le plafond");
+    b.type = "button";
+    b.addEventListener("click", async () => {
+      b.disabled = true;
+      const r = await enregistrerPlafondAbonnement(input.value);
+      message.textContent = r.message;
+      b.disabled = false;
+    });
+    bloc.append(message, b);
+  }
+  return bloc;
+}
+
 // La partie « Parallélisme du projet », en bas de l'onglet : deux nombres et « Enregistrer » (si l'on peut agir).
 export function partieParallelisme(ctx) {
   const r = resumeParallelisme(ctx.etat);
   const bloc = el("div", "parallelisme");
   bloc.append(el("div", "carte-sous-titre", "Parallélisme du projet"));
-  bloc.append(el("p", "note", `${r.polyvalent ? "Agents" : "Agents recrutés"} : ${r.recrutes.locaux} locaux, ${r.recrutes.cloud} cloud.`));
+  bloc.append(el("p", "note", `${r.polyvalent ? "Agents" : "Agents recrutés"} : ${r.recrutes.locaux} locaux, ${r.recrutes.serveur} serveur, ${r.recrutes.cloud} cloud.`));
   const champ = (libelle, valeur, [bas, haut]) => {
     const label = el("label", "parallelisme-champ");
     const input = document.createElement("input");
@@ -348,7 +469,13 @@ export function partieParallelisme(ctx) {
   };
   const l = champ("Agents locaux en même temps", r.locaux, BORNES_PLACES.locaux);
   const c = champ("Agents cloud en même temps", r.cloud, BORNES_PLACES.cloud);
-  bloc.append(l.label, c.label);
+  const s = champ("Agents sur le serveur en même temps", Number.isInteger(ctx.etat?.agents_serveur_max) ? ctx.etat.agents_serveur_max : 0, BORNES_PLACES.serveur);
+  s.input.setAttribute("data-champ", "agents_serveur_max");
+  bloc.append(l.label, c.label, s.label);
+  const ordres = partieOrdreDesLieux(ctx);
+  bloc.append(ordres.bloc);
+  const plafond = partiePlafond(ctx);
+  if (plafond) bloc.append(plafond);
   if (r.attente) bloc.append(el("p", "avertissement", r.attente));
   for (const n of r.notes) bloc.append(el("p", "note", n));
   if (ctx.etat?.agir && ctx.barre?.demander) {
@@ -356,8 +483,10 @@ export function partieParallelisme(ctx) {
     const b = el("button", "bouton", "Enregistrer");
     b.type = "button";
     b.addEventListener("click", async () => {
-      const d = demandeParallelisme(l.input.value, c.input.value);
-      if (!d) { erreur.textContent = "Agents locaux : de 1 à 16 ; agents cloud : de 0 à 16 (nombres entiers)."; return; }
+      const lu = ordres.lire();
+      if (lu.erreur) { erreur.textContent = lu.erreur; return; }
+      const d = demandeParallelisme(l.input.value, c.input.value, {serveur: s.input.value, ordre: lu.ordre, parMetier: lu.parMetier});
+      if (!d) { erreur.textContent = "Agents locaux : de 1 à 16 ; agents cloud : de 0 à 16 ; agents serveur : de 0 à 4 (nombres entiers)."; return; }
       erreur.textContent = "";
       b.disabled = true;
       const res = await ctx.barre.demander(d, b);

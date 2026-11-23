@@ -87,6 +87,9 @@ def _dans(valeur, ensemble):
     return isinstance(valeur, str) and valeur in ensemble
 
 
+LIEUX_DE_TITULAIRE = ("local", "serveur", "cloud")     # le lieu d'un agent (tranche B : les agents du serveur)
+
+
 def valider(r):
     """Messages d'erreur en français ; liste vide si le relevé est valide."""
     if not _est_dict(r):
@@ -112,8 +115,8 @@ def valider(r):
     chefs = 0
     for t in titulaires:
         cle = t.get("cle")
-        if t.get("lieu") not in ("local", "cloud"):
-            erreurs.append(f"Titulaire « {cle} » : « lieu » doit valoir « local » ou « cloud ».")
+        if t.get("lieu") not in LIEUX_DE_TITULAIRE:
+            erreurs.append(f"Titulaire « {cle} » : « lieu » doit valoir « local », « serveur » ou « cloud ».")
         if t.get("chef") is True:
             chefs += 1
         elif t.get("polyvalent") is True:      # un agent polyvalent : le service est celui de sa tâche (ou nul)
@@ -897,6 +900,20 @@ def _verifier_v4(r, titulaires, taches, cles, erreurs):
     m = r.get("agents_cloud_max")
     if m is not None and (isinstance(m, bool) or not isinstance(m, int) or m < 0):
         erreurs.append("« agents_cloud_max » doit être un entier positif ou nul.")
+    m = r.get("agents_serveur_max")
+    if m is not None and (isinstance(m, bool) or not isinstance(m, int) or not 0 <= m <= 4):
+        erreurs.append("« agents_serveur_max » doit être un entier de 0 à 4 ou nul.")
+    ordre_ok = lambda o: (isinstance(o, list) and o and all(isinstance(x, str) and x in ("local", "serveur", "cloud") for x in o)   # noqa: E731
+                          and len(set(o)) == len(o))
+    if r.get("ordre_lieux") is not None and not ordre_ok(r["ordre_lieux"]):
+        erreurs.append("« ordre_lieux » doit lister, sans doublon, au moins un lieu parmi local, serveur, cloud.")
+    par = r.get("ordre_lieux_par_metier")
+    # mêmes règles que la factory (`factory._lire`) : 50 métiers au plus, deux clés qui n'en font qu'une une fois
+    # nettoyées (« dev » et « dev ») refusées
+    if par is not None and (not isinstance(par, dict) or len(par) > 50
+                            or not all(isinstance(k, str) and k.strip() and ordre_ok(o) for k, o in par.items())
+                            or len({k.strip() for k in par}) != len(par)):
+        erreurs.append("« ordre_lieux_par_metier » doit associer à un rôle un ordre de lieux (local, serveur, cloud).")
     if r.get("recrutement") is not None:
         _verifier_recrutement(r["recrutement"], erreurs)
     ids_decisions = set()
@@ -1195,7 +1212,7 @@ def _verifier_regles(regles, q, erreurs):
 
 
 CHAMPS_V4_RACINE = ("genre", "livrable", "fonctionnalites", "decisions_projet", "agents_locaux_max", "agents_cloud_max",
-                    "recrutement")
+                    "recrutement", "agents_serveur_max", "ordre_lieux", "ordre_lieux_par_metier")
 LIEUX = ("local", "cloud")
 
 

@@ -2384,7 +2384,9 @@ def _sur_parallelisme(projet, demande, etat):
     """Les places du projet, réglées depuis l'onglet Facturation : écrites par l'outil (qui les vérifie de nouveau),
     puis ce qui peut partir part."""
     r = lancer(projet, "parallelisme", {"agents_locaux_max": demande.get("agents_locaux_max"),
-                                        "agents_cloud_max": demande.get("agents_cloud_max")})
+                                        "agents_cloud_max": demande.get("agents_cloud_max"),
+                                        **{c: demande[c] for c in ("agents_serveur_max", "ordre_lieux", "ordre_lieux_par_metier")
+                                           if c in demande}})
     locaux, nuage = r["agents_locaux_max"], r["agents_cloud_max"]
     equipe = []
     if r.get("crees"):
@@ -2397,6 +2399,9 @@ def _sur_parallelisme(projet, demande, etat):
     _terminer(projet, {"demande": demande["id"]},
               f"C'est noté : au plus {locaux} {'agents locaux' if locaux > 1 else 'agent local'} et {nuage} "
               f"{'agents cloud' if nuage > 1 else 'agent cloud'} travaillent en même temps sur ce projet."
+              + (f" Places sur le serveur : {r['agents_serveur_max']}." if "agents_serveur_max" in r else "")
+              + (f" Ordre des lieux : {', '.join(r['ordre_lieux'])}." if "ordre_lieux" in r else "")
+              + (" L'ordre des lieux de certains métiers est réglé à part." if r.get("ordre_lieux_par_metier") else "")
               + (f" Équipe : {', '.join(equipe)}." if equipe else ""))
     return _demarrer_en_attente(projet, etat, None)
 
@@ -3041,18 +3046,24 @@ def _raison_prerequis(ctx, t):
 
 
 def _ligne_du_lieu(ctx, lieu, ensuite=False):
-    """« elle exige le poste local ; 1 place locale, occupée par Léa » et le détail de chaque occupant."""
-    if lieu not in ("local", "cloud"):
+    """« elle exige le poste local ; 1 place locale, occupée par Léa » et le détail de chaque occupant. `serveur` (tranche
+    B) : les places serveur du projet (`agents_serveur_max`), ses agents serveur et, s'il est hors ligne, pourquoi."""
+    if lieu not in ("local", "cloud", "serveur"):
         return []
     occupants = ctx.occupants(lieu)
     if lieu == "local":
         n, quoi, mot = ctx.fac["agents_locaux_max"], "elle exige le poste local", "locale"
+    elif lieu == "serveur":
+        n, quoi, mot = ctx.fac.get("agents_serveur_max") or 0, "elle peut se faire sur le serveur", "serveur"
     else:
         n, quoi, mot = ctx.cloud_max, "elle se fait dans le cloud", "cloud"
     s = "s" if n > 1 else ""
+    accord = s if mot == "locale" else ""
     noms = ", ".join(dict.fromkeys(ctx.prenoms.get(o["agent"], o["agent"]) for o in occupants))
-    if occupants and len(occupants) >= n:
-        ligne = f"{quoi} ; {n} place{s} {mot}{s if mot != 'cloud' else ''}, occupée{s} par {noms}"
+    if lieu == "serveur" and n and outil.serveur_hors_ligne():
+        ligne = f"{quoi} ; le serveur est hors ligne (aucune sonde récente ne le dit prêt pour les agents)"
+    elif occupants and len(occupants) >= n:
+        ligne = f"{quoi} ; {n} place{s} {mot}{accord}, occupée{s} par {noms}"
     elif n == 0:
         ligne = f"{quoi} ; aucune place {mot} dans ce projet"
     else:
@@ -3083,6 +3094,8 @@ def _raison_agent(ctx, t, lieu):
         detail = [f"{ctx.places['total']} place{s} au total, toutes prises"]
     else:
         detail = [f"aucun agent libre ne peut la prendre ({t.get('role') or 'sans rôle'})"]
+    if ctx.fac.get("agents_serveur_max"):       # un projet à places serveur : ce qui retient le serveur aussi
+        detail += _ligne_du_lieu(ctx, "serveur", ensuite=True)
     detail += [f"{ctx.qui(o)} : « {o['titre']} »" for o in occupants[:4]]
     return "aucun agent libre", "aucun agent libre", detail, "quand un agent se libérera"
 
@@ -4275,11 +4288,51 @@ def _service_en_panne(projet, etat, execution, depart, maintenant=None):
 ARRET_DEPUIS_LE_BUREAU = "Tâche arrêtée : l'agent a été arrêté depuis le bureau (Optimiser la charge)."
 
 
-def arret_depuis_le_bureau(projet, etat, taches):
+def arret_depuis_le_bureau(projet, etat, taches, branche=None):
     """L'utilisateur a arrêté l'agent depuis le bureau (« Optimiser la charge », `detache.ArretDemande`) : la tâche
-    s'arrête là, sans nouvel essai ni analyse de blocage ; elle se relance depuis le bureau comme toute tâche bloquée."""
-    _bloquer_taches(projet, taches, ARRET_DEPUIS_LE_BUREAU)
-    _terminer(projet, {"demande": _m(etat, "liees").pop(taches[0], None)}, ARRET_DEPUIS_LE_BUREAU)
+    s'arrête là, sans nouvel essai ni analyse de blocage ; elle se relance depuis le bureau comme toute tâche bloquée.
+    `branche` : un agent serveur dont les commits ont été rapatriés (gardés sur cette branche, non fusionnés)."""
+    raison = ARRET_DEPUIS_LE_BUREAU + (f" Son travail commité est gardé sur la branche {branche} (non fusionnée)."
+                                       if branche else "")
+    _bloquer_taches(projet, taches, raison)
+    _terminer(projet, {"demande": _m(etat, "liees").pop(taches[0], None)}, raison)
+    return []
+
+
+ECHEANCE_SERVEUR = "Tâche arrêtée : l'agent serveur a atteint sa durée maximale"
+
+
+def echeance_serveur(projet, etat, taches, branche=None):
+    """L'agent serveur a atteint sa durée maximale (`agents.Execution.echeance`) : son travail commité a été rapatrié
+    (branche `agent/<tâche>`, jamais fusionnée d'elle-même). La tâche s'arrête là, sans nouvel essai ni analyse : la
+    discussion le dit ; elle se relance depuis le bureau comme toute tâche bloquée."""
+    garde = (f" ; son travail commité est gardé sur la branche {branche} (non fusionnée)" if branche
+             else " ; aucun commit n'a été rapatrié")
+    raison = f"{ECHEANCE_SERVEUR}{garde}. Relancez la tâche ou découpez-la."
+    _bloquer_taches(projet, taches, raison)
+    t = _tache(projet, taches[0])
+    if t.get("fonctionnalite"):
+        _dire(projet, t["fonctionnalite"], f"La tâche « {t['titre']} » est bloquée : {raison}")
+    _terminer(projet, {"demande": _m(etat, "liees").pop(taches[0], None)}, raison)
+    return []
+
+
+LIMITE_SERVEUR = "Tâche arrêtée : l'agent serveur a été arrêté par une limite du serveur"
+
+
+def limite_serveur(projet, etat, taches, erreur, branche=None):
+    """L'agent serveur a été arrêté par une limite AUTRE que sa durée (`agents.Execution.limite` : sortie, disque, travail
+    trop gros) : un nouvel essai la retrouverait. La tâche s'arrête là, sans nouvel essai ni analyse, avec la raison du
+    serveur ; elle se relance depuis le bureau comme toute tâche bloquée."""
+    detail = str(erreur or "")
+    detail = detail.split(agents.executeur_serveur.LIMITE, 1)[-1].lstrip(" :").strip()   # la raison du veilleur seule
+    garde = (f" Son travail commité est gardé sur la branche {branche} (non fusionnée)." if branche else "")
+    raison = f"{LIMITE_SERVEUR}" + (f" ({detail[:300]})" if detail else "") + f".{garde} Relancez la tâche ou découpez-la."
+    _bloquer_taches(projet, taches, raison)
+    t = _tache(projet, taches[0])
+    if t.get("fonctionnalite"):
+        _dire(projet, t["fonctionnalite"], f"La tâche « {t['titre']} » est bloquée : {raison}")
+    _terminer(projet, {"demande": _m(etat, "liees").pop(taches[0], None)}, raison)
     return []
 
 
@@ -4291,7 +4344,11 @@ def _agent_en_echec(projet, etat, execution, depart):
     etat.pop("panne", None)
     tid = depart["taches"][0]
     if getattr(execution, "arrete", False):
-        return arret_depuis_le_bureau(projet, etat, depart["taches"])
+        return arret_depuis_le_bureau(projet, etat, depart["taches"], getattr(execution, "branche", None))
+    if getattr(execution, "echeance", False):
+        return echeance_serveur(projet, etat, depart["taches"], getattr(execution, "branche", None))
+    if getattr(execution, "limite", False):
+        return limite_serveur(projet, etat, depart["taches"], execution.erreur, getattr(execution, "branche", None))
     relancees = _m(etat, "relancees", set)
     if tid not in relancees:
         relancees.add(tid)

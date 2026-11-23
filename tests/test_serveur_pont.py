@@ -1013,5 +1013,44 @@ class TestFilm(unittest.TestCase):
             self.assertEqual([x for x in b.appels if "screenrecord" in x], [])
 
 
+@unittest.skipUnless(shutil.which("bash"), "bash absent")
+class TestConcordancePontHote(unittest.TestCase):
+    """Décision R2 : les MÊMES exemples (valides et hostiles, filmer et finfilm compris) passent par pont.sh,
+    serveur_tache.valider_verbe et le pont hôte (sa table, et une vraie requête qui ne doit rien exécuter si elle est refusée)."""
+
+    def test_motifs_pont_sh_python_et_pont_hote_s_accordent(self):
+        from tests.test_serveur_pont_hote import Banc as BancHote, PH, st
+        from tests.test_serveur_tache import ACCEPTES, REFUSES
+        self.assertEqual({v: tuple(m) for v, m in PH.VERBES.items()}, {v: tuple(m) for v, m in st.VERBES.items()})
+        self.assertEqual(dict(PH.FACULTATIFS), dict(st.FACULTATIFS))
+        self.assertEqual(PH.MOTIF_NOM_RESERVE, st.MOTIF_NOM_RESERVE)
+        for nom in ("filmer", "finfilm"):
+            self.assertIn(nom, PH.VERBES)
+        with Banc(PONT_PAQUET="com.exemple.app") as banc, BancHote() as hote:
+            for v, args in ACCEPTES + REFUSES:
+                with self.subTest(verbe=v, args=args):
+                    try:
+                        st.valider_verbe(v, args)
+                        python = True
+                    except ValueError:
+                        python = False
+                    try:
+                        PH.valider_verbe(v, args)
+                        cote_hote = True
+                    except PH.Refus:
+                        cote_hote = False
+                    self.assertEqual(python, cote_hote, (v, args))
+                    if not (v == "demarrer" and cote_hote):  # sans émulation : un verbe valide rend 4, un refusé 2
+                        code_hote, d = hote.appel(v, *args)
+                        self.assertEqual(cote_hote, code_hote != 2, (v, args, d))
+                    if (v == "lancer" and not args) or (v == "finfilm" and not args):
+                        continue                                # exige un paquet installé / un film en cours : couverts ailleurs
+                    code, _d = banc.lancer(v, *args)
+                    self.assertEqual(python, code != 2, (v, args, code, _d))
+                    if v == "filmer" and code == 0:
+                        self.assertEqual(banc.lancer("finfilm")[0], 0)
+            self.assertEqual(hote.faux.appels, [])
+
+
 if __name__ == "__main__":
     unittest.main()

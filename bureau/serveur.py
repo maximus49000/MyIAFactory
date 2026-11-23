@@ -1009,7 +1009,25 @@ class Bureau(ThreadingHTTPServer):
         """L'état servi à la page : celui du projet, plus la pause globale du bureau (une installation d'outil, dans
         n'importe quel projet, retient tous les départs) : `pause_installation` vaut `{texte, projet, outils}` ou `None`."""
         e = projet.etat()
-        return {**e, "pause_installation": attente.pause_installation(self.fichier_bureau)}
+        plus = {"pause_installation": attente.pause_installation(self.fichier_bureau)}
+        if self.fichier_bureau is not None:     # le plafond de l'abonnement (1 à 32 ou None) se règle dans ce fichier
+            try:
+                plus["agents_abonnement_max"] = reglages.lire_bureau(self.fichier_bureau)["agents_abonnement_max"]
+            except reglages.ReglagesInvalides:
+                plus["agents_abonnement_max"] = None
+        return {**e, **plus}
+
+    def projets_et_dossiers(self):
+        """`[(nom du dossier du projet, dossier de sa factory)]` : le nom que porte une tâche d'agent serveur est celui que
+        le moteur lui donne, le NOM DU DOSSIER du projet (`regles.Projet.nom`), jamais le nom affiché du relevé ; le dossier
+        de la factory est celui où le moteur lit la marque d'arrêt. Lu des chemins seuls (aucun relevé, aucun cache)."""
+        rendu = []
+        for p in list(self.projets.values()):
+            factory = p.chemin_reglages.parent
+            dossier = factory.parent if factory.name == ".factory" else factory
+            if dossier.name:
+                rendu.append((dossier.name, factory))
+        return rendu
 
     def projet(self, id_=None):
         """Le projet d'id donné ; `None` → le premier ; inconnu → `None`."""
@@ -2020,7 +2038,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(400, {"erreur": "Demande illisible."})
             if not isinstance(corps, dict):
                 return self._json(400, {"erreur": "Demande illisible."})
-            return self._json(*modserveurs.poster(self.server.travaux_serveurs, cible_serveur, corps))
+            return self._json(*modserveurs.poster(self.server.travaux_serveurs, cible_serveur, corps,
+                                                  projets=self.server.projets_et_dossiers))
         if chemin == "/api/processus/arreter":   # arrêter un programme : seulement sur le clic de l'utilisateur
             if (self.headers.get("X-Bureau") != "1"
                     or not self.headers.get("Content-Type", "").lower().startswith("application/json")):
@@ -2106,6 +2125,11 @@ class Handler(BaseHTTPRequestHandler):
                 nouveau = reglages.fixer_une_session_moyenne(projet.chemin_reglages, corps["une_session_moyenne"])
             elif isinstance(corps, dict) and "cloud_dossier_approuve" in corps and "charge_max" not in corps:
                 nouveau = reglages.fixer_cloud_dossier_approuve(projet.chemin_reglages, corps["cloud_dossier_approuve"])
+            elif isinstance(corps, dict) and "agents_abonnement_max" in corps and "charge_max" not in corps:
+                if self.server.fichier_bureau is None:
+                    raise ValueError("Le plafond de l'abonnement se règle dans le fichier du bureau : ce bureau n'en a pas.")
+                nouveau = {"agents_abonnement_max": reglages.fixer_agents_abonnement_max(
+                    self.server.fichier_bureau, corps["agents_abonnement_max"])}
             elif isinstance(corps, dict) and "deport" in corps and "charge_max" not in corps:
                 demande = corps["deport"]
                 if not isinstance(demande, dict):

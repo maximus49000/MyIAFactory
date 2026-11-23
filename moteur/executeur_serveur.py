@@ -136,6 +136,20 @@ def _projet_flutter(projet):
         return False
 
 
+def _dossier_flutter(projet):
+    """Le sous-dossier Flutter du projet du poste (« . » pour la racine), s'il passe le motif strict de la demande
+    (`serveur_agent.MOTIF_DOSSIER_FLUTTER`) ; None sinon (projet non Flutter, nom hors motif, lecture impossible)."""
+    if _OUTILS not in sys.path:
+        sys.path.append(_OUTILS)
+    try:
+        import projet_flutter
+        import serveur_agent
+        d = projet_flutter.dossier_flutter(projet)
+        return d if isinstance(d, str) and serveur_agent.MOTIF_DOSSIER_FLUTTER.fullmatch(d) and d != ".." else None
+    except Exception:
+        return None
+
+
 def argv_distant(argv):
     """`(argv pour le serveur, chemin local de la consigne)` : `argv[0]` devient `claude`, le fichier de consigne
     `/entree/consigne.md` ; chaque option passe par `DRAPEAUX` (valeur entière revérifiée). `ValueError` pour toute option
@@ -424,6 +438,8 @@ class ExecuteurServeur:
             demande["modele"] = _valeur(distant, "--model")
         if "flutter" not in demande:          # projet Flutter (pubspec.yaml vu sur le poste) : un booléen, rien d'autre
             demande["flutter"] = _projet_flutter(self.projet)
+            if demande["flutter"]:            # les commandes uniques s'y placent d'elles-mêmes (/opt/outils/dossier-flutter)
+                demande["flutter_dossier"] = _dossier_flutter(self.projet)
         apk = self.apk
         if isinstance(apk, (str, Path)):      # le moteur donne un CHEMIN (`apk_pour_le_pilote`) ; le serveur reçoit les OCTETS
             try:

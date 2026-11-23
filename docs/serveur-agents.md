@@ -382,6 +382,13 @@ conteneur des agents des projets Flutter.
   test`), chaque morceau doit être couvert : préférer `flutter pub get --directory android_app`, et pour `flutter test`
   un `cd android_app` seul puis `flutter test`. La consigne de départ d'un agent serveur d'un projet Flutter le dit
   (`depart.CONSIGNE_FLUTTER_SERVEUR` : commandes simples, ni `&&`, `;`, `|`, `timeout` ni variable en préfixe).
+- **Commandes uniques** (`serveur_ovh/agent-outils/outil-flutter.sh`, déposé par le poste avec l'enveloppe, monté en lecture
+  seule sous `/opt/outils`, en tête du `PATH` du conteneur, image inchangée) : `analyser-flutter`, `tester-flutter`,
+  `construire-apk [release|debug]` (défaut `release`) ; elles se placent dans le dossier Flutter du projet (transmis par le
+  poste, `"flutter_dossier"`, motif strict), lancent `flutter pub get` si les paquets ne sont pas à jour puis l'étape
+  (sortie bornée aux 200 000 derniers octets) ; tout autre argument : code 2 sans rien lancer. Chacune s'ouvre à la fiche
+  par sa règle (`Bash(analyser-flutter:*)`, `Bash(tester-flutter:*)`, `Bash(construire-apk:*)`, jamais `Bash` seul), par la
+  décision `outil_agent` ou la commande `fiche` `ouvrir_outil`.
 - **Construire l'APK au serveur : JDK 17, SDK Android et Flutter en copie sur écriture par tâche.** L'image `agent`
   porte le JDK 17 de la distribution (`openjdk-17-jdk-headless`) : elle change, la capacité `agent` redevient
   « À mettre à jour » jusqu'à la réinstallation d'`agent-serveur`. `flutter build apk` est appelé par `flutter` (règle

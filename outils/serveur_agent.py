@@ -34,13 +34,16 @@ LIMITES_AGENT = {"duree_s": 2400, "tours": 200, "memoire_mo": 4096, "cpus": 2, "
 MODES_AGENT = ("seul", "pilote")
 PLACES_DEFAUT = 2
 CLES_DEMANDE_AGENT = frozenset({"id", "projet", "tache", "mode", "modele", "branche", "base", "limites", "reprend", "places",
-                                "genre", "flutter"})
+                                "genre", "flutter", "flutter_dossier"})
 # `tache` : l'agent de la tâche ; `reponse` : sa réponse aux questions de l'utilisateur (même tâche, jamais confondues)
 GENRES_AGENT = ("tache", "reponse")
 # Mêmes motifs que serveur_ovh/images/agent/entree-agent.py (qui les revérifie sur le serveur).
 MOTIF_TACHE = re.compile(r"[A-Za-z0-9_.-]{1,60}", re.ASCII)
 MOTIF_BRANCHE = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_./-]{0,199}", re.ASCII)
 MOTIF_BASE = re.compile(r"[0-9a-f]{40}", re.ASCII)
+# le dossier Flutter du projet (`projet_flutter.dossier_flutter`) : « . » ou un sous-dossier direct, jamais « .. » (relu par
+# lancer_agent.sh et par les commandes uniques de l'agent avec le même motif)
+MOTIF_DOSSIER_FLUTTER = re.compile(r"\.|[A-Za-z0-9_][A-Za-z0-9_.-]{0,99}", re.ASCII)
 MOTIF_MODELE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._\[\]-]{0,59}", re.ASCII)
 ENTETE_MAX = 65536                 # en-tête d'un paquet Git : lu sur 64 Ko au plus
 FIN_MAX_OCTETS = 65536
@@ -62,6 +65,7 @@ class DemandeAgent:
     genre: str = "tache"
     # projet Flutter (vu sur le poste, `projet_flutter`) : le serveur doit avoir flutter-sdk, monté en lecture seule
     flutter: bool = False
+    flutter_dossier: object = None     # le sous-dossier Flutter du projet (« . » pour la racine), ou None
 
 
 class RefusRecuperation(ValueError):
@@ -249,6 +253,11 @@ def valider_demande_agent(brut, git=_git):
     flutter = brut.get("flutter", False)
     if flutter is not True and flutter is not False:
         raise ValueError("« flutter » vaut true ou false.")
+    flutter_dossier = brut.get("flutter_dossier")
+    if flutter_dossier is not None and (not flutter or not isinstance(flutter_dossier, str)
+                                        or not MOTIF_DOSSIER_FLUTTER.fullmatch(flutter_dossier) or flutter_dossier == ".."):
+        raise ValueError("Dossier Flutter invalide : « . » ou un nom de sous-dossier direct (lettres, chiffres, _ . -), "
+                         "pour un projet Flutter seulement.")
     limites_brutes = brut.get("limites")
     if limites_brutes is not None and not isinstance(limites_brutes, dict):
         raise ValueError("Les limites doivent être un dictionnaire.")
@@ -259,7 +268,7 @@ def valider_demande_agent(brut, git=_git):
         limites[cle] = _entier_limite(cle, v)
     return DemandeAgent(id=ident, projet=projet, tache=tache, mode=mode, modele=modele, branche=branche, base=base,
                         limites=MappingProxyType(limites), reprend=reprend, places=places, genre=genre,
-                        flutter=flutter)
+                        flutter=flutter, flutter_dossier=flutter_dossier)
 
 
 def capacites_requises(d):
@@ -276,7 +285,8 @@ def _demande_dict(d):
     `limites.duree_s` est la valeur même passée à l'enveloppe (une seule source) ; `flutter` (true ou false, une seule
     fois) est relu par l'enveloppe par motif strict."""
     return {"id": d.id, "type": "agent", "projet": d.projet, "tache": d.tache, "mode": d.mode, "modele": d.modele,
-            "branche": d.branche, "base": d.base, "limites": dict(d.limites), "reprend": d.reprend, "flutter": d.flutter}
+            "branche": d.branche, "base": d.base, "limites": dict(d.limites), "reprend": d.reprend, "flutter": d.flutter,
+            "flutter_dossier": d.flutter_dossier}
 
 
 def _demande_sure(demande):
@@ -284,7 +294,7 @@ def _demande_sure(demande):
         brut = {"id": demande.id, "projet": demande.projet, "tache": demande.tache, "mode": demande.mode,
                 "modele": demande.modele, "branche": demande.branche, "base": demande.base,
                 "limites": dict(demande.limites), "reprend": demande.reprend, "places": demande.places,
-                "genre": demande.genre, "flutter": demande.flutter}
+                "genre": demande.genre, "flutter": demande.flutter, "flutter_dossier": demande.flutter_dossier}
     elif isinstance(demande, dict):
         brut = demande
     else:
@@ -461,6 +471,7 @@ def _verifier_et_recuperer_paquet(projet, paquet, tache, base, git):
 
 AGENT_SCRIPT = "taches/lancer_agent.sh"
 AGENT_DISTANT = f"{DOSSIER_DISTANT}/{AGENT_SCRIPT}"
+OUTIL_FLUTTER = "agent-outils/outil-flutter.sh"     # les commandes uniques d'un agent Flutter (montées sur /opt/outils)
 PONT_HOTE = "taches/pont_hote.py"          # mode pilote : le pont hôte, et l'enveloppe d'émulation qu'il lance
 EMULATION_SCRIPT = st.ENVELOPPE            # taches/lancer_emulation.sh
 FICHIERS_ENTREE = ("projet.bundle", "argv.json", "consigne.md", "message.md", "demande.json")
@@ -496,12 +507,16 @@ d=$(mktemp -d "$HOME/myiafactory/.depot.XXXXXX") || exit 1
 f="$d/{AGENT_SCRIPT}"
 c="$d/{st.COMMUN}"
 p="$d/{PONT_HOTE}"
+o="$d/{OUTIL_FLUTTER}"
 e="$d/{EMULATION_SCRIPT}"
 r=1
 if tar -x --no-same-owner -C "$d" -f - && [ -f "$f" ] && [ ! -L "$f" ] && [ -s "$f" ] && [ -f "$c" ] && [ ! -L "$c" ] && [ -s "$c" ]; then
   mkdir -p "{DOSSIER_DISTANT}/taches" && mv -f "$c" "{st.COMMUN_DISTANT}" && mv -f "$f" "{AGENT_DISTANT}" && r=0
   if [ "$r" = 0 ] && [ -f "$e" ] && [ ! -L "$e" ] && [ -s "$e" ]; then mv -f "$e" "{st.ENVELOPPE_DISTANTE}" || r=1; fi
   if [ "$r" = 0 ] && [ -f "$p" ] && [ ! -L "$p" ] && [ -s "$p" ]; then mv -f "$p" "{DOSSIER_DISTANT}/{PONT_HOTE}" || r=1; fi
+  if [ "$r" = 0 ] && [ -f "$o" ] && [ ! -L "$o" ] && [ -s "$o" ]; then
+    mkdir -p "{DOSSIER_DISTANT}/agent-outils" && mv -f "$o" "{DOSSIER_DISTANT}/{OUTIL_FLUTTER}" || r=1
+  fi
 fi
 rm -rf "$d"
 exit $r
@@ -532,13 +547,15 @@ def _script(modele, ident, **valeurs):
     return st._script(modele, ident, **valeurs)
 
 
-def _deposer_agent(serveur, ssh, avec_pont):
+def _deposer_agent(serveur, ssh, avec_pont, avec_flutter=False):
     """Dépose lancer_agent.sh, commun.sh (qu'il source) et, pour le mode pilote, pont_hote.py et lancer_emulation.sh (que le
     pont hôte lance au premier `demarrer`). None si réussi, sinon le message."""
     fichiers = []
     a_deposer = [(AGENT_SCRIPT, 0o755), (st.COMMUN, 0o644)]
     if avec_pont:
         a_deposer += [(EMULATION_SCRIPT, 0o755), (PONT_HOTE, 0o644)]
+    if avec_flutter:
+        a_deposer.append((OUTIL_FLUTTER, 0o755))
     for rel, mode in a_deposer:
         source = RACINE_SERVEUR / rel
         if source.is_symlink() or not source.is_file():
@@ -724,7 +741,7 @@ def _lancer_agent(demande, paquet, argv, consigne, message, apk, dossier, ssh, a
         st._bash(serveur, ssh, _script(st._EFFACER, d.id))
         return sortie("echouee", erreur=f"{st._court(e)} : tâche non démarrée, rien ne tourne sur le serveur.")
 
-    probleme = _deposer_agent(serveur, ssh, d.mode == "pilote")
+    probleme = _deposer_agent(serveur, ssh, d.mode == "pilote", d.flutter)
     if probleme:
         st._bash(serveur, ssh, _script(st._EFFACER, d.id))
         avert = st._noter(dossier, d.id, {"etat": "echouee", "statut": "erreur", "fin": st._maintenant_iso(),

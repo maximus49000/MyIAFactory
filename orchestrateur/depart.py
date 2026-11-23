@@ -384,7 +384,10 @@ TOUCHES_DU_PONT = ("retour", "accueil", "menu")    # `serveur_tache.MOTIF_TOUCHE
 # Projet Flutter au serveur : personne n'approuve les commandes (refus automatique de tout ce que la fiche ne couvre pas).
 CONSIGNE_FLUTTER_SERVEUR = (
     "Au serveur, personne n'approuve tes commandes : chaque commande doit être SIMPLE et commencer par un programme "
-    "ouvert (flutter). Jamais `&&`, `;`, `|`, `timeout`, ni variable d'environnement en préfixe ; le dossier courant est "
+    "ouvert. Pour une étape complète, emploie les commandes uniques, chacune seule : `analyser-flutter`, "
+    "`tester-flutter`, `construire-apk` (ou `construire-apk debug`) : elles se placent d'elles-mêmes dans le dossier "
+    "Flutter du projet et font `flutter pub get` si besoin. Sinon, une commande `flutter` simple. "
+    "Jamais `&&`, `;`, `|`, `timeout`, ni variable d'environnement en préfixe ; le dossier courant est "
     "gardé d'un appel à l'autre : fais `cd android_app` seul, puis `flutter pub get`, `flutter analyze`, `flutter test`, "
     "`flutter build apk --release` chacun seul. Lis les fichiers avec Read/Glob/Grep, pas avec `ls`/`cat`. "
     "L'environnement (JAVA_HOME, ANDROID_*, clé de debug) est déjà posé.")

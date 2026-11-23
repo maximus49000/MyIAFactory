@@ -412,7 +412,8 @@ class TestEnveloppeFlutter(unittest.TestCase):
             self.assertFalse([x for x in a if "src=" + h + "/android-sdk" in x])
             self.assertNotIn("flutter-verrou", " ".join(a))
             self.assertEqual([a[i + 1] for i in range(len(a) - 1) if a[i] == "-e"],
-                             ["HOME=/maison", "AGENT_DUREE_S=30", "AGENT_FLUTTER=1"])
+                             ["HOME=/maison", "AGENT_DUREE_S=30", "AGENT_FLUTTER=1",
+                              "PATH=/opt/outils:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"])
             for x in ("--read-only", "--rm", "-d"):                          # mêmes durcissements qu'un agent ordinaire
                 self.assertIn(x, a)
             suite_dans(self, a, "--cap-drop", "ALL")
@@ -421,7 +422,7 @@ class TestEnveloppeFlutter(unittest.TestCase):
             suite_dans(self, a, "--network", "myiafactory-agents")
             self.assertNotIn("--privileged", a)
             self.assertEqual(a[-2:], ["myiafactory/agent", "entree-agent"])
-            self.assertEqual(len([a[i + 1] for i in range(len(a) - 1) if a[i] == "--mount"]), 2)
+            self.assertEqual(len([a[i + 1] for i in range(len(a) - 1) if a[i] == "--mount"]), 5)     # + les trois commandes uniques
             self.assertEqual(b.appels("docker volume rm"), [])
             b.arreter()
             b.attendre_final()

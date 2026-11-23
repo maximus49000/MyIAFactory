@@ -56,6 +56,9 @@
 #   Une seule fonction pour les deux (preparer_overlay). -e AGENT_FLUTTER=1 : l'entrée pose alors PATH, FLUTTER_ROOT,
 #   PUB_CACHE et GRADLE_USER_HOME sous /maison, ANDROID_HOME, JAVA_HOME (JDK 17 de l'image), CI=true et
 #   FLUTTER_SUPPRESS_ANALYTICS : valeurs fixes. Aucun autre droit : mêmes durcissements.
+#   Commandes uniques : agent-outils/outil-flutter.sh (déposé par le poste à côté de taches/) monté en lecture seule sous
+#   /opt/outils/{analyser-flutter,tester-flutter,construire-apk}, le dossier Flutter (« "flutter_dossier" », motif strict)
+#   dans /opt/outils/dossier-flutter, et -e PATH=/opt/outils:… (repris par l'entrée).
 # Durée : duree_s (argument 3) fait foi ; elle est passée au conteneur (-e AGENT_DUREE_S) : l'échéance interne de l'entrée
 #   (duree_s - 120 s) et celle du veilleur partent de la même valeur, quoi que porte limites.duree_s dans demande.json.
 # Hôte exigé : kernel.yama.ptrace_scope >= 1 (lu dans /proc/sys/kernel/yama/ptrace_scope ; 0 -> echouee, rien ne démarre ;
@@ -80,7 +83,10 @@ DELAI_ARRET=60                            # docker stop -t : l'entrée de l'agen
 LIMITE_SORTIE_KO=540672                   # sortie/ : paquet 500 Mo + flux 20 Mo + erreurs et fin.json, en Ko
 if [[ ${ENVELOPPE_SORTIE_MAX_KO:-} =~ ^[1-9][0-9]{0,8}$ ]]; then LIMITE_SORTIE_KO="$ENVELOPPE_SORTIE_MAX_KO"; fi   # tests
 TRAVAIL_MAX_KO=8388608                    # travail/ + maison/ : 8 Go au plus (sondés toutes les DU_TRAVAIL_S secondes)
-if [[ ${ENVELOPPE_TRAVAIL_MAX_KO:-} =~ ^[1-9][0-9]{0,11}$ ]]; then TRAVAIL_MAX_KO="$ENVELOPPE_TRAVAIL_MAX_KO"; fi   # tests
+TRAVAIL_FLUTTER_MAX_KO=16777216           # projet Flutter (flutter-up existe) : 16 Go (Gradle 3 à 5 Go, couches des SDK, build/)
+if [[ ${ENVELOPPE_TRAVAIL_MAX_KO:-} =~ ^[1-9][0-9]{0,11}$ ]]; then                                                 # tests
+  TRAVAIL_MAX_KO="$ENVELOPPE_TRAVAIL_MAX_KO"; TRAVAIL_FLUTTER_MAX_KO="$ENVELOPPE_TRAVAIL_MAX_KO"
+fi
 DU_TRAVAIL_S=60
 if [[ ${ENVELOPPE_DU_TRAVAIL_S:-} =~ ^[1-9][0-9]{0,3}$ ]]; then DU_TRAVAIL_S="$ENVELOPPE_DU_TRAVAIL_S"; fi          # tests
 LIBRE_MIN_KO=5242880                      # disque du serveur : moins de 5 Go libres (df -Pk) -> la tâche s'arrête en limite
@@ -93,6 +99,7 @@ MOTIF_PROJET='"projet"[[:space:]]*:[[:space:]]*"([^"\\]{1,200})"'
 MOTIF_TYPE_EMULATION='"type"[[:space:]]*:[[:space:]]*"emulation"'
 MOTIF_ECHEANCE='"echeance"[[:space:]]*:[[:space:]]*true'
 MOTIF_FLUTTER='"flutter":[[:space:]]*(true|false)[[:space:]]*[,}]'
+MOTIF_FLUTTER_DOSSIER='"flutter_dossier":[[:space:]]*(null|"([^"\\]{0,200})")[[:space:]]*[,}]'
 PTRACE_SCOPE=/proc/sys/kernel/yama/ptrace_scope    # lu seulement (jamais modifié ici)
 if [ -n "${ENVELOPPE_PTRACE_SCOPE:-}" ]; then PTRACE_SCOPE="$ENVELOPPE_PTRACE_SCOPE"; fi                           # tests
 
@@ -307,7 +314,7 @@ preparer_overlay() {
 veilleur() {
   { : >&8; } 2>/dev/null || exit 2                  # sans la place héritée de l'enveloppe, jamais de veilleur
   printf '%s\n' "$$" > "$DOSSIER/veilleur.pid"
-  local debut_iso debut_s maintenant pannes=0 etat_conteneur motif ko prochaine pause libre dernier_du mesures
+  local debut_iso debut_s maintenant pannes=0 etat_conteneur motif ko prochaine pause libre dernier_du mesures plafond
   debut_iso=$(debut_ecrit); [ -n "$debut_iso" ] || debut_iso=$(maintenant_iso)
   debut_s=$(date +%s)
   dernier_du=$debut_s
@@ -389,8 +396,10 @@ veilleur() {
       [ -d "$DOSSIER/flutter-up" ] && mesures+=("$DOSSIER/flutter-up")      # projet Flutter : les couches hautes des SDK
       [ -d "$DOSSIER/android-up" ] && mesures+=("$DOSSIER/android-up")
       ko=$(du -sck --apparent-size -- "${mesures[@]}" 2>/dev/null | tail -n 1 | cut -f1)
-      if [[ $ko =~ ^[0-9]+$ ]] && [ "$ko" -gt "$TRAVAIL_MAX_KO" ]; then
-        arreter_puis terminee limite "Limite atteinte : travail et maison trop volumineux (${ko} Ko, maximum ${TRAVAIL_MAX_KO} Ko)"
+      plafond="$TRAVAIL_MAX_KO"
+      [ -d "$DOSSIER/flutter-up" ] && plafond="$TRAVAIL_FLUTTER_MAX_KO"
+      if [[ $ko =~ ^[0-9]+$ ]] && [ "$ko" -gt "$plafond" ]; then
+        arreter_puis terminee limite "Limite atteinte : travail et maison trop volumineux (${ko} Ko, maximum ${plafond} Ko)"
       fi
     fi
     # Sommeil d'une sonde, raccourci jusqu'à l'échéance si elle tombe avant (au moins 1 s).
@@ -498,6 +507,27 @@ if [ "$FLUTTER" = 1 ]; then
     [ -f "$FLUTTER_SDK/bin/cache/lockfile" ] && [ ! -L "$FLUTTER_SDK/bin/cache/lockfile" ] &&
     [ -s "$HOME/.myiafactory/flutter-sdk.version" ] ||
     fin_erreur "Flutter absent du serveur (~/flutter-sdk incomplet) : installez la capacité flutter-sdk (lancer.py plateforme serveurs installer <id> agent-flutter --accord)."
+  # Dossier Flutter du projet (« "flutter_dossier": "<nom>"|null », une seule clé) : « . » ou un sous-dossier direct,
+  # jamais « .. » ; écrit dans ~/taches/<id>/dossier-flutter, lu par les commandes uniques (/opt/outils).
+  FLUTTER_DOSSIER=""
+  reste="${demande//\"flutter_dossier\":/}"
+  occurrences=$(( (${#demande} - ${#reste}) / 18 ))
+  if [ "$occurrences" -gt 1 ]; then fin_erreur "demande.json : clé flutter_dossier en double."; fi
+  if [ "$occurrences" = 1 ]; then
+    if [[ $demande =~ $MOTIF_FLUTTER_DOSSIER ]]; then
+      FLUTTER_DOSSIER="${BASH_REMATCH[2]}"
+      if [ "${BASH_REMATCH[1]}" != null ]; then
+        [[ $FLUTTER_DOSSIER =~ ^(\.|[A-Za-z0-9_][A-Za-z0-9_.-]{0,99})$ ]] && [ "$FLUTTER_DOSSIER" != .. ] ||
+          fin_erreur "demande.json : flutter_dossier refusé (« . » ou un sous-dossier direct du projet)."
+      fi
+    else
+      fin_erreur "demande.json : flutter_dossier mal formé."
+    fi
+  fi
+  OUTIL_FLUTTER="$(cd -P -- "$ICI/.." 2>/dev/null && pwd)/agent-outils/outil-flutter.sh"
+  [ -f "$OUTIL_FLUTTER" ] && [ ! -L "$OUTIL_FLUTTER" ] ||
+    fin_erreur "Commandes uniques de l'agent absentes (agent-outils/outil-flutter.sh, déposé par le poste avec l'enveloppe)."
+  case "$OUTIL_FLUTTER" in *[,]*) fin_erreur "Chemin des commandes uniques non admis (virgule)." ;; esac
 fi
 
 # Places : les PLACES_MAX verrous sont tous essayés. Un verrou tenu = un agent qui tourne ; la place prise est le premier
@@ -571,7 +601,17 @@ if [ "$FLUTTER" = 1 ]; then                        # aucun SDK de l'hôte en bin
       echec "clé de debug : cible ~/taches/$ID/maison/.android/debug.keystore non créable."
     COMMANDE+=(--mount "type=bind,src=$CLE_DEBUG,dst=/maison/.android/debug.keystore,readonly")
   fi
-  COMMANDE+=(-e AGENT_FLUTTER=1)
+  # Commandes uniques (analyser-flutter, tester-flutter, construire-apk) : le même script, en lecture seule, sous chaque
+  # nom dans /opt/outils, ajouté en tête du PATH du conteneur (l'entrée le reprend tel quel : image inchangée).
+  for nom in analyser-flutter tester-flutter construire-apk; do
+    COMMANDE+=(--mount "type=bind,src=$OUTIL_FLUTTER,dst=/opt/outils/$nom,readonly")
+  done
+  if [ -n "$FLUTTER_DOSSIER" ]; then
+    printf '%s\n' "$FLUTTER_DOSSIER" > "$DOSSIER/dossier-flutter" ||
+      echec "Dossier Flutter non écrit (~/taches/$ID/dossier-flutter)."
+    COMMANDE+=(--mount "type=bind,src=$DOSSIER/dossier-flutter,dst=/opt/outils/dossier-flutter,readonly")
+  fi
+  COMMANDE+=(-e AGENT_FLUTTER=1 -e "PATH=/opt/outils:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin")
 fi
 COMMANDE+=("$IMAGE" entree-agent)
 if ! dk 120 "${COMMANDE[@]}" >/dev/null 2>"$DOSSIER/docker-run.log"; then

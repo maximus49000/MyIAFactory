@@ -126,15 +126,15 @@ Valeurs lues dans le code (`LIMITES_AGENT` de `outils/serveur_agent.py`, `lancer
 |---|---|---|
 | Durée maximale | **2400 s** (40 min) ; jamais au-dessus du délai demandé par le moteur ; l'enveloppe accepte 1 à 86400 | veilleur ; l'entrée arrête `claude` **120 s avant** (à mi-chemin pour une tâche de moins de 240 s), conclut, et note `"echeance": true` |
 | Tours de l'agent | **200** (`--max-turns`, ajouté par l'entrée) | `claude` |
-| Mémoire | **4096 Mo** (swap identique : pas de swap) | `docker run` |
-| Processeurs | **2** | `docker run` |
+| Mémoire | **4096 Mo** (swap identique : pas de swap) ; projet Flutter : **12 288 Mo** (`LIMITES_AGENT_FLUTTER` : un build APK dépasse 4 Go) | `docker run` |
+| Processeurs | **2** ; projet Flutter : **4** | `docker run` |
 | Processus | **512** ; `/tmp` en mémoire de 1 Go ; système de fichiers en lecture seule | `docker run` |
 | Paquet Git | **500 Mo** à l'aller comme au retour | poste (aller) ; poste et serveur (retour) |
 | Flux `stream-json` | **20 Mo** (au-delà : `claude` arrêté) ; `claude.err` 64 Ko | entrée |
 | `sortie/` | **540 672 Ko** (paquet 500 Mo + flux 20 Mo + marge), taille apparente, sondé toutes les 5 s | veilleur (`limite`) |
-| `travail/` + `maison/` | **8 Go**, sondés toutes les 60 s | veilleur (`limite`) |
+| `travail/` + `maison/` | **8 Go** ; projet Flutter : **16 Go** avec les couches hautes des SDK (`flutter-up`, `android-up` ; Gradle prend 3 à 5 Go dans `maison/`), sondés toutes les 60 s | veilleur (`limite`) |
 | Disque du serveur | plancher de **5 Go** libres (`df`), sondé toutes les 5 s | veilleur (`limite`) |
-| Places d'agent par serveur | **2** par défaut, de **1 à 4** (réglage `agents_serveur_max` du projet quand il est donné) | enveloppe (verrous `flock`) |
+| Places d'agent par serveur | **2** par défaut, de **1 à 4** (réglage `agents_serveur_max` du projet quand il est donné) ; elles comptent des agents, **pas de la mémoire** : 2 agents Flutter (24 Go) + l'émulation (6 Go) + des campagnes de tests (jetons de mémoire de 14e, tests seulement) peuvent approcher les 62 Go du serveur | enveloppe (verrous `flock`) |
 | Attente d'une place | nouvel essai toutes les **15 s**, **600 s** au plus | poste |
 | Suivi par le poste | durée de la tâche **+ 120 s**, puis arrêt et rapatriement du travail | exécuteur distant |
 | Consigne, message | 1 Mo au plus chacun ; options de `claude` : 64 Ko | poste |
@@ -382,6 +382,13 @@ conteneur des agents des projets Flutter.
   test`), chaque morceau doit être couvert : préférer `flutter pub get --directory android_app`, et pour `flutter test`
   un `cd android_app` seul puis `flutter test`. La consigne de départ d'un agent serveur d'un projet Flutter le dit
   (`depart.CONSIGNE_FLUTTER_SERVEUR` : commandes simples, ni `&&`, `;`, `|`, `timeout` ni variable en préfixe).
+- **Commandes uniques** (`serveur_ovh/agent-outils/outil-flutter.sh`, déposé par le poste avec l'enveloppe, monté en lecture
+  seule sous `/opt/outils`, en tête du `PATH` du conteneur, image inchangée) : `analyser-flutter`, `tester-flutter`,
+  `construire-apk [release|debug]` (défaut `release`) ; elles se placent dans le dossier Flutter du projet (transmis par le
+  poste, `"flutter_dossier"`, motif strict), lancent `flutter pub get` si les paquets ne sont pas à jour puis l'étape
+  (sortie bornée aux 200 000 derniers octets) ; tout autre argument : code 2 sans rien lancer. Chacune s'ouvre à la fiche
+  par sa règle (`Bash(analyser-flutter:*)`, `Bash(tester-flutter:*)`, `Bash(construire-apk:*)`, jamais `Bash` seul), par la
+  décision `outil_agent` ou la commande `fiche` `ouvrir_outil`.
 - **Construire l'APK au serveur : JDK 17, SDK Android et Flutter en copie sur écriture par tâche.** L'image `agent`
   porte le JDK 17 de la distribution (`openjdk-17-jdk-headless`) : elle change, la capacité `agent` redevient
   « À mettre à jour » jusqu'à la réinstallation d'`agent-serveur`. `flutter build apk` est appelé par `flutter` (règle

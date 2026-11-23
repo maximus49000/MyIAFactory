@@ -1,6 +1,7 @@
 import json
 import os
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -169,6 +170,49 @@ class TestFactory(unittest.TestCase):
         for mauvais in (-1, 17, True, "2", 1.5):
             with self.assertRaises(factory.FactoryInvalide, msg=repr(mauvais)):
                 factory.lire(self.ecrire(agents_cloud_max=mauvais))
+
+    def _date(self, chemin, ns):
+        os.utime(chemin, ns=(ns, ns))
+
+    def test_reecriture_de_meme_taille_dans_le_meme_grain_d_horloge(self):
+        # Deux écritures de même taille avec la même date (grain d'horloge du système de fichiers) : la seconde lecture
+        # doit voir la nouvelle valeur (l'ancien cache rendait la première : « 1 != 4 » sur le serveur Linux).
+        maintenant = time.time_ns()
+        for i, valeur in enumerate((1, 4, 7)):
+            chemin = self.ecrire(agents_locaux_max=valeur)
+            self._date(chemin, maintenant)
+            self.assertEqual(factory.lire(chemin)["agents_locaux_max"], valeur, i)
+        chemin = self.ecrire(agents_locaux_max=-1)    # une valeur refusée après une valeur gardée : refusée
+        self._date(chemin, maintenant)
+        with self.assertRaises(factory.FactoryInvalide):
+            factory.lire(chemin)
+
+    def test_cache_garde_un_fichier_stable_sans_le_relire(self):
+        chemin = self.ecrire(agents_locaux_max=3)
+        self._date(chemin, time.time_ns() - 60 * 10**9)    # hors du doute : la clé suffit
+        vrai = factory._lire
+        with mock.patch.object(factory, "_lire", side_effect=vrai) as lu, \
+                mock.patch.object(factory, "_octets", wraps=factory._octets) as octets:
+            for _ in range(5):
+                self.assertEqual(factory.lire(chemin)["agents_locaux_max"], 3)
+        self.assertEqual(lu.call_count, 1)
+        self.assertEqual(octets.call_count, 0)
+
+    def test_cache_d_un_fichier_douteux_compare_les_octets(self):
+        chemin = self.ecrire(agents_locaux_max=3)
+        self._date(chemin, time.time_ns())
+        vrai = factory._lire
+        with mock.patch.object(factory, "_lire", side_effect=vrai) as lu:
+            for _ in range(5):
+                self.assertEqual(factory.lire(chemin)["agents_locaux_max"], 3)
+            self.assertEqual(lu.call_count, 1)
+            # devenu ancien, l'entrée est confirmée une fois par ses octets puis gardée sans relecture
+            self._date(chemin, time.time_ns() - 60 * 10**9)
+            with mock.patch.object(factory, "_octets", wraps=factory._octets) as octets:
+                for _ in range(3):
+                    factory.lire(chemin)
+            self.assertLessEqual(octets.call_count, 1)
+            self.assertEqual(lu.call_count, 2)      # la date a changé : une seule relecture
 
     def test_ecrire_parallelisme_garde_le_reste(self):
         chemin = self.ecrire(description="Un jeu")

@@ -126,13 +126,15 @@ def lister(*, dossier=None):
     for chemin in (sorted(d.glob("c*.json")) if d.is_dir() else []):
         if not MOTIF_ID.match(chemin.stem):
             continue
-        try:
-            b = lire(chemin.stem, dossier=d)
-        except Echec:
-            continue
+        with _VERROU:     # le fichier et l'état du tour ensemble : un tour qui finit entre les deux n'est pas « interrompu »
+            try:
+                b = lire(chemin.stem, dossier=d)
+            except Echec:
+                continue
+            tour = etat_du_tour(b)
         sortie.append({"id": b["id"], "nom": str(b["infos"].get("nom") or ""), "maj": b.get("maj") or "",
                        "etat": "proposition" if b.get("proposition") else "questions",
-                       "tours": b.get("tours") if isinstance(b.get("tours"), int) else 0, "tour": etat_du_tour(b)})
+                       "tours": b.get("tours") if isinstance(b.get("tours"), int) else 0, "tour": tour})
     return sorted(sortie, key=lambda x: x["maj"], reverse=True)
 
 

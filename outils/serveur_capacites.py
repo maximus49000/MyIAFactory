@@ -75,6 +75,10 @@ _CATALOGUE = {
     "agent": Capacite(
         "agent", "Agent de développement sur le serveur (image myiafactory/agent, réseau des agents)", ("base",), "agent_image",
         "test -s ~/.myiafactory/agent-image.version", 1.0, 8),
+    # Image des campagnes de tests routées au serveur (conteneur sans réseau, sans jeton ni clé ; voir images/tests/).
+    "tests-image": Capacite(
+        "tests-image", "Image des campagnes de tests (conteneur sans réseau ni secret)", ("base",), "tests_image",
+        "test -s ~/.myiafactory/tests-image.version", 1.0, 6),
     # Étape humaine : le jeton de l'abonnement est enregistré UNE fois par le Directeur ; la sonde ne lit jamais son contenu
     # (droits du dossier et du fichier, fichier non vide).
     "agent-abonnement": Capacite(
@@ -100,6 +104,8 @@ _BESOINS = {
     # un agent du projet tourne sur le serveur : seul (branche et rapport) ou pilote (il conduit l'émulateur par le pont fermé)
     "agent-serveur": ("agent", "agent-abonnement"),
     "agent-pilote": ("agent", "agent-abonnement", "emulateur-image"),
+    # les campagnes de tests d'un projet routées au serveur (`lancer.py tests …`) tournent dans l'image de tests
+    "tests-serveur": ("tests-image",),
 }
 
 CATALOGUE = MappingProxyType(_CATALOGUE)

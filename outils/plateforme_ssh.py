@@ -5,7 +5,9 @@ Règles : jamais `StrictHostKeyChecking=no` (`accept-new`), toujours `BatchMode=
 jamais dans les arguments de la commande. `oublier_hote` retire une empreinte connue : accord explicite requis.
 Tout sous-processus passe par `runner` (injectable) : les tests ne font aucune connexion réelle.
 """
+import re
 import subprocess
+import threading
 import time
 from pathlib import Path
 
@@ -205,6 +207,346 @@ def executer_vers_fichier(hote, commande, cle, destination, maximum, entree=None
     if etat["ecriture"] is not None:
         return 98, etat["taille"], f"écriture sur le poste impossible ({etat['ecriture']})"
     return p.returncode, etat["taille"], erreur
+
+
+# --- Session en flux avec laisse (route serveur des tests) -------------------------------------------------------------
+# Protocole de `serveur_ovh/taches/lancer_tests.sh` : la sortie d'erreur du conteneur arrive préfixée par `| ` ; seules
+# les lignes de l'enveloppe commencent par `#`. La marque de fin n'est crue que si c'est la DERNIÈRE ligne non vide de la
+# sortie d'erreur, entière (terminée par un retour) et exactement de la forme `#fin <code> <debut> <fin> <attente>` :
+# une ligne des tests qui imite `#fin 0 …` (préfixée, ou suivie d'autre chose) ne peut pas changer un échec en succès.
+MOTIF_FIN = re.compile(rb"#fin ([0-9]{1,3}) ([0-9]{1,12}) ([0-9]{1,12}) ([0-9]{1,12})")
+# Un code rendu par l'ENVELOPPE elle-même (refus, disque, image, laisse…) : `#refus <code>` juste avant `#fin <code>`.
+MOTIF_REFUS = re.compile(rb"#refus ([0-9]{1,3})")
+MOTIF_ATTENTE = re.compile(rb"#attente ([0-9]{1,6}) ([0-9]{1,6})(?: [0-9]{1,6})?")
+LIGNE_MAX = 4096           # une ligne de la sortie d'erreur au-delà : gardée tronquée, jamais une marque
+ERREUR_GARDEE = 65536      # la fin de la sortie d'erreur gardée pour le diagnostic
+PREMIERE_LIGNE_MAX = 4096  # la commande JSON lue par l'enveloppe
+
+
+def _marque_de_fin(ligne):
+    m = MOTIF_FIN.fullmatch(ligne) if ligne else None
+    if m is None or int(m.group(1)) > 255:
+        return None
+    return tuple(int(x) for x in m.groups())
+
+
+def _refus(precedente, fin_serveur):
+    """Le code de l'enveloppe si la ligne non vide juste avant la marque de fin est exactement `#refus <même code>`."""
+    m = MOTIF_REFUS.fullmatch(precedente) if (precedente and fin_serveur is not None) else None
+    if m is None or int(m.group(1)) != fin_serveur[0]:
+        return None
+    return fin_serveur[0]
+
+
+class _Erreurs:
+    """Lit la sortie d'erreur de ssh ligne par ligne (mémoire bornée) : `#attente` → `sur_attente`, le reste gardé
+    (64 Ko de fin) et montré sur `sortie_erreur`, et la dernière ligne non vide notée pour la marque de fin."""
+
+    def __init__(self, sur_attente, sortie_erreur, activite):
+        self.sur_attente = sur_attente
+        self.sortie_erreur = sortie_erreur
+        self.activite = activite
+        self.garde = bytearray()
+        self.ligne = bytearray()
+        self.trop_long = False
+        self.derniere = None     # dernière ligne non vide complète ; b"" : une ligne qui ne peut pas être une marque
+        self.precedente = None   # la ligne non vide d'avant (`#refus` attendu juste avant `#fin`)
+        self.vu = False          # quelque chose de l'enveloppe (place, sortie du conteneur, marque) est arrivé
+
+    def lire(self, flux):
+        lire = getattr(flux, "read1", None) or flux.read
+        try:
+            while True:
+                b = lire(65536)
+                if not b:
+                    break
+                self.activite()
+                self._morceau(b)
+        except (OSError, ValueError):
+            pass
+        if self.ligne.strip() or self.trop_long:   # ligne finale sans retour : session coupée, jamais une marque
+            self._montrer(bytes(self.ligne))
+            self._noter(b"")
+
+    def _noter(self, ligne):
+        self.precedente, self.derniere = self.derniere, ligne
+
+    def _morceau(self, b):
+        debut = 0
+        while True:
+            i = b.find(b"\n", debut)
+            if i < 0:
+                self._ajouter(b[debut:])
+                return
+            self._ajouter(b[debut:i])
+            self._ligne_finie()
+            debut = i + 1
+
+    def _ajouter(self, part):
+        if self.trop_long or not part:
+            return
+        place = LIGNE_MAX - len(self.ligne)
+        if len(part) > place:
+            self.ligne += part[:place]
+            self.trop_long = True
+        else:
+            self.ligne += part
+
+    def _ligne_finie(self):
+        # Découpe sur b"\n" SEULEMENT (jamais splitlines) ; aucun `\r` toléré dans une marque : elle doit être exacte.
+        ligne, trop_long = bytes(self.ligne), self.trop_long
+        self.ligne, self.trop_long = bytearray(), False
+        if trop_long:
+            self._noter(b"")
+            self._montrer(ligne + b"...\n")
+            return
+        if not ligne.strip():
+            self._montrer(ligne + b"\n")
+            return
+        self._noter(ligne)
+        brute = ligne
+        if ligne.startswith(b"| "):
+            self.vu = True
+        m = MOTIF_ATTENTE.fullmatch(ligne)
+        if m is not None:
+            self.vu = True
+            if self.sur_attente is not None:
+                try:
+                    self.sur_attente(int(m.group(1)), int(m.group(2)))
+                except Exception:   # noqa: BLE001 — un affichage cassé ne doit jamais bloquer la lecture (tuyau plein)
+                    pass
+            return
+        if MOTIF_FIN.fullmatch(ligne) or MOTIF_REFUS.fullmatch(ligne):
+            self.vu = True
+            return
+        self._montrer(brute + b"\n")
+
+    def _montrer(self, b):
+        self.garde += b
+        if len(self.garde) > 2 * ERREUR_GARDEE:
+            del self.garde[:-ERREUR_GARDEE]
+        if self.sortie_erreur is not None:
+            try:
+                self.sortie_erreur.write(b)
+                self.sortie_erreur.flush()
+            except (OSError, ValueError):
+                self.sortie_erreur = None
+
+    def texte(self):
+        return bytes(self.garde[-ERREUR_GARDEE:]).decode("utf-8", "replace")
+
+
+class _Suivi:
+    """La sortie standard de ssh, dont chaque lecture compte comme une activité (délai de silence)."""
+
+    def __init__(self, flux, activite):
+        self.flux = flux
+        self.activite = activite
+
+    def read1(self, n):
+        lire = getattr(self.flux, "read1", None) or self.flux.read
+        try:
+            b = lire(n)
+        except (OSError, ValueError):
+            return b""
+        if b:
+            self.activite()
+        return b
+
+
+def _fermer(flux):
+    try:
+        flux.close()
+    except (OSError, ValueError):
+        pass
+
+
+def _lacher_laisse(p, ecrivain):
+    """Ferme l'entrée de ssh (la laisse : l'enveloppe tue le conteneur). Si l'écriture de la première ligne est encore
+    bloquée (ssh ne lit pas encore), fermer attendrait le verrou du tampon : ssh est alors tué d'abord."""
+    if ecrivain.is_alive():
+        try:
+            p.kill()
+        except OSError:
+            pass
+    _fermer(p.stdin)
+
+
+PAS_S = 0.2           # le fil principal n'attend jamais plus longtemps d'un coup : le Ctrl-C lui arrive tout de suite
+ARRET_S = 5           # après `terminate()`, délai avant `kill()`
+# Codes de ssh.exe tué par le Ctrl-C de la console (STATUS_CONTROL_C_EXIT, non signé et signé).
+CODES_CTRL_C = (0xC000013A, 0xC000013A - (1 << 32))
+
+
+def _attendre_fil(fil, delai=None):
+    """`join` par pas courts (jamais un blocage long du fil principal sous Windows) ; rend True si le fil a fini."""
+    fin = None if delai is None else time.monotonic() + delai
+    while fil.is_alive():
+        if fin is not None and time.monotonic() >= fin:
+            return False
+        fil.join(PAS_S if fin is None else max(0.0, min(PAS_S, fin - time.monotonic())))
+    return True
+
+
+def _attendre_processus(p, delai):
+    """`wait` par pas courts ; `subprocess.TimeoutExpired` une fois `delai` écoulé."""
+    fin = time.monotonic() + delai
+    while True:
+        try:
+            return p.wait(timeout=max(0.0, min(PAS_S, fin - time.monotonic())))
+        except subprocess.TimeoutExpired:
+            if time.monotonic() >= fin:
+                raise
+
+
+def _arreter(p, ecrivain):
+    """Ctrl-C : laisse fermée D'ABORD, puis `terminate()`, puis `kill()` après 5 s (si l'écriture de la première ligne
+    est bloquée, `_lacher_laisse` tue ssh avant de fermer) ; un second Ctrl-C ici tue ssh tout de suite."""
+    try:
+        _lacher_laisse(p, ecrivain)
+        try:
+            p.terminate()
+        except OSError:
+            pass
+        try:
+            _attendre_processus(p, ARRET_S)
+        except subprocess.TimeoutExpired:
+            p.kill()
+            try:
+                _attendre_processus(p, ARRET_S)
+            except subprocess.TimeoutExpired:
+                pass
+    except KeyboardInterrupt:
+        try:
+            p.kill()
+        except OSError:
+            pass
+        raise
+
+
+def executer_en_flux(hote, commande, cle, premiere_ligne, sortie, sur_attente=None, delai_connexion=30,
+                     popen=subprocess.Popen, sortie_erreur=None, delai_total=None, delai_silence=None):
+    """Une session ssh qui lance `commande` (l'enveloppe `lancer_tests.sh`, construite de valeurs validées par
+    l'appelant) : `premiere_ligne` (la commande JSON) est écrite sur l'entrée standard, terminée par `\\n`, puis l'entrée
+    reste OUVERTE jusqu'à la fin de la sortie standard : c'est la laisse (fermée = le serveur tue le conteneur).
+
+    La sortie standard est relayée en direct vers `sortie` (`campagne.relayer`, 4 Ko de fin gardés) ; la sortie d'erreur
+    est lue dans un fil : `#attente r t` → `sur_attente(r, t)`, le reste gardé (64 Ko de fin) et, si `sortie_erreur` est
+    donnée, montré en direct (c'est là que unittest écrit, préfixé `| `). `delai_total` / `delai_silence` (secondes,
+    facultatifs) : au-delà, laisse fermée et ssh tué, code 124. Ctrl-C : laisse fermée, ssh arrêté, exception relevée.
+
+    Rend {"code", "octets", "fin", "fin_serveur", "erreur", "code_ssh", "raison", "refus"} : `fin_serveur` = les quatre
+    entiers de `#fin` seulement si c'est la dernière ligne non vide de la sortie d'erreur ; `refus` = ce code seulement si
+    la ligne non vide juste avant est exactement `#refus <même code>` (code rendu par l'enveloppe elle-même, jamais par
+    les tests) ; `code` = celui de la marque s'il y en a une, 124 après un délai, sinon celui de ssh ; `raison` : "refus"
+    (marque + `#refus`), "fin" (marque : code des tests), "delai", "silence", "interrompu" (ssh.exe tué par le Ctrl-C
+    de la console, code 130), "connexion" (ssh 255 sans rien reçu de l'enveloppe) ou "perdue" (session finie sans
+    marque). Un `KeyboardInterrupt` reçu ici est toujours relevé (jamais rendu en code)."""
+    import campagne
+    _verifier_hote(hote)
+    if not isinstance(commande, str) or not commande.strip() or any(c in commande for c in "\r\n\0"):
+        raise ValueError("Commande distante invalide : vide ou sur plusieurs lignes.")
+    if not isinstance(premiere_ligne, bytes):
+        raise ValueError("La première ligne doit être des octets.")
+    ligne = premiere_ligne[:-1] if premiere_ligne.endswith(b"\n") else premiere_ligne
+    if not ligne.strip() or len(ligne) > PREMIERE_LIGNE_MAX or any(c in ligne for c in b"\r\n\0"):
+        raise ValueError(f"Première ligne invalide : vide, sur plusieurs lignes ou plus de {PREMIERE_LIGNE_MAX} octets.")
+    # LogLevel=ERROR en ligne de commande (prime sur ~/.ssh/config) : un `LogLevel VERBOSE/DEBUG` de l'utilisateur
+    # écrirait des lignes `debug1:` / `Transferred:` APRÈS `#fin`, qui ne serait plus la dernière ligne.
+    args = ["ssh", *_options(cle), "-T", "-o", "LogLevel=ERROR",
+            "-o", f"ConnectTimeout={max(1, min(int(delai_connexion), 30))}",
+            "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=4", "--", hote, commande]
+    try:
+        p = popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    except FileNotFoundError:
+        raise ErreurSsh(f"« {args[0]} » est introuvable : le client OpenSSH de Windows est requis "
+                        "(Paramètres > Applications > Fonctionnalités facultatives > Client OpenSSH).") from None
+    etat = {"activite": time.monotonic(), "coupure": None}
+    fini = threading.Event()
+
+    def activite():
+        etat["activite"] = time.monotonic()
+
+    erreurs = _Erreurs(sur_attente, sortie_erreur, activite)
+
+    def ecrire():
+        try:
+            p.stdin.write(ligne + b"\n")
+            p.stdin.flush()
+        except (OSError, ValueError):
+            pass     # ssh déjà mort (connexion refusée) : son code et sa sortie d'erreur le diront
+
+    def surveiller():
+        debut = time.monotonic()
+        delais = [d for d in (delai_total, delai_silence) if d is not None]
+        pas = max(0.001, min(0.5, min(delais) / 4))
+        while not fini.is_set():
+            maintenant = time.monotonic()
+            if delai_total is not None and maintenant - debut >= delai_total:
+                etat["coupure"] = "delai"
+            elif delai_silence is not None and maintenant - etat["activite"] >= delai_silence:
+                etat["coupure"] = "silence"
+            else:
+                fini.wait(pas)
+                continue
+            _lacher_laisse(p, ecrivain)   # la laisse d'abord : l'enveloppe tue le conteneur
+            try:
+                p.kill()
+            except OSError:
+                pass
+            return
+
+    relais = {}
+
+    def relayer():
+        try:
+            relais["fait"] = campagne.relayer(_Suivi(p.stdout, activite), sortie, garder=4096)
+        except BaseException as e:   # noqa: BLE001 — relevée dans le fil principal
+            relais["exception"] = e
+
+    lecteur = threading.Thread(target=erreurs.lire, args=(p.stderr,), daemon=True)
+    ecrivain = threading.Thread(target=ecrire, daemon=True)
+    relayeur = threading.Thread(target=relayer, daemon=True)
+    lecteur.start()
+    ecrivain.start()
+    relayeur.start()
+    # Le délai total court dès le départ, attente d'une place comprise ; seulement si l'appelant le donne.
+    if delai_total is not None or delai_silence is not None:
+        threading.Thread(target=surveiller, daemon=True).start()
+    try:
+        # Les deux tuyaux sont lus dans des fils : le fil principal n'attend que par pas de 0,2 s (sous Windows, un
+        # `ReadFile` bloquant ne serait pas interrompu par le Ctrl-C).
+        _attendre_fil(relayeur)
+        if "exception" in relais:
+            raise relais["exception"]
+        octets, fin = relais["fait"]
+        _attendre_fil(lecteur, 10)    # la sortie d'erreur finit avec ssh
+        _lacher_laisse(p, ecrivain)   # la laisse, seulement après la fin de la sortie standard
+        try:
+            code_ssh = _attendre_processus(p, 10)
+        except subprocess.TimeoutExpired:
+            p.kill()
+            code_ssh = _attendre_processus(p, 10)
+        _attendre_fil(lecteur, 2)
+    except BaseException:
+        fini.set()
+        _arreter(p, ecrivain)
+        raise
+    finally:
+        fini.set()
+    fin_serveur = _marque_de_fin(erreurs.derniere) if not lecteur.is_alive() else None
+    refus = _refus(erreurs.precedente, fin_serveur)
+    if fin_serveur is not None:
+        code, raison = fin_serveur[0], ("refus" if refus is not None else "fin")
+    elif etat["coupure"] is not None:
+        code, raison = 124, etat["coupure"]
+    elif code_ssh in CODES_CTRL_C:     # Ctrl-C de la console reçu par ssh.exe avant le KeyboardInterrupt de Python
+        code, raison = 130, "interrompu"
+    else:
+        code = code_ssh
+        raison = "connexion" if code_ssh == 255 and octets == 0 and not erreurs.vu else "perdue"
+    return {"code": code, "octets": octets, "fin": fin, "fin_serveur": fin_serveur, "erreur": erreurs.texte(),
+            "code_ssh": code_ssh, "raison": raison, "refus": refus}
 
 
 def executer_octets_silencieux(hote, commande, cle, entree=None, delai=60, runner=subprocess.run):

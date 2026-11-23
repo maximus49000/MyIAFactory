@@ -22,6 +22,9 @@ PRIX_INVENTES = json.dumps({"modele-a": {"input_cost_per_token": 3e-06, "output_
 TAUX_INVENTE = ("<Envelope><Cube><Cube time='2026-11-09'><Cube currency='USD' rate='1.25'/>"
                 "</Cube></Cube></Envelope>")
 
+from tests import plateforme_tests  # noqa: E402
+
+
 
 class SourceSimulee:
     """Remplace Internet : jamais de requête sortante dans les tests."""
@@ -298,12 +301,21 @@ class TestServeur(AvecServeur):
         r, _ = self.req("GET", "/nexiste/pas.js")
         self.assertEqual(r.status, 404)
 
+    @plateforme_tests.windows_seulement("la sonde de charge (processeur, mémoire) ne mesure que sous Windows")
     def test_commande_charge(self):
         sortie = io.StringIO()
         with redirect_stdout(sortie):
             code = serveur.main(["charge", "--reglages", str(self.regl)])
         self.assertIn(code, (0, 1))
         self.assertIn("charge", sortie.getvalue())
+
+    @plateforme_tests.linux_seulement("hors Windows la charge n'est pas mesurée : la commande laisse passer")
+    def test_commande_charge_hors_windows_laisse_passer(self):
+        sortie = io.StringIO()
+        with redirect_stdout(sortie):
+            code = serveur.main(["charge", "--reglages", str(self.regl)])
+        self.assertEqual(code, 0)
+        self.assertEqual(sortie.getvalue(), "mesure indisponible, on laisse passer\n")
 
     # -- les images --------------------------------------------------------
     PNG = bytes.fromhex("89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489")

@@ -15,6 +15,9 @@ sys.path.insert(0, str(RACINE / "outils"))
 import plateforme_ssh  # noqa: E402
 import serveur_tache as st  # noqa: E402
 
+from tests import plateforme_tests  # noqa: E402
+
+
 
 def brut(**plus):
     return {"type": "emulation", "projet": "demo", "mode": "scenario", "scenario": "demarrage", **plus}

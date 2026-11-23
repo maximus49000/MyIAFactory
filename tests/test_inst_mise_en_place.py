@@ -11,7 +11,7 @@ from installation import dossier, mise_en_place as mep
 from installation.dossier import Echec
 from orchestrateur import factory as fa
 from orchestrateur import fiches
-from tests.inst_aide import AvecMaison, instantane, proposition_valide
+from tests.inst_aide import AvecMaison, instantane, proposition_valide, retirer_lien
 
 MAINTENANT = datetime(2026, 11, 11, 10, 0)
 RACINE = Path(__file__).resolve().parent.parent
@@ -25,7 +25,7 @@ class Base(AvecMaison):
         if s.exists():
             return
         dossier.creer_lien(RACINE, s)
-        self.addCleanup(os.rmdir, s)   # retire la jonction seule, jamais ce qu'elle désigne
+        self.addCleanup(retirer_lien, s)   # retire le lien seul, jamais ce qu'il désigne
 
     def appliquer(self, **extra):
         self.lier_skill()

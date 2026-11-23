@@ -116,7 +116,8 @@ class TestReglages(unittest.TestCase):
         bureau = self.bureau_avec(port=9100)
         marque = Path(str(bureau) + ".verrou")
         marque.write_text("", encoding="utf-8")                  # un autre programme écrit le fichier du bureau
-        with mock.patch.object(reglages, "VERROU_ATTENTE_S", 0.2):
+        from bureau import verrou_fichier
+        with mock.patch.object(verrou_fichier, "VERROU_ATTENTE_S", 0.2):
             with self.assertRaises(reglages.ReglagesInvalides):
                 reglages.fixer_agents_abonnement_max(bureau, 4)
         self.assertNotIn("agents_abonnement_max", json.loads(bureau.read_text(encoding="utf-8")))

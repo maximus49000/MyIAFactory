@@ -398,6 +398,13 @@ def _resume_de_la_connaissance(c):
             "avertissement": c.get("avertissement")}
 
 
+def vue_actuelle(id_, prix_de=lambda modele: None, *, dossier=None):
+    """La vue du brouillon relu, le fichier et l'état du tour lus ensemble (sous le verrou des tours) : un tour qui
+    finit entre les deux ne le fait pas voir « interrompu ». `Echec` si le brouillon n'existe pas."""
+    with brouillons._VERROU:
+        return vue(brouillons.lire(id_, dossier=dossier), prix_de)
+
+
 # --- La validation finale : le projet naît.
 
 def _verifier_les_infos(infos, bureau_json):

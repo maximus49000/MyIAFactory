@@ -55,6 +55,11 @@ SLEEP_FACTICE = 'echo "sleep $*" >> "$FAUX_JOURNAL"\nexit 0'
 PILOTE = 'mapfile -d "" -t A < "$1"; exec bash "$2" "${A[@]}"'
 LIGNE_JOURNAL = re.compile(r"^\S+( .*)? \d+ms$")
 
+from tests import plateforme_tests  # noqa: E402
+
+# Le repli des verrous en dossier (mkdir + PID) ne sert que sans flock : le bash de Git ; l'image Linux a toujours flock.
+REPLI_SANS_FLOCK = "verrou en dossier, repli du pont sans flock (bash de Git) ; sous Linux flock est toujours là"
+
 
 def posix(chemin):
     """Chemin absolu tel que le voit bash (/c/... sous Git bash) : le pont refuse un PONT_SORTIE non absolu."""
@@ -617,6 +622,7 @@ class TestPont(unittest.TestCase):
             self.assertEqual([x for x in b.appels if "screencap" in x], [])
             self.assertEqual(b.captures(), [])
 
+    @plateforme_tests.windows_seulement(REPLI_SANS_FLOCK)
     def test_verrou_perime_est_repris(self):
         with Banc() as b:
             verrou = b.sortie / ".verrou-captures.d"
@@ -740,6 +746,16 @@ class TestPont(unittest.TestCase):
             self.assertFalse(self._vivant(ancien))
             self.assertEqual(pid.read_text().strip(), "424242")
 
+    @plateforme_tests.linux_seulement("vrai flock de l'image Linux : un fichier de verrou laissé par un détenteur tué ne bloque rien")
+    def test_fichier_de_verrou_laisse_ne_bloque_pas(self):
+        with Banc(PONT_DELAI_ADB_S="1") as b:
+            (b.sortie / ".verrou-captures").write_bytes(b"")
+            debut = time.monotonic()
+            self.assertEqual(b.lancer("capturer", "a")[0], 0)
+            self.assertLess(time.monotonic() - debut, 5)
+            self.assertEqual(b.captures(), ["a.png"])
+
+    @plateforme_tests.windows_seulement(REPLI_SANS_FLOCK)
     def test_verrou_sans_pid_ancien_est_repris(self):
         with Banc(PONT_DELAI_ADB_S="1") as b:
             verrou = b.sortie / ".verrou-captures.d"
@@ -915,6 +931,7 @@ class TestFilm(unittest.TestCase):
         self.addCleanup(lambda: (bash('kill -9 "$1" 2>/dev/null; exit 0', numero), p.wait(timeout=30)))
         return numero
 
+    @plateforme_tests.windows_seulement(REPLI_SANS_FLOCK)
     def test_filmer_n_attend_le_verrou_que_quelques_secondes(self):
         # Revue 1 : un finfilm en cours tient le verrou « film » longtemps ; filmer renonce vite (code 4), bien avant le
         # délai SSH de filmer côté poste.
@@ -925,6 +942,21 @@ class TestFilm(unittest.TestCase):
             debut = time.monotonic()
             code, d = b.lancer("filmer", "demo")
             self.assertEqual(code, 4, d)
+            self.assertLess(time.monotonic() - debut, 15)
+            self.assertEqual([x for x in b.appels if "screenrecord" in x], [])
+
+    @plateforme_tests.linux_seulement("vrai flock de l'image Linux : le verrou « film » tenu par un autre processus")
+    def test_filmer_n_attend_le_flock_que_quelques_secondes(self):
+        with Banc() as b:
+            tenu = subprocess.Popen(["bash", "-c", 'exec 9>> "$1"; flock 9; echo pris; read x', "bash",
+                                     (b.sortie / ".verrou-film").as_posix()],
+                                    stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+            self.addCleanup(lambda: (tenu.stdin.close(), tenu.stdout.close(), tenu.wait(timeout=30)))
+            self.assertEqual(tenu.stdout.readline().strip(), "pris")
+            debut = time.monotonic()
+            code, d = b.lancer("filmer", "demo")
+            self.assertEqual(code, 4, d)
+            self.assertIn("occupé", d["detail"])
             self.assertLess(time.monotonic() - debut, 15)
             self.assertEqual([x for x in b.appels if "screenrecord" in x], [])
 

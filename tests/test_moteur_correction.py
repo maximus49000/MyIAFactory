@@ -56,6 +56,19 @@ class TestCorrection(Base):
             self.corriger()
         self.assertEqual(self.flux_de(), ["f1-correctif", "f1-verification", "f1-validation", "f1-livraison"])
 
+    def test_apres_une_maquette_validee_la_correction_va_au_developpeur(self):
+        """Essai réel 2026-11-23 : la correction partait chez le maquettiste et se terminait sans code ni livrable."""
+        fac = json.loads(self.factory.read_text(encoding="utf-8"))
+        fac["flux"] = ([{"id": "maquette", "nom": "Maquette", "role": "maquettiste", "service": "dev"},
+                        {"id": "valid-maquette", "nom": "Validation", "validation": True}] + fac["flux"])
+        self.factory.write_text(json.dumps(fac), encoding="utf-8")
+        (self.dossier / "fiches" / "briefs" / "maquettiste.md").write_text(
+            "# Brief du rôle : maquettiste\n\nMaquette.\n", encoding="utf-8")
+        self.corriger()
+        w = wf.de_la_fonctionnalite(fa.lire(self.factory), self.fonc())
+        self.assertEqual(w["flux"][0]["role"], "dev")
+        self.assertEqual(w["flux"][-1]["role"], "dev")
+
     def test_un_role_qa_sans_agent_n_empeche_pas_la_correction(self):
         with self.recette(agent=False):
             self.corriger()

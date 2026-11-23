@@ -870,6 +870,14 @@ lieu `serveur` ; la signature n'est jamais exécutée par un agent. **Tests :** 
 
 Pour un projet Android/Flutter, le choix de la signature appartient à l'utilisateur : nouveau champ dans les paramètres « projet » (page Réglages à trois niveaux : global / type / projet ; valeur par défaut = la plus sûre) : (a) **le serveur signe avec la clé de debug copiée** (`~/android-signature/debug.keystore`, montée en lecture seule dans le conteneur de l'agent : c'est ce qui est codé pour FM_Stats sur la branche `flutter-build-apk` en attendant) ; (b) **le serveur construit, le poste signe** (tâche 15d) ; (c) **aucune clé ne quitte le poste**, build non signée ou clé jetable. Le montage de la clé de debug n'a lieu que si le réglage du projet choisit (a). **Files :** réglages (`bureau/reglages*.py`, page Réglages), `moteur/executeur_serveur.py` (demande : `signature`), `serveur_ovh/taches/lancer_agent.sh`. **Tests :** faux serveur ; défaut sans montage.
 
+### Task 15f (ajoutée le 2026-11-23, demande du Directeur « faciliter cela ») : commandes uniques pour les étapes standard des agents du serveur
+
+Au serveur personne n'approuve une commande : toute commande composée/préfixée (`cd … && flutter …`, `timeout …`, `VAR=… flutter …`) est refusée et l'agent s'arrête. Fournir des commandes COURTES et FIXES qui font l'étape complète (placement dans le dossier du projet, programme et arguments figés) : pour Flutter `analyser-flutter`, `tester-flutter`, `construire-apk` (arguments énumérés : `release`|`debug`), scripts du dépôt (`serveur_ovh/agent-outils/`), déposés par le poste à chaque lancement et montés en lecture seule sur `/opt/outils` (aucune reconstruction d'image), `PATH` du conteneur ; une règle `Bash(<commande>:*)` par commande (jamais `Bash` seul ; `ouvrir_outil` existant). Aucun shell libre, aucun argument libre. **Tests :** faux docker, motifs d'arguments refusés. Essai réel : Lucas, `construire-apk`.
+
+### Task 15g (ajoutée le 2026-11-23) : profil d'outils par type de projet (Réglages, niveau « type »)
+
+Les programmes ouverts aux agents d'un type de projet (Flutter : `analyser-flutter`, `tester-flutter`, `construire-apk` et `flutter` ; Gradle : …) se règlent une fois dans la page Réglages (niveau « type », valeur par défaut sûre) ; tout agent du serveur créé (`parallelisme`/`synchroniser_equipe`) reçoit ce profil : plus de décision « ouvrez-lui l'outil » fiche par fiche. Même famille que le réglage « signature des APK » (15e).
+
 ### Task 16: Documentation, CLAUDE.md et suite complète (contrôleur)
 
 **Files:**

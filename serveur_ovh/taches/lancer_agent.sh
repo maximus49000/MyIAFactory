@@ -51,8 +51,11 @@
 #   `docker run --rm --network none` bref qui le monte (un overlay n'est monté qu'au run) : refusé -> tâche échouée
 #   « flutter : overlay refusé », jamais de repli en écriture sur le SDK de l'hôte. Le volume est retiré à la fin (conclure),
 #   sur un échec de l'enveloppe (echec) et, à chaque lancement Flutter, ceux des tâches finies (balayage) ; flutter-up compte
-#   dans le plafond travail + maison. ~/android-sdk en lecture seule sur /opt/android-sdk s'il existe, et -e AGENT_FLUTTER=1 (l'entrée pose alors PATH, FLUTTER_ROOT, PUB_CACHE sous /maison,
-#   ANDROID_HOME, CI=true et FLUTTER_SUPPRESS_ANALYTICS : valeurs fixes). Aucun autre droit : mêmes durcissements.
+#   dans le plafond travail + maison. ~/android-sdk (s'il existe) de même, pour construire l'APK (Gradle et AGP écrivent
+#   dans le SDK) : volume asdk-<id>, couches android-up et android-work, sur /opt/android-sdk, libellé « SDK Android ».
+#   Une seule fonction pour les deux (preparer_overlay). -e AGENT_FLUTTER=1 : l'entrée pose alors PATH, FLUTTER_ROOT,
+#   PUB_CACHE et GRADLE_USER_HOME sous /maison, ANDROID_HOME, JAVA_HOME (JDK 17 de l'image), CI=true et
+#   FLUTTER_SUPPRESS_ANALYTICS : valeurs fixes. Aucun autre droit : mêmes durcissements.
 # Durée : duree_s (argument 3) fait foi ; elle est passée au conteneur (-e AGENT_DUREE_S) : l'échéance interne de l'entrée
 #   (duree_s - 120 s) et celle du veilleur partent de la même valeur, quoi que porte limites.duree_s dans demande.json.
 # Hôte exigé : kernel.yama.ptrace_scope >= 1 (lu dans /proc/sys/kernel/yama/ptrace_scope ; 0 -> echouee, rien ne démarre ;
@@ -237,35 +240,66 @@ controle_secret() {
   return 2
 }
 
-# --- Flutter : le SDK en copie sur écriture, par tâche ------------------------
+# --- Flutter et SDK Android : copie sur écriture, par tâche ------------------
 
-VOLUME_FLUTTER="flutter-$ID"                # $ID validé par MOTIF_ID : nom fermé
+# Deux volumes overlay par tâche d'un projet Flutter (noms fermés : $ID est validé par MOTIF_ID) :
+#   flutter-<id> : lowerdir ~/flutter-sdk,  couche haute ~/taches/<id>/flutter-up, travail flutter-work -> /opt/flutter-sdk
+#   asdk-<id>    : lowerdir ~/android-sdk,  couche haute ~/taches/<id>/android-up, travail android-work -> /opt/android-sdk
+# Les SDK de l'hôte ne sont jamais modifiés ; toutes les écritures vont dans la couche de la tâche.
+OVERLAYS=("flutter flutter-up" "asdk android-up")   # « <préfixe du volume> <couche haute> »
 
-# Retire le volume overlay de CETTE tâche (s'il a été préparé : flutter-up existe) ; jamais d'erreur. Le conteneur parti avec
-# --rm peut tenir le volume un instant : trois essais.
-retirer_volume_flutter() {
+# Retire un volume overlay de CETTE tâche (s'il a été préparé : sa couche haute existe) ; jamais d'erreur. Le conteneur parti
+# avec --rm peut tenir le volume un instant : trois essais.
+retirer_volume() {   # retirer_volume <volume> <couche haute>
   local n
-  [ -d "$DOSSIER/flutter-up" ] || return 0
+  [ -d "$DOSSIER/$2" ] || return 0
   for n in 1 2 3; do
-    dk 30 volume rm "$VOLUME_FLUTTER" >/dev/null 2>&1 && return 0
-    dk 30 volume inspect "$VOLUME_FLUTTER" >/dev/null 2>&1 || return 0
+    dk 30 volume rm "$1" >/dev/null 2>&1 && return 0
+    dk 30 volume inspect "$1" >/dev/null 2>&1 || return 0
     sleep 1
   done
   return 0
 }
 
-# Balayage : les volumes flutter-<id> (motif strict) des tâches à l'état final (une sortie anormale de leur veilleur a pu
-# les laisser) ; jamais celui d'une tâche en cours ni d'un nom hors motif.
-balayer_volumes_flutter() {
+retirer_volumes_overlay() {
+  local o
+  for o in "${OVERLAYS[@]}"; do retirer_volume "${o%% *}-$ID" "${o#* }"; done
+  return 0
+}
+
+# Balayage : les volumes flutter-<id> et asdk-<id> (motif strict) des tâches à l'état final (une sortie anormale de leur
+# veilleur a pu les laisser) ; jamais celui d'une tâche en cours ni d'un nom hors motif.
+balayer_volumes_overlay() {
   local v t
   while IFS= read -r v; do
-    [[ $v == flutter-* ]] || continue
-    t="${v#flutter-}"
+    case "$v" in flutter-*) t="${v#flutter-}" ;; asdk-*) t="${v#asdk-}" ;; *) continue ;; esac
     [[ $t =~ $MOTIF_ID ]] && [ "$t" != "$ID" ] || continue
     grep -qE '"etat": "(terminee|arretee|echouee)"' "$TACHES/$t/etat.json" 2>/dev/null || continue
     dk 30 volume rm "$v" >/dev/null 2>&1
-  done < <(dk 30 volume ls -q --filter "name=^flutter-t" 2>/dev/null)
+  done < <(dk 30 volume ls -q --filter "name=^flutter-t" --filter "name=^asdk-t" 2>/dev/null)
   return 0
+}
+
+# preparer_overlay <volume> <couche haute> <travail> <lowerdir> <cible> <libellé> <test…> : crée le volume overlay de la
+# tâche puis le PROUVE (`volume create` ne monte rien) par un run bref, sans réseau ni dossier de l'hôte, qui le monte et y
+# lance `test <test…>`. Tout refus : la tâche échoue « <libellé> : overlay refusé » (jamais de repli en écriture sur le SDK
+# de l'hôte) ; echec retire les volumes déjà créés.
+preparer_overlay() {
+  local volume="$1" haut="$2" travail="$3" bas="$4" cible="$5" libelle="$6"
+  shift 6
+  mkdir -p -- "$DOSSIER/$haut" "$DOSSIER/$travail" && chmod 700 "$DOSSIER/$haut" "$DOSSIER/$travail" ||
+    echec "$libelle : dossiers de l'overlay non créables (~/taches/$ID/$haut, $travail)."
+  dk 60 volume create --driver local --opt type=overlay --opt device=overlay \
+    --opt "o=lowerdir=$bas,upperdir=$DOSSIER/$haut,workdir=$DOSSIER/$travail" "$volume" \
+    >/dev/null 2>>"$DOSSIER/docker-run.log" || echec "$libelle : overlay refusé (volume non créé : voir docker-run.log)."
+  VERIF=(run --rm --pull never --name "verif-$volume" --label "$GENRE" --network none --user "$UTILISATEUR" --read-only
+    --cap-drop ALL --security-opt no-new-privileges --pids-limit 64 --memory 256m --memory-swap 256m
+    --mount "type=volume,src=$volume,dst=$cible" "$IMAGE" test "$@")
+  if ! dk 120 "${VERIF[@]}" >/dev/null 2>>"$DOSSIER/docker-run.log"; then
+    dk 30 rm -f "verif-$volume" >/dev/null 2>&1
+    echec "$libelle : overlay refusé (le volume ne se monte pas : voir docker-run.log) ; le SDK de l'hôte n'est jamais monté en écriture."
+  fi
+  COMMANDE+=(--mount "type=volume,src=$volume,dst=$cible")
 }
 
 # --- Veilleur (détaché) ----------------------------------------------------
@@ -280,7 +314,7 @@ veilleur() {
   FINI=0
   conclure() {   # conclure <etat> <statut> <raison>
     FINI=1
-    retirer_volume_flutter                 # projet Flutter : le volume overlay de la tâche (le conteneur est arrêté)
+    retirer_volumes_overlay                # projet Flutter : les volumes overlay de la tâche (le conteneur est arrêté)
     ecrire_etat "$1" "$2" "$debut_iso" "$(maintenant_iso)" "$3"
     liberer_creneau
     exit 0
@@ -352,7 +386,8 @@ veilleur() {
     if [ $((maintenant - dernier_du)) -ge "$DU_TRAVAIL_S" ]; then
       dernier_du=$maintenant
       mesures=("$DOSSIER/travail" "$DOSSIER/maison")
-      [ -d "$DOSSIER/flutter-up" ] && mesures+=("$DOSSIER/flutter-up")      # projet Flutter : la couche haute du SDK
+      [ -d "$DOSSIER/flutter-up" ] && mesures+=("$DOSSIER/flutter-up")      # projet Flutter : les couches hautes des SDK
+      [ -d "$DOSSIER/android-up" ] && mesures+=("$DOSSIER/android-up")
       ko=$(du -sck --apparent-size -- "${mesures[@]}" 2>/dev/null | tail -n 1 | cut -f1)
       if [[ $ko =~ ^[0-9]+$ ]] && [ "$ko" -gt "$TRAVAIL_MAX_KO" ]; then
         arreter_puis terminee limite "Limite atteinte : travail et maison trop volumineux (${ko} Ko, maximum ${TRAVAIL_MAX_KO} Ko)"
@@ -374,7 +409,7 @@ if [ "$VEILLEUR" = 1 ]; then veilleur; exit 0; fi
 
 veilleur_vivant() { processus_vivant "$DOSSIER/veilleur.pid" "--veilleur $ID"; }
 enveloppe_vivante() { processus_vivant "$DOSSIER/enveloppe.pid" "lancer_agent.sh $ID"; }
-echec() { arreter_pont_et_emulation; retirer_volume_flutter; fin_erreur "$1"; }   # fin_erreur (commun.sh) : après pont et volume
+echec() { arreter_pont_et_emulation; retirer_volumes_overlay; fin_erreur "$1"; }   # fin_erreur (commun.sh) : après pont et volume
 
 # Un identifiant ne sert qu'une fois : seul un état absent ou en_attente (jamais démarré) peut être relancé. Rien n'est modifié.
 if [ -f "$DOSSIER/etat.json" ] && ! grep -q '"etat": "en_attente"' "$DOSSIER/etat.json"; then
@@ -512,27 +547,29 @@ COMMANDE=(run --pull never -d --rm --name "tache-$ID" --label "$GENRE" --user "$
   -v "$DOSSIER/entree:/entree:ro" -v "$DOSSIER/travail:/travail" -v "$DOSSIER/maison:/maison" -v "$DOSSIER/sortie:/sortie"
   -v "$JETON:/run/identifiants/jeton:ro")
 if [ "$MODE" = pilote ]; then COMMANDE+=(-v "$DOSSIER/pont:/pont" -v "$DOSSIER/outil:/outil:ro"); fi
-if [ "$FLUTTER" = 1 ]; then                        # --mount : une source absente est une erreur, jamais créée par root
-  balayer_volumes_flutter
-  mkdir -p -- "$DOSSIER/flutter-up" "$DOSSIER/flutter-work" && chmod 700 "$DOSSIER/flutter-up" "$DOSSIER/flutter-work" ||
-    echec "flutter : dossiers de l'overlay non créables (~/taches/$ID/flutter-up, flutter-work)."
-  dk 60 volume create --driver local --opt type=overlay --opt device=overlay \
-    --opt "o=lowerdir=$FLUTTER_SDK,upperdir=$DOSSIER/flutter-up,workdir=$DOSSIER/flutter-work" "$VOLUME_FLUTTER" \
-    >/dev/null 2>>"$DOSSIER/docker-run.log" || echec "flutter : overlay refusé (volume non créé : voir docker-run.log)."
-  # Preuve : `volume create` ne monte rien ; un run bref, sans réseau ni dossier de l'hôte, monte le volume, y trouve flutter
-  # exécutable et le verrou lisible.
-  VERIF=(run --rm --pull never --name "verif-flutter-$ID" --label "$GENRE" --network none --user "$UTILISATEUR" --read-only
-    --cap-drop ALL --security-opt no-new-privileges --pids-limit 64 --memory 256m --memory-swap 256m
-    --mount "type=volume,src=$VOLUME_FLUTTER,dst=/opt/flutter-sdk" "$IMAGE"
-    test -x /opt/flutter-sdk/bin/flutter -a -r /opt/flutter-sdk/bin/cache/lockfile)
-  if ! dk 120 "${VERIF[@]}" >/dev/null 2>>"$DOSSIER/docker-run.log"; then
-    dk 30 rm -f "verif-flutter-$ID" >/dev/null 2>&1
-    echec "flutter : overlay refusé (le volume du SDK ne se monte pas : voir docker-run.log) ; le SDK de l'hôte n'est jamais monté en écriture."
-  fi
-  COMMANDE+=(--mount "type=volume,src=$VOLUME_FLUTTER,dst=/opt/flutter-sdk" -e AGENT_FLUTTER=1)   # jamais le SDK en bind
+if [ "$FLUTTER" = 1 ]; then                        # aucun SDK de l'hôte en bind : chacun en copie sur écriture par tâche
+  balayer_volumes_overlay
+  preparer_overlay "flutter-$ID" flutter-up flutter-work "$FLUTTER_SDK" /opt/flutter-sdk flutter \
+    -x /opt/flutter-sdk/bin/flutter -a -r /opt/flutter-sdk/bin/cache/lockfile
   if [ -d "$SDK_ANDROID" ] && [ ! -L "$SDK_ANDROID" ]; then
-    COMMANDE+=(--mount "type=bind,src=$SDK_ANDROID,dst=/opt/android-sdk,readonly")
+    preparer_overlay "asdk-$ID" android-up android-work "$SDK_ANDROID" /opt/android-sdk "SDK Android" \
+      -d /opt/android-sdk/platforms -a -d /opt/android-sdk/build-tools
   fi
+  # Clé de DEBUG du poste du Directeur (copiée par lui : ~/android-signature/debug.keystore) : l'APK construit ici se met à
+  # jour sur son appareil sans conflit de signature. Absente : rien de monté (AGP crée une clé jetable dans /maison).
+  # Présente mais pas un fichier ordinaire (lien, dossier…) : refusée. Jamais lue ici. Montée en LECTURE SEULE sur
+  # /maison/.android/debug.keystore, dont la cible (fichier vide) est créée d'abord par l'enveloppe, sous l'uid de l'hôte.
+  CLE_DEBUG="$HOME/android-signature/debug.keystore"
+  if [ -e "$CLE_DEBUG" ] || [ -L "$CLE_DEBUG" ]; then
+    [ -f "$CLE_DEBUG" ] && [ ! -L "$CLE_DEBUG" ] ||
+      echec "clé de debug refusée : ~/android-signature/debug.keystore n'est pas un fichier ordinaire (lien ou autre)."
+    cible="$DOSSIER/maison/.android/debug.keystore"
+    { [ ! -L "$DOSSIER/maison/.android" ] && mkdir -p -- "$DOSSIER/maison/.android" && chmod 700 "$DOSSIER/maison/.android" &&
+      { [ ! -L "$cible" ] || rm -f -- "$cible"; } && { [ -f "$cible" ] || { [ ! -e "$cible" ] && : > "$cible"; }; }; } ||
+      echec "clé de debug : cible ~/taches/$ID/maison/.android/debug.keystore non créable."
+    COMMANDE+=(--mount "type=bind,src=$CLE_DEBUG,dst=/maison/.android/debug.keystore,readonly")
+  fi
+  COMMANDE+=(-e AGENT_FLUTTER=1)
 fi
 COMMANDE+=("$IMAGE" entree-agent)
 if ! dk 120 "${COMMANDE[@]}" >/dev/null 2>"$DOSSIER/docker-run.log"; then

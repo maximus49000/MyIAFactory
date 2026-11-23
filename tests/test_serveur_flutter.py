@@ -379,14 +379,14 @@ class TestEnveloppeFlutter(unittest.TestCase):
             r = b.lancer("seul", "30", "2048", "2", "2")
             self.assertEqual(r.returncode, 0, r.stderr + r.stdout)
             h, d, vol = b.h(), f"{b.h()}/taches/{ID}", f"flutter-{ID}"
-            creation = b.appels("docker volume create")
+            creation = [x for x in b.appels("docker volume create") if x.endswith(f" {vol}")]
             self.assertEqual(len(creation), 1, b.journal)
             self.assertIn(f"--driver local --opt type=overlay --opt device=overlay --opt o=lowerdir={h}/flutter-sdk,"
                           f"upperdir={d}/flutter-up,workdir={d}/flutter-work {vol}", creation[0])
             for sous in ("flutter-up", "flutter-work"):
                 self.assertTrue((b.dossier / sous).is_dir())
             # validation : un run bref, sans réseau, qui monte le volume, AVANT le conteneur de l'agent
-            v = b.run_args("verif.txt")
+            v = next(x for x in b.appels("docker run") if "verif-flutter-" in x).split()
             self.assertIn("--rm", v)
             suite_dans(self, v, "--network", "none")
             suite_dans(self, v, "--mount", f"type=volume,src={vol},dst=/opt/flutter-sdk")
@@ -401,7 +401,15 @@ class TestEnveloppeFlutter(unittest.TestCase):
             a = b.run_args()
             suite_dans(self, a, "--mount", f"type=volume,src={vol},dst=/opt/flutter-sdk")       # le SDK entier, en overlay
             self.assertFalse([x for x in a if "src=" + h + "/flutter-sdk" in x])                # jamais le SDK de l'hôte en bind
-            suite_dans(self, a, "--mount", f"type=bind,src={h}/android-sdk,dst=/opt/android-sdk,readonly")
+            # le SDK Android aussi en copie sur écriture par tâche (Gradle et AGP y écrivent), jamais en bind
+            asdk = f"asdk-{ID}"
+            self.assertTrue([x for x in b.appels("docker volume create") if x.endswith(
+                f"o=lowerdir={h}/android-sdk,upperdir={d}/android-up,workdir={d}/android-work {asdk}")], b.journal)
+            for sous in ("android-up", "android-work"):
+                self.assertTrue((b.dossier / sous).is_dir())
+            self.assertLess(j.index("verif-asdk-"), j.index("docker run --pull never -d"))
+            suite_dans(self, a, "--mount", f"type=volume,src={asdk},dst=/opt/android-sdk")
+            self.assertFalse([x for x in a if "src=" + h + "/android-sdk" in x])
             self.assertNotIn("flutter-verrou", " ".join(a))
             self.assertEqual([a[i + 1] for i in range(len(a) - 1) if a[i] == "-e"],
                              ["HOME=/maison", "AGENT_DUREE_S=30", "AGENT_FLUTTER=1"])
@@ -418,6 +426,24 @@ class TestEnveloppeFlutter(unittest.TestCase):
             b.arreter()
             b.attendre_final()
             self.assertTrue([x for x in b.appels("docker volume rm") if vol in x], b.journal)   # retiré à la fin
+            self.assertTrue([x for x in b.appels("docker volume rm") if asdk in x], b.journal)
+
+    def test_overlay_android_refuse_echec_clair_et_volumes_retires(self):
+        with Banc() as b:
+            self.sdk(b)
+            (b.home / "android-sdk").mkdir()
+            b.ecrire_entree(flutter=True)
+            (b.bin / "docker").rename(b.bin / "docker-banc")
+            (b.bin / "docker").write_text(
+                '#!/bin/sh\ncase "$*" in *verif-asdk-*) echo "docker $*" >> "$FAUX_JOURNAL"; exit 125;; esac\n'
+                'exec "$(dirname "$0")/docker-banc" "$@"\n', newline="\n")
+            (b.bin / "docker").chmod(0o755)
+            r = b.lancer("seul", "30", "2048", "2", "2")
+            self.assertEqual(r.returncode, 1, r.stderr + r.stdout)
+            self.assertFalse([x for x in b.appels("docker run") if x.startswith("docker run --pull never -d ")], b.journal)
+            self.assertIn("SDK Android : overlay refusé", b.etat()["raison"])
+            for vol in (f"flutter-{ID}", f"asdk-{ID}"):
+                self.assertTrue([x for x in b.appels("docker volume rm") if vol in x], b.journal)
 
     def test_overlay_refuse_echec_clair_sans_agent_et_volume_retire(self):
         with Banc(FAUX_VERIF_CODE="125") as b:
@@ -425,7 +451,7 @@ class TestEnveloppeFlutter(unittest.TestCase):
             b.ecrire_entree(flutter=True)
             r = b.lancer("seul", "30", "2048", "2", "2")
             self.assertEqual(r.returncode, 1, r.stderr + r.stdout)
-            self.assertFalse([x for x in b.appels("docker run") if " -d " in f" {x} "], b.journal)
+            self.assertFalse([x for x in b.appels("docker run") if x.startswith("docker run --pull never -d ")], b.journal)
             e = b.etat()
             self.assertEqual((e["etat"], e["statut"]), ("echouee", "erreur"))
             self.assertIn("flutter : overlay refusé", e["raison"])
@@ -452,20 +478,75 @@ class TestEnveloppeFlutter(unittest.TestCase):
             (b.bin / "docker").rename(b.bin / "docker-banc")
             (b.bin / "docker").write_text(
                 '#!/bin/sh\nif [ "$1 $2" = "volume ls" ]; then echo "docker $*" >> "$FAUX_JOURNAL"; '
-                f'printf "flutter-{finie}\\nflutter-{vivante}\\nflutter-x;rm\\nautre\\n"; exit 0; fi\n'
+                f'printf "flutter-{finie}\\nflutter-{vivante}\\nflutter-x;rm\\nasdk-{finie}\\nasdk-{vivante}\\nautre\\n"; exit 0; fi\n'
                 'exec "$(dirname "$0")/docker-banc" "$@"\n', newline="\n")
             (b.bin / "docker").chmod(0o755)
             r = b.lancer("seul", "30", "2048", "2", "2")
             self.assertEqual(r.returncode, 0, r.stderr + r.stdout)
             rm = b.appels("docker volume rm")
-            self.assertEqual(rm, [f"docker volume rm flutter-{finie}"], b.journal)
+            self.assertEqual(rm, [f"docker volume rm flutter-{finie}", f"docker volume rm asdk-{finie}"], b.journal)
             b.arreter()
             b.attendre_final()
+
+    def cle(self, b, lien=False):
+        """Une FAUSSE clé de debug (jamais la vraie : aucun test n'en ouvre une) dans ~/android-signature."""
+        d = b.home / "android-signature"
+        d.mkdir()
+        if lien:
+            vraie = b.t / "ailleurs.keystore"
+            vraie.write_bytes(b"FAUSSE")
+            try:
+                os.symlink(vraie, d / "debug.keystore")
+            except OSError:
+                self.skipTest("liens symboliques indisponibles")
+            if not (d / "debug.keystore").is_symlink():
+                self.skipTest("liens symboliques indisponibles")
+        else:
+            (d / "debug.keystore").write_bytes(b"FAUSSE")
+
+    def test_cle_de_debug_du_poste_montee_en_lecture_seule(self):
+        with Banc() as b:
+            self.sdk(b)
+            self.cle(b)
+            b.ecrire_entree(flutter=True)
+            r = b.lancer("seul", "30", "2048", "2", "2")
+            self.assertEqual(r.returncode, 0, r.stderr + r.stdout)
+            a, h = b.run_args(), b.h()
+            suite_dans(self, a, "--mount",
+                       f"type=bind,src={h}/android-signature/debug.keystore,dst=/maison/.android/debug.keystore,readonly")
+            # la cible est créée AVANT par l'enveloppe (uid de l'hôte), vide : la clé ne s'écrit jamais dans maison/
+            self.assertTrue((b.dossier / "maison" / ".android").is_dir())
+            self.assertEqual((b.dossier / "maison" / ".android" / "debug.keystore").read_bytes(), b"")
+            self.assertNotIn("android-signature", "".join(p.name for p in (b.dossier / "sortie").iterdir()))
+            b.arreter()
+            b.attendre_final()
+
+    def test_sans_cle_de_debug_pas_de_montage_ni_d_echec(self):
+        with Banc() as b:
+            self.sdk(b)
+            b.ecrire_entree(flutter=True)
+            r = b.lancer("seul", "30", "2048", "2", "2")
+            self.assertEqual(r.returncode, 0, r.stderr + r.stdout)
+            self.assertNotIn("debug.keystore", " ".join(b.run_args()))
+            b.arreter()
+            b.attendre_final()
+
+    def test_cle_de_debug_qui_n_est_pas_un_fichier_ordinaire_refusee(self):
+        with Banc() as b:
+            self.sdk(b)
+            self.cle(b, lien=True)
+            b.ecrire_entree(flutter=True)
+            r = b.lancer("seul", "30", "2048", "2", "2")
+            self.assertEqual(r.returncode, 1, r.stderr + r.stdout)
+            self.assertFalse([x for x in b.appels("docker run") if x.startswith("docker run --pull never -d ")], b.journal)
+            self.assertIn("clé de debug", b.etat()["raison"])
+            self.assertTrue([x for x in b.appels("docker volume rm") if f"flutter-{ID}" in x], b.journal)
 
     def test_projet_non_flutter_inchange(self):
         for valeur in (None, False):
             with self.subTest(valeur=valeur), Banc() as b:
                 self.sdk(b)
+                self.cle(b)                                   # la clé est là, mais un projet non Flutter ne la reçoit pas
                 if valeur is not None:
                     b.ecrire_entree(flutter=valeur)
                 r = b.lancer("seul", "30", "2048", "2", "2")
@@ -524,6 +605,11 @@ class TestEntreeFlutter(unittest.TestCase):
                 else:
                     os.environ[k] = v
 
+    def test_jdk_17_dans_l_image_agent(self):
+        dockerfile = (RACINE / "serveur_ovh" / "images" / "agent" / "Dockerfile").read_text(encoding="utf-8")
+        self.assertIn("openjdk-17-jdk-headless", dockerfile)
+        self.assertEqual(self.e.JAVA_RACINE, "/usr/lib/jvm/java-17-openjdk-amd64")
+
     def test_image_agent_inchangee_par_l_overlay(self):
         self.assertNotIn("overlay", (RACINE / "serveur_ovh" / "images" / "agent" / "entree-agent.py").read_text(encoding="utf-8"))
 
@@ -534,7 +620,8 @@ class TestEntreeFlutter(unittest.TestCase):
         v = self.env(AGENT_FLUTTER="1")
         self.assertEqual(v, {"PATH": "/opt/flutter-sdk/bin:/usr/local/bin:/usr/bin:/bin", "FLUTTER_ROOT": "/opt/flutter-sdk",
                              "PUB_CACHE": os.path.join("/maison", ".pub-cache"), "FLUTTER_SUPPRESS_ANALYTICS": "true",
-                             "CI": "true"})
+                             "CI": "true", "JAVA_HOME": "/usr/lib/jvm/java-17-openjdk-amd64",
+                             "GRADLE_USER_HOME": os.path.join("/maison", ".gradle")})
         (self.racine / "opt" / "android-sdk").mkdir(parents=True)
         v = self.env(AGENT_FLUTTER="1")
         self.assertEqual((v["ANDROID_HOME"], v["ANDROID_SDK_ROOT"]), ("/opt/android-sdk", "/opt/android-sdk"))

@@ -365,10 +365,13 @@ conteneur des agents des projets Flutter.
   `docker run --rm --network none` bref qui le monte (un overlay n'est monté qu'au lancement d'un conteneur) ; refusé : la
   tâche échoue « **flutter : overlay refusé** », jamais de repli en écriture sur le SDK de l'hôte. Il est retiré à la fin
   de la tâche, sur un échec de l'enveloppe et, à chaque lancement d'un agent Flutter, pour les tâches finies (balayage) ;
-  `flutter-up` compte dans le plafond `travail/` + `maison/`. L'image `agent` ne change pas. `~/android-sdk` sur
-  `/opt/android-sdk` en lecture seule. L'entrée pose des valeurs **fixes** :
+  `flutter-up` compte dans le plafond `travail/` + `maison/`. `~/android-sdk` suit le même chemin (même fonction
+  `preparer_overlay`) : volume `asdk-<id>`, couches `android-up` et `android-work`, sur `/opt/android-sdk`, prouvé de
+  même (« **SDK Android : overlay refusé** » sinon), retiré et balayé de même, `android-up` compté. L'entrée pose des
+  valeurs **fixes** :
   `PATH` (`/opt/flutter-sdk/bin` en tête), `FLUTTER_ROOT`, `PUB_CACHE=/maison/.pub-cache` (inscriptible, gardé à la
-  reprise, compté dans les 8 Go de `travail/` + `maison/`), `ANDROID_HOME`, `CI=true`, `FLUTTER_SUPPRESS_ANALYTICS=true`.
+  reprise, compté dans les 8 Go de `travail/` + `maison/`), `ANDROID_HOME`, `JAVA_HOME` (JDK 17 de l'image),
+  `GRADLE_USER_HOME=/maison/.gradle`, `CI=true`, `FLUTTER_SUPPRESS_ANALYTICS=true`.
   `flutter pub get` passe par le **réseau sortant ouvert** des agents (pub.dev).
 - **Le droit d'appeler `flutter`** n'est jamais donné par la capacité : c'est la règle `Bash(flutter:*)` de la fiche de
   l'agent (jamais `Bash` seul), ouverte par le Directeur (décision `outil_agent`, « Autoriser ce programme ») ou par
@@ -376,9 +379,33 @@ conteneur des agents des projets Flutter.
   lancer fiche`. La règle couvre une commande qui **commence** par `flutter` ; dans une commande composée (`cd x && flutter
   test`), chaque morceau doit être couvert : préférer `flutter pub get --directory android_app`, et pour `flutter test`
   un `cd android_app` seul puis `flutter test`.
-- **Limites** : l'image n'a pas de JDK : `flutter build apk` ne marche pas dans le conteneur d'agent (seulement
-  `pub get`, `analyze`, `test`). Les tests routés au serveur (`lancer.py tests`) ne connaissent pas encore la famille
-  `flutter`.
+- **Construire l'APK au serveur : JDK 17, SDK Android et Flutter en copie sur écriture par tâche.** L'image `agent`
+  porte le JDK 17 de la distribution (`openjdk-17-jdk-headless`) : elle change, la capacité `agent` redevient
+  « À mettre à jour » jusqu'à la réinstallation d'`agent-serveur`. `flutter build apk` est appelé par `flutter` (règle
+  `Bash(flutter:*)`) ; Gradle (wrapper) et AGP sont lancés par flutter, pas par l'agent : aucune règle `java` ou
+  `gradle` n'est requise tant que l'agent n'appelle pas `./gradlew` lui-même (sinon `Bash(./gradlew:*)` serait à demander
+  : un chemin relatif, que la fiche n'ouvre pas). Gradle et ses dépendances passent par le réseau sortant ouvert ; leur
+  cache vit sous `/maison/.gradle` (compté dans les 8 Go). L'APK est écrit dans le dépôt de l'agent
+  (`build/app/outputs/flutter-apk/` du dossier Flutter), qui est hors des commits (`build/` ignoré) : il ne revient
+  **pas** au poste par la branche ; le rapatrier est à faire.
+- **Signature : la clé de debug du poste du Directeur.** Un projet qui signe sa release avec la configuration `debug`
+  (FM_Stats) doit signer au serveur avec la **même** clé que le poste, sinon l'APK ne se met pas à jour sur l'appareil
+  (conflit de signature). Décision du Directeur : sa clé `~/.android/debug.keystore` est copiée sur le serveur dans
+  `~/android-signature/debug.keystore` (dossier 0700, fichier 0400 ; étape manuelle, faite par le Directeur ou le
+  contrôleur, jamais par MyIAFactory, qui ne lit ni la clé ni son mot de passe). Pour un projet Flutter, l'enveloppe la monte
+  **en lecture seule** sur `/maison/.android/debug.keystore` (`user.home/.android` d'AGP, `HOME=/maison`), après avoir
+  créé elle-même la cible (un fichier vide de `maison/.android/`, sous l'uid de l'hôte). **Absente** : rien n'est monté,
+  la tâche continue et AGP signe avec une clé de debug **jetable** créée dans `/maison/.android` (l'APK ne remplacera pas
+  celui de l'appareil). **Présente mais pas un fichier ordinaire** (lien, dossier) : la tâche échoue (« clé de debug
+  refusée »). Un projet non Flutter ne la reçoit jamais.
+  **Risque accepté par le Directeur** : le code du projet qui tourne dans le conteneur (Gradle, scripts de build, tests)
+  et l'agent lui-même **peuvent lire cette clé** (clé de debug, projets du Directeur seulement). Elle ne doit **jamais**
+  être poussée ni rapatriée : `maison/` n'est jamais rapatrié (seuls `flux.jsonl`, `fin.json` et `resultat.bundle`
+  reviennent) et le paquet résultat ne contient que les commits du dépôt `/travail/projet` ; le fichier de `maison/.android`
+  sur l'hôte reste vide (le montage le recouvre). Limite : un agent qui **copierait** la clé dans le dépôt et la commiterait
+  la ferait entrer dans le paquet ; aucun contrôle ne le détecte aujourd'hui (contrairement au jeton de l'abonnement) :
+  relire les branches rapatriées (un fichier `*.keystore` ne doit jamais y apparaître).
+- **Limites** : les tests routés au serveur (`lancer.py tests`) ne connaissent pas encore la famille `flutter`.
 
 <a id="connexion-a-l-abonnement"></a>
 ## Connexion à l'abonnement
@@ -464,3 +491,6 @@ Tout ce qui précède est vérifié par des tests simulés. À prouver sur le se
   haute d'environ 76 Ko) ; restent `flutter pub get`, `analyze` et `test` dans le conteneur de l'agent lancé par
   l'enveloppe, la suppression du volume en fin de tâche, les bibliothèques système dont `flutter_tester` a besoin dans l'image (Ubuntu
   minimal) ; le nom exact de l'archive et la présence de la 3.47.1 dans `releases_linux.json`.
+- **APK au serveur** : `flutter build apk --debug` dans l'agent (téléchargement de Gradle et des dépendances par le
+  réseau de l'agent, durée, mémoire sous 4 Go, taille de `/maison/.gradle` et de `android-up`, chemin réel du JDK dans
+  l'image, overlay du SDK Android) ; la récupération de l'APK produit (hors commits aujourd'hui).

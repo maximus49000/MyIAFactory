@@ -12,6 +12,7 @@ import {creerConso} from "./conso.js";
 import {definirAbonnement} from "./abonnement.js";
 import {accuseDe, creerAccuses, majEtatAccuses, noterAccuse} from "./accuse.js";
 import {brancherOptimiser} from "./optimiser.js";
+import {creerVoyant} from "./voyant.js";
 import {creerHorloge, creerMenuParametres, raccourcir, resserrer, CLASSE_ETROITE} from "./barre-parametres.js";
 
 const INTERVALLE_CHARGE = 5000;
@@ -33,11 +34,8 @@ export function creerBarre(entete, bandeau) {
   choixProjet.hidden = true;   // montré seulement quand le bureau suit plusieurs projets
   titre.append(logo, projet, choixProjet);
 
-  const lampe = el("span", "voyant-lampe");
-  const libelle = el("span", "voyant-libelle", "…");
-  const leVoyant = el("div", "voyant");
-  leVoyant.setAttribute("role", "status");
-  leVoyant.append(lampe, libelle);
+  // Le voyant : la pastille de couleur seule ; son texte est l'infobulle (ui/voyant.js).
+  const leVoyant = creerVoyant();
   // Ce que le moteur dit retenir le travail (pause d'une installation, attente de charge), sous le voyant.
   const retenue = el("div", "barre-retenue");
   retenue.setAttribute("role", "status");
@@ -120,7 +118,7 @@ export function creerBarre(entete, bandeau) {
     retenue: () => (!retenue.hidden && (telephone() || entete.classList.contains(CLASSE_ETROITE))
       ? [...retenue.children].map((s) => s.textContent) : []),
   });
-  entete.append(blocAbonnement, horloge.racine, separateur, titre, leVoyant, retenue, charge, zoneActions, boutonNouvelle, boutonCorrection,
+  entete.append(blocAbonnement, horloge.racine, separateur, titre, leVoyant.racine, retenue, charge, zoneActions, boutonNouvelle, boutonCorrection,
                 boutonQuestion, boutonFonctions, zoneLivrable, boutonListe, menu.racine);
 
   // Une seule ligne à toutes les largeurs : ce qui ne tient pas passe dans le menu de la roue, de droite à gauche
@@ -300,8 +298,7 @@ export function creerBarre(entete, bandeau) {
 
   function afficherVoyant() {
     const v = voyant(factory, erreur);
-    libelle.textContent = v.libelle;
-    leVoyant.dataset.ton = v.ton;
+    leVoyant.maj(v.libelle, v.ton);
   }
 
   function afficherCharge() {

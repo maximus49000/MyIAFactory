@@ -122,7 +122,7 @@ body.panneau-ouvert #scene { right: var(--largeur-panneau); }
   --marge-barre: 16px;
   --largeur-menu-parametres: 250px;
   --retenue-min: 8em;
-  --choix-min: 6em;
+  --choix-min: 12em;   /* plancher du sélecteur de projets ; il descend aux derniers resserrements */
   position: fixed;
   top: 0; left: 0; right: 0;
   height: var(--hauteur-barre);
@@ -184,7 +184,9 @@ body.panneau-ouvert #scene { right: var(--largeur-panneau); }
 .mobile #barre > .barre-titre, #barre.barre-minimale > .barre-titre { flex: 0 1 auto; min-width: 0; overflow: hidden; }
 #barre > .barre-titre:has(> .barre-choix:not([hidden])) { min-width: var(--choix-min); }
 #barre .barre-choix { min-width: var(--choix-min); text-overflow: ellipsis; }
-#barre.barre-minimale .barre-choix { max-width: 10em; }
+#barre.barre-etroite { --choix-min: 9em; }
+#barre.barre-minimale { --choix-min: 6em; }
+#barre.barre-minimale .barre-choix { max-width: 12em; }
 #barre.barre-etroite .barre-projet::before { content: none; }
 .menu-parametres-retenue { margin-bottom: 4px; padding-bottom: 4px; border-bottom: 1px solid #efe8da; }
 .menu-parametres-retenu { padding: 6px 10px; border-radius: 6px; background: #fbf0d4; color: #7a5a0c; font-size: 13px; font-weight: 600;
@@ -200,7 +202,14 @@ body.panneau-ouvert #scene { right: var(--largeur-panneau); }
 }
 .barre-projet:not(:empty)::before { content: "· "; }
 
-.voyant { flex: none; display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 14px; white-space: nowrap; }
+/* Le voyant : la pastille seule (ui/voyant.js) ; son texte est l'infobulle, posée dans le <body> (la barre coupe ce qui dépasse). */
+.voyant { flex: none; display: flex; align-items: center; justify-content: center; padding: 6px; border-radius: 50%; cursor: help; }
+.voyant:focus-visible { outline: 2px solid #3d3a4b; outline-offset: 1px; }
+.voyant-bulle {
+  position: fixed; z-index: 40; max-width: min(320px, calc(100vw - 16px)); padding: 6px 10px; border-radius: 8px;
+  background: #3d3a4b; color: #fff; font-size: 13px; font-weight: 600; line-height: 1.3; box-shadow: 0 4px 14px rgba(61, 58, 75, 0.3);
+  pointer-events: none;
+}
 .barre-retenue { display: flex; gap: 4px; font-size: 13px; font-weight: 600; }
 /* Dans la barre, sur la même ligne : la retenue se raccourcit (points de suspension) jusqu'à --retenue-min. */
 #barre > .barre-retenue { flex: 0 1 auto; min-width: var(--retenue-min); overflow: hidden; }
@@ -227,7 +236,7 @@ body.panneau-ouvert #scene { right: var(--largeur-panneau); }
 .kanban-carte-resume { color: #5b5868; font-size: 12px; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .resume-tache { color: #4a4757; font-size: 13px; margin: 2px 0 6px; }
 .kanban-carte-travail { color: #2f6b3f; font-size: 12px; overflow-wrap: anywhere; }
-.voyant-lampe { width: 12px; height: 12px; border-radius: 50%; background: #9a96a6; box-shadow: 0 0 0 3px rgba(154, 150, 166, 0.25); }
+.voyant-lampe { width: 15px; height: 15px; border-radius: 50%; background: #9a96a6; box-shadow: 0 0 0 3px rgba(154, 150, 166, 0.25); }
 .voyant[data-ton="ok"] .voyant-lampe { background: #3aa65b; box-shadow: 0 0 0 3px rgba(58, 166, 91, 0.25); }
 .voyant[data-ton="pause"] .voyant-lampe { background: #e0a21b; box-shadow: 0 0 0 3px rgba(224, 162, 27, 0.28); }
 .voyant[data-ton="alerte"] .voyant-lampe { background: #d65a31; box-shadow: 0 0 0 3px rgba(214, 90, 49, 0.28); }
@@ -540,7 +549,7 @@ body.panneau-ouvert #scene { right: var(--largeur-panneau); }
 /* --- Plusieurs projets : sélecteur, livrables. */
 .barre-choix {
   font: inherit; padding: 2px 6px; border: 1px solid #cfc6b4; border-radius: 6px; background: #fffdf7; color: inherit;
-  max-width: 22em;
+  min-width: 12em; max-width: 18em;
 }
 .barre-livrable { position: relative; display: inline-block; }
 .menu-livrables { position: relative; }
@@ -1051,14 +1060,12 @@ div.cout-etape > .cout-etape-ligne { width: 100%; }
 #scene { touch-action: none; }   /* glisser et pincer sont gérés par la page (ui/gestes.js) */
 
 /* Téléphone : l'heure, le rond de consommation, le projet, le voyant et la roue ; le reste est dans le menu de la roue. */
-.mobile #barre { --marge-barre: 10px; gap: 8px; }
+.mobile #barre { --marge-barre: 10px; --choix-min: 6em; gap: 8px; }
 .mobile #barre .barre-date, .mobile #barre .barre-logo, .mobile #barre .charge, .mobile #barre .barre-retenue,
 .mobile #barre .barre-actions, .mobile #barre .barre-livrable { display: none; }
 .mobile .barre-projet:not(:empty)::before { content: none; }
-.mobile #barre > .voyant { flex: 0 1 auto; min-width: 0; }
 .mobile .barre-projet:not([hidden]) { display: block; max-width: none; }
-.mobile .barre-choix { max-width: 40vw; }
-.mobile .voyant-libelle { overflow: hidden; text-overflow: ellipsis; }
+.mobile .barre-choix { max-width: 46vw; }
 .mobile .barre-roue { width: 40px; height: 40px; }
 .mobile .menu-parametres-entree { min-height: 44px; }
 .mobile .bouton-barre { min-height: 38px; }

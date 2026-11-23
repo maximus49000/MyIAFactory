@@ -743,7 +743,7 @@ téléphones associés devront scanner un nouveau QR code (téléphone perdu, Wi
 
 **Sur le téléphone.** La même page et la vue 3D, allégée : toucher pour choisir, pincer pour zoomer, glisser pour se
 déplacer ; les panneaux s'ouvrent en plein écran (« Fermer ») ; la barre tient sur une ligne (le rond de consommation,
-l'heure et la date, le projet, le voyant, la roue crantée) et les boutons d'action passent dans le menu de la roue,
+l'heure et la date, le projet, le voyant, la roue crantée ; le voyant est une pastille de couleur seule, son texte s'affiche dans une info-bulle au toucher ou au survol) et les boutons d'action passent dans le menu de la roue,
 groupe « Actions ». Tous les gestes de l'ordinateur y
 sont possibles (décisions du Directeur, déplacer un post-it, discussion), et une photo prise au téléphone est réduite
 et réencodée (JPEG, moins de 5 Mo) avant l'envoi ; un format que le navigateur ne sait pas lire (certains HEIC) donne

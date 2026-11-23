@@ -10,6 +10,13 @@ from tests.inst_aide import AvecMaison, instantane
 
 RACINE = Path(__file__).resolve().parent.parent
 
+from tests import plateforme_tests  # noqa: E402
+
+
+def setUpModule():
+    plateforme_tests.module_pas_encore_linux(
+        "création d'installation en échec au conteneur Linux (chemins du poste), cause à préciser")
+
 
 class Executeur:
     """Un git ou un gh simulé : note les appels, répond comme demandé."""

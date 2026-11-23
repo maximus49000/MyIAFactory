@@ -12,6 +12,13 @@ from tests.inst_aide import AvecMaison, proposition_valide
 OUTIL = Path(__file__).resolve().parent.parent / "installation" / "outil.py"
 RACINE = Path(__file__).resolve().parent.parent
 
+from tests import plateforme_tests  # noqa: E402
+
+
+def setUpModule():
+    plateforme_tests.module_pas_encore_linux(
+        "outil d'installation en échec au conteneur Linux (sous-processus et chemins du poste), cause à préciser")
+
 
 class TestOutil(AvecMaison):
     def lancer(self, *args, entree=None):

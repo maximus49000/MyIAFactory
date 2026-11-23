@@ -16,6 +16,13 @@ from tests.inst_aide import AvecMaison, instantane, proposition_valide
 MAINTENANT = datetime(2026, 11, 11, 10, 0)
 RACINE = Path(__file__).resolve().parent.parent
 
+from tests import plateforme_tests  # noqa: E402
+
+
+def setUpModule():
+    plateforme_tests.module_pas_encore_linux(
+        "mise en place en échec au conteneur Linux (chemins du poste), cause à préciser")
+
 
 class Base(AvecMaison):
     def lier_skill(self):

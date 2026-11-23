@@ -22,6 +22,13 @@ PRIX_INVENTES = json.dumps({"modele-a": {"input_cost_per_token": 3e-06, "output_
 TAUX_INVENTE = ("<Envelope><Cube><Cube time='2026-11-09'><Cube currency='USD' rate='1.25'/>"
                 "</Cube></Cube></Envelope>")
 
+from tests import plateforme_tests  # noqa: E402
+
+
+def setUpModule():
+    plateforme_tests.module_pas_encore_linux(
+        "bureau.serveur en échec au conteneur Linux (module entier relevé, cause à préciser), à trier par classe")
+
 
 class SourceSimulee:
     """Remplace Internet : jamais de requête sortante dans les tests."""

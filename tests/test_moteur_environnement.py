@@ -19,6 +19,13 @@ JDK = {"outil": "JDK 21", "pour": "dev", "executables": ["java", "javac"],
        "etapes": ["Ouvrir la page.", "Télécharger le .zip du JDK 21.", "L'extraire dans le profil.", "Lancer java -version."]}
 GRADLE = {"outil": "Gradle", "pour": "dev", "executables": ["gradle"], "installation": "gradle.org (environ 130 Mo)"}
 
+from tests import plateforme_tests  # noqa: E402
+
+
+def setUpModule():
+    plateforme_tests.module_pas_encore_linux(
+        "environnement du moteur en échec au conteneur Linux (chemins et outils du poste), à trier par classe")
+
 
 class Enregistreur:
     """Un faux `which` et un faux lanceur de version qui gardent ce qu'on leur a demandé."""

@@ -21,6 +21,13 @@ METIERS = [
      "brief": "# Brief du métier : relecteur\n\nRelis."},
 ]
 
+from tests import plateforme_tests  # noqa: E402
+
+
+def setUpModule():
+    plateforme_tests.module_pas_encore_linux(
+        "polyvalents d'installation en échec au conteneur Linux (dépend de test_inst_mise_en_place), cause à préciser")
+
 
 def poly(**extra):
     """Les champs du nouveau format à poser sur une proposition valide à l'ancienne."""

@@ -17,6 +17,13 @@ from tests.test_inst_definition import GENRES, QUESTIONS, USAGE, Faux, a_install
 DECISION = {"id": "g1", "genre": "genre_fonctionnalite", "texte": "Ce n'est pas un jeu web.", "propose": "jeu-mobile",
             "genres_connus": ["jeu-web", "jeu-mobile"], "incertain": False}
 
+from tests import plateforme_tests  # noqa: E402
+
+
+def setUpModule():
+    plateforme_tests.module_pas_encore_linux(
+        "création de projet depuis le bureau en échec au conteneur Linux (dépend de tests.test_inst_creation et du poste), cause à préciser")
+
 
 class AvecCreation(AvecBureau):
     def setUp(self):

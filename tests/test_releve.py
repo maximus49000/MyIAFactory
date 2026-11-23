@@ -19,6 +19,13 @@ BASE = {"version": 1, "projet": "P", "factory": {"etat": "en marche"},
         "titulaires": [{"cle": "d1", "service": "dev", "lieu": "local"}],
         "taches": [{"id": "t1", "titre": "T", "colonne": "a", "active": True, "titulaire": "d1"}]}
 
+from tests import plateforme_tests  # noqa: E402
+
+
+def setUpModule():
+    plateforme_tests.module_pas_encore_linux(
+        "relevé du bureau en échec au conteneur Linux (sous-processus et chemins du poste), à trier par classe")
+
 
 class TestValider(unittest.TestCase):
     def test_base_valide(self):

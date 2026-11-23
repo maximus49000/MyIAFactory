@@ -111,7 +111,13 @@ def lancer(morceau, env):
     m = re.search(r"Ran (\d+) tests?", sortie)
     if code == 5 and "NO TESTS RAN" in sortie:   # une classe de base sans test : rien à faire, pas un échec
         code = 0
-    return morceau, code, time.monotonic() - debut, int(m.group(1)) if m else 0, sortie
+    return morceau, code, time.monotonic() - debut, int(m.group(1)) if m else 0, sortie, _ignores(sortie)
+
+
+def _ignores(sortie):
+    """Le nombre de tests ignorés, lu dans `OK (skipped=N)` ou `FAILED (…, skipped=N)`."""
+    m = re.search(r"^(?:OK|FAILED) \(.*?\bskipped=(\d+)", sortie, re.M)
+    return int(m.group(1)) if m else 0
 
 
 def main(argv=None):
@@ -152,19 +158,20 @@ def _campagne(o, liste):
     connues, env = _lire_durees(), _environnement()
     parts = morceaux(liste, connues, o.decouper)
     parts.sort(key=lambda n: -connues.get(n, 1e9))   # inconnus d'abord (prudence), puis les plus longs
-    debut, resultats, echecs = time.monotonic(), [], []
+    debut, resultats, echecs, ignores = time.monotonic(), [], [], 0
     print(f"{len(liste)} modules en {len(parts)} morceaux, {o.j} à la fois.", flush=True)
     with ThreadPoolExecutor(max_workers=max(1, o.j)) as pool:
         for f in as_completed([pool.submit(lancer, n, env) for n in parts]):
-            morceau, code, duree, nb, sortie = f.result()
+            morceau, code, duree, nb, sortie, ign = f.result()
             resultats.append((morceau, code, duree, nb))
+            ignores += ign
             print(f"[{len(resultats)}/{len(parts)}] {'ok' if code == 0 else 'ÉCHEC':5} {duree:7.1f} s  {nb:4} tests  "
                   f"{morceau}", flush=True)
             if code != 0:
                 echecs.append(morceau)
     instables, vrais = [], []
     for morceau in sorted(echecs):   # relancé seul : la charge parallèle n'est plus en cause
-        _, code, duree, _, sortie = lancer(morceau, env)
+        _, code, duree, _, sortie, _ = lancer(morceau, env)
         print(f"relance seule : {'ok' if code == 0 else 'ÉCHEC':5} {duree:7.1f} s  {morceau}", flush=True)
         (instables if code == 0 else vrais).append((morceau, sortie))
     total = time.monotonic() - debut
@@ -185,7 +192,8 @@ def _campagne(o, liste):
     for morceau, sortie in vrais:
         print(f"\n===== {morceau} =====\n{sortie[-4000:]}")
     cumul = sum(r[2] for r in resultats)
-    print(f"\n{sum(r[3] for r in resultats)} tests ; {len(vrais)} morceau(x) en échec"
+    print(f"\n{sum(r[3] for r in resultats)} tests" + (f" ; {ignores} ignoré(s)" if ignores else "")
+          + f" ; {len(vrais)} morceau(x) en échec"
           + (f", {len(instables)} instable(s) sous charge ({', '.join(m for m, _ in instables)})" if instables else "")
           + f" ; {total:.0f} s au total ({cumul:.0f} s cumulées).")
     return 1 if vrais else 0

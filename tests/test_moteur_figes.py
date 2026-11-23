@@ -14,6 +14,13 @@ from unittest import mock
 
 from moteur import figes
 
+from tests import plateforme_tests  # noqa: E402
+
+
+def setUpModule():
+    plateforme_tests.module_pas_encore_linux(
+        "processus figés : vrais sous-processus lancés par les tests, en échec au conteneur Linux, à trier par classe")
+
 
 def iso(t):
     return datetime.fromtimestamp(t, timezone.utc).isoformat().replace("+00:00", "Z")

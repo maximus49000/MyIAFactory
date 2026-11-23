@@ -53,6 +53,9 @@ class TestIsolationDesMorceaux(unittest.TestCase):
         self.assertNotIn(campagne.VARIABLE_ETAT, os.environ)         # jamais dans l'environnement du lanceur
         dossier = env[campagne.VARIABLE_ETAT]
         self.assertTrue(Path(dossier).is_dir())
+        # le nom que `campagne` honore : `<temp>/myiafactory-etat-tests-…/<n>`
+        self.assertTrue(Path(dossier).parent.name.startswith(campagne.PREFIXE_ETAT))
+        self.assertEqual(Path(dossier).parent.parent, Path(tempfile.gettempdir()).resolve())
         self.envs.setdefault(morceau, []).append(dossier)
         code = 1 if morceau in self.echouer else 0
         self.echouer.discard(morceau)                                  # passe à la relance : « instable »

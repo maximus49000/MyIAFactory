@@ -42,6 +42,7 @@ VARIABLE_AGENT = "MYIAFACTORY_AGENT"   # la clé de l'agent, exportée à son la
 DELAI_BATTEMENT_S = 180        # une attente dont le battement a plus de 3 min n'est plus vivante
 OPTIONS_CONSIGNE = ("--append-system-prompt-file", "--system-prompt-file")
 ARRET = "agent arrêté par l'utilisateur depuis le bureau"
+VARIABLE_ETAT_TESTS = "MYIAFACTORY_ETAT_TESTS"   # l'isolation des tests de MyIAFactory : jamais donnée à un agent
 VARIABLE_TACHE = "MYIAFACTORY_TACHE"    # la clé de l'agent dans l'environnement de ses commandes (voir `outils/campagne`)
 
 
@@ -731,7 +732,9 @@ class Registre:
         self.chemin(cle, ".entree").write_bytes(entree or b"")
         # la clé de l'agent, héritée par ses commandes : une campagne de tests qui attend son tour dit pour qui (le bureau),
         # et `lancer.py deporter` : son fichier d'attente est le sien, pas celui des agents du même dossier
-        env = {**(os.environ if env is None else env), VARIABLE_TACHE: cle}
+        # jamais l'isolation des tests de MyIAFactory (`outils/campagne.VARIABLE_ETAT`) : un agent prend le vrai verrou
+        env = {**{k: v for k, v in (os.environ if env is None else env).items() if k != VARIABLE_ETAT_TESTS},
+               VARIABLE_TACHE: cle}
         env[VARIABLE_AGENT] = str(cle)
         p = self.lancer(argv, str(self.chemin(cle, ".entree")), str(self.chemin(cle, ".jsonl")),
                         str(self.chemin(cle, ".err")), env, cwd)

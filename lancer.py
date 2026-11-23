@@ -15,6 +15,8 @@
   python lancer.py deporter recette-emulateur [--mode scenario|pilote] [--scenario <nom>] [--apk <fichier>] [--dossier <dossier>] [--reglages <fichier>]
       (l'APK sur un émulateur du serveur, sans défaut au poste : le projet doit être enregistré au bureau et l'action
       réglée sur serveur ; voir docs/serveur-taches.md)
+  py -3.12 lancer.py signer-release --artefact <apk non signé ou aab> --keystore <coffre> --alias <alias> --sortie <fichier> [--sdk <SDK>]
+      (« Release signé » : le serveur compile, le poste signe ; mot de passe saisi au poste, jamais par un agent : voir `outils/signature_locale.py`)
   py -3.12 lancer.py plateforme <etat|installer|verifier|bureau-distant> [--accord-reinstallation] [--bureau-distant] [--dossier <dossier>]
       (le serveur dédié OVH : voir `outils/plateforme.py`)
   py -3.12 lancer.py plateforme serveurs <declarer <nom> <hote> <utilisateur> [--fournisseur ovh]|lister|cle <id>|sonder <id>|apercu <id> <action>...|installer <id> <action>... [--accord]>
@@ -46,6 +48,10 @@ if __name__ == "__main__":
             sys.exit(deporter.serveur_tests(sys.argv[2:]))
         # sur GitHub, ou en attente d'une production d'ailleurs : par `deporter` ; sinon les tests au poste (campagne)
         sys.exit(deporter.lancer_tests(sys.argv[2:]))
+    if sys.argv[1:2] == ["signer-release"]:
+        sys.path.insert(0, str(Path(__file__).resolve().parent / "outils"))
+        import signature_locale  # noqa: E402
+        sys.exit(signature_locale.main(sys.argv[2:]))
     if sys.argv[1:2] == ["plateforme"]:
         sys.path.insert(0, str(Path(__file__).resolve().parent / "outils"))
         import plateforme  # noqa: E402

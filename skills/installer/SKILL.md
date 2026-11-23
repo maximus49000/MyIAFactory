@@ -188,10 +188,6 @@ Dis, sans plus :
 - **L'orchestrateur : démarre-le toi-même**, `outil.py orchestrateur "<dossier>"` : le moteur démarre sans fenêtre
   (un seul pour tous). Refus : donne `message_orchestrateur` à coller dans une nouvelle
   session. Sans orchestrateur, le bureau bloque les gestes.
-- **Les tests au serveur** (facultatif) : une fois l'orchestrateur démarré et la mesure de départ des tests faite,
-  demande au Directeur s'il veut évaluer les tests de ce projet au serveur (une campagne d'essai ; le code du projet y
-  est envoyé). Sur son accord seulement : `lancer evaluer-tests-serveur '{"confirme": true}'` ; le verdict arrive au
-  bureau comme une décision (« Tests au serveur »). Jamais d'activation de ta part : c'est sa réponse qui règle l'action.
 
 `outil.py creer <parent> <nom>` crée un projet vide.
 

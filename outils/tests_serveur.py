@@ -410,6 +410,16 @@ EXECUTEURS = ("conteneur", "hote_bac_a_sable")
 LICENCES = ("B1", "B2", "B3")
 MOTIF_HOTE = re.compile(r"[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+", re.ASCII)
 HOTES_LICENCE_MAX = 8
+HOTES_LICENCE_OCTETS = 512
+# Table FERMÉE des domaines de licence Unity (miroir de SUFFIXES_LICENCE de l'enveloppe, qui fait foi) : un hôte de B3 est l'un
+# d'eux ou un nom dessous ; jamais une adresse IP (dernier libellé alphabétique), jamais un autre domaine.
+SUFFIXES_LICENCE = ("unity3d.com", "unity.com")
+
+
+def _hote_de_licence(h):
+    return (isinstance(h, str) and MOTIF_HOTE.fullmatch(h) is not None
+            and re.fullmatch(r"[a-z]{2,63}", h.rsplit(".", 1)[-1], re.ASCII) is not None
+            and any(h == s or h.endswith("." + s) for s in SUFFIXES_LICENCE))
 
 
 def _arguments_executeur(executeur, licence, hotes_licence, reseau_licence, racine):
@@ -430,8 +440,10 @@ def _arguments_executeur(executeur, licence, hotes_licence, reseau_licence, raci
             raise Repli(f"refusé (licence Unity B3 : 1 à {HOTES_LICENCE_MAX} hôtes de licence attendus)")
     elif hotes:
         raise Repli("refusé (hôtes de licence sans la licence B3)")
-    if not all(isinstance(h, str) and MOTIF_HOTE.fullmatch(h) for h in hotes):
-        raise Repli("refusé (hôte de licence hors motif)")
+    if not all(_hote_de_licence(h) for h in hotes):
+        raise Repli("refusé (hôte de licence hors motif ou hors des domaines de licence Unity)")
+    if len(",".join(hotes)) > HOTES_LICENCE_OCTETS:
+        raise Repli(f"refusé (hôtes de licence : {HOTES_LICENCE_OCTETS} caractères au plus)")
     suffixe = f" {executeur or 'conteneur'} {licence or '-'}"
     return suffixe + (f" {','.join(hotes)}" if hotes else "")
 

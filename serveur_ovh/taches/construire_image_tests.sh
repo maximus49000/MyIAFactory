@@ -136,8 +136,9 @@ if [ "${1:-}" = "--ramasser" ]; then
       if grep -Fxq -- "$u" <<< "$vivantes" || grep -Fxq -- "$u:latest" <<< "$vivantes"; then tenue=1; fi
     done
     [ "$tenue" = 1 ] && continue
-    for u in "${etiquettes_unity[@]}"; do dk 120 rmi "$u" >/dev/null 2>&1; done   # l'étiquette Unity d'abord
     if dk 120 rmi "$cible" >/dev/null 2>&1; then
+      # L'étiquette Unity seulement APRÈS la cible : une cible refusée laisse l'image entière et toutes ses étiquettes.
+      for u in "${etiquettes_unity[@]}"; do dk 120 rmi "$u" >/dev/null 2>&1; done
       rm -f -- "$CONSTRUCTION/usage/${cible#myiafactory/}"
       total_mo=$((total_mo - mo))
       printf '#ramassee %s\n' "$cible"

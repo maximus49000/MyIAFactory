@@ -18,7 +18,8 @@
 #   vers les seuls hôtes de hotes_licence. CONTRAIRE À --network none : la route ne l'envoie qu'avec
 #   tests.adoption.reseau_licence == "accorde" (décision du Directeur, QU1). Le contenu de la licence n'est jamais lu ici.
 #   hotes_licence (17e) : « - » (défaut), ou pour B3 seulement 1 à 8 noms d'hôtes séparés par des virgules, chacun
-#   ^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$ (aucune quote, `$`, espace, tiret initial) ;
+#   ^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$ (aucune quote, `$`, espace, tiret initial),
+#   dernier libellé alphabétique (jamais une adresse IP), et égal à un suffixe de la table FERMÉE SUFFIXES_LICENCE ou dessous ;
 #   B3 sans liste, ou liste sans B3 : 2. ÉCART AU BRIEF : il annonçait deux arguments ; la liste des hôtes de B3, « passée par le
 #   poste », en demande un troisième.
 #   Famille unity : image ^myiafactory/tests-unity-<version Unity>$ (et seulement pour elle), /tmp tmpfs 6 Go, variable
@@ -195,6 +196,9 @@ RAISONS_BREVES=" distribution-injoignable mandataire reseau-interne "
 # B3, et la table FERMÉE des montages de licence (lecture seule ; jamais unityhub, jamais une socket, jamais le dossier entier).
 MOTIF_IMAGE_UNITY='^myiafactory/tests-unity-[0-9]{1,4}\.[0-9]{1,2}\.[0-9]{1,3}[abfp][0-9]{1,3}$'
 MOTIF_HOTE='^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$'
+# Table FERMÉE des suffixes de licence Unity (B3) : le poste ne choisit qu'un sous-ensemble de noms SOUS ces domaines (ou eux-
+# mêmes) ; jamais une adresse IP (dernier libellé alphabétique exigé), jamais un autre domaine. Miroir : tests_serveur.SUFFIXES_LICENCE.
+SUFFIXES_LICENCE=" unity3d.com unity.com "
 LICENCE_DROITS_REL=".config/unity3d/Unity/licenses"     # -> /licence/droits:ro
 LICENCE_ULF_REL=".local/share/unity3d/Unity/Unity_lic.ulf"   # -> /licence/ulf:ro
 MACHINE_ID=/etc/machine-id                             # B2 et B3 : -> /etc/machine-id:ro
@@ -243,6 +247,10 @@ if [ "$HOTES_LICENCE" != - ]; then
   [ "${#HOTES_B3[@]}" -ge 1 ] && [ "${#HOTES_B3[@]}" -le 8 ] || refuser "hotes_licence refusés (1 à 8 noms)."
   for h in "${HOTES_B3[@]}"; do
     [[ $h =~ $MOTIF_HOTE ]] || refuser "hotes_licence refusés (nom d'hôte hors motif)."
+    [[ ${h##*.} =~ ^[a-z]{2,63}$ ]] || refuser "hotes_licence refusés (adresse IP ou dernier libellé non alphabétique)."
+    admis=0
+    for s in $SUFFIXES_LICENCE; do [ "$h" = "$s" ] || [[ $h == *".$s" ]] && admis=1; done
+    [ "$admis" = 1 ] || refuser "hotes_licence refusés ($h hors de la table des domaines de licence Unity)."
   done
   [[ $HOTES_LICENCE == *, || $HOTES_LICENCE == ,* || $HOTES_LICENCE == *,,* ]] && refuser "hotes_licence refusés (liste mal formée)."
 fi
@@ -428,8 +436,17 @@ fi
 LICENCE_ARGS=()
 if [ "$FAMILLE" = unity ]; then
   droits="$HOME/$LICENCE_DROITS_REL"; ulf="$HOME/$LICENCE_ULF_REL"
-  if [ -d "$droits" ] && [ ! -L "$droits" ]; then LICENCE_ARGS+=(-v "$droits:/licence/droits:ro"); fi
-  if [ -f "$ulf" ] && [ ! -L "$ulf" ]; then LICENCE_ARGS+=(-v "$ulf:/licence/ulf:ro"); fi
+  # Lisible par l'uid du conteneur (1000, celui de l'enveloppe, vérifié plus haut) : dossier parcourable, chaque fichier
+  # lisible (noms seulement, -r ; jamais le contenu) ; sinon 77 explicite plutôt qu'un refus de licence trompeur dans le conteneur.
+  if [ -d "$droits" ] && [ ! -L "$droits" ]; then
+    [ -r "$droits" ] && [ -x "$droits" ] && [ -z "$(find "$droits" \( -type f -o -type d \) ! -readable -print -quit 2>/dev/null)" ] ||
+      echouer 77 "licence Unity illisible par l'utilisateur des tests (~/$LICENCE_DROITS_REL) : droits à corriger."
+    LICENCE_ARGS+=(-v "$droits:/licence/droits:ro")
+  fi
+  if [ -f "$ulf" ] && [ ! -L "$ulf" ]; then
+    [ -r "$ulf" ] || echouer 77 "licence Unity illisible par l'utilisateur des tests (~/$LICENCE_ULF_REL) : droits à corriger."
+    LICENCE_ARGS+=(-v "$ulf:/licence/ulf:ro")
+  fi
   [ "${#LICENCE_ARGS[@]}" -gt 0 ] ||
     echouer 77 "licence Unity absente de l'hôte (~/$LICENCE_DROITS_REL ou ~/$LICENCE_ULF_REL) : installez la capacité unity-cli."
   if [ "$LICENCE" = B2 ] || [ "$LICENCE" = B3 ]; then

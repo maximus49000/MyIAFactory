@@ -102,7 +102,13 @@ class TestEnveloppeUnity(D.Banc):
         mauvais = [("docker", "-"), ("-x", "-"), ("conteneur;id", "-"), ("conteneur", "B4"), ("conteneur", "b1"),
                    ("conteneur", "$(id)"), ("conteneur", "-", "x"), ("conteneur", "B1", "licence.unity3d.com"),
                    ("conteneur", "B3", "evil;rm -rf"), ("conteneur", "B3", "-h"), ("conteneur", "B3", "a.b,'c'.d"),
-                   ("conteneur", "B3", "a.b\nc.d"), ("conteneur", "B3", "a..b"), ("conteneur", "B3", "UPPER.example")]
+                   ("conteneur", "B3", "a.b\nc.d"), ("conteneur", "B3", "a..b"), ("conteneur", "B3", "UPPER.example"),
+                   # I2 : hors de la table fermée des suffixes de licence, adresses IP, dernier libellé non alphabétique
+                   ("conteneur", "B3", "169.254.169.254"), ("conteneur", "B3", "172.17.0.1"),
+                   ("conteneur", "B3", "attaquant.example"), ("conteneur", "B3", "license.unity3d.com,attaquant.example"),
+                   ("conteneur", "B3", "unity3d.com.attaquant.example"), ("conteneur", "B3", "fauxunity3d.com"),
+                   ("conteneur", "B3", "license.unity3d.c0m"), ("conteneur", "B3", "::1"),
+                   ("conteneur", "B3", ",".join(["a" * 60 + ".unity3d.com"] * 8) + ",x.unity.com")]
         for i, plus in enumerate(mauvais):
             with self.subTest(plus=plus):
                 ident = E.ident(i)
@@ -148,6 +154,18 @@ class TestEnveloppeUnity(D.Banc):
         code, err, etat = self.unity("conteneur", "B1", ident=E.ident(7))
         self.assertEqual(code, 77, err)
         self.assertIsNone(self.run_de(etat, f"tests-{E.ident(7)}"))
+
+    def test_licence_illisible_code_77(self):
+        # M1 : une licence que l'uid du conteneur (celui de l'enveloppe, 1000) ne peut pas lire : 77 explicite, aucun conteneur.
+        cible = self.droits / "UnityEntitlementLicense.xml"
+        cible.chmod(0o000)
+        self.addCleanup(cible.chmod, 0o600)
+        if os.access(cible, os.R_OK):
+            self.skipTest("droits de fichier sans effet ici (Windows ou root)")
+        code, err, etat = self.unity("conteneur", "B1")
+        self.assertEqual(code, 77, err)
+        self.assertTrue(any("illisible" in x for x in err), err)
+        self.assertIsNone(self.run_de(etat, f"tests-{ID}"))
 
     def test_b2_identifiants_de_machine(self):
         code, err, etat = self.unity("conteneur", "B2")
@@ -339,6 +357,44 @@ class TestEntreeUnity(unittest.TestCase):
         r = self.lancer("ok\n", xml_resultats(30, 0, 30, many), code=2)
         self.assertEqual(len([x for x in r.stdout.splitlines() if "Tests.N.T" in x]), 20)
 
+    def test_relais_borne_et_noms_stricts(self):
+        # I1 : noms d'échecs relayés seulement dans [A-Za-z0-9_.()] et 120 caractères ; journal borné, sans ligne > 200.
+        echecs = ["Tests.Ok.Cas_1(2)", "Tests.X.Cas avec espace", "Tests.X.Param(1,2)", "Tests.X." + "a" * 130,
+                  "Tests.X.Cas&#233;"]
+        longue = "LIGNE-LONGUE-" + "x" * 240
+        journal = "".join(f"ligne {i:05d} " + "y" * 120 + "\n" for i in range(3000)) + longue + "\nfin du journal\n"
+        r = self.lancer(journal, xml_resultats(5, 0, 5, echecs), code=2)
+        self.assertEqual(r.returncode, 2, r.stderr)
+        self.assertIn("unity : échec Tests.Ok.Cas_1(2)\n", r.stdout)
+        self.assertEqual(r.stdout.count("unity : échec nom filtré\n"), 4, r.stdout[-800:])
+        for interdit in ("avec espace", "Param(1,2)", "a" * 121, "Casé", "LIGNE-LONGUE"):
+            self.assertNotIn(interdit, r.stdout)
+        self.assertIn("fin du journal", r.stdout)
+        self.assertTrue(all(len(x) <= 200 for x in r.stdout.splitlines()))
+        self.assertLessEqual(len([x for x in r.stdout.splitlines() if x.startswith("ligne ")]), 100)
+        self.assertLessEqual(len(r.stdout.encode("utf-8")), 24 * 1024)
+        bruts = [p for p in self.t.rglob("unity.*") if p.parent != self.t / "tmp"]
+        self.assertEqual(bruts, [])                                                        # journal brut : /tmp seulement
+        self.assertTrue((self.t / "tmp" / "unity.log").exists())
+
+    def test_81_seulement_sans_tests_et_codes_ramenes(self):
+        # I3 : un motif de refus dans un journal où des tests ont tourné n'est pas un 81 (un vrai échec reste 2) ; un code de
+        # l'éditeur hors de {0, 1, 2, 3} devient 1 (81, 82… ne viennent que du script).
+        refus = "No valid Unity Editor license found\n"
+        r = self.lancer(refus, xml_resultats(3, 2, 1, ["Tests.A.B"]), code=2)
+        self.assertEqual(r.returncode, 2, r.stderr)
+        r = self.lancer(refus, xml_resultats(3, 3, 0), code=0)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        r = self.lancer(refus, xml_resultats(0, 0, 0), code=0)                             # 0 test et refus : 81
+        self.assertEqual(r.returncode, 81, r.stderr)
+        for code_editeur in (81, 82, 137, 76, 255):
+            with self.subTest(code=code_editeur):
+                r = self.lancer("ok\n", xml_resultats(2, 2, 0), code=code_editeur)
+                self.assertEqual(r.returncode, 1, r.stderr)
+        (self.faux_unity / "resultats.xml").unlink()
+        r = self.lancer("ok\n", None, code=82)                                             # XML absent, éditeur à 82 : 1
+        self.assertEqual(r.returncode, 1, r.stderr)
+
 
 # --------------------------------------------------------------------------------------- image : gabarit, digest, taille propre
 
@@ -407,6 +463,39 @@ class TestImageUnity(unittest.TestCase):
         self.assertEqual(banc.lancer("--ramasser", "1").stdout, f"#ramassee {etiquette}\n")
 
     @unittest.skipUnless(shutil.which("bash"), "bash absent")
+    def test_ramassage_etiquette_unity_retiree_apres_la_cible(self):
+        # M2 : l'étiquette tests-unity-* n'est retirée qu'APRÈS un rmi réussi de la cible ; cible refusée : elle reste.
+        banc = TI.TestEnveloppeConstruction("test_ramassage")
+        banc.setUp()
+        self.addCleanup(banc.doCleanups)
+        docker = banc.monde.parent / "bin" / "docker"
+        docker.write_text(r'''#!/bin/sh
+echo "docker $*" >> "$MONDE/appels.txt"
+case "$1" in
+  image) case "$2" in
+           ls) echo aaaaaaaaaaaa; exit 0 ;;
+           inspect) case "$*" in
+                      *RepoTags*) printf '%s ' "myiafactory/tests-unity-6000.6.7f1:latest" "myiafactory/tests-aaaaaaaaaaaa:latest" ;;
+                      *Created*) echo "2020-01-01T00:00:00Z" ;;
+                      *) echo 851443712 ;;
+                    esac; exit 0 ;;
+         esac ;;
+  rmi) [ "$2" = "${FAUX_RMI_ECHEC:-}" ] && exit 1; exit 0 ;;
+esac
+exit 0
+''', newline="\n")
+        r = banc.lancer("--ramasser", "1", FAUX_RMI_ECHEC="myiafactory/tests-aaaaaaaaaaaa")   # 40 jours et plus : ancienne
+        self.assertEqual(r.returncode, 0, r.stderr)
+        rmi = [x for x in banc.appels() if x.startswith("docker rmi")]
+        self.assertEqual(rmi, ["docker rmi myiafactory/tests-aaaaaaaaaaaa"])               # étiquette Unity laissée
+        self.assertEqual(r.stdout, "")
+        (banc.monde / "appels.txt").unlink()
+        r = banc.lancer("--ramasser", "1")
+        rmi = [x for x in banc.appels() if x.startswith("docker rmi")]
+        self.assertEqual(rmi, ["docker rmi myiafactory/tests-aaaaaaaaaaaa", "docker rmi myiafactory/tests-unity-6000.6.7f1"])
+        self.assertEqual(r.stdout, "#ramassee myiafactory/tests-aaaaaaaaaaaa\n")
+
+    @unittest.skipUnless(shutil.which("bash"), "bash absent")
     def test_construction_unity_base_locale_sans_tirage(self):
         banc = TI.TestEnveloppeConstruction("test_construction_ligne_image")
         banc.setUp()
@@ -441,10 +530,19 @@ class TestRouteUnity(unittest.TestCase):
         self.assertEqual(f(None, "B2", None, non, "r"), " conteneur B2")
         self.assertEqual(f("conteneur", "B3", ["license.unity3d.com", "core.cloud.unity3d.com"], oui, "r"),
                          " conteneur B3 license.unity3d.com,core.cloud.unity3d.com")
+        self.assertEqual(f(None, "B3", ["unity.com", "api.unity.com"], oui, "r"), " conteneur B3 unity.com,api.unity.com")
+        self.assertEqual(tests_serveur.SUFFIXES_LICENCE, ("unity3d.com", "unity.com"))
+        enveloppe = (RACINE / "serveur_ovh" / "taches" / "lancer_tests.sh").read_text(encoding="utf-8")
+        self.assertIn('SUFFIXES_LICENCE=" unity3d.com unity.com "', enveloppe)            # la table fermée du serveur
         for mauvais in ((None, "B3", ["license.unity3d.com"], non), (None, "B3", None, oui), (None, "B3", [], oui),
                         (None, "B1", ["a.b"], oui), ("docker", None, None, oui), (None, "b1", None, oui),
                         (None, "B3", ["a.b;id"], oui), (None, "B3", ["-h.b"], oui), (None, "B3", ["x"], oui),
-                        (None, "B3", ["a.b"] * 9, oui)):
+                        (None, "B3", ["license.unity3d.com"] * 9, oui),
+                        # I2 et M4 : table fermée des suffixes, IP refusées, 512 caractères au plus (miroir de l'enveloppe)
+                        (None, "B3", ["169.254.169.254"], oui), (None, "B3", ["172.17.0.1"], oui),
+                        (None, "B3", ["attaquant.example"], oui), (None, "B3", ["unity3d.com.attaquant.example"], oui),
+                        (None, "B3", ["fauxunity3d.com"], oui),
+                        (None, "B3", ["a" * 60 + f".x{i}.unity3d.com" for i in range(8)], oui)):
             with self.subTest(mauvais=mauvais[:3]):
                 with self.assertRaises(tests_serveur.Repli):
                     f(*mauvais, "r")

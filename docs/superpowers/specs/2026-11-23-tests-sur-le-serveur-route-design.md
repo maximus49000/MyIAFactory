@@ -534,6 +534,15 @@ fichier écrit par le client plus récent de Hub ; (4) si les tests sans `.asmde
   2 des tests échouent (Test Framework), 3 erreur d'exécution ; licence refusée (motifs de l'étape `licence` : `no valid
   unity editor license`, `not licensed`…, testés par `grep -q`) → code 81 « licence Unity refusée » ; **0 test exécuté →
   code 82 « aucun test découvert »**, jamais une réussite.
+- **Limite assumée de l'option B (relecture 14g)** : *code de projet hostile = licence exposée*. Le code des tests tourne
+  sous le même uid que la licence dans le conteneur : il peut lire `/licence/*` ou sa copie et l'encoder dans sa sortie
+  (hexadécimal en morceaux, noms de tests, fichiers de `travail/`). Le filtre du relais (mots-clés, suites base64, lignes de
+  plus de 200 caractères, 100 lignes et 16 Ko, noms d'échecs limités à `[A-Za-z0-9_.()]{1,120}`) est une hygiène, **pas une
+  barrière**. Conséquences : la sortie des campagnes Unity ne doit **jamais** être poussée vers le dépôt public (ni journal, ni
+  rapport qui la cite) ; l'option B n'est faite que pour les projets du Directeur. Seules atténuations réelles : deux uid ou
+  deux conteneurs (l'éditeur et son client de licence d'un côté, le code de test de l'autre, ce que Unity ne permet pas
+  simplement), ou l'option A (bac à sable de l'hôte, licence liée en lecture pour un utilisateur dédié). B3 n'ouvre le réseau
+  que vers une table fermée de domaines de licence (`unity3d.com`, `unity.com` et leurs sous-domaines ; jamais une adresse IP).
 
 #### Option A (repli, seulement si B ne marche pas) : éditeur de l'hôte dans un bac à sable obligatoire
 

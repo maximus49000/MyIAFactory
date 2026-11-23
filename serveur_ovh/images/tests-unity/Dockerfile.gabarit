@@ -1,0 +1,17 @@
+FROM @BASE@
+SHELL ["/bin/bash", "-euo", "pipefail", "-c"]
+USER root
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates git python3 bash util-linux tar \
+    && rm -rf /var/lib/apt/lists/* \
+    && git --version >/dev/null \
+    && python3 --version >/dev/null \
+    && command -v unity-editor >/dev/null \
+    && (getent passwd 1000 >/dev/null || useradd -u 1000 -M -s /usr/sbin/nologin tests)
+COPY entree-tests.sh /usr/local/bin/entree-tests.sh
+COPY entree-unity.sh /usr/local/bin/entree-unity.sh
+RUN chown root:root /usr/local/bin/entree-tests.sh /usr/local/bin/entree-unity.sh \
+    && chmod 0555 /usr/local/bin/entree-tests.sh /usr/local/bin/entree-unity.sh \
+    && install -d -o 1000 -m 0755 /work
+ENV HOME=/tmp

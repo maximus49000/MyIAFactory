@@ -21,12 +21,18 @@
 #   supprimée au ramassage.
 # Étiquettes posées : myiafactory.genre=tests-derivee, myiafactory.empreinte=<sha256 du Dockerfile> (ÉCART À LA CONCEPTION :
 #   l'enveloppe ne connaît que cette somme, pas l'empreinte d'image du poste ; le registre du poste garde l'empreinte d'image).
-# `--pull` : seulement quand la base n'est pas une image locale `myiafactory/*` (elle n'existe sur aucun registre : docker
-#   build --pull échouerait) ; une base `unityci/editor` est tirée.
+# Jamais de `--pull` : une base locale `myiafactory/*` n'existe sur aucun registre ; une base `unityci/editor` (tâche 14g)
+#   est l'image GameCI DÉJÀ présente (27 Go), épinglée par son digest local (`unityci/editor:ubuntu-<version>-android-<x.y.z>
+#   @sha256:<64 hexa>`, jamais une étiquette seule) : absente du serveur -> refus 2, jamais tirée. Une image dérivée d'Unity
+#   porte en plus l'étiquette myiafactory/tests-unity-<version> (celle que l'enveloppe des tests attend) ; son contexte reçoit
+#   aussi entree-unity.sh (du dépôt du serveur) ; la taille de `#image` est alors sa taille PROPRE (image moins base).
 # Ramassage : ne touche QUE les images portant le label myiafactory.genre=tests-derivee ; jamais une image que le moindre
 #   conteneur référence (docker ps -a ; en plus, rmi sans -f refuse une image en usage) ; d'abord toute image sans usage depuis
-#   plus de 30 jours, puis la moins récemment utilisée tant que le total (docker image inspect .Size : la taille apparente,
-#   qui compte la base partagée, donc par excès) dépasse le budget. Usage = date du fichier ~/tests/.construction/usage/<tests-12hexa>
+#   plus de 30 jours, puis la moins récemment utilisée tant que le total dépasse le budget. Taille d'une image : sa taille
+#   PROPRE (couches non partagées, colonne UNIQUE SIZE de `docker system df -v`, comme tests_images.taille_propre_mo) : une
+#   image dérivée de l'image GameCI (27 Go apparents) n'y compte que pour sa couche ; à défaut (docker system df illisible),
+#   la taille apparente (docker image inspect .Size, par excès). Les étiquettes myiafactory/tests-unity-* d'une image ramassée
+#   sont retirées avec elle (sinon l'image resterait). Usage = date du fichier ~/tests/.construction/usage/<tests-12hexa>
 #   (posé à la construction et par --utilise), sinon la date de création de l'image.
 # Réservée aux tests : SERVEUR_OVH_DIR (dépôt du serveur).
 set -u
@@ -39,7 +45,8 @@ SERVEUR_OVH="${SERVEUR_OVH_DIR:-$HOME/myiafactory/serveur_ovh}"
 MOTIF_ETIQUETTE='^myiafactory/tests-[0-9a-f]{12}$'
 MOTIF_SOMME='^[0-9a-f]{64}$'
 MOTIF_BASE_LOCALE='^myiafactory/tests(-[a-z0-9]{1,24})?(@sha256:[0-9a-f]{64})?$'
-MOTIF_BASE_UNITY='^unityci/editor(:[A-Za-z0-9._-]{1,100}|@sha256:[0-9a-f]{64})$'
+MOTIF_BASE_UNITY='^unityci/editor:ubuntu-([0-9]{1,4}\.[0-9]{1,2}\.[0-9]{1,3}[abfp][0-9]{1,3})-android-[0-9]{1,2}\.[0-9]{1,2}\.[0-9]{1,2}@sha256:[0-9a-f]{64}$'
+MOTIF_ETIQUETTE_UNITY='^myiafactory/tests-unity-[0-9]{1,4}\.[0-9]{1,2}\.[0-9]{1,3}[abfp][0-9]{1,3}$'
 DISQUE_MIN_KO=10485760                   # 10 Go libres pour construire
 DUREE_MAX=1800
 DOSSIER_MAX_OCTETS=65536
@@ -72,19 +79,35 @@ if [ "${1:-}" = "--ramasser" ]; then
     || echouer 1 "liste des images impossible (docker)."
   vivantes=$(dk 60 ps -a --format '{{.Image}} {{.ImageID}}') || echouer 1 "liste des conteneurs impossible (docker) : rien n'est supprimé."
   vivantes=$(tr ' ' '\n' <<< "$vivantes" | sed -e 's/^sha256://' -e 's/^\([0-9a-f]\{12\}\)[0-9a-f]*$/\1/')
+  # Tailles propres « <id 12 hexa> <Mo> » (UNIQUE SIZE, unités décimales de docker, Mo de 1 048 576 octets arrondis au-dessus).
+  propres=$(dk 120 system df -v 2>/dev/null | awk '
+    /^Images space usage/ { dans = 1; next }
+    /space usage/ { dans = 0 }
+    dans && NF >= 7 && length($3) == 12 && $3 ~ /^[0-9a-f]+$/ {
+      u = $(NF - 1)
+      if (match(u, /^[0-9]+(\.[0-9]+)?/)) {
+        v = substr(u, 1, RLENGTH); s = substr(u, RLENGTH + 1)
+        m = (s == "B") ? 1 : (s == "kB" || s == "KB") ? 1e3 : (s == "MB") ? 1e6 : (s == "GB") ? 1e9 : (s == "TB") ? 1e12 : 0
+        if (m > 0) { o = v * m; mo = int(o / 1048576); if (mo * 1048576 < o) mo++; print $3, mo }
+      }
+    }')
   maintenant=$(date +%s)
   lignes=""; total_mo=0
   while IFS= read -r id; do
     id="${id#sha256:}"; id="${id:0:12}"
     [[ $id =~ ^[0-9a-f]{12}$ ]] || continue
     grep -Eq -- " $id\$" <<< "$lignes" && continue                   # une image par identifiant
-    octets=$(dk 60 image inspect --format '{{.Size}}' "$id") || continue
-    [[ $octets =~ ^[0-9]{1,15}$ ]] || continue
-    mo=$((octets / 1048576))
-    cible="$id"
+    mo=$(awk -v i="$id" '$1 == i { print $2; exit }' <<< "$propres")
+    if ! [[ $mo =~ ^[0-9]{1,9}$ ]]; then
+      octets=$(dk 60 image inspect --format '{{.Size}}' "$id") || continue
+      [[ $octets =~ ^[0-9]{1,15}$ ]] || continue
+      mo=$((octets / 1048576))
+    fi
+    cible="$id"; unity=""
     for tag in $(dk 60 image inspect --format '{{range .RepoTags}}{{.}} {{end}}' "$id" 2>/dev/null); do
       tag="${tag%:latest}"
-      [[ $tag =~ $MOTIF_ETIQUETTE ]] && cible="$tag" && break
+      if [[ $tag =~ $MOTIF_ETIQUETTE_UNITY ]]; then unity+="$tag,"; continue; fi
+      [[ $tag =~ $MOTIF_ETIQUETTE ]] && [ "$cible" = "$id" ] && cible="$tag"
     done
     usage="$CONSTRUCTION/usage/${cible#myiafactory/}"
     quand=""
@@ -95,17 +118,25 @@ if [ "${1:-}" = "--ramasser" ]; then
       quand=$(date -d "$cree" +%s 2>/dev/null)
     fi
     [[ ${quand:-} =~ ^[0-9]{1,12}$ ]] || quand="$maintenant"          # date illisible : jamais « ancienne »
-    lignes+="$quand $cible $mo $id"$'\n'
+    lignes+="$quand $cible $mo $id ${unity:--}"$'\n'
     total_mo=$((total_mo + mo))
   done <<< "$ids"
-  while read -r quand cible mo id; do
+  while read -r quand cible mo id unity; do
     [ -n "${id:-}" ] || continue
+    [ "${unity:--}" = - ] && unity=""
     ancienne=0
     [ $((maintenant - quand)) -gt $((JOURS_INUTILISEE * 86400)) ] && ancienne=1
     [ "$ancienne" = 1 ] || [ "$total_mo" -gt "$budget_mo" ] || continue
     if grep -Fxq -- "$id" <<< "$vivantes" || grep -Fxq -- "$cible" <<< "$vivantes" || grep -Fxq -- "$cible:latest" <<< "$vivantes"; then
       continue
     fi
+    tenue=0; etiquettes_unity=()
+    [ -n "$unity" ] && IFS=, read -r -a etiquettes_unity <<< "$unity"
+    for u in "${etiquettes_unity[@]}"; do
+      if grep -Fxq -- "$u" <<< "$vivantes" || grep -Fxq -- "$u:latest" <<< "$vivantes"; then tenue=1; fi
+    done
+    [ "$tenue" = 1 ] && continue
+    for u in "${etiquettes_unity[@]}"; do dk 120 rmi "$u" >/dev/null 2>&1; done   # l'étiquette Unity d'abord
     if dk 120 rmi "$cible" >/dev/null 2>&1; then
       rm -f -- "$CONSTRUCTION/usage/${cible#myiafactory/}"
       total_mo=$((total_mo - mo))
@@ -151,11 +182,17 @@ reelle=$(sha256sum -- "$DOCKERFILE" | cut -d' ' -f1)
 # Défense en profondeur (la somme approuvée suffit, ceci borne ce qu'un gabarit trafiqué pourrait demander).
 [ "$(grep -Eic '^[[:space:]]*FROM[[:space:]]' "$DOCKERFILE")" = 1 ] || echouer 2 "une seule instruction FROM est permise."
 BASE=$(awk 'toupper($1) == "FROM" { print $2; exit }' "$DOCKERFILE")
+VERSION_UNITY=""; ETIQUETTES_PLUS=()
 if [[ $BASE =~ $MOTIF_BASE_LOCALE ]]; then
   PULL=()
   # Base locale : elle doit exister ici, sinon docker irait chercher un espace « myiafactory » sur le Docker Hub.
   dk 20 image inspect "$BASE" >/dev/null 2>&1 || echouer 2 "image de base $BASE absente du serveur (installez la capacité qui la fournit)."
-elif [[ $BASE =~ $MOTIF_BASE_UNITY ]]; then PULL=(--pull)
+elif [[ $BASE =~ $MOTIF_BASE_UNITY ]]; then
+  PULL=()
+  VERSION_UNITY="${BASH_REMATCH[1]}"
+  # Base GameCI : DÉJÀ présente au serveur (27 Go), jamais tirée ; son digest local est celui qu'a lu la sonde du poste.
+  dk 20 image inspect "$BASE" >/dev/null 2>&1 || echouer 2 "image GameCI $BASE absente du serveur (installez la capacité unity-cli) : jamais tirée."
+  ETIQUETTES_PLUS=(-t "myiafactory/tests-unity-$VERSION_UNITY")
 else echouer 2 "image de base refusée."; fi
 if grep -Eiq '^[[:space:]]*(ADD|VOLUME|ONBUILD)[[:space:]]' "$DOCKERFILE" \
    || grep -Eiq -- '(^|[[:space:]])--(mount|network|security|privileged)([=[:space:]]|$)' "$DOCKERFILE" \
@@ -165,6 +202,10 @@ if grep -Eiq '^[[:space:]]*(ADD|VOLUME|ONBUILD)[[:space:]]' "$DOCKERFILE" \
 fi
 [ -f "$SERVEUR_OVH/images/tests/entree-tests.sh" ] && [ ! -L "$SERVEUR_OVH/images/tests/entree-tests.sh" ] \
   || echouer 1 "entree-tests.sh introuvable dans le dépôt du serveur."
+if [ -n "$VERSION_UNITY" ]; then
+  [ -f "$SERVEUR_OVH/images/tests/entree-unity.sh" ] && [ ! -L "$SERVEUR_OVH/images/tests/entree-unity.sh" ] \
+    || echouer 1 "entree-unity.sh introuvable dans le dépôt du serveur."
+fi
 libre=$(df -Pk -- "$HOME" 2>/dev/null | awk 'NR == 2 { print $4 }')
 [[ ${libre:-} =~ ^[0-9]{1,15}$ ]] || echouer 76 "espace disque libre illisible (df)."
 [ "$libre" -ge "$DISQUE_MIN_KO" ] || echouer 76 "disque presque plein : $((libre / 1024)) Mo libres, 10 Go au moins."
@@ -172,13 +213,16 @@ libre=$(df -Pk -- "$HOME" 2>/dev/null | awk 'NR == 2 { print $4 }')
 # À partir d'ici le dossier déposé est à nous : effacé à la sortie, quoi qu'il arrive.
 trap 'rm -rf -- "$CONTEXTE" "$PRIVE"' EXIT
 cp -- "$SERVEUR_OVH/images/tests/entree-tests.sh" "$PRIVE/entree-tests.sh" || echouer 1 "copie de entree-tests.sh impossible."
+if [ -n "$VERSION_UNITY" ]; then
+  cp -- "$SERVEUR_OVH/images/tests/entree-unity.sh" "$PRIVE/entree-unity.sh" || echouer 1 "copie de entree-unity.sh impossible."
+fi
 mkdir -p -- "$CONSTRUCTION/journaux" "$CONSTRUCTION/usage" || echouer 1 "dossiers de journaux impossibles."
 JOURNAL="$CONSTRUCTION/journaux/$NOM.log"
 
 # Seuls arguments : le réseau de construction par défaut, les deux étiquettes, l'étiquette de l'image et la copie privée.
 timeout -k 30 "$DUREE_MAX" sudo -n docker build "${PULL[@]}" \
   --label myiafactory.genre=tests-derivee --label "myiafactory.empreinte=$SOMME" \
-  -t "$ETIQUETTE" "$PRIVE" </dev/null 2>&1 | tail -c "$JOURNAL_OCTETS" > "$JOURNAL"
+  "${ETIQUETTES_PLUS[@]}" -t "$ETIQUETTE" "$PRIVE" </dev/null 2>&1 | tail -c "$JOURNAL_OCTETS" > "$JOURNAL"
 code=${PIPESTATUS[0]}
 if [ "$code" != 0 ]; then
   tail -n 20 -- "$JOURNAL" 2>/dev/null | une_ligne >&2
@@ -187,5 +231,9 @@ if [ "$code" != 0 ]; then
 fi
 octets=$(dk 60 image inspect --format '{{.Size}}' "$ETIQUETTE") && [[ $octets =~ ^[0-9]{1,15}$ ]] \
   || echouer 1 "taille de l'image illisible."
+if [ -n "$VERSION_UNITY" ]; then                  # taille propre : l'image moins sa base GameCI (couches partagées)
+  base_o=$(dk 60 image inspect --format '{{.Size}}' "$BASE") && [[ $base_o =~ ^[0-9]{1,15}$ ]] && [ "$base_o" -le "$octets" ] \
+    && octets=$((octets - base_o))
+fi
 touch -- "$CONSTRUCTION/usage/$NOM" 2>/dev/null
 printf '#image %s %s\n' "$ETIQUETTE" "$((octets / 1048576))"

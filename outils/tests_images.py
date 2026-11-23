@@ -330,17 +330,50 @@ OUTILS = {"jdk": _bloc_jdk, "node": _bloc_node, "python": _bloc_python, "maven":
           "go": _bloc_go, "rust": _bloc_rust, "godot": _bloc_godot, "unity": None}   # unity : socle (FROM), voir rendre_dockerfile
 
 
-def _socle_unity() -> str:
-    """Par-dessus l'image GameCI : git (dépendances UPM git), python3 et l'entrée, l'utilisateur 1000 (source : paquets Ubuntu)."""
-    return "\n".join([
-        _run("apt-get update",
-             "apt-get install -y --no-install-recommends ca-certificates git python3 bash util-linux tar",
-             "rm -rf /var/lib/apt/lists/*",
-             "(getent passwd 1000 >/dev/null || useradd -u 1000 -M -s /usr/sbin/nologin tests)"),
-        "COPY entree-tests.sh /usr/local/bin/entree-tests.sh",
-        _run("chown root:root /usr/local/bin/entree-tests.sh", "chmod 0555 /usr/local/bin/entree-tests.sh",
-             "install -d -o 1000 -m 0755 /work"),
-        "ENV HOME=/tmp"])
+# Bloc `unity` (tâche 14g) : un gabarit FIXE du dépôt (jamais de texte du projet), seule la base y est écrite (`@BASE@`) :
+# l'image GameCI déjà présente au serveur, épinglée par son digest local (jamais un FROM par étiquette seule : aucun tirage de
+# 27 Go). Il porte git (dépendances UPM git, vérifié), python3, entree-tests.sh et entree-unity.sh, l'utilisateur 1000.
+GABARIT_UNITY = Path(__file__).resolve().parent.parent / "serveur_ovh" / "images" / "tests-unity" / "Dockerfile.gabarit"
+IMAGE_GAMECI = "unityci/editor"
+
+
+def base_unity(version: str, digest: str) -> str:
+    """`unityci/editor:ubuntu-<version>-android-<GameCI>@sha256:<64 hexa>` ; ValueError hors motif."""
+    version = _version("unity", version)
+    if not isinstance(digest, str) or DIGEST.fullmatch(digest) is None:
+        raise ValueError("digest de l'image GameCI requis (sha256:<64 hexa>)")
+    return f"{IMAGE_GAMECI}:ubuntu-{version}-android-{UNITY_GAMECI}@{digest}"
+
+
+def _socle_unity(base: str) -> str:
+    texte = GABARIT_UNITY.read_bytes().decode("ascii")
+    if "\r" in texte or texte.count("@BASE@") != 1:
+        raise ValueError("gabarit Unity illisible")
+    return texte.replace("@BASE@", base).rstrip("\n")
+
+
+def sonde_digest_unity(version: str) -> str:
+    """La commande (fixe, version validée) qui lit au serveur le digest LOCAL de l'image GameCI : jamais un tirage."""
+    version = _version("unity", version)
+    return ("sudo -n docker image inspect --format '{{json .RepoDigests}}' "
+            f"{IMAGE_GAMECI}:ubuntu-{version}-android-{UNITY_GAMECI}")
+
+
+def lire_digest_unity(sortie) -> Optional[str]:
+    """`sha256:<64 hexa>` lu dans la réponse de `sonde_digest_unity` (liste JSON de `unityci/editor@sha256:…`), sinon None."""
+    try:
+        texte = sortie.decode("utf-8") if isinstance(sortie, (bytes, bytearray)) else str(sortie)
+        liste = json.loads(texte[:4096])
+    except (ValueError, UnicodeDecodeError):
+        return None
+    if not isinstance(liste, list):
+        return None
+    for x in liste:
+        if isinstance(x, str) and x.startswith(IMAGE_GAMECI + "@"):
+            digest = x[len(IMAGE_GAMECI) + 1:]
+            if DIGEST.fullmatch(digest):
+                return digest
+    return None
 
 
 def _version(outil: str, valeur) -> str:
@@ -377,23 +410,22 @@ def outils_a_installer(profil) -> list:
 
 def rendre_dockerfile(profil, base_digest: Optional[str] = None) -> Tuple[str, str]:
     """`(texte, sha256)` : le Dockerfile de l'image dérivée du profil. Mêmes octets à profil égal ; ValueError pour tout outil ou
-    version hors table (rien n'est écrit alors). `base_digest` (`sha256:<64 hexa>`) épingle l'image de base par son digest."""
+    version hors table (rien n'est écrit alors). `base_digest` (`sha256:<64 hexa>`) épingle l'image de base par son digest ;
+    OBLIGATOIRE pour Unity (gabarit `serveur_ovh/images/tests-unity/Dockerfile.gabarit`, digest lu par `sonde_digest_unity`)."""
     a_installer = outils_a_installer(profil)
-    if base_digest is not None and DIGEST.fullmatch(base_digest) is None:
+    if base_digest is not None and (not isinstance(base_digest, str) or DIGEST.fullmatch(base_digest) is None):
         raise ValueError("digest de base refusé")
     unity = dict(a_installer).get("unity")
+    lignes = ["# Image derivee des campagnes de tests : rendue par outils/tests_images.py (gabarit ferme), jamais ecrite a la main.",
+              f"# gabarit {GABARIT_VERSION}"]
     if unity:
-        base = f"unityci/editor@{base_digest}" if base_digest else f"unityci/editor:ubuntu-{unity}-android-{UNITY_GAMECI}"
+        lignes.append(_socle_unity(base_unity(unity, base_digest)))   # FROM par digest seulement (ValueError sans lui)
     else:
         base = f"{IMAGE_DEFAUT}@{base_digest}" if base_digest else IMAGE_DEFAUT
-    lignes = ["# Image derivee des campagnes de tests : rendue par outils/tests_images.py (gabarit ferme), jamais ecrite a la main.",
-              f"# gabarit {GABARIT_VERSION}",
-              f"FROM {base}",
-              'SHELL ["/bin/bash", "-euo", "pipefail", "-c"]',
-              "USER root",
-              "ENV DEBIAN_FRONTEND=noninteractive"]
-    if unity:
-        lignes.append(_socle_unity())
+        lignes += [f"FROM {base}",
+                   'SHELL ["/bin/bash", "-euo", "pipefail", "-c"]',
+                   "USER root",
+                   "ENV DEBIAN_FRONTEND=noninteractive"]
     for outil, v in a_installer:
         if outil != "unity":
             lignes.append(OUTILS[outil](v))
@@ -524,3 +556,35 @@ def oublier_image(serveur_id: str, etiquette: str, registre=None) -> None:
     donnees = _lire_pour_ecrire(registre)
     if _entrees(donnees, str(serveur_id)).pop(etiquette, None) is not None:
         _ecrire_registre(registre, donnees)
+
+
+# ---------------------------------------------------------------- taille propre (ramassage, budget des images)
+
+_UNITES = {"B": 1, "kB": 1000, "KB": 1000, "MB": 1000 ** 2, "GB": 1000 ** 3, "TB": 1000 ** 4}
+_TAILLE = re.compile(r"([0-9]{1,6}(?:\.[0-9]{1,4})?)(B|kB|KB|MB|GB|TB)", re.ASCII)
+
+
+def taille_propre_mo(image: str, df_v: str) -> Optional[int]:
+    """La taille PROPRE (couches non partagées, colonne UNIQUE SIZE de `docker system df -v`) de `image` (identifiant de 12
+    hexa, ou `<dépôt>` / `<dépôt>:<étiquette>`), en Mo de 1 048 576 octets arrondis au-dessus ; None si l'image n'y est pas ou si
+    la taille est illisible. Une image dérivée de l'image GameCI (27 Go apparents) n'y compte que pour sa couche. Même lecture que
+    `construire_image_tests.sh --ramasser` (awk)."""
+    dans_images = False
+    for ligne in str(df_v).splitlines():
+        if ligne.startswith("Images space usage"):
+            dans_images = True
+            continue
+        if "space usage" in ligne:
+            dans_images = False
+        champs = ligne.split()
+        if not dans_images or len(champs) < 7 or not re.fullmatch(r"[0-9a-f]{12}", champs[2]):
+            continue
+        noms = {champs[2], champs[0], f"{champs[0]}:{champs[1]}"}
+        if image not in noms:
+            continue
+        m = _TAILLE.fullmatch(champs[-2])
+        if m is None:
+            return None
+        octets = float(m.group(1)) * _UNITES[m.group(2)]
+        return int(-(-octets // 1048576))
+    return None

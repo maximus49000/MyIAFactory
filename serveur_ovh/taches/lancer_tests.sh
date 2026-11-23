@@ -2,7 +2,28 @@
 # Enveloppe HÔTE d'une campagne de tests : exécutée sur le serveur par UNE session SSH du poste, elle reste au premier plan
 # du début à la fin (place, conteneur, sortie en direct, nettoyage) ; l'entrée standard de la session sert de laisse.
 # Usage : lancer_tests.sh <id> <places> <cpus> <memoire_mo> <duree_s> <projet> <deps> [<travail_go> [<image> [<famille>
-#         [<echauffement> [<reseau_code> [<budget_caches_go> [<budget_unites>]]]]]]]
+#         [<echauffement> [<reseau_code> [<budget_caches_go> [<budget_unites> [<executeur> [<licence> [<hotes_licence>]]]]]]]]]]
+#   POSITIONS (tâche 14g, fixées après relecture de l'état livré en 14e) : executeur = 15e, licence = 16e, hotes_licence = 17e.
+#   executeur (15e) ^(conteneur|hote_bac_a_sable)$, défaut conteneur : qui exécute la commande. Les fonctions
+#   executeur_<nom>_lancer / executeur_<nom>_arreter sont les SEULES différences ; places, jetons, file, laisse, timeout, coupe
+#   à 50 Mo, préfixe `| `, `#fin` et nettoyage sont communs. hote_bac_a_sable (option A, § 5.16) n'est pas installé avant la
+#   tâche 14h : refusé (code 2, « exécuteur hôte non installé »), rien n'est écrit.
+#   licence (16e) ^(-|B1|B2|B3)$, défaut « - » : exigée (≠ -) pour la famille unity, refusée pour toute autre famille. Montages
+#   de la table FERMÉE ci-dessous (jamais une valeur du poste, jamais unityhub, jamais une socket, jamais ~/.config/unity3d
+#   entier), en lecture seule ; au moins l'un des deux doit exister (sinon 77, aucun conteneur) :
+#     $HOME/.config/unity3d/Unity/licenses -> /licence/droits:ro (licence par droits, celle de Hub)
+#     $HOME/.local/share/unity3d/Unity/Unity_lic.ulf -> /licence/ulf:ro (licence manuelle, s'il existe)
+#   B1 : ces fichiers seuls, --network none. B2 : B1 + /etc/machine-id:/etc/machine-id:ro et --hostname de l'hôte (identifiants de
+#   machine, aucun secret ; /etc/machine-id absent : 77). B3 : B2 + réseau --internal deps-<id> et le mandataire éphémère (§ 5.13)
+#   vers les seuls hôtes de hotes_licence. CONTRAIRE À --network none : la route ne l'envoie qu'avec
+#   tests.adoption.reseau_licence == "accorde" (décision du Directeur, QU1). Le contenu de la licence n'est jamais lu ici.
+#   hotes_licence (17e) : « - » (défaut), ou pour B3 seulement 1 à 8 noms d'hôtes séparés par des virgules, chacun
+#   ^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$ (aucune quote, `$`, espace, tiret initial) ;
+#   B3 sans liste, ou liste sans B3 : 2. ÉCART AU BRIEF : il annonçait deux arguments ; la liste des hôtes de B3, « passée par le
+#   poste », en demande un troisième.
+#   Famille unity : image ^myiafactory/tests-unity-<version Unity>$ (et seulement pour elle), /tmp tmpfs 6 Go, variable
+#   MYIAFACTORY_TESTS_FAMILLE=unity (entree-tests.sh passe alors la main à entree-unity.sh, qui copie la licence sur le tmpfs,
+#   garde le journal de l'éditeur dans /tmp et ne relaie qu'un résumé filtré ; codes 81 licence refusée, 82 aucun test).
 #   id t<AAAAMMJJ>-<HHMMSS>-<4 hexa> ; places 1..4 ; cpus 1..64 ; memoire_mo 256..65536 ; duree_s 1..3600 (nombres sans zéro
 #   initial) ; projet ^[a-z0-9][a-z0-9-]{0,39}$ ; deps 16 hexa (empreinte du cache, tests_profil.empreinte_deps) ou « - » ;
 #   echauffement (11e) : clé de la table FERMÉE ECH (npm, pip, gradle…), par défaut celle de la famille (ECH_DEFAUT) ;
@@ -98,7 +119,9 @@
 # Conteneur : sans réseau, racine en lecture seule, aucune capacité, utilisateur 1000, pas de fichier core, journal Docker
 #   désactivé (la sortie ne remplit pas le disque), seulement travail/ (/work), entree/ (lecture seule), le cache de
 #   dépendances (copie sur écriture, /deps) et, pour gradle-android, le SDK (copie sur écriture) montés ; /tmp tmpfs 4 Go exécutable (nosuid, nodev par défaut) ; aucun secret, aucune variable de
-#   l'appelant : -e HOME=/tmp et -e MYIAFACTORY_TESTS_CONTENEUR=1 seulement. Sans --rm : l'enveloppe lit l'état final
+#   l'appelant : -e HOME=/tmp et -e MYIAFACTORY_TESTS_CONTENEUR=1 seulement (famille unity : en plus les montages de licence
+#   en lecture seule, -e MYIAFACTORY_TESTS_FAMILLE=unity, /tmp 6 Go, et pour B3 seulement le réseau interne du mandataire ;
+#   voir executeur et licence plus haut). Sans --rm : l'enveloppe lit l'état final
 #   (docker inspect) pour distinguer un code du conteneur d'une panne de docker, puis le supprime (docker rm -f).
 # Réservées aux tests : ENVELOPPE_SONDE_S (période de la file et du surveillant, 0,5 s par défaut), ENVELOPPE_SORTIE_MAX_OCTETS,
 #   ENVELOPPE_MARGE_S (marge de l'échéance du surveillant, 30 s), ENVELOPPE_DU_S (période de du, 5 s).
@@ -168,6 +191,13 @@ RAISONS=" reseau-non-accorde wrapper-modifie wrapper-absent wrapper-illisible di
 RAISONS="${RAISONS//$'\n'/ }"
 RAISONS_MEMOIRE=" echauffement plafond inodes duree distribution-redirection distribution-somme "
 RAISONS_BREVES=" distribution-injoignable mandataire reseau-interne "
+# Unity (tâche 14g) : l'image de la famille (version Unity : miroir de tests_images.MOTIFS_VERSION["unity"]), les noms d'hôtes de
+# B3, et la table FERMÉE des montages de licence (lecture seule ; jamais unityhub, jamais une socket, jamais le dossier entier).
+MOTIF_IMAGE_UNITY='^myiafactory/tests-unity-[0-9]{1,4}\.[0-9]{1,2}\.[0-9]{1,3}[abfp][0-9]{1,3}$'
+MOTIF_HOTE='^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$'
+LICENCE_DROITS_REL=".config/unity3d/Unity/licenses"     # -> /licence/droits:ro
+LICENCE_ULF_REL=".local/share/unity3d/Unity/Unity_lic.ulf"   # -> /licence/ulf:ro
+MACHINE_ID=/etc/machine-id                             # B2 et B3 : -> /etc/machine-id:ro
 PLACES_MAX=4
 JETONS_MAX=20
 DUREE_MAX=3600
@@ -185,7 +215,7 @@ if [[ ${ENVELOPPE_DU_S:-} =~ ^[0-9]{1,3}$ ]]; then DU_S="$ENVELOPPE_DU_S"; fi   
 
 # --- Arguments (rien n'est écrit avant la fin de ce bloc) ------------------
 
-[ $# -ge 7 ] && [ $# -le 14 ] || refuser "usage : <id> <places> <cpus> <memoire_mo> <duree_s> <projet> <deps> [<travail_go> [<image> [<famille> [<echauffement> [<reseau_code> [<budget_caches_go> [<budget_unites>]]]]]]]"
+[ $# -ge 7 ] && [ $# -le 17 ] || refuser "usage : <id> <places> <cpus> <memoire_mo> <duree_s> <projet> <deps> [<travail_go> [<image> [<famille> [<echauffement> [<reseau_code> [<budget_caches_go> [<budget_unites> [<executeur> [<licence> [<hotes_licence>]]]]]]]]]]"
 for argument in "$@"; do
   [[ $argument == *[[:cntrl:]]* ]] && refuser "caractère de contrôle refusé dans un argument."
 done
@@ -198,8 +228,33 @@ ID="$1"; PLACES="$2"; CPUS="$3"; MEMOIRE="$4"; DUREE="$5"; PROJET="$6"; DEPS="$7
 [[ $PROJET =~ ^[a-z0-9][a-z0-9-]{0,39}$ ]] || refuser "projet refusé."
 [[ $DEPS =~ ^([0-9a-f]{16}|-)$ ]] || refuser "deps refusé (16 hexa ou -)."
 [[ $TRAVAIL_GO =~ ^[1-9][0-9]{0,2}$ ]] && [ "$TRAVAIL_GO" -le 200 ] || refuser "travail_go refusé (1 à 200)."
-[[ $IMAGE_DEMANDEE =~ ^myiafactory/tests(-[a-z0-9]{1,24})?$ ]] || refuser "image refusée (myiafactory/tests ou myiafactory/tests-<nom>)."
+IMAGE_UNITY=0
+if [[ $IMAGE_DEMANDEE =~ $MOTIF_IMAGE_UNITY ]]; then IMAGE_UNITY=1
+else [[ $IMAGE_DEMANDEE =~ ^myiafactory/tests(-[a-z0-9]{1,24})?$ ]] || refuser "image refusée (myiafactory/tests ou myiafactory/tests-<nom>)."; fi
 [[ $FAMILLE =~ ^[a-z][a-z-]{1,15}$ ]] && [[ $FAMILLES == *" $FAMILLE "* ]] || refuser "famille refusée."
+EXECUTEUR="${15-conteneur}"; LICENCE="${16--}"; HOTES_LICENCE="${17--}"
+[[ $EXECUTEUR =~ ^(conteneur|hote_bac_a_sable)$ ]] || refuser "executeur refusé (conteneur ou hote_bac_a_sable)."
+[[ $LICENCE =~ ^(-|B1|B2|B3)$ ]] || refuser "licence refusée (-, B1, B2 ou B3)."
+HOTES_B3=()
+if [ "$HOTES_LICENCE" != - ]; then
+  [ "$LICENCE" = B3 ] || refuser "hotes_licence refusés : seulement avec la licence B3."
+  [ "${#HOTES_LICENCE}" -le 512 ] || refuser "hotes_licence refusés (512 caractères au plus)."
+  IFS=, read -r -a HOTES_B3 <<< "$HOTES_LICENCE"
+  [ "${#HOTES_B3[@]}" -ge 1 ] && [ "${#HOTES_B3[@]}" -le 8 ] || refuser "hotes_licence refusés (1 à 8 noms)."
+  for h in "${HOTES_B3[@]}"; do
+    [[ $h =~ $MOTIF_HOTE ]] || refuser "hotes_licence refusés (nom d'hôte hors motif)."
+  done
+  [[ $HOTES_LICENCE == *, || $HOTES_LICENCE == ,* || $HOTES_LICENCE == *,,* ]] && refuser "hotes_licence refusés (liste mal formée)."
+fi
+[ "$LICENCE" = B3 ] && [ "${#HOTES_B3[@]}" = 0 ] && refuser "licence B3 sans hotes_licence : rien ne part."
+if [ "$FAMILLE" = unity ]; then
+  [ "$IMAGE_UNITY" = 1 ] || refuser "famille unity : image myiafactory/tests-unity-<version> attendue."
+  [ "$LICENCE" != - ] || refuser "famille unity : licence B1, B2 ou B3 attendue."
+else
+  [ "$IMAGE_UNITY" = 0 ] || refuser "image Unity refusée hors de la famille unity."
+  [ "$LICENCE" = - ] || refuser "licence refusée hors de la famille unity."
+fi
+[ "$EXECUTEUR" = conteneur ] || refuser "exécuteur hôte non installé (option A, tâche 14h) : rien ne part."
 ECH_CLE="${11-${ECH_DEFAUT[$FAMILLE]-"-"}}"; RESEAU="${12-refuse}"; BUDGET="${13-40}"; BUDGET_U="${14-16}"
 if [ "$ECH_CLE" != - ]; then
   [[ $ECH_CLE =~ ^[a-z][a-z-]{1,11}$ ]] && [ -n "${ECH[$ECH_CLE]+x}" ] || refuser "échauffement refusé (clé hors de la table)."
@@ -272,7 +327,7 @@ finir() {   # finir <code> [conteneur] : « conteneur » = le code vient du cont
   { for p in $PID_LAISSE $PID_SURVEILLANT; do kill "$p"; wait "$p"; done; } 2>/dev/null
   PID_LAISSE=""; PID_SURVEILLANT=""
   if [ "$CONTENEUR" = 1 ]; then                       # parti sans fin constatée : jamais de conteneur laissé derrière
-    dk 30 kill "tests-$ID" >/dev/null 2>&1
+    "$ARRETER"
     dk 30 rm -f "tests-$ID" >/dev/null 2>&1
     conteneur_absent || sur=0                         # arrêt non confirmé : le conteneur peut encore écrire dans travail/
   fi
@@ -315,6 +370,20 @@ done
 ( set -C; printf '%s\n' "$$" > "$DOSSIER/enveloppe.pid" ) 2>/dev/null || echouer 1 "enveloppe.pid non écrit."
 enveloppe_vivante() { processus_vivant "$TESTS/$1/enveloppe.pid" "lancer_tests.sh" "$1"; }
 
+# --- Exécuteurs (tâche 14g) : SEULE différence entre conteneur et hôte ; tout le reste (place, jetons, file, laisse, surveillant,
+# coupe, préfixe, #fin, nettoyage) est commun. _lancer écrit la sortie de la commande sur la sortie standard et sa sortie
+# d'erreur sur la sortie d'erreur, rend son code ; _arreter l'arrête (laisse, surveillant, fin), sans rien écrire.
+executeur_conteneur_lancer() { timeout "$DUREE" sudo -n docker "${COMMANDE[@]}"; }
+executeur_conteneur_arreter() { dk 30 kill "tests-$ID" >/dev/null 2>&1; }
+executeur_hote_lancer() {   # option A (§ 5.16) : tâche 14h ; d'ici là refusée dès les arguments, jamais atteinte
+  printf '%s\n' "lancer_tests : exécuteur hôte non installé (tâche 14h)." >&2; return 2
+}
+executeur_hote_arreter() { :; }
+case "$EXECUTEUR" in
+  conteneur) LANCER=executeur_conteneur_lancer; ARRETER=executeur_conteneur_arreter ;;
+  *) LANCER=executeur_hote_lancer; ARRETER=executeur_hote_arreter ;;
+esac
+
 # Laisse : le reste de l'entrée standard. Fin de fichier = la session SSH est partie : marque, puis conteneur tué et
 # enveloppe arrêtée, répétés tant que l'enveloppe vit (vérifiée par sa ligne de commande : jamais un PID recyclé).
 exec 6<&0 </dev/null
@@ -323,7 +392,7 @@ exec 6<&0 </dev/null
   exec 6<&-
   : > "$DOSSIER/laisse-coupee"
   while :; do
-    dk 30 kill "tests-$ID" >/dev/null 2>&1
+    "$ARRETER"
     dk 30 kill "deps-$ID" >/dev/null 2>&1
     enveloppe_vivante "$ID" || exit 0
     kill -TERM "$$" 2>/dev/null
@@ -353,6 +422,23 @@ inodes_bas && echouer 76 "inodes presque épuisés : moins de ${INODES_MIN_PC} %
 dk 20 image inspect "$IMAGE" >/dev/null 2>&1 || echouer 77 "image $IMAGE absente : installez la capacité qui la fournit (tests-image, tests-android)."
 if [ "$FAMILLE" = gradle-android ]; then
   [ -d "$HOME/android-sdk" ] || echouer 77 "SDK Android de l'hôte absent (~/android-sdk) : installez la capacité android-build."
+fi
+# Licence Unity (famille unity seulement, table fermée de l'en-tête) : chaque source est vérifiée AVANT d'être montée (un
+# `docker -v` sur un chemin absent créerait un dossier de root sur l'hôte) ; un lien n'est jamais monté. Rien n'est lu.
+LICENCE_ARGS=()
+if [ "$FAMILLE" = unity ]; then
+  droits="$HOME/$LICENCE_DROITS_REL"; ulf="$HOME/$LICENCE_ULF_REL"
+  if [ -d "$droits" ] && [ ! -L "$droits" ]; then LICENCE_ARGS+=(-v "$droits:/licence/droits:ro"); fi
+  if [ -f "$ulf" ] && [ ! -L "$ulf" ]; then LICENCE_ARGS+=(-v "$ulf:/licence/ulf:ro"); fi
+  [ "${#LICENCE_ARGS[@]}" -gt 0 ] ||
+    echouer 77 "licence Unity absente de l'hôte (~/$LICENCE_DROITS_REL ou ~/$LICENCE_ULF_REL) : installez la capacité unity-cli."
+  if [ "$LICENCE" = B2 ] || [ "$LICENCE" = B3 ]; then
+    [ -f "$MACHINE_ID" ] && [ ! -L "$MACHINE_ID" ] || echouer 77 "$MACHINE_ID absent de l'hôte : licence $LICENCE impossible."
+    nom_hote=$(hostname 2>/dev/null || uname -n 2>/dev/null)
+    [[ $nom_hote =~ ^[A-Za-z0-9][A-Za-z0-9.-]{0,62}$ ]] || echouer 77 "nom d'hôte illisible : licence $LICENCE impossible."
+    LICENCE_ARGS+=(-v "$MACHINE_ID:$MACHINE_ID:ro" --hostname "$nom_hote")
+  fi
+  LICENCE_ARGS+=(-e MYIAFACTORY_TESTS_FAMILLE=unity)
 fi
 DEPS_RACINE=""; CACHE=""
 if [ "$DEPS" != - ]; then
@@ -662,8 +748,35 @@ prendre_echauffement() {   # une des ECHAUFFEMENTS_MAX places d'échauffement (d
   done
 }
 
+# Réseau interne + mandataire éphémère (liste fermée d'hôtes) : l'échauffement (§ 5.13) et la licence B3 (§ 5.16).
+# ouvrir_mandataire <durée_s> <hôte>... : 0 et RESEAU_MANDATAIRE (les options docker run du conteneur client : réseau interne,
+# DNS coupé, mandataire joint par --add-host, variables de mandataire) ; 1 réseau interne impossible ; 2 mandataire en échec.
+# Le réseau et le mandataire sont TOUJOURS fermés par fermer_reseau (finir, ou l'appelant).
+RESEAU_MANDATAIRE=()
+ouvrir_mandataire() {
+  local duree="$1" ip p; shift
+  DEPS_RESEAU="deps-$ID"
+  dk 30 network create --internal --label myiafactory.genre=tests-deps "deps-$ID" >/dev/null 2>&1 || return 1
+  MANDATAIRE=1
+  # Créé sur le réseau INTERNE seul (il y écoute, et seulement là), puis branché au bridge pour sortir ; toujours l'image de
+  # base myiafactory/tests (jamais une image dérivée : elle porte des outils de plus et ne sert qu'au code du projet).
+  dk 60 run -d --pull never --init --name "mandataire-$ID" --label myiafactory.genre=tests-deps --log-driver none \
+    --network "deps-$ID" --read-only --cap-drop ALL --security-opt no-new-privileges --user 1000:1000 \
+    --pids-limit 256 --memory 256m --memory-swap 256m --cpus 1 --tmpfs /tmp:size=16m \
+    -v "$AIDE:/opt/myiafactory/tests_hote.py:ro" --entrypoint python3 myiafactory/tests \
+    -I /opt/myiafactory/tests_hote.py --mandataire 3128 "$duree" "$@" >/dev/null 2>&1 || return 2
+  dk 30 network connect bridge "mandataire-$ID" >/dev/null 2>&1 || return 2
+  ip=$(dk 20 inspect -f "{{(index .NetworkSettings.Networks \"deps-$ID\").IPAddress}}" "mandataire-$ID" 2>/dev/null)
+  [[ $ip =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]] || return 2
+  p="http://mandataire:3128"
+  RESEAU_MANDATAIRE=(--network "deps-$ID" --dns 0.0.0.0 --add-host "mandataire:$ip"
+    -e "HTTPS_PROXY=$p" -e "HTTP_PROXY=$p" -e "https_proxy=$p" -e "http_proxy=$p" -e "NO_PROXY=localhost,127.0.0.1"
+    -e "JAVA_TOOL_OPTIONS=-Dhttps.proxyHost=mandataire -Dhttps.proxyPort=3128 -Dhttp.proxyHost=mandataire -Dhttp.proxyPort=3128")
+  return 0
+}
+
 echauffer() {
-  local duree plafond code r ko hotes p ip de="$DOSSIER/deps-entree" tmp="$CACHE.tmp"
+  local duree plafond code r ko hotes de="$DOSSIER/deps-entree" tmp="$CACHE.tmp"
   read -r duree plafond code <<< "${ECH[$ECH_CLE]}"
   local memoire=$((MEMOIRE + plafond * 1024)) depart   # le tmpfs /work compte dans --memory : il s'y ajoute
   [ "$ECH_CLE" = unity ] && deps_echec unity-tache-14g
@@ -697,24 +810,9 @@ echauffer() {
   # Réseau : TOUJOURS interne + mandataire (liste fermée), jamais bridge ; DNS coupé, le mandataire joint par --add-host.
   read -r -a hotes <<< "${ECH_HOTES[$ECH_CLE]-}"
   [ "${#hotes[@]}" -gt 0 ] || deps_echec reseau-sans-liste
-  DEPS_RESEAU="deps-$ID"
-  dk 30 network create --internal --label myiafactory.genre=tests-deps "deps-$ID" >/dev/null 2>&1 || deps_echec reseau-interne
-  MANDATAIRE=1
-  # Créé sur le réseau INTERNE seul (il y écoute, et seulement là), puis branché au bridge pour sortir ; toujours l'image de
-  # base myiafactory/tests (jamais une image dérivée : elle porte des outils de plus et ne sert qu'au code du projet).
-  dk 60 run -d --pull never --init --name "mandataire-$ID" --label myiafactory.genre=tests-deps --log-driver none \
-    --network "deps-$ID" --read-only --cap-drop ALL --security-opt no-new-privileges --user 1000:1000 \
-    --pids-limit 256 --memory 256m --memory-swap 256m --cpus 1 --tmpfs /tmp:size=16m \
-    -v "$AIDE:/opt/myiafactory/tests_hote.py:ro" --entrypoint python3 myiafactory/tests \
-    -I /opt/myiafactory/tests_hote.py --mandataire 3128 $((duree + 120)) "${hotes[@]}" >/dev/null 2>&1 || deps_echec mandataire
-  dk 30 network connect bridge "mandataire-$ID" >/dev/null 2>&1 || deps_echec mandataire
-  ip=$(dk 20 inspect -f "{{(index .NetworkSettings.Networks \"deps-$ID\").IPAddress}}" "mandataire-$ID" 2>/dev/null)
-  [[ $ip =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]] || deps_echec mandataire
-  p="http://mandataire:3128"
-  run+=(--network "deps-$ID" --dns 0.0.0.0 --add-host "mandataire:$ip"
-    -e "HTTPS_PROXY=$p" -e "HTTP_PROXY=$p" -e "https_proxy=$p" -e "http_proxy=$p" -e "NO_PROXY=localhost,127.0.0.1"
-    -e "JAVA_TOOL_OPTIONS=-Dhttps.proxyHost=mandataire -Dhttps.proxyPort=3128 -Dhttp.proxyHost=mandataire -Dhttp.proxyPort=3128"
-    -e HOME=/tmp -e MYIAFACTORY_TESTS_CONTENEUR=1 "$IMAGE")
+  ouvrir_mandataire $((duree + 120)) "${hotes[@]}"
+  case $? in 0) ;; 1) deps_echec reseau-interne ;; *) deps_echec mandataire ;; esac
+  run+=("${RESEAU_MANDATAIRE[@]}" -e HOME=/tmp -e MYIAFACTORY_TESTS_CONTENEUR=1 "$IMAGE")
   printf '%s\n' "lancer_tests : échauffement des dépendances ($ECH_CLE, ${duree} s et ${plafond} Go au plus)." >&2
   rm -f -- "$DOSSIER/deps-plafond" "$DOSSIER/deps-inodes" "$DOSSIER/deps-disque"
   # Surveillant de l'échauffement : plafond (taille, inodes) du cache, disque ; la laisse tue deps-<id> elle aussi.
@@ -897,12 +995,22 @@ ATTENTE=$((DEBUT - DEBUT_ATTENTE))
 
 # --- Conteneur ------------------------------------------------------------------
 
+# Réseau des tests : AUCUN (--network none), sauf la licence B3 (réseau interne + mandataire vers les seuls hôtes de licence,
+# accord du Directeur vérifié par la route). /tmp : 4 Go, 6 Go pour Unity (préférences, caches de l'éditeur, copie de licence).
+RESEAU_TESTS=(--network none); TMP_GO=4
+[ "$FAMILLE" = unity ] && TMP_GO=6
+if [ "$LICENCE" = B3 ]; then
+  mkdir -p -m 700 -- "$TESTS/.deps" 2>/dev/null          # le balayage des réseaux deps- et des mandataires s'y fie
+  ouvrir_mandataire $((DUREE + 120)) "${HOTES_B3[@]}"
+  case $? in 0) ;; 1) echouer 77 "réseau interne de la licence B3 impossible." ;; *) echouer 77 "mandataire de la licence B3 en échec." ;; esac
+  RESEAU_TESTS=("${RESEAU_MANDATAIRE[@]}")
+fi
 COMMANDE=(run --pull never --init --name "tests-$ID" --label myiafactory.genre=tests --log-driver none
-  --network none --read-only --cap-drop ALL --security-opt no-new-privileges --user 1000:1000
+  "${RESEAU_TESTS[@]}" --read-only --cap-drop ALL --security-opt no-new-privileges --user 1000:1000
   --pids-limit 2048 --ulimit nofile=8192:8192 --ulimit core=0
   --memory "${MEMOIRE}m" --memory-swap "${MEMOIRE}m" --cpus "$CPUS"
-  --tmpfs /tmp:size=4g,mode=1777,exec
-  -v "$DOSSIER/travail:/work" -v "$ENTREE:/entree:ro")
+  --tmpfs "/tmp:size=${TMP_GO}g,mode=1777,exec"
+  -v "$DOSSIER/travail:/work" -v "$ENTREE:/entree:ro" "${LICENCE_ARGS[@]}")
 # Cache de dépendances : copie sur écriture (volume overlay, basse = le cache figé), jamais le cache lui-même.
 if [ -n "$CACHE" ]; then
   COMMANDE+=(--mount "type=volume,src=tests-deps-$ID,dst=/deps")
@@ -938,16 +1046,16 @@ if command -v ionice >/dev/null 2>&1; then DU=(ionice -c3 "${DU[@]}"); fi
 if command -v nice >/dev/null 2>&1; then DU=(nice -n 19 "${DU[@]}"); fi
 DU=(timeout 60 "${DU[@]}" "$DOSSIER/travail")
 ( trap - TERM INT HUP PIPE
-  arreter() { : > "$DOSSIER/$1"; dk 30 kill "tests-$ID" >/dev/null 2>&1; }
+  arreter() { : > "$DOSSIER/$1"; "$ARRETER"; }
   echeance=$(( $(date +%s) + DUREE + MARGE )); du_t=0; du_en_cours=0
   rm -f -- "$DOSSIER/.du" "$DOSSIER/.du.tmp"
   while sleep "$SONDE" 8>&-; do
     if [ -e "$DOSSIER/laisse-coupee" ]; then
-      dk 30 kill "tests-$ID" >/dev/null 2>&1
+      "$ARRETER"
       enveloppe_vivante "$ID" && kill -TERM "$$" 2>/dev/null
       continue
     fi
-    enveloppe_vivante "$ID" || { dk 30 kill "tests-$ID" >/dev/null 2>&1; exit 0; }
+    enveloppe_vivante "$ID" || { "$ARRETER"; exit 0; }
     l=$(disque_libre_ko)
     if [[ $l =~ ^[0-9]{1,15}$ ]] && [ "$l" -lt "$DISQUE_ARRET_KO" ]; then arreter disque-plein; continue; fi
     if inodes_bas; then arreter inodes; continue; fi
@@ -969,7 +1077,7 @@ PID_SURVEILLANT=$!
 [ -e "$DOSSIER/laisse-coupee" ] && finir 130          # laisse coupée avant le départ : rien ne démarre
 CONTENEUR=1
 {
-  { timeout "$DUREE" sudo -n docker "${COMMANDE[@]}" </dev/null 2>&1 1>&3 3>&- 8>&-
+  { "$LANCER" </dev/null 2>&1 1>&3 3>&- 8>&-
     printf '%s\n' "$?" > "$DOSSIER/code"
   } | python3 -I "$AIDE" --prefixer "$DOSSIER/erreur-coupee" "$SORTIE_MAX" >&2 3>&- 8>&-
 } 3>&1 | python3 -I "$AIDE" --couper "$DOSSIER/sortie-coupee" "$SORTIE_MAX" 8>&-

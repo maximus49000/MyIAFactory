@@ -4,6 +4,7 @@ import os
 import re
 import tempfile
 import threading
+import time
 import unicodedata
 from pathlib import Path
 
@@ -60,7 +61,7 @@ def _charger(chemin):
     if chemin.exists():
         try:
             donnees = json.loads(chemin.read_text(encoding="utf-8-sig"))
-        except (ValueError, OSError) as e:
+        except (ValueError, OSError, RecursionError) as e:
             raise ReglagesInvalides(f"Réglages illisibles ({chemin}) : {e}")
         if not isinstance(donnees, dict):
             raise ReglagesInvalides(f"Réglages illisibles ({chemin}) : un objet JSON est attendu")
@@ -100,15 +101,20 @@ _CACHE_BUREAU = {}
 _CACHE_GENRE = {}
 _VERROU_CACHES = threading.Lock()
 _CACHE_MAX = 64
+# Un refus du fichier du bureau peut venir d'un fichier de projet qui manquait un instant : le fichier du bureau n'a
+# pas changé quand il revient. Un refus gardé est donc relu après ce délai (secondes) ; une lecture réussie suit
+# seulement la signature du fichier.
+_REFUS_RELU_APRES = 5.0
 
 
 def _signature(chemin):
-    """`(date en ns, taille)` du fichier, ou None s'il n'existe pas (ou n'est pas lisible)."""
+    """`(date en ns, taille, numéro de fichier)` du fichier, ou None s'il n'existe pas (ou n'est pas lisible). Le numéro
+    change quand un remplacement atomique (`os.replace`) pose un autre fichier."""
     try:
         st = os.stat(chemin)
     except (OSError, ValueError):
         return None
-    return (st.st_mtime_ns, st.st_size)
+    return (st.st_mtime_ns, st.st_size, st.st_ino)
 
 
 def _poser(cache, cle, valeur):
@@ -121,7 +127,7 @@ def _poser(cache, cle, valeur):
 def _niveaux_du_bureau(fichier_bureau):
     """`{"reglages", "types"}` du fichier du bureau, lus par `lire_bureau` (seule source) ; relus seulement si le
     fichier a changé. Lève `ReglagesInvalides` (ou OSError, TypeError, ValueError) comme `lire_bureau` ; un refus est
-    gardé lui aussi, jusqu'au prochain changement du fichier."""
+    gardé lui aussi, jusqu'au prochain changement du fichier ou, au plus, `_REFUS_RELU_APRES` secondes."""
     cle = str(Path(fichier_bureau))
     signature = _signature(cle)
     if signature is None:          # fichier disparu : jamais une ancienne lecture
@@ -129,12 +135,14 @@ def _niveaux_du_bureau(fichier_bureau):
             _CACHE_BUREAU.pop(cle, None)
         raise ReglagesInvalides(f"Fichier du bureau introuvable ({cle}).")
     entree = _CACHE_BUREAU.get(cle)
-    if entree is None or entree[0] != signature:
+    maintenant = time.monotonic()
+    if (entree is None or entree[0] != signature
+            or (entree[2] is not None and maintenant - entree[3] > _REFUS_RELU_APRES)):
         try:
             lu = lire_bureau(cle)
-            entree = (signature, {"reglages": lu["reglages"], "types": lu["types"]}, None)
+            entree = (signature, {"reglages": lu["reglages"], "types": lu["types"]}, None, maintenant)
         except ReglagesInvalides as e:
-            entree = (signature, None, str(e))
+            entree = (signature, None, str(e), maintenant)
         _poser(_CACHE_BUREAU, cle, entree)
     if entree[2] is not None:      # une exception neuve : relever la même ferait grossir sa trace à chaque passage
         raise ReglagesInvalides(entree[2])
@@ -224,7 +232,7 @@ def lire_bureau(chemin):
     chemin = Path(chemin)
     try:
         donnees = json.loads(chemin.read_text(encoding="utf-8-sig"))
-    except (ValueError, OSError) as e:
+    except (ValueError, OSError, RecursionError) as e:
         raise ReglagesInvalides(f"Fichier du bureau illisible ({chemin}) : {e}")
     if not isinstance(donnees, dict):
         raise ReglagesInvalides(f"Fichier du bureau illisible ({chemin}) : un objet JSON est attendu")
@@ -423,7 +431,7 @@ def _modifier_bureau(chemin, fonction):
         with _verrou_fichier(chemin):
             try:
                 donnees = json.loads(chemin.read_text(encoding="utf-8-sig"))
-            except (ValueError, OSError) as e:
+            except (ValueError, OSError, RecursionError) as e:
                 raise ReglagesInvalides(f"Fichier du bureau illisible ({chemin}) : {e}")
             if not isinstance(donnees, dict):
                 raise ReglagesInvalides(f"Fichier du bureau illisible ({chemin}) : un objet JSON est attendu")
@@ -499,7 +507,7 @@ def effacer_cle(chemin_projet, cle):
             with _verrou_fichier(chemin):
                 try:
                     donnees = json.loads(chemin.read_text(encoding="utf-8-sig"))
-                except (ValueError, OSError) as e:
+                except (ValueError, OSError, RecursionError) as e:
                     raise ReglagesInvalides(f"Réglages illisibles ({chemin}) : {e}")
                 if isinstance(donnees, dict) and cle in donnees:
                     del donnees[cle]
@@ -553,7 +561,7 @@ def _ecrire_cle(chemin, cle, valeur):
             if chemin.exists():
                 try:
                     donnees = json.loads(chemin.read_text(encoding="utf-8-sig"))
-                except (ValueError, OSError) as e:
+                except (ValueError, OSError, RecursionError) as e:
                     raise ReglagesInvalides(f"Réglages illisibles ({chemin}) : {e}")
             donnees[cle] = valeur
             _ecrire_fichier(chemin, donnees)

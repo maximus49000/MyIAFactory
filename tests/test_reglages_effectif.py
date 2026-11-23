@@ -139,6 +139,38 @@ class Effectif(unittest.TestCase):
         r = self.effectif(reglages={"lecons_auto": True}, types={ANDROID: {"reglages": {"lecons_auto": "non"}}})
         self.assertIs(r["lecons_auto"], True)
 
+    def test_un_refus_en_cache_est_relu_apres_quelques_secondes(self):
+        """Un projet listé dont les réglages disparaissent fait refuser le fichier du bureau ; le fichier revenu (le
+        fichier du bureau, lui, n'a pas changé), le global s'applique de nouveau après un court délai."""
+        b = bureau_avec(self.regl, reglages={"lecons_auto": True})
+        self.assertIs(reglages.charger_effectif(self.regl, b)["lecons_auto"], True)
+        sauvegarde = self.regl.read_text(encoding="utf-8")
+        horloge = [1000.0]
+        with mock.patch.object(reglages.time, "monotonic", lambda: horloge[0]):
+            self.regl.unlink()
+            b.write_text(json.dumps({"projets": ["reglages.json"], "reglages": {"lecons_auto": True}, "x": 1}),
+                         encoding="utf-8")                              # le fichier du bureau change : relu, refusé
+            with self.assertRaises(reglages.ReglagesInvalides):
+                reglages._niveaux_du_bureau(b)                          # refus gardé
+            self.regl.write_text(sauvegarde, encoding="utf-8")          # revenu ; le fichier du bureau est intact
+            horloge[0] += 1
+            with self.assertRaises(reglages.ReglagesInvalides):         # trop tôt : le refus reste gardé
+                reglages._niveaux_du_bureau(b)
+            horloge[0] += 10
+            self.assertIs(reglages.charger_effectif(self.regl, b)["lecons_auto"], True)
+
+    def test_la_signature_porte_l_inode(self):
+        self.assertEqual(len(reglages._signature(self.regl)), 3)
+        self.assertIsNone(reglages._signature(self.tmp / "absent.json"))
+
+    def test_un_fichier_du_bureau_trop_imbrique_est_refuse_sans_lever_pour_le_moteur(self):
+        b = self.tmp / "profond.json"
+        b.write_text("[" * 100000 + "]" * 100000, encoding="utf-8")
+        with self.assertRaises(reglages.ReglagesInvalides):
+            reglages.lire_bureau(b)
+        self.projet(lecons_auto=True)
+        self.assertEqual(reglages.charger_effectif(self.regl, b), reglages.charger(self.regl))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -242,6 +242,7 @@ chmod 700 -- "$TESTS" "$DOSSIER" "$ENTREE" 2>/dev/null   # 0700 imposé (créés
 declare -A MES_JETONS=()                               # numéro -> descripteur des jetons de mémoire tenus
 liberer_jetons() {
   local k f
+  [ "${#MES_JETONS[@]}" -gt 0 ] || return 0              # tableau vide sous set -u : à éviter avant bash 4.4
   for k in "${!MES_JETONS[@]}"; do
     f="${MES_JETONS[$k]}"
     flock -u "$f" 2>/dev/null; exec {f}>&-
@@ -824,6 +825,9 @@ prendre_place() {   # 0 si une place est prise (descripteur 8)
   return 0
 }
 
+# `#attente … libres` est une photo : pendant un passage de prise/relâche (le premier ticket tient un instant les jetons libres
+# le temps de choisir) elle peut être fausse de 1 à 2 unités en moins ; jamais en trop pour le budget, que seuls les jetons
+# gardés (mes + autres < budget) engagent.
 JETONS_LIBRES=0
 compter_jetons_libres() {   # sans rien garder : JETONS_LIBRES = budget - (tenus par d'autres) - (les miens)
   local k f autres=0
@@ -844,7 +848,7 @@ tenir_jetons() {   # un passage, réservé au premier ticket (le poids atteint, 
     if flock -n "$f"; then nums+=("$k"); fds+=("$f"); else autres=$((autres + 1)); exec {f}>&-; fi
   done
   # Les libres sont tenus le temps du choix : personne d'autre ne peut les prendre ; gardés seulement ceux qu'il faut.
-  for i in "${!nums[@]}"; do
+  for ((i = 0; i < ${#nums[@]}; i++)); do
     if [ "${#MES_JETONS[@]}" -lt "$POIDS" ] && [ $((${#MES_JETONS[@]} + autres)) -lt "$BUDGET_U" ]; then
       MES_JETONS[${nums[$i]}]="${fds[$i]}"
     else

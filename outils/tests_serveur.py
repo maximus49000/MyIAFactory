@@ -553,15 +553,16 @@ class _Attente:
 
 def limites_de(profil, forces=None):
     """Les limites de la campagne : `cpus`, `memoire_mo`, `duree_s` du profil (`ressources_par_defaut`, § 5.14), relevées par
-    `forces` (`tests.profil_force.ressources` du projet, écrit par le bureau seul) ; une valeur absente ou invalide retombe sur
-    `LIMITES`. Au-delà de `BORNES_LIMITES` : `Repli` (décision du Directeur requise), avant toute connexion."""
+    `forces` (`tests.profil_force.ressources` du projet, écrit par le bureau seul) qui ne font que RELEVER (jamais sous le profil) ;
+    une valeur absente ou invalide retombe sur `LIMITES`. Au-delà de `BORNES_LIMITES` : `Repli` (décision du Directeur requise), avant toute connexion."""
     limites = dict(LIMITES)
-    for source in (getattr(profil, "ressources", None), forces):
+    profil_res = getattr(profil, "ressources", None)
+    for source in (profil_res, forces):
         if isinstance(source, dict):
             for cle in limites:
                 v = source.get(cle)
                 if isinstance(v, int) and not isinstance(v, bool) and v > 0:
-                    limites[cle] = v
+                    limites[cle] = v if source is profil_res else max(v, limites[cle])
     for cle, maximum in BORNES_LIMITES.items():
         if limites[cle] > maximum:
             raise Repli(f"refusé ({cle} {limites[cle]} au-delà de {maximum} : décision du Directeur requise)")
@@ -643,6 +644,10 @@ def _au_serveur(commande, racine, attendre, places, dossier_etat, ssh, noter, ho
     projet = trouve[0] if trouve else None
     if not isinstance(projet, str) or not MOTIF_PROJET.fullmatch(projet):
         raise Repli("refusé (projet non enregistré au bureau)")
+    poids = -(-limites["memoire_mo"] // UNITE_MEMOIRE_MO)
+    if poids > budget_unites_de(serveur):
+        raise Repli(f"refusé (la campagne demande {poids} jetons de mémoire, le budget du serveur en offre "
+                    f"{budget_unites_de(serveur)})")
     if places is None:
         places = places_de(serveur)
     if isinstance(places, bool) or not isinstance(places, int) or not 1 <= places <= PLACES_MAX:

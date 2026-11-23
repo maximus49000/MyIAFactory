@@ -65,19 +65,17 @@ class TestJetons(unittest.TestCase):
         self.addCleanup(self.lacher, p)
         return p
 
-    def jetons_stables(self, attendus, delai=30):
-        """Attend que le nombre de jetons tenus ait pour PLANCHER `attendus` sur huit relevés rapprochés : le faux `flock`
-        laisse un fichier le temps d'un essai (l'enveloppe essaie les jetons libres avant de choisir) et le nombre monte alors
-        au-dessus ; le plancher est ce qui reste tenu. Le vrai verrou n'a pas de trace."""
-        fin = time.time() + delai
+    def jetons_stables(self, attendus, delai=40):
+        """Attend `attendus` jetons tenus à deux relevés d'affilée espacés d'au moins 0,5 s : le faux `flock` laisse un fichier
+        le temps d'un essai (l'enveloppe essaie les jetons libres avant de choisir), un relevé peut donc tomber au-dessus ;
+        deux relevés égaux et distants ne sont pas un passage transitoire. Le vrai verrou n'a pas de trace."""
+        fin, precedent = time.time() + delai, None
         while time.time() < fin:
-            releves = []
-            for _ in range(8):
-                releves.append(len(self.jetons()))
-                time.sleep(0.05)
-            if min(releves) == attendus:
+            n = len(self.jetons())
+            if n == attendus and precedent == attendus:
                 return
-            time.sleep(0.1)
+            precedent = n
+            time.sleep(0.5)
         self.fail(f"{len(self.jetons())} jetons tenus au lieu de {attendus}")
 
     @staticmethod
@@ -227,6 +225,7 @@ class TestJetons(unittest.TestCase):
         self.assertEqual(tests_serveur.limites_de(gradle)["duree_s"], 2700)
         self.assertEqual(tests_serveur.limites_de(profil, {"memoire_mo": 16384, "cpus": 8, "duree_s": 3600}),
                          {"cpus": 8, "memoire_mo": 16384, "duree_s": 3600})
+        self.assertEqual(tests_serveur.limites_de(profil, {"memoire_mo": 4096, "cpus": 1}), tests_serveur.LIMITES)  # jamais sous le profil
         for forces, mot in (({"memoire_mo": 20000}, "memoire_mo"), ({"cpus": 9}, "cpus"), ({"duree_s": 3601}, "duree_s")):
             with self.subTest(forces=forces), self.assertRaises(tests_serveur.Repli) as c:
                 tests_serveur.limites_de(profil, forces)
@@ -290,6 +289,17 @@ class TestCommandeDistante(TS.Base):
         self.assertTrue(self.dit("décision du Directeur requise"))
         self.assertEqual((ssh.appels_octets, ssh.appels_flux), ([], []))
         self.assertEqual(self.poste.appels, [])
+
+
+    def test_poids_au_dela_du_budget_du_serveur_refuse_avant_connexion(self):
+        serveur = SimpleNamespace(**vars(TS.SERVEUR), budget_tests_mo=8192)         # 4 jetons
+        profil = tests_profil.Profil(familles=("python",), ressources={"cpus": 4, "memoire_mo": 10240, "duree_s": 1800})
+        ssh = TS.FauxSsh()
+        code = self.lancer(ssh, forcer=True, choisir=lambda d, requises: serveur, analyse=lambda racine, **o: profil,
+                           ressources_forcees=lambda racine: {})
+        self.assertEqual(code, 4)
+        self.assertTrue(self.dit("la campagne demande 5 jetons de mémoire, le budget du serveur en offre 4"))
+        self.assertEqual((ssh.appels_octets, ssh.appels_flux), ([], []))
 
 
 class TestPaliersMixtes(unittest.TestCase):

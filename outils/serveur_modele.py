@@ -145,9 +145,9 @@ def valider(serveur):
         raise ValueError("Ce nom est réservé (il se confondrait avec l'adresse /api/serveurs/migration) : choisissez-en un autre.")
     places = serveur.get("places_tests")
     if isinstance(places, bool) or not isinstance(places, int) or not 1 <= places <= PLACES_TESTS_MAX:
-        places = None       # hors bornes : on retombe sur le défaut de la route (le bureau le dit, voir `rejets_places`)
+        places = None       # hors bornes : on retombe sur le défaut de la route (à dire au bureau : tâche 15)
     return Serveur(ident, nom, hote, utilisateur, cle, fournisseur, dict(reglages), places,
-                   budget_tests_valide(serveur.get("budget_tests_mo")))     # hors bornes : le défaut (voir `raison_budget`)
+                   budget_tests_valide(serveur.get("budget_tests_mo")))     # hors bornes : le défaut (`raison_budget` à brancher au bureau : tâche 15)
 
 
 def lire_avec_rejets(dossier=DOSSIER):

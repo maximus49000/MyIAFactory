@@ -223,15 +223,13 @@ class TestEnveloppeUnity(D.Banc):
                 self.assertFalse(any(i in a for i in INTERDITS), a)
                 self.assertNotRegex(a, r"unity3d(/Unity)?:|unity3d/Unity/?:")                 # jamais le dossier entier
 
-    def test_hote_non_installe_code_2(self):
-        avant = self.arbre()
-        code, err, _ = self.unity("hote_bac_a_sable", "B1")
-        self.assertEqual(code, 2, err)
-        self.assertTrue(any("exécuteur hôte non installé" in x for x in err), err)
-        self.assertEqual(self.docker_args(), [])
-        self.assertFalse((self.home / "tests" / ID / "travail").exists())
+    def test_hote_seulement_pour_unity(self):
+        # Tâche 14h : l'exécuteur hôte existe (test_serveur_unity_bac_a_sable) ; il reste réservé à la famille unity.
         code, err, _ = self.lancer(*NODE_14, "hote_bac_a_sable", "-", deps="-", ident=ID_B)
         self.assertEqual(code, 2, err)
+        self.assertTrue(any("famille unity" in x for x in err), err)
+        self.assertEqual(self.docker_args(), [])
+        self.assertFalse((self.home / "tests" / ID_B / "travail").exists())
 
 
 # --------------------------------------------------------------------------------------- entrée du conteneur (entree-unity.sh)

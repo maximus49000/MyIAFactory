@@ -2,12 +2,23 @@
 # Enveloppe HÔTE d'une campagne de tests : exécutée sur le serveur par UNE session SSH du poste, elle reste au premier plan
 # du début à la fin (place, conteneur, sortie en direct, nettoyage) ; l'entrée standard de la session sert de laisse.
 # Usage : lancer_tests.sh <id> <places> <cpus> <memoire_mo> <duree_s> <projet> <deps> [<travail_go> [<image> [<famille>
-#         [<echauffement> [<reseau_code> [<budget_caches_go> [<budget_unites> [<executeur> [<licence> [<hotes_licence>]]]]]]]]]]
-#   POSITIONS (tâche 14g, fixées après relecture de l'état livré en 14e) : executeur = 15e, licence = 16e, hotes_licence = 17e.
+#         [<echauffement> [<reseau_code> [<budget_caches_go> [<budget_unites> [<executeur> [<licence> [<hotes_licence>
+#         [<version_hote>]]]]]]]]]]]]
+#   POSITIONS (tâche 14g, fixées après relecture de l'état livré en 14e) : executeur = 15e, licence = 16e, hotes_licence = 17e ;
+#   version_hote = 18e (tâche 14h).
 #   executeur (15e) ^(conteneur|hote_bac_a_sable)$, défaut conteneur : qui exécute la commande. Les fonctions
 #   executeur_<nom>_lancer / executeur_<nom>_arreter sont les SEULES différences ; places, jetons, file, laisse, timeout, coupe
-#   à 50 Mo, préfixe `| `, `#fin` et nettoyage sont communs. hote_bac_a_sable (option A, § 5.16) n'est pas installé avant la
-#   tâche 14h : refusé (code 2, « exécuteur hôte non installé »), rien n'est écrit.
+#   à 50 Mo, préfixe `| `, `#fin` et nettoyage sont communs. hote_bac_a_sable (option A, § 5.16, tâche 14h ; famille unity
+#   seulement) : `sudo -n /usr/local/lib/myiafactory/unity-bac-a-sable.sh lancer <id> <cpus> <memoire_mo> <duree_s> <version>
+#   <reseau>` (unité systemd confinée sous l'utilisateur unity-tests ; voir ce script), entrée = la commande puis l'instantané ;
+#   arrêt : `… arreter <id>`. reseau = licence pour B3 (le mandataire de la campagne, ouvert ici), aucun sinon (B1 et B2 :
+#   l'hôte EST la machine de la licence). Aucune image Docker n'est demandée. Son code 77 (prérequis absent sur l'hôte :
+#   utilisateur, éditeur, licence, scripts ; rien n'a tourné) devient un refus (#refus 77) : la commande de l'unité ne rend
+#   jamais 77.
+#   version_hote (18e) « - » (défaut : la version du projet, celle de l'image ^myiafactory/tests-unity-<v>$) ou une version Unity
+#   (même motif), avec hote_bac_a_sable seulement : la version de repli décidée par le Directeur (tests.profil_force.
+#   unity_version_hote) ; différente de celle du projet, la sortie commence par « Éditeur <v> au lieu de <v projet> : résultats
+#   indicatifs ».
 #   licence (16e) ^(-|B1|B2|B3)$, défaut « - » : exigée (≠ -) pour la famille unity, refusée pour toute autre famille. Montages
 #   de la table FERMÉE ci-dessous (jamais une valeur du poste, jamais unityhub, jamais une socket, jamais ~/.config/unity3d
 #   entier), en lecture seule ; au moins l'un des deux doit exister (sinon 77, aucun conteneur) :
@@ -219,7 +230,7 @@ if [[ ${ENVELOPPE_DU_S:-} =~ ^[0-9]{1,3}$ ]]; then DU_S="$ENVELOPPE_DU_S"; fi   
 
 # --- Arguments (rien n'est écrit avant la fin de ce bloc) ------------------
 
-[ $# -ge 7 ] && [ $# -le 17 ] || refuser "usage : <id> <places> <cpus> <memoire_mo> <duree_s> <projet> <deps> [<travail_go> [<image> [<famille> [<echauffement> [<reseau_code> [<budget_caches_go> [<budget_unites> [<executeur> [<licence> [<hotes_licence>]]]]]]]]]]"
+[ $# -ge 7 ] && [ $# -le 18 ] || refuser "usage : <id> <places> <cpus> <memoire_mo> <duree_s> <projet> <deps> [<travail_go> [<image> [<famille> [<echauffement> [<reseau_code> [<budget_caches_go> [<budget_unites> [<executeur> [<licence> [<hotes_licence> [<version_hote>]]]]]]]]]]]"
 for argument in "$@"; do
   [[ $argument == *[[:cntrl:]]* ]] && refuser "caractère de contrôle refusé dans un argument."
 done
@@ -262,7 +273,13 @@ else
   [ "$IMAGE_UNITY" = 0 ] || refuser "image Unity refusée hors de la famille unity."
   [ "$LICENCE" = - ] || refuser "licence refusée hors de la famille unity."
 fi
-[ "$EXECUTEUR" = conteneur ] || refuser "exécuteur hôte non installé (option A, tâche 14h) : rien ne part."
+VERSION_HOTE="${18--}"
+[ "$EXECUTEUR" = conteneur ] || [ "$FAMILLE" = unity ] || refuser "exécuteur hote_bac_a_sable : famille unity seulement."
+if [ "$VERSION_HOTE" != - ]; then
+  [ "$EXECUTEUR" = hote_bac_a_sable ] || refuser "version_hote refusée : seulement avec l'exécuteur hote_bac_a_sable."
+  [[ myiafactory/tests-unity-$VERSION_HOTE =~ $MOTIF_IMAGE_UNITY ]] || refuser "version_hote refusée (version Unity hors motif)."
+fi
+VERSION_PROJET="${IMAGE_DEMANDEE#myiafactory/tests-unity-}"
 ECH_CLE="${11-${ECH_DEFAUT[$FAMILLE]-"-"}}"; RESEAU="${12-refuse}"; BUDGET="${13-40}"; BUDGET_U="${14-16}"
 if [ "$ECH_CLE" != - ]; then
   [[ $ECH_CLE =~ ^[a-z][a-z-]{1,11}$ ]] && [ -n "${ECH[$ECH_CLE]+x}" ] || refuser "échauffement refusé (clé hors de la table)."
@@ -383,10 +400,18 @@ enveloppe_vivante() { processus_vivant "$TESTS/$1/enveloppe.pid" "lancer_tests.s
 # d'erreur sur la sortie d'erreur, rend son code ; _arreter l'arrête (laisse, surveillant, fin), sans rien écrire.
 executeur_conteneur_lancer() { timeout "$DUREE" sudo -n docker "${COMMANDE[@]}"; }
 executeur_conteneur_arreter() { dk 30 kill "tests-$ID" >/dev/null 2>&1; }
-executeur_hote_lancer() {   # option A (§ 5.16) : tâche 14h ; d'ici là refusée dès les arguments, jamais atteinte
-  printf '%s\n' "lancer_tests : exécuteur hôte non installé (tâche 14h)." >&2; return 2
+# Option A (§ 5.16, tâche 14h) : le script racine (sudo -n, règle sudoers limitée à ce chemin) lance l'unité confinée. Il reçoit
+# la commande (1re ligne) puis l'instantané, lus ICI par l'utilisateur principal : la racine n'ouvre aucun fichier de ~/tests.
+BAC_A_SABLE=/usr/local/lib/myiafactory/unity-bac-a-sable.sh
+executeur_hote_lancer() {
+  local v="$VERSION_PROJET" reseau=aucun
+  [ "$VERSION_HOTE" != - ] && v="$VERSION_HOTE"
+  [ "$LICENCE" = B3 ] && reseau=licence
+  [ "$v" = "$VERSION_PROJET" ] || printf 'Éditeur %s au lieu de %s : résultats indicatifs\n' "$v" "$VERSION_PROJET"
+  { printf '%s\n' "$COMMANDE_JSON"; cat -- "$ENTREE/entree.tar"; } |
+    timeout "$DUREE" sudo -n "$BAC_A_SABLE" lancer "$ID" "$CPUS" "$MEMOIRE" "$DUREE" "$v" "$reseau"
 }
-executeur_hote_arreter() { :; }
+executeur_hote_arreter() { timeout 130 sudo -n "$BAC_A_SABLE" arreter "$ID" </dev/null >/dev/null 2>&1 8>&-; }
 case "$EXECUTEUR" in
   conteneur) LANCER=executeur_conteneur_lancer; ARRETER=executeur_conteneur_arreter ;;
   *) LANCER=executeur_hote_lancer; ARRETER=executeur_hote_arreter ;;
@@ -427,7 +452,9 @@ libre=$(disque_libre_ko)
 [ "$libre" -ge "$DISQUE_MIN_KO" ] || echouer 76 "disque presque plein : $((libre / 1024)) Mo libres, 5 Go au moins."
 inodes_bas && echouer 76 "inodes presque épuisés : moins de ${INODES_MIN_PC} % libres."
 [ "$(id -u)" = 1000 ] || echouer 77 "l'utilisateur du serveur doit être 1000 (celui du conteneur de tests)."
-dk 20 image inspect "$IMAGE" >/dev/null 2>&1 || echouer 77 "image $IMAGE absente : installez la capacité qui la fournit (tests-image, tests-android)."
+if [ "$EXECUTEUR" = conteneur ]; then                  # l'exécuteur hôte n'a pas d'image (l'éditeur de l'hôte)
+  dk 20 image inspect "$IMAGE" >/dev/null 2>&1 || echouer 77 "image $IMAGE absente : installez la capacité qui la fournit (tests-image, tests-android)."
+fi
 if [ "$FAMILLE" = gradle-android ]; then
   [ -d "$HOME/android-sdk" ] || echouer 77 "SDK Android de l'hôte absent (~/android-sdk) : installez la capacité android-build."
 fi
@@ -449,7 +476,8 @@ if [ "$FAMILLE" = unity ]; then
   fi
   [ "${#LICENCE_ARGS[@]}" -gt 0 ] ||
     echouer 77 "licence Unity absente de l'hôte (~/$LICENCE_DROITS_REL ou ~/$LICENCE_ULF_REL) : installez la capacité unity-cli."
-  if [ "$LICENCE" = B2 ] || [ "$LICENCE" = B3 ]; then
+  # B2 et B3 en conteneur : identifiants de machine de l'hôte (sur l'hôte, option A, l'unité les a d'elle-même).
+  if [ "$EXECUTEUR" = conteneur ] && { [ "$LICENCE" = B2 ] || [ "$LICENCE" = B3 ]; }; then
     [ -f "$MACHINE_ID" ] && [ ! -L "$MACHINE_ID" ] || echouer 77 "$MACHINE_ID absent de l'hôte : licence $LICENCE impossible."
     nom_hote=$(hostname 2>/dev/null || uname -n 2>/dev/null)
     [[ $nom_hote =~ ^[A-Za-z0-9][A-Za-z0-9.-]{0,62}$ ]] || echouer 77 "nom d'hôte illisible : licence $LICENCE impossible."
@@ -1111,6 +1139,14 @@ PID_SURVEILLANT=""
 [ -e "$DOSSIER/echeance" ] && echouer 74 "échéance du surveillant dépassée (${DUREE} s + ${MARGE} s) : conteneur arrêté."
 code=""; [ -f "$DOSSIER/code" ] && IFS= read -r code < "$DOSSIER/code"
 [[ $code =~ ^[0-9]{1,3}$ ]] || echouer 1 "code de docker run illisible."
+# Exécuteur hôte : pas de conteneur à inspecter. 124 : timeout (CONTENEUR reste 1 : finir arrête l'unité) ; 77 : refus du script
+# racine (prérequis absent, rien n'a tourné ; la commande de l'unité ne rend jamais 77) ; sinon le code de la commande.
+if [ "$EXECUTEUR" = hote_bac_a_sable ]; then
+  [ "$code" = 124 ] && echouer 124 "durée maximale dépassée (${DUREE} s)."
+  CONTENEUR=0                                           # --wait : l'unité est finie et ramassée
+  [ "$code" = 77 ] && echouer 77 "bac à sable Unity : prérequis absent sur l'hôte (utilisateur unity-tests, éditeur, licence ou scripts) ; rien n'a tourné."
+  finir "$code" conteneur
+fi
 # État final : « jamais démarré » SEULEMENT si le conteneur est absent, ou « created » avec StartedAt à la date nulle ; fini
 # (exited, dead) après un vrai départ : code du conteneur ; tout le reste (running, restarting, paused, removing, inspect
 # en panne, réponse illisible) : conteneur tué puis supprimé, 74 (le code de docker n'est jamais rendu comme un refus).

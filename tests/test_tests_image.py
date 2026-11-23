@@ -43,7 +43,8 @@ class TestCapaciteTestsImage(unittest.TestCase):
         self.assertEqual(sc.manquantes_pour(["tests-serveur"], set()), ["base", "tests-image"])
         self.assertEqual(inst.FICHIERS_ETAPE["tests_image"], ("images/tests/Dockerfile", "images/tests/entree-tests.sh",
                                                               "taches/lancer_tests.sh", "taches/commun.sh",
-                                                              "taches/tests_hote.py"))
+                                                              "taches/tests_hote.py", "images/tests/entree-unity.sh",
+                                                              "taches/construire_image_tests.sh"))   # 14g, déposés en 14h
         self.assertEqual(inst.EMPREINTE_FICHIERS["tests_image"],                 # l'enveloppe hors de l'empreinte de l'image
                          ("images/tests/Dockerfile", "images/tests/entree-tests.sh"))
         self.assertEqual(inst.MARQUEURS["tests-image"], ("tests_image", "$HOME/.myiafactory/tests-image.version"))

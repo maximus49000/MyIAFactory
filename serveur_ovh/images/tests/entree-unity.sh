@@ -22,7 +22,13 @@
 #   dans le journal ou la sortie (`grep -qiE`, jamais affiché) ; 82 aucun test découvert (même cas, sans motif de refus, quand
 #   l'éditeur rend 0 ou 2 : jamais une réussite) ; sinon celui de l'éditeur (0 tous passent, 2 des échecs, 3 erreur
 #   d'exécution, 1 panne), 2 si l'éditeur rend 0 avec des échecs dans le XML ; 2 commande autre que unity-editor.
-# Réservée aux tests : ENTREE_TESTS_RACINE (préfixe de /licence et /tmp ; vide en production).
+# - Option A (tâche 14h, bac à sable de l'hôte) : posées par unity-bac-a-sable.sh (script racine), jamais par le poste :
+#   MYIAFACTORY_UNITY_LICENCE=liee : la licence est déjà LIÉE en lecture seule dans le HOME de l'unité (systemd
+#   BindReadOnlyPaths) : rien n'est copié ni modifié (aucun chmod) ; aucun fichier de licence dans le HOME : code 81.
+#   MYIAFACTORY_UNITY_EDITEUR=<chemin absolu de l'éditeur de l'hôte> : remplace `unity-editor` ; la valeur de -projectPath
+#   devient le dossier courant (la copie extraite dans la campagne, jamais /work).
+# ENTREE_TESTS_RACINE : préfixe de /licence et /tmp ; vide dans le conteneur, le dossier de la campagne dans l'unité (option A),
+#   un dossier temporaire dans les tests.
 set -u
 exec </dev/null
 umask 077
@@ -52,27 +58,40 @@ echec() { printf 'entree-unity : %s\n' "$2" >&2; exit "$1"; }
 # --- Licence : copie sur le tmpfs, jamais lue -----------------------------------------------------------------------------
 droits="$HOME/.config/unity3d/Unity/licenses"
 partage="$HOME/.local/share/unity3d/Unity"
-mkdir -p -- "$droits" "$partage" 2>/dev/null || echec 81 "licence Unity refusée : dossier de copie impossible."
-copie=0
-if [ -d "$LICENCE_MONTEE/droits" ] && [ -n "$(ls -A -- "$LICENCE_MONTEE/droits" 2>/dev/null)" ]; then
-  cp -R -- "$LICENCE_MONTEE/droits/." "$droits/" 2>/dev/null && copie=1
+EDITEUR_HOTE="${MYIAFACTORY_UNITY_EDITEUR:-}"
+if [ "${MYIAFACTORY_UNITY_LICENCE:-}" = liee ]; then        # option A : déjà liée, en lecture seule ; ni copie ni chmod
+  { [ -d "$droits" ] && [ -n "$(ls -A -- "$droits" 2>/dev/null)" ]; } || [ -f "$partage/Unity_lic.ulf" ] ||
+    echec 81 "licence Unity refusée : aucune licence liée dans le HOME de l'unité."
+else
+  mkdir -p -- "$droits" "$partage" 2>/dev/null || echec 81 "licence Unity refusée : dossier de copie impossible."
+  copie=0
+  if [ -d "$LICENCE_MONTEE/droits" ] && [ -n "$(ls -A -- "$LICENCE_MONTEE/droits" 2>/dev/null)" ]; then
+    cp -R -- "$LICENCE_MONTEE/droits/." "$droits/" 2>/dev/null && copie=1
+  fi
+  if [ -f "$LICENCE_MONTEE/ulf" ]; then
+    cp -- "$LICENCE_MONTEE/ulf" "$partage/Unity_lic.ulf" 2>/dev/null && copie=1
+  fi
+  chmod -R u=rwX,go= -- "$HOME/.config/unity3d" "$HOME/.local/share/unity3d" 2>/dev/null
+  [ "$copie" = 1 ] || echec 81 "licence Unity refusée : aucune licence montée dans le conteneur."
 fi
-if [ -f "$LICENCE_MONTEE/ulf" ]; then
-  cp -- "$LICENCE_MONTEE/ulf" "$partage/Unity_lic.ulf" 2>/dev/null && copie=1
+if [ -n "$EDITEUR_HOTE" ]; then
+  [[ $EDITEUR_HOTE == /*/Editor/Unity ]] && [ -f "$EDITEUR_HOTE" ] && [ -x "$EDITEUR_HOTE" ] ||
+    echec 2 "éditeur de l'hôte absent ou hors motif."
 fi
-chmod -R u=rwX,go= -- "$HOME/.config/unity3d" "$HOME/.local/share/unity3d" 2>/dev/null
-[ "$copie" = 1 ] || echec 81 "licence Unity refusée : aucune licence montée dans le conteneur."
 
 # --- Commande : journal et résultats imposés -------------------------------------------------------------------------------
-cmd=(); saute=0
+cmd=(); saute=0; projet=0
 for a in "$@"; do
   if [ "$saute" = 1 ]; then
     saute=0
     [ "$a" = - ] || [ "${a:0:1}" != - ] && continue      # la valeur de l'option retirée (un drapeau suivant est gardé)
   fi
+  if [ "$projet" = 1 ]; then projet=0; cmd+=("$PWD"); continue; fi   # option A : la copie extraite, jamais /work
   case "${a,,}" in -logfile|-testresults) saute=1; continue ;; esac
+  [ -n "$EDITEUR_HOTE" ] && [ "${a,,}" = -projectpath ] && projet=1
   cmd+=("$a")
 done
+[ -n "$EDITEUR_HOTE" ] && cmd[0]="$EDITEUR_HOTE"
 cmd+=(-logFile "$JOURNAL" -testResults "$RESULTATS")
 mkdir -p -- "$T" 2>/dev/null
 rm -f -- "$JOURNAL" "$SORTIE" "$RESULTATS"

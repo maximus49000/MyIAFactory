@@ -4,8 +4,8 @@
 # Contrat d'entrée standard : SEULES les étapes licence (la licence) et bureau_distant (UNE ligne : le mot de passe de la
 # session graphique) lisent stdin. Pour toutes les autres, stdin est fermé (/dev/null) afin qu'aucune commande
 # (ssh, apt, docker...) ne puisse consommer ce que l'appelant envoie.
-# Les étapes android_build, android_emulateur, emulateur_image, agent_image, tests_image, tests_android_image et unity_cli (capacités du serveur) ne lisent pas non plus stdin : aucun secret.
-# Usage : mise_en_place.sh --etape <durcissement|docker|images|licence|bureau_distant|android_build|android_emulateur|emulateur_image|agent_image|tests_image|tests_android_image|unity_cli|etat> [--simuler]
+# Les étapes android_build, android_emulateur, emulateur_image, agent_image, tests_image, tests_android_image, unity_cli et unity_bac_a_sable (capacités du serveur) ne lisent pas non plus stdin : aucun secret.
+# Usage : mise_en_place.sh --etape <durcissement|docker|images|licence|bureau_distant|android_build|android_emulateur|emulateur_image|agent_image|tests_image|tests_android_image|unity_cli|unity_bac_a_sable|etat> [--simuler]
 # Réservées aux tests (valeurs par défaut en production) : JVM_RACINE, KVM_PERIPH, SDK_DELAI_S.
 # Sortie standard : UN SEUL objet JSON {"etape","statut","detail","versions","disque_libre_go"}.
 # Idempotent : chaque étape constate l'état avant d'agir. --simuler n'exécute aucune commande apt/docker/ufw/systemctl.
@@ -51,14 +51,14 @@ SIMULER=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --etape)
-      [ $# -ge 2 ] || { echo "L'option --etape attend une valeur (durcissement, docker, images, licence, bureau_distant, android_build, android_emulateur, emulateur_image, agent_image, tests_image, tests_android_image, unity_cli ou etat)." >&2; exit 2; }
+      [ $# -ge 2 ] || { echo "L'option --etape attend une valeur (durcissement, docker, images, licence, bureau_distant, android_build, android_emulateur, emulateur_image, agent_image, tests_image, tests_android_image, unity_cli, unity_bac_a_sable ou etat)." >&2; exit 2; }
       ETAPE="$2"; shift 2 ;;
     --simuler) SIMULER=1; shift ;;
     *) echo "Argument inconnu : $1" >&2; exit 2 ;;
   esac
 done
 case "$ETAPE" in
-  durcissement|docker|images|licence|bureau_distant|android_build|android_emulateur|emulateur_image|agent_image|tests_image|tests_android_image|unity_cli|etat) ;;
+  durcissement|docker|images|licence|bureau_distant|android_build|android_emulateur|emulateur_image|agent_image|tests_image|tests_android_image|unity_cli|unity_bac_a_sable|etat) ;;
   *) echo "Étape inconnue ou absente : '$ETAPE'" >&2; exit 2 ;;
 esac
 
@@ -992,6 +992,100 @@ etape_unity_cli() {
   repondre fait "${prefixe} ; l'installateur officiel a pu ajouter ~/.local/bin au PATH dans votre profil shell (~/.bashrc). Aucun éditeur installé : installez un éditeur par la session graphique (Unity Hub) ou \`unity install <version>\` une fois connecté."
 }
 
+# --- Bac à sable Unity de l'hôte (option A, § 5.16, tâche 14h) --------------
+
+# Étape unity_bac_a_sable : prépare ce qui permet à l'enveloppe des tests de lancer l'éditeur Unity de l'HÔTE dans une unité
+# systemd confinée (code de projet non fiable sur l'hôte) : utilisateur système unity-tests (sans shell, mot de passe verrouillé,
+# hors docker/kvm/sudo/adm/lxd), /var/lib/unity-tests et campagnes/ (0700, à lui), le script racine et ses entrées dans
+# /usr/local/lib/myiafactory (root, 0755), la règle /etc/sudoers.d/myiafactory-unity limitée au SEUL chemin du script racine
+# (vérifiée par visudo -c avant ET après la pose, retirée si refus), une ACL de lecture pour unity-tests sur les SEULS fichiers
+# de licence (et une ACL par défaut sur licenses/ pour qu'un rafraîchissement par Hub la garde). Vérifie d'abord que
+# ~/agent-identifiants, ~/.ssh et ~/taches sont en 0700 (sinon bloque, rien n'est modifié). N'écrit PAS le marqueur
+# ~/.myiafactory/unity-bac-a-sable.version : seul l'audit J14 (sonde-bac-a-sable.sh lancée dans l'unité par
+# `unity-bac-a-sable.sh auditer …`) l'écrit, après lecture de son résultat. La licence n'est jamais lue (noms seulement).
+BAC_LIB=/usr/local/lib/myiafactory
+BAC_SCRIPT="$BAC_LIB/unity-bac-a-sable.sh"
+BAC_SUDOERS=/etc/sudoers.d/myiafactory-unity
+BAC_VAR=/var/lib/unity-tests
+BAC_UTILISATEUR=unity-tests
+etape_unity_bac_a_sable() {
+  local racine="${SERVEUR_OVH_DIR:-$HOME/myiafactory/serveur_ovh}" moi d p m f v tmp groupes g n=0
+  local droits="$HOME/.config/unity3d/Unity/licenses" ulf="$HOME/.local/share/unity3d/Unity/Unity_lic.ulf"
+  if [ "$SIMULER" = 1 ]; then
+    repondre a_faire "Simulation : vérifierait que ~/agent-identifiants, ~/.ssh et ~/taches sont en 0700, créerait l'utilisateur système ${BAC_UTILISATEUR} (sans shell ni mot de passe, hors docker, kvm et sudo) et ${BAC_VAR} (0700), déposerait ${BAC_SCRIPT} (root, 0755) et ses entrées, poserait la règle ${BAC_SUDOERS} limitée à ce script (vérifiée par visudo -c) et une ACL de lecture pour ${BAC_UTILISATEUR} sur les seuls fichiers de licence Unity ; le marqueur ~/.myiafactory/unity-bac-a-sable.version n'est écrit que par l'audit J14."
+  fi
+  refuser_root
+  for d in agent-identifiants .ssh taches; do            # d'abord : rien n'est modifié si un dossier privé est lisible
+    p="$HOME/$d"
+    [ -e "$p" ] || [ -L "$p" ] || continue
+    [ -d "$p" ] && [ ! -L "$p" ] || repondre bloque "~/$d n'est pas un dossier (ou est un lien) : à corriger avant que du code de projet tourne sur l'hôte. Rien n'a été modifié."
+    m=$(stat -c %a -- "$p" 2>/dev/null)
+    [ "$m" = 700 ] || repondre bloque "~/$d est en ${m:-?} : il doit être en 700 (chmod 700 ~/$d) avant que du code de projet tourne sur l'hôte. Rien n'a été modifié."
+  done
+  moi=$(id -un 2>/dev/null)
+  [[ $moi =~ ^[a-z_][a-z0-9_-]{0,31}$ ]] || repondre bloque "Nom de l'utilisateur SSH hors motif : règle sudoers impossible. Rien n'a été modifié."
+  for f in unity-bac-a-sable.sh sonde-bac-a-sable.sh images/tests/entree-tests.sh images/tests/entree-unity.sh; do
+    [ -f "$racine/$f" ] || repondre bloque "Fichier introuvable : $racine/$f. Relancez l'installation (elle redépose les fichiers)."
+  done
+  v=$(systemctl --version 2>/dev/null | head -n 1 | awk '{ print $2 }')
+  [[ $v =~ ^[0-9]{1,4}$ ]] && [ "$v" -ge 247 ] || repondre bloque "systemd ${v:-absent} : la version 247 au moins est exigée (ProtectProc, ProcSubset). Rien n'a été modifié."
+  command -v systemd-run >/dev/null 2>&1 || repondre bloque "systemd-run absent. Rien n'a été modifié."
+  command -v setfacl >/dev/null 2>&1 || repondre bloque "setfacl absent (paquet acl : sudo apt-get install acl). Rien n'a été modifié."
+  sudo -n true >/dev/null 2>&1 || repondre bloque "sudo sans mot de passe indisponible pour ${moi}. Rien n'a été modifié."
+  # Utilisateur dédié : système, sans shell de connexion, mot de passe verrouillé, hors des groupes qui ouvrent l'hôte.
+  if ! id -u "$BAC_UTILISATEUR" >/dev/null 2>&1; then
+    sudo -n useradd --system --user-group --home-dir "$BAC_VAR" --no-create-home --shell /usr/sbin/nologin "$BAC_UTILISATEUR" \
+      >/dev/null 2>&1 || repondre bloque "Création de l'utilisateur ${BAC_UTILISATEUR} impossible."
+  fi
+  groupes=" $(id -nG "$BAC_UTILISATEUR" 2>/dev/null) "
+  for g in docker kvm sudo adm lxd; do
+    [[ $groupes == *" $g "* ]] && repondre bloque "${BAC_UTILISATEUR} est membre du groupe $g : retirez-le (sudo gpasswd -d ${BAC_UTILISATEUR} $g) puis relancez."
+  done
+  sudo -n usermod --shell /usr/sbin/nologin "$BAC_UTILISATEUR" >/dev/null 2>&1 &&
+    sudo -n passwd --lock "$BAC_UTILISATEUR" >/dev/null 2>&1 ||
+    repondre bloque "Shell ou mot de passe de ${BAC_UTILISATEUR} non verrouillés."
+  sudo -n install -d -o "$BAC_UTILISATEUR" -g "$BAC_UTILISATEUR" -m 0700 "$BAC_VAR" "$BAC_VAR/campagnes" >/dev/null 2>&1 ||
+    repondre bloque "Dossier ${BAC_VAR} non créable."
+  sudo -n install -d -o root -g root -m 0755 "$BAC_LIB" >/dev/null 2>&1 || repondre bloque "Dossier ${BAC_LIB} non créable."
+  for f in unity-bac-a-sable.sh sonde-bac-a-sable.sh images/tests/entree-tests.sh images/tests/entree-unity.sh; do
+    sudo -n install -o root -g root -m 0755 "$racine/$f" "$BAC_LIB/${f##*/}" >/dev/null 2>&1 ||
+      repondre bloque "Dépôt de ${BAC_LIB}/${f##*/} impossible."
+  done
+  # Règle sudoers : le script exact, rien d'autre ; vérifiée seule, puis avec toute la configuration ; retirée si refus.
+  tmp=$(mktemp) || repondre bloque "Fichier temporaire non créable pour la règle sudoers."
+  printf '%s ALL=(root) NOPASSWD: %s\n' "$moi" "$BAC_SCRIPT" > "$tmp"
+  if ! sudo -n visudo -c -q -f "$tmp" >/dev/null 2>&1; then
+    rm -f "$tmp"; sudo -n rm -f "$BAC_SUDOERS" >/dev/null 2>&1
+    repondre bloque "Règle sudoers refusée par visudo -c : rien n'est posé (règle retirée)."
+  fi
+  if ! sudo -n install -o root -g root -m 0440 "$tmp" "$BAC_SUDOERS" >/dev/null 2>&1; then
+    rm -f "$tmp"; sudo -n rm -f "$BAC_SUDOERS" >/dev/null 2>&1
+    repondre bloque "Pose de la règle ${BAC_SUDOERS} impossible (retirée)."
+  fi
+  rm -f "$tmp"
+  if ! sudo -n visudo -c -q >/dev/null 2>&1; then
+    sudo -n rm -f "$BAC_SUDOERS" >/dev/null 2>&1
+    repondre bloque "Configuration sudo refusée par visudo -c après la pose : règle ${BAC_SUDOERS} retirée."
+  fi
+  # ACL : lecture pour unity-tests sur les SEULS fichiers de licence (noms seulement, jamais le contenu).
+  if [ -d "$droits" ] && [ ! -L "$droits" ]; then
+    setfacl -m "u:$BAC_UTILISATEUR:rx" -- "$droits" >/dev/null 2>&1 &&
+      setfacl -d -m "u:$BAC_UTILISATEUR:r" -- "$droits" >/dev/null 2>&1 ||
+      repondre bloque "ACL de ${BAC_UTILISATEUR} impossible sur ~/.config/unity3d/Unity/licenses (système de fichiers sans ACL ?)."
+    for f in "$droits"/* "$droits"/.[!.]*; do            # fichiers ordinaires seulement, jamais un lien ni un dossier
+      [ -f "$f" ] && [ ! -L "$f" ] || continue
+      setfacl -m "u:$BAC_UTILISATEUR:r" -- "$f" >/dev/null 2>&1 || repondre bloque "ACL de ${BAC_UTILISATEUR} impossible sur un fichier de licence."
+      n=$((n + 1))
+    done
+  fi
+  if [ -f "$ulf" ] && [ ! -L "$ulf" ]; then
+    setfacl -m "u:$BAC_UTILISATEUR:r" -- "$ulf" >/dev/null 2>&1 || repondre bloque "ACL de ${BAC_UTILISATEUR} impossible sur Unity_lic.ulf."
+    n=$((n + 1))
+  fi
+  [ "$n" -gt 0 ] || repondre a_faire "Bac à sable Unity installé, mais aucune licence Unity sur l'hôte : connectez Unity Hub (session graphique), puis refaites cette étape pour poser l'ACL de lecture de ${BAC_UTILISATEUR}."
+  repondre fait "Bac à sable Unity installé : utilisateur ${BAC_UTILISATEUR}, ${BAC_VAR}, ${BAC_SCRIPT}, règle ${BAC_SUDOERS} vérifiée, ACL de lecture sur ${n} fichier(s) de licence. Le marqueur ~/.myiafactory/unity-bac-a-sable.version sera écrit par l'audit J14 seulement."
+}
+
 # --- État ------------------------------------------------------------------
 
 etape_etat() {
@@ -1027,5 +1121,6 @@ case "$ETAPE" in
   tests_image) etape_tests_image ;;
   tests_android_image) etape_tests_android_image ;;
   unity_cli) etape_unity_cli ;;
+  unity_bac_a_sable) etape_unity_bac_a_sable ;;
   etat) etape_etat ;;
 esac

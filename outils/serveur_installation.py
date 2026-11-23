@@ -302,11 +302,17 @@ FICHIERS_ETAPE = {"emulateur_image": ("images/emulateur/Dockerfile", "images/emu
                   # sur l'hôte) : déposés avec l'étape, hors de l'empreinte de l'image (ils n'y entrent pas)
                   "agent_image": ("images/agent/Dockerfile", "images/agent/entree-agent.py", "images/agent/pont",
                                   "taches/enregistrer_jeton.sh", "taches/pont_hote.py"),
-                  # l'enveloppe hôte des campagnes (lancer_tests.sh), commun.sh qu'elle source et ses aides python3 :
-                  # déposés avec l'étape, hors de l'image et de son empreinte
+                  # l'enveloppe hôte des campagnes (lancer_tests.sh), commun.sh qu'elle source et ses aides python3, l'entrée
+                  # Unity et la construction des images dérivées (tâche 14g, lues par construire_image_tests.sh dans ce
+                  # dossier) : déposés avec l'étape, hors de l'image et de son empreinte
                   "tests_image": ("images/tests/Dockerfile", "images/tests/entree-tests.sh", "taches/lancer_tests.sh",
-                                  "taches/commun.sh", "taches/tests_hote.py"),
-                  "tests_android_image": ("images/tests-android/Dockerfile",)}
+                                  "taches/commun.sh", "taches/tests_hote.py", "images/tests/entree-unity.sh",
+                                  "taches/construire_image_tests.sh"),
+                  "tests_android_image": ("images/tests-android/Dockerfile",),
+                  # bac à sable Unity de l'hôte (option A, tâche 14h) : installés par l'étape dans /usr/local/lib/myiafactory
+                  # (root, 0755) ; l'empreinte du marqueur (écrit par l'audit J14 seulement) les couvre tous
+                  "unity_bac_a_sable": ("unity-bac-a-sable.sh", "sonde-bac-a-sable.sh", "images/tests/entree-tests.sh",
+                                        "images/tests/entree-unity.sh")}
 # Fichiers du contexte de construction de l'image, dans l'ordre de l'empreinte (par défaut : tous ceux de l'étape).
 EMPREINTE_FICHIERS = {**FICHIERS_ETAPE,
                       "agent_image": ("images/agent/Dockerfile", "images/agent/entree-agent.py", "images/agent/pont"),
@@ -346,6 +352,8 @@ def empreinte_etape(etape):
         versions_image = f"ubuntu={versions['base_ubuntu']};python=3.12;node={versions['node']}"
     elif etape == "tests_android_image":             # mêmes champs, même ordre que EMPREINTE_TESTS_ANDROID du script
         versions_image = f"base={empreinte_etape('tests_image')};jdk=17,21"   # l'étiquette de l'image de base
+    elif etape == "unity_bac_a_sable":               # pas d'image : le contenu du marqueur que l'audit J14 écrit
+        versions_image = "bac_a_sable=A;utilisateur=unity-tests"
     else:
         versions_image = f"ubuntu={versions['base_ubuntu']};jdk=17"
     return f"{versions_image};fichiers={h.hexdigest()[:16]}"
@@ -358,7 +366,9 @@ def empreinte_etape(etape):
 MARQUEURS = {"emulateur-image": ("emulateur_image", '$HOME/.myiafactory/emulateur-image.version'),
              "agent": ("agent_image", '$HOME/.myiafactory/agent-image.version'),
              "tests-image": ("tests_image", '$HOME/.myiafactory/tests-image.version'),
-             "tests-android": ("tests_android_image", '$HOME/.myiafactory/tests-android-image.version')}
+             "tests-android": ("tests_android_image", '$HOME/.myiafactory/tests-android-image.version'),
+             # écrit par l'audit J14 seulement (jamais par l'étape) ; la capacité entrera au catalogue avec J14
+             "unity-bac-a-sable": ("unity_bac_a_sable", '$HOME/.myiafactory/unity-bac-a-sable.version')}
 
 
 def _perimees(serveur, ssh, presentes, requises):

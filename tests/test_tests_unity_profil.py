@@ -16,7 +16,7 @@ import tests_instantane as ti  # noqa: E402
 import tests_profil as tp  # noqa: E402
 
 FIXTURES = RACINE / "tests" / "fixtures" / "profils"
-LICENCES = ["Unity_lic.ulf", "x/UnityEntitlementLicense.xml", ".config/unity3d/Unity/licenses/a.xml",
+LICENCES = ["Unity_lic.ulf", "Unity_lic.ulf.bak", "Unity_lic", "a/Unity-LicenseClient-x.log", "x/UnityEntitlementLicense.xml", ".config/unity3d/Unity/licenses/a.xml",
             ".config/unityhub/session.json", ".local/share/unity3d/Unity/Unity_lic.ulf", "Unity.Licensing.Client.log"]
 COMMANDE_UNITY = ["unity-editor", "-batchmode", "-nographics", "-projectPath", "/work", "-runTests", "-testPlatform",
                   "EditMode", "-testResults", "/tmp/resultats.xml", "-logFile", "/tmp/unity.log"]
@@ -133,6 +133,11 @@ class ProfilUnityTest(unittest.TestCase):
             {"name": "T", "includePlatforms": [], "defineConstraints": ["UNITY_INCLUDE_TESTS"]}), encoding="utf-8")
         p = tp.analyser(str(d), catalogue={}, lancee=COMMANDE_UNITY)
         self.assertTrue(p.non_deportable.startswith("N3") and "PlayMode" in p.non_deportable)
+        sans = tp.analyser(str(d), catalogue={})        # sans commande lancée : le projet entier
+        self.assertTrue(sans.non_deportable.startswith("N3"))
+        self.assertEqual(sans.commandes, [])
+        python = tp.analyser(str(d), catalogue={}, lancee=["python3", "-m", "unittest"])
+        self.assertIsNone(python.non_deportable)
         self.assertFalse(any("PlayMode" in " ".join(c) for c in p.commandes))
         # EditMode et PlayMode ensemble : la commande EditMode part, PlayMode n'est pas proposée
         _ecrire(d, "Assets/Editor/Tests/E.asmdef", json.dumps({"name": "E", "includePlatforms": ["Editor"],
@@ -167,6 +172,35 @@ class ProfilUnityTest(unittest.TestCase):
         self.assertEqual(p.deps["unity"]["git"], ["github.com", "gitlab.com", "h.example"])
         self.assertEqual(p.confiance, "basse")
         self.assertNotIn("evil", p.vers_json())
+
+    def test_hotes_git_internes_ou_trompeurs_refuses(self):
+        for mauvais in ("https://169.254.169.254/x.git", "https://10.0.0.5/x.git", "git@10.0.0.5:x/y.git",
+                        "https://[::1]/x.git", "https://localhost/x.git", "https://hote/x.git", "https://a.internal/x.git",
+                        "https://a.local/x.git", "https://evil.com#@github.com/x.git", "https://evil.com?@github.com/x.git",
+                        "https://evil.com\\@github.com/x.git", "https://x:y@192.168.1.1/x.git"):
+            with self.subTest(mauvais=mauvais):
+                self.assertIsNone(tp._hote_git(mauvais))
+        self.assertEqual(tp._hote_git("https://u:p@GitHub.com:443/x.git"), "github.com")
+        d = self.copie("unity-sans-asmdef")
+        _ecrire(d, "Packages/manifest.json", json.dumps({"dependencies": {"a": "https://evil.com#@github.com/x.git"}}))
+        p = tp.analyser(str(d), catalogue={})
+        self.assertEqual((p.deps["unity"]["git"], p.confiance), ([], "basse"))
+        self.assertIn("hôte git d'une dépendance illisible (manifest.json)", p.raisons)
+
+    def test_trop_d_hotes_git_dit(self):
+        d = self.copie("unity-sans-asmdef")
+        deps = {"p%d" % i: "https://h%d.example.com/x.git" % i for i in range(21)}
+        _ecrire(d, "Packages/manifest.json", json.dumps({"dependencies": deps}))
+        p = tp.analyser(str(d), catalogue={})
+        self.assertEqual(len(p.deps["unity"]["git"]), 20)
+        self.assertTrue(any("plus de 20 hôtes git" in r for r in p.raisons))
+
+    def test_famille_d_exclusion_selon_le_projet(self):
+        import tests_serveur
+        d = self.copie("unity-sans-asmdef")
+        self.assertEqual(tests_serveur._famille_exclusion(str(d)), "unity")
+        shutil.rmtree(d / "ProjectSettings")
+        self.assertIsNone(tests_serveur._famille_exclusion(str(d)))
 
     def test_python_du_projet_sans_licence(self):
         p = analyser("unity-sans-asmdef", lancee=["python3", "-m", "unittest", "discover", "-s", "Tools/factory/tests"])

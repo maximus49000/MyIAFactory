@@ -6,8 +6,8 @@ Ce module décide de CE QUI QUITTE LE POSTE : il est volontairement strict, et c
   plus `AJOUTS` s'ils existent (même ignorés). Hors dépôt git : `HorsLimites` (la route se replie au poste). Git est lancé
   durci (`_git_local`) : le dépôt est écrit par des agents, sa configuration ne doit rien pouvoir exécuter.
 - Jamais (même suivis par erreur) : les motifs `EXCLUS` (conception) et `EXCLUS_EN_PLUS` (autres fichiers de secrets
-  courants, dont la licence et la session Unity : `*.ulf`, `Unity_lic*`, `UnityEntitlementLicense*`,
-  `Unity.Licensing.Client*`, `unityhub/`), comparés sans tenir compte de la casse à CHAQUE segment du chemin (un dossier
+  courants, dont la licence et la session Unity : `*.ulf`, `Unity_lic`, `Unity_lic.*`, `UnityEntitlementLicense*`,
+  `Unity.Licensing.Client*`, `Unity-LicenseClient-*`, `unityhub/`), comparés sans tenir compte de la casse à CHAQUE segment du chemin (un dossier
   `.git`, `node_modules`, `.factory` à n'importe quel niveau ; un `.env` ou un `id_ed25519` dans n'importe quel dossier),
   et les suites de segments `EXCLUS_SEGMENTS` (`.config/unity3d/`, `.local/share/unity3d/`, à n'importe quel niveau).
   `exclus_de_famille` y ajoute, à la racine seulement, les dossiers générés de la famille (`Library/`, `Temp/`… pour Unity). Ils sont écartés en
@@ -57,7 +57,8 @@ EXCLUS_EN_PLUS = (".ssh/", ".aws/", ".azure/", ".gnupg/", ".docker/", ".kube/", 
                   "keystore.properties", "signing.properties", "secrets.properties",
                   "secrets.toml", "*.tfstate", "*.tfstate.*", "*.tfvars", ".htpasswd",
                   # Licence et session Unity (§ 5.16) : jamais au serveur, même suivies par erreur.
-                  "*.ulf", "Unity_lic*", "UnityEntitlementLicense*", "Unity.Licensing.Client*", "unityhub/")
+                  "*.ulf", "Unity_lic", "Unity_lic.*", "UnityEntitlementLicense*", "Unity.Licensing.Client*",
+                  "Unity-LicenseClient-*", "unityhub/")
 # Suites de segments consécutifs, à n'importe quel niveau, sans tenir compte de la casse (préférences et licences Unity de
 # l'utilisateur) : un `Assets/Unity3D/` du projet reste admis.
 EXCLUS_SEGMENTS = (".config/unity3d/", ".local/share/unity3d/")

@@ -92,8 +92,9 @@ _VERSION_UNITY = re.compile(r"[0-9]{4}\.[0-9]{1,2}\.[0-9]{1,3}[abfp][0-9]{1,2}")
 _REVISION_UNITY = re.compile(r"[0-9a-f]{12}")
 _NOM_HOTE = r"[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?){0,8}"
 _HOTE_GIT = re.compile(_NOM_HOTE)
-_URL_GIT = re.compile(r"(?:git\+)?(?:https?|ssh|git)://(?:[^/@\s]{1,100}@)?([^/:@\s]{1,253})(?::[0-9]{1,5})?(?:/\S*)?")
+_URL_GIT = re.compile(r"(?:git\+)?(?:https?|ssh|git)://(?:[^/@\s#?\\]{1,100}@)?([^/:@\s#?\\]{1,253})(?::[0-9]{1,5})?(?:/\S*)?")
 _SCP_GIT = re.compile(r"[a-z0-9._-]{1,64}@([^:/\s]{1,253}):\S+")
+_SUFFIXES_INTERNES = ("internal", "local", "localhost")
 N3_PLAYMODE = "N3 : Unity PlayMode : rendu requis"
 _EXPORT_CI = re.compile(r"\b(java|node|python|go|dotnet)-version:\s*\[?\s*['\"]?(\d{1,4}(?:\.\d{1,4})*)")
 _N1_TFM = re.compile(r"\bnet4\d\d?\b")
@@ -654,7 +655,12 @@ def _hote_git(valeur: str) -> Optional[str]:
     forme d'un nom de domaine ; None sinon (refusé : l'hôte ouvre une sortie réseau au serveur)."""
     m = _URL_GIT.fullmatch(valeur) or _SCP_GIT.fullmatch(valeur.lower())
     hote = m.group(1).lower() if m else ""
-    return hote if _HOTE_GIT.fullmatch(hote) else None
+    if not _HOTE_GIT.fullmatch(hote) or "." not in hote:
+        return None             # pas un nom de domaine : adresse IP, `localhost`, nom à un seul libellé
+    etiquettes = hote.split(".")
+    if not re.fullmatch(r"[a-z][a-z0-9-]*", etiquettes[-1]) or etiquettes[-1] in _SUFFIXES_INTERNES:
+        return None             # dernier libellé numérique (IPv4) ou suffixe de réseau interne
+    return hote
 
 
 def _asmdef_tests(c: _Contexte) -> Tuple[List[str], List[str]]:
@@ -720,6 +726,8 @@ def _unity(c: _Contexte):
                     hotes.add(hote)
                 else:
                     refus.append("hôte git d'une dépendance illisible (manifest.json)")
+    if len(hotes) > 20:
+        refus.append("plus de 20 hôtes git dans le manifeste (liste tronquée)")
     edit, play = _asmdef_tests(c)
     commande = ["unity-editor", "-batchmode", "-nographics", "-projectPath", "/work", "-runTests", "-testPlatform",
                 "EditMode", "-testResults", "/tmp/resultats.xml", "-logFile", "/tmp/unity.log"]

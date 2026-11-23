@@ -425,6 +425,12 @@ def _premiere_ligne(commande):
     return ligne
 
 
+def _famille_exclusion(racine):
+    """« unity » dès que `ProjectSettings/ProjectVersion.txt` existe à la racine : `Library/`, `Temp/`, `obj/`, `Builds/`
+    ne partent pas, même pour une commande d'une autre famille (projet mixte)."""
+    return "unity" if os.path.isfile(os.path.join(racine, "ProjectSettings", "ProjectVersion.txt")) else None
+
+
 def _instantane(instantane, racine, fichier, dire, famille=None):
     """Écrit l'archive dans `fichier` (fermé en sortant, même sur Ctrl-C) ; `famille` (« unity ») ajoute les exclusions de la famille ; `Repli` (R5) si elle ne peut pas partir."""
     plus = {"famille": famille} if famille else {}
@@ -661,7 +667,7 @@ def _au_serveur(commande, racine, attendre, places, dossier_etat, ssh, noter, ho
     prive = tempfile.mkdtemp(prefix="myiafactory-tests-")      # 0700 ; jamais dans le projet
     try:
         archive = os.path.join(prive, "entree.tar")
-        _instantane(instantane, racine, archive, dire, "unity" if "unity" in profil.familles else None)
+        _instantane(instantane, racine, archive, dire, _famille_exclusion(racine))
         ident = None
         for _ in range(ESSAIS_ID):
             essai = nouvel_id()

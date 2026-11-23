@@ -933,7 +933,11 @@ etape_tests_image() {
 #   5. `flutter --version --machine` doit dire frameworkVersion = V_FLUTTER ; marqueur ~/.myiafactory/flutter-sdk.version
 #      (contenu = « flutter=<version>;canal=stable ») retiré avant tout changement et écrit en dernier.
 # git safe.directory n'est pas touché : le conteneur tourne sous l'utilisateur de l'hôte, propriétaire de ~/flutter-sdk.
-# Idempotent : marqueur à jour et SDK en place -> « fait » sans réseau. FLUTTER_DELAI_S (1500 s) : délai de precache.
+# Idempotent : marqueur à jour et SDK en place -> « fait » sans réseau. FLUTTER_DELAI_S (1200 s) : délai de precache.
+# Délais internes bornés (manifeste 120 s, archive 1200 s, 2 × version 300 s, precache 1200 s, licences 120 s,
+# 2 × sdkmanager 120 s = 3480 s) sous le délai SSH de l'étape (serveur_installation.DELAIS_ETAPE_S : 3600 s) ; apt non borné.
+# Un ~/flutter-sdk déjà présent de la bonne version (flutter --version) est accepté sans contrôle de somme : il a été
+# posé par cette étape ou par l'utilisateur du serveur lui-même (hors menace).
 FLUTTER_SDK="${HOME}/flutter-sdk"
 MARQUEUR_FLUTTER="${HOME}/.myiafactory/flutter-sdk.version"
 EMPREINTE_FLUTTER="flutter=${V_FLUTTER};canal=${V_FLUTTER_CANAL}"
@@ -971,7 +975,7 @@ flutter_hote() {
 flutter_version_ok() {
   local sortie
   [ -d "$FLUTTER_SDK" ] && [ ! -L "$FLUTTER_SDK" ] && [ -x "$FLUTTER_SDK/bin/flutter" ] || return 1
-  sortie=$(flutter_hote 600 --version --machine 2>/dev/null | head -c 65536)
+  sortie=$(flutter_hote 300 --version --machine 2>/dev/null | head -c 65536)
   [[ $sortie =~ \"frameworkVersion\"[[:space:]]*:[[:space:]]*\"([0-9A-Za-z.+-]{1,40})\" ]] && [ "${BASH_REMATCH[1]}" = "$V_FLUTTER" ]
 }
 
@@ -1007,7 +1011,7 @@ installer_archive_flutter() {
       || { ECHEC_FLUTTER="Nom d'archive inattendu dans le manifeste officiel Flutter : archive refusée."; break; }
     [[ $attendu =~ ^[0-9a-f]{64}$ ]] \
       || { ECHEC_FLUTTER="Empreinte SHA-256 du manifeste officiel Flutter mal formée : archive refusée."; break; }
-    curl -fsSL --proto '=https' --connect-timeout 20 --max-time 1800 --max-filesize 3221225472 "${URL_FLUTTER_DEPOT}/${archive}" \
+    curl -fsSL --proto '=https' --connect-timeout 20 --max-time 1200 --max-filesize 3221225472 "${URL_FLUTTER_DEPOT}/${archive}" \
       -o "$travail/flutter.tar.xz" >/dev/null 2>&1 && [ -s "$travail/flutter.tar.xz" ] \
       || { ECHEC_FLUTTER="Téléchargement de ${archive##*/} impossible, vide ou tronqué."; break; }
     obtenu=$(sha256sum "$travail/flutter.tar.xz" 2>/dev/null | awk '{print tolower($1)}')
@@ -1036,7 +1040,9 @@ installer_archive_flutter() {
 }
 
 etape_flutter_sdk() {
-  local code lic=0 delai="${FLUTTER_DELAI_S:-1500}" sdkmanager="$SDK_ANDROID/cmdline-tools/latest/bin/sdkmanager" note_lic=""
+  local code lic=0 delai="${FLUTTER_DELAI_S:-1200}" sdkmanager="$SDK_ANDROID/cmdline-tools/latest/bin/sdkmanager" note_lic=""
+  # sdkmanager (--version, repli JDK 21) sous 120 s ici : la somme des délais internes tient sous le délai SSH (3600 s).
+  local SDK_DELAI_S="${SDK_DELAI_S:-120}"
   NOTE_FLUTTER=""
   if [ "$SIMULER" = 1 ]; then
     repondre a_faire "Simulation : téléchargerait le manifeste officiel ${URL_FLUTTER_MANIFESTE}, puis l'archive de Flutter ${V_FLUTTER} (canal ${V_FLUTTER_CANAL}) vérifiée par son SHA-256 avant extraction dans ${FLUTTER_SDK}, lancerait flutter precache --android, accepterait les licences Android puis écrirait ${MARQUEUR_FLUTTER}."

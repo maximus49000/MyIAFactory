@@ -326,6 +326,17 @@ class TestScriptEtConcordance(unittest.TestCase):
         self.assertIn("flutter_sdk", inst.DELAIS_ETAPE_S)
         self.assertNotIn("flutter_sdk", inst.FICHIERS_ETAPE)          # rien à déposer : aucune image
 
+    def test_delai_ssh_couvre_les_delais_internes(self):
+        import re
+        section = self.texte[self.texte.index("# --- Flutter ---"):self.texte.index("# --- Unity CLI ---")]
+        curl = [int(x) for x in re.findall(r"--max-time (\d+)", section)]
+        version = int(re.search(r"flutter_hote (\d+) --version", section).group(1))
+        precache = int(re.search(r'FLUTTER_DELAI_S:-(\d+)', section).group(1))
+        licences = int(re.search(r'SDK_DELAI_LICENCE_S:-(\d+)', section).group(1))
+        sdkmanager = int(re.search(r'local SDK_DELAI_S="\$\{SDK_DELAI_S:-(\d+)\}"', section).group(1))
+        total = sum(curl) + 2 * version + precache + licences + 2 * sdkmanager       # --version avant et après ; repli JDK 21
+        self.assertLess(total, inst.DELAIS_ETAPE_S["flutter_sdk"])
+
     def test_usage_dispatch_et_jamais_de_pipe_vers_un_shell(self):
         usage = next(x for x in self.texte.splitlines() if x.startswith("# Usage"))
         self.assertIn("flutter_sdk", usage)

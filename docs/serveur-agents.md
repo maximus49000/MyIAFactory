@@ -337,6 +337,13 @@ conteneur des agents des projets Flutter.
   avertissement seulement) et le fichier `bin/cache/lockfile`. Marqueur `~/.myiafactory/flutter-sdk.version`
   (« `flutter=<version>;canal=stable` ») écrit en dernier ; changer la version de `versions.json` le rend **périmé** : la
   capacité est alors refaite. Jamais sous root ; environ 3 Go ; idempotente (rien n'est retéléchargé si le marqueur est à jour).
+  Un `~/flutter-sdk` **déjà présent** qui annonce la bonne version (`flutter --version`) est **gardé sans contrôle de
+  somme** : seuls cette étape ou l'utilisateur du serveur peuvent l'avoir posé (hors menace). Délai SSH de l'étape :
+  3600 s, au-dessus de la somme de ses délais internes (3480 s).
+- **Après cette mise à jour, l'image `agent` doit être reconstruite** : l'entrée du conteneur (`entree-agent.py`) a
+  changé, donc la capacité `agent` apparaît « **À mettre à jour** » jusqu'à la réinstallation de `agent-serveur`
+  (`py -3.12 lancer.py plateforme serveurs installer <id> agent-serveur --accord`, ou `agent-flutter`, qui la comprend).
+  D'ici là, les agents serveur partent avec l'ancienne image (sans les variables Flutter).
 - **L'installer** : besoin `agent-flutter` (= `agent` + `agent-abonnement` + `flutter-sdk`). L'écran Serveurs du bureau ne
   propose pas encore cette action ; en ligne de commande, aperçu puis accord :
   `py -3.12 lancer.py plateforme serveurs apercu <id> agent-flutter` puis
@@ -344,11 +351,13 @@ conteneur des agents des projets Flutter.
 - **Le projet est reconnu sur le poste** (`outils/projet_flutter.py`) : un `pubspec.yaml` à la racine ou dans un
   sous-dossier direct dont la section `dependencies:` déclare `flutter:` + `sdk: flutter`. La demande de l'agent porte alors
   `"flutter": true` (un booléen, relu sur le serveur par un motif strict ; une clé en double ou une autre valeur fait échouer
-  la tâche) et le serveur choisi doit avoir `flutter-sdk`.
+  la tâche) et le serveur choisi doit avoir `flutter-sdk`. **Bascule** : pour un projet Flutter, un serveur sans
+  `flutter-sdk` compte comme indisponible **pour ce projet** : le choix retombe sur le lieu suivant de l'ordre (le poste),
+  avec la raison « serveur : flutter-sdk absent du serveur » ; un projet non Flutter n'est pas concerné.
 - **Dans le conteneur** (mêmes durcissements : utilisateur de l'hôte, `--read-only`, `--cap-drop ALL`,
   `no-new-privileges`…) : `~/flutter-sdk` sur `/opt/flutter-sdk` **en lecture seule**, un fichier de verrou **propre à la
-  tâche** (`~/taches/<id>/flutter-verrou`) monté sur `/opt/flutter-sdk/bin/cache/lockfile` (le seul fichier que flutter
-  écrit dans son SDK), `~/android-sdk` sur `/opt/android-sdk` en lecture seule. L'entrée pose des valeurs **fixes** :
+  tâche** (`~/taches/<id>/flutter-verrou`) monté sur `/opt/flutter-sdk/bin/cache/lockfile` (**supposé** être le seul
+  fichier que flutter écrit dans son SDK une fois `precache` fait : à constater à l'essai réel), `~/android-sdk` sur `/opt/android-sdk` en lecture seule. L'entrée pose des valeurs **fixes** :
   `PATH` (`/opt/flutter-sdk/bin` en tête), `FLUTTER_ROOT`, `PUB_CACHE=/maison/.pub-cache` (inscriptible, gardé à la
   reprise, compté dans les 8 Go de `travail/` + `maison/`), `ANDROID_HOME`, `CI=true`, `FLUTTER_SUPPRESS_ANALYTICS=true`.
   `flutter pub get` passe par le **réseau sortant ouvert** des agents (pub.dev).

@@ -43,6 +43,7 @@ Sur le serveur (tout sous l'utilisateur déclaré, jamais root) :
 ~/android-sdk                        le SDK Android de l'hôte, monté en lecture seule dans le conteneur
 ~/flutter-sdk                        le SDK Flutter de l'hôte (capacité flutter-sdk, marqueur ~/.myiafactory/flutter-sdk.version),
                                      monté en lecture seule chez les agents des projets Flutter : voir serveur-agents.md#projets-flutter
+                                     (cette mise à jour change l'image agent : réinstaller agent-serveur)
 ```
 
 Sur le poste (`~/MyIAFactory`, avec majuscules) : `taches.json` (l'**index** des tâches, un simple cache : la vérité est sur le

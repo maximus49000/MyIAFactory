@@ -722,6 +722,13 @@ class FauxExecuteurServeur:
         self.autres_noms = kw.get("autres_noms", ())
         self.branche, self.arrets = None, 0
         self.arret = __import__("threading").Event()
+        self.livrables, self.rapports = [], []      # les lignes rendues par `rapatrier_livrables`, les rapports reçus
+
+    def rapatrier_livrables(self, rapport):
+        self.rapports.append(rapport)
+        if getattr(self, "verifier", None):
+            self.verifier()
+        return list(self.livrables)
 
     def arreter(self):
         self.arrets += 1
@@ -797,6 +804,13 @@ class Serveur(Base):
                                        "lot": None, "suite": None}
         self.moteur._partir(self.projet, ("agent", "dev-1", [self.tache], matiere))
 
+    def test_partir_serveur_projet_flutter_consigne_des_commandes_simples(self):
+        (self.dossier / "android_app").mkdir()
+        (self.dossier / "android_app" / "pubspec.yaml").write_text("dependencies:\n  flutter:\n    sdk: flutter\n",
+                                                                  encoding="utf-8")
+        self.partir()
+        self.assertIn("personne n'approuve tes commandes", self.lances()[-1]["depart"])
+
     def test_partir_serveur_utilise_l_executeur_distant(self):
         self.partir()
         (lance,) = self.lances()
@@ -808,11 +822,34 @@ class Serveur(Base):
         self.assertIn(f"`agent/{self.tache}`", lance["depart"])
         self.assertIn("commite", lance["depart"])
         self.assertNotIn("lancer.py\" tests --", lance["depart"])     # pas le lanceur de tests du poste
+        self.assertNotIn("personne n'approuve", lance["depart"])      # projet non Flutter : pas de consigne Flutter
         self.assertNotIn("reprendre", lance)
         self.assertFalse(any(detache.dossier(self.dossier).glob("*.json")))   # aucun agent détaché sur le poste
         self.moteur.tour()
         self.assertEqual(self.tache_suivie()["colonne"], "fait")
         self.assertEqual(self.cloud.fusions, [])          # sans commit rapatrié : rien à fusionner
+
+    def test_livrables_rapatries_dits_au_journal_de_la_tache(self):
+        from moteur import executeur_serveur
+        ligne = "Livrable rapatrié : android_app/build/app.apk (2,0 Ko, cccccccccccccccc)"
+        vus = []
+
+        def fabrique(*a, **kw):
+            ex = FauxExecuteurServeur(*a, **kw)
+            ex.livrables = [ligne, "Livrable non rapatrié : ../x.apk : chemin avec « .. » : refusé"]
+            # pendant le rapatriement, l'exécuteur reste connu du moteur : l'arrêt du bureau l'atteint
+            ex.verifier = lambda: vus.append(any(v is ex for v in self.moteur._serveurs.values()))
+            self.executeurs.append(ex)
+            return ex
+        with mock.patch.object(executeur_serveur, "ExecuteurServeur", fabrique):
+            self.partir()
+        (ex,) = self.executeurs
+        self.assertEqual(ex.rapports[0]["statut"], "fait")
+        self.assertEqual(vus, [True])
+        self.moteur.tour()
+        self.assertEqual(self.tache_suivie()["colonne"], "fait")
+        self.assertIn(ligne, self.journal())
+        self.assertTrue(any(j.startswith("Livrable non rapatrié : ../x.apk") for j in self.journal()))
 
     def test_mode_pilote_seulement_avec_accord_et_apk(self):
         sorties = self.dossier / "app" / "build" / "outputs" / "apk"

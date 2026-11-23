@@ -487,6 +487,46 @@ def agent_dev():
     return {"cle": "dev1"}
 
 
+class Livrables(Base):
+    RAPPORT = {"statut": "fait", "fichiers": [
+        {"chemin": "android_app/build/app/outputs/flutter-apk/app-release.apk", "titre": "APK", "livrable": True},
+        {"chemin": "docs/notes.md", "titre": "Notes"}]}
+
+    def test_livrables_declares_rapatries_apres_les_commits(self):
+        self.faux(branche=f"agent/{TACHE}", fin={"code": 0, "commits": 1, "branche": f"agent/{TACHE}", "base": BASE})
+        ex = self.executeur()
+        appel.appeler("c", "m", "sonnet", executer=ex, outils=OUTILS, delai_s=600)
+        self.assertEqual(ex.branche, f"agent/{TACHE}")                 # les commits reviennent comme avant
+        st._noter(self.dossier, ID2, {"cree": "2026-11-20T10:15:00Z"})
+        import serveur_livrables as sl
+        vus, arrets = [], []
+
+        def faux_rapatrier(ident, projet, chemins, debut=None, dossier=None, ssh=None, arret=None):
+            vus.append((ident, projet, chemins, debut, dossier))
+            arrets.append(arret())
+            ex._arret = True
+            arrets.append(arret())                  # l'arrêt demandé pendant le rapatriement est vu
+            return [{"chemin": chemins[0], "statut": "rapatrie", "taille": 2048, "sha256": "c" * 64}]
+
+        with mock.patch.object(sl, "rapatrier", faux_rapatrier):
+            lignes = ex.rapatrier_livrables(self.RAPPORT)
+        self.assertEqual(vus, [(ID2, self.projet, ["android_app/build/app/outputs/flutter-apk/app-release.apk"],
+                                st._epoch("2026-11-20T10:15:00Z"), self.dossier)])
+        self.assertEqual(lignes, ["Livrable rapatrié : android_app/build/app/outputs/flutter-apk/app-release.apk "
+                                  "(2,0 Ko, cccccccccccccccc)"])
+        self.assertEqual(arrets, [False, True])
+
+    def test_sans_livrable_rien_et_jamais_d_exception(self):
+        self.faux()
+        ex = self.executeur()
+        self.assertEqual(ex.rapatrier_livrables({"statut": "fait", "fichiers": []}), [])
+        self.assertIn("aucune tâche serveur", ex.rapatrier_livrables(self.RAPPORT)[0])   # aucun appel rapatrié
+        appel.appeler("c", "m", "sonnet", executer=ex, outils=OUTILS, delai_s=600)
+        import serveur_livrables as sl
+        with mock.patch.object(sl, "rapatrier", side_effect=RuntimeError("boum")):
+            self.assertIn("boum", ex.rapatrier_livrables(self.RAPPORT)[0])
+
+
 class Recuperation(Base):
     def test_recuperation_transitoire_reessayee_sans_relancer(self):
         f = self.faux()

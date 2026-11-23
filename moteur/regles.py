@@ -1126,7 +1126,18 @@ def _sur_correction(projet, demande, etat):
     fid = demande["fonctionnalite"]
     _nommer(projet, fid)
     return _lancer_la_correction(projet, etat, fid, {"demande": demande["id"], "fonctionnalite": fid},
-                                 _role_production(projet))
+                                 _role_de_correction(projet))
+
+
+def _role_de_correction(projet):
+    """Le métier qui corrige : celui de la première étape d'agent APRÈS la dernière validation du Directeur du workflow
+    (une maquette validée, puis le développement : la correction va au développeur, pas au maquettiste qui ouvre le
+    parcours) ; sans validation dans le workflow, le rôle de production habituel. Essai réel du 2026-11-23 : une
+    correction de l'écran partie chez le maquettiste s'est terminée sans code ni livrable."""
+    flux = _production(projet)
+    derniere = max((i for i, s in enumerate(flux) if wf.est_validation(s)), default=-1)
+    suite = [s for s in wf.etapes_d_agent(flux[derniere + 1:]) if s.get("role") and s.get("role") != ROLE_RELECTURE]
+    return suite[0]["role"] if derniere >= 0 and suite else _role_production(projet)
 
 
 def _lancer_la_correction(projet, etat, fid, suite, production):

@@ -108,6 +108,7 @@ SANS_LIEN = getattr(os, "O_NOFOLLOW", 0)
 # Projet Flutter : chemins FIXES des SDK de l'hôte montés en lecture seule par lancer_agent.sh (environnement_flutter).
 FLUTTER_RACINE = "/opt/flutter-sdk"
 ANDROID_RACINE = "/opt/android-sdk"
+JAVA_RACINE = "/usr/lib/jvm/java-17-openjdk-amd64"   # JDK 17 de l'image (openjdk-17-jdk-headless, amd64)
 
 
 class Refus(Exception):
@@ -585,13 +586,23 @@ def signal_recu(_numero, _cadre):
 
 
 def environnement_flutter(c, chemin):
-    """Projet Flutter (AGENT_FLUTTER=1, posé par lancer_agent.sh avec le SDK de l'hôte monté en lecture seule sur
-    /opt/flutter-sdk) : les variables de claude et de ses outils, toutes FIXES (rien n'est lu du projet ni de la demande) ;
+    """Projet Flutter (AGENT_FLUTTER=1, posé par lancer_agent.sh avec les SDK Flutter et Android de l'hôte en copie sur
+    écriture par tâche sur /opt/flutter-sdk et /opt/android-sdk) : les variables de claude et de ses outils, toutes FIXES (rien n'est lu du projet ni de la demande) ;
     le cache des paquets (pub get) sous /maison, inscriptible et gardé à la reprise. Toute autre valeur : rien."""
     if os.environ.get("AGENT_FLUTTER") != "1":
         return {}
     env = {"PATH": f"{FLUTTER_RACINE}/bin:{chemin}", "FLUTTER_ROOT": FLUTTER_RACINE,
-           "PUB_CACHE": os.path.join(c["maison"], ".pub-cache"), "FLUTTER_SUPPRESS_ANALYTICS": "true", "CI": "true"}
+           "PUB_CACHE": os.path.join(c["maison"], ".pub-cache"), "FLUTTER_SUPPRESS_ANALYTICS": "true", "CI": "true",
+           # construire l'APK : le JDK de l'image et le cache de Gradle sous /maison (inscriptible, compté dans le plafond)
+           "JAVA_HOME": JAVA_RACINE, "GRADLE_USER_HOME": os.path.join(c["maison"], ".gradle"),
+           # la JVM prend user.home dans /etc/passwd (le /home de l'hôte, en lecture seule ici), pas dans HOME : AGP y
+           # écrirait ~/.android. ANDROID_USER_HOME (lu par AGP : clé de debug montée par lancer_agent.sh) et, pour toutes
+           # les JVM (client et démon Gradle, démon Kotlin, sdkmanager), JAVA_TOOL_OPTIONS -Duser.home : GRADLE_OPTS ne
+           # vaudrait que pour le client Gradle. Prix : une ligne « Picked up JAVA_TOOL_OPTIONS » par JVM sur stderr.
+           "ANDROID_USER_HOME": os.path.join(c["maison"], ".android"),
+           "ANDROID_EMULATOR_HOME": os.path.join(c["maison"], ".android"),
+           "ANDROID_AVD_HOME": os.path.join(c["maison"], ".android", "avd"),
+           "JAVA_TOOL_OPTIONS": f"-Duser.home={c['maison']}"}
     if os.path.isdir(os.path.join(os.environ.get("AGENT_RACINE") or "/", ANDROID_RACINE.lstrip("/"))):
         env.update(ANDROID_HOME=ANDROID_RACINE, ANDROID_SDK_ROOT=ANDROID_RACINE)
     return env

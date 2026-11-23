@@ -118,6 +118,44 @@ La branche **est gardée, non fusionnée** quand : l'agent a été **arrêté** 
 autre limite du serveur l'a arrêté ; le rapport n'est pas « fait » ; ou la branche touche des **chemins réservés** (voir « La fusion
 locale protégée »). Elle reste alors dans le projet, à la disposition du Directeur.
 
+## Livrables rapatriés
+
+Un livrable construit au serveur (l'APK de `construire-apk`, sous `android_app/build/…`) est **ignoré par git** : il n'est pas dans le
+paquet. Après le rapport de l'agent, le moteur rapatrie donc **en octets**, au poste, à leur chemin relatif dans le projet, les fichiers
+que le rapport déclare livrables (`fichiers` avec `livrable: true`) ; le bureau peut alors les proposer au téléchargement
+(`outils/serveur_livrables.py`, appelé par `ExecuteurServeur.rapatrier_livrables`).
+
+- **Quels fichiers.** Seulement ceux du rapport, chacun revalidé au poste : chemin relatif au projet, sans `..`, sans lecteur ni `/`
+  initial, segments au motif strict (lettres, chiffres, `_ . + -`, jamais un segment qui commence par « . ») ; extension dans une liste
+  **fermée et minimale** propre au rapatriement : `.apk`, `.aab`, `.zip` (aucun exécutable du poste : ni `.exe`, `.msi`, `.dmg`,
+  `.jar`) ; le chemin doit être une **sortie de build Android** : `(^|/)build/(app/)?outputs/(flutter-apk|apk|bundle)/<fichier>`,
+  exigé pour un fichier neuf comme pour un fichier existant (Gradle range `apk/release/…` et `bundle/release/…` un niveau plus bas :
+  refusés tant qu'aucune décision n'élargit le motif) ; **jamais** une clé ou un certificat (`.keystore`, `.jks`, `.pem`, `.key`,
+  `.p12`, `.pfx`…) ni rien sous `maison/`, `android-signature/`, `agent-identifiants/`, `node_modules/`, `venv/`, `.venv/`,
+  `vendor/`, `.git/`, `.factory/`, `site-packages/` ; **8 fichiers** au plus, **500 Mo** chacun, **1 Go** en tout.
+- **Pourquoi côté poste.** La liste n'est connue que du rapport, lu par le moteur sur le poste ; l'enveloppe du serveur n'est pas
+  modifiée. Le poste envoie chaque chemin validé comme une **valeur** insérée dans deux scripts figés (aucun espace, guillemet ni
+  caractère de motif possible) : le **manifeste** (taille et SHA-256), puis l'**envoi** d'un fichier.
+- **Au serveur.** `~/taches/<id>`, `travail` et `travail/projet` ne sont pas des liens et `pwd -P` vaut bien ce chemin ; aucun
+  composant du chemin demandé n'est un lien. Le fichier est ouvert **une fois** (descripteur 3), vérifié sur ce descripteur
+  (`stat -L /proc/self/fd/3` : fichier ordinaire, un seul lien, même inode que le chemin), puis haché ou envoyé **depuis ce
+  descripteur** : un échange de fichier entre le contrôle et la lecture ne passe pas. Un fichier qui contient le jeton de
+  l'abonnement est refusé (même `grep -F` que la sortie).
+- **Limite connue.** Un `.zip` (ou un APK, qui en est un) peut contenir n'importe quoi, une clé comprise, et son contenu compressé
+  n'est pas lisible par le `grep -F` du jeton : le contrôle porte sur le chemin et l'extension, pas sur le contenu d'une archive.
+- **Au poste.** Les octets arrivent dans un fichier temporaire du **même dossier**, la taille et le SHA-256 sont vérifiés contre le
+  manifeste, puis le fichier est **renommé** (atomique) ; un écart jette le temporaire et retire les dossiers créés pour lui.
+  L'espace libre doit couvrir la taille plus 1 Go. La destination reste dans le projet (aucun lien suivi), n'est jamais un fichier
+  **suivi par git**, et son chemin est écrit dans **`.git/info/exclude`** (local, jamais commité, une ligne `/<chemin>`, une seule fois)
+  avant le renommage : le commit « Factory : … » (`git add -A`) ne l'ajoute jamais, même si l'agent a retiré `/build/` du
+  `.gitignore`. Un fichier déjà là n'est remplacé que s'il est **plus ancien que la tâche** (date `cree` de l'index) ; sinon il est
+  gardé et la raison est dite.
+- **Arrêt.** L'arrêt du bureau est lu avant chaque fichier et pendant un transfert (ssh coupé) ; les fichiers restants sont dits
+  « arrêt demandé ». Délai d'un envoi : taille à 1 Mo/s plus 60 s, 30 min au plus ; manifeste : 3 min.
+- **Résultat dit.** Une ligne par fichier dans le journal de la tâche (caractères de contrôle remplacés) : « Livrable rapatrié : `<chemin>` (`<taille>`, `<sha16>`) », ou
+  « Livrable non rapatrié : `<chemin>` : `<raison>` ». Un refus ou une panne ne fait **jamais** échouer la tâche et ne touche pas aux
+  commits rapatriés (la branche `agent/<tâche>` revient comme avant).
+
 ## Les limites par défaut
 
 Valeurs lues dans le code (`LIMITES_AGENT` de `outils/serveur_agent.py`, `lancer_agent.sh`, `entree-agent.py`). Une limite ne dépasse jamais son défaut.
@@ -126,15 +164,15 @@ Valeurs lues dans le code (`LIMITES_AGENT` de `outils/serveur_agent.py`, `lancer
 |---|---|---|
 | Durée maximale | **2400 s** (40 min) ; jamais au-dessus du délai demandé par le moteur ; l'enveloppe accepte 1 à 86400 | veilleur ; l'entrée arrête `claude` **120 s avant** (à mi-chemin pour une tâche de moins de 240 s), conclut, et note `"echeance": true` |
 | Tours de l'agent | **200** (`--max-turns`, ajouté par l'entrée) | `claude` |
-| Mémoire | **4096 Mo** (swap identique : pas de swap) | `docker run` |
-| Processeurs | **2** | `docker run` |
+| Mémoire | **4096 Mo** (swap identique : pas de swap) ; projet Flutter : **12 288 Mo** (`LIMITES_AGENT_FLUTTER` : un build APK dépasse 4 Go) | `docker run` |
+| Processeurs | **2** ; projet Flutter : **4** | `docker run` |
 | Processus | **512** ; `/tmp` en mémoire de 1 Go ; système de fichiers en lecture seule | `docker run` |
 | Paquet Git | **500 Mo** à l'aller comme au retour | poste (aller) ; poste et serveur (retour) |
 | Flux `stream-json` | **20 Mo** (au-delà : `claude` arrêté) ; `claude.err` 64 Ko | entrée |
 | `sortie/` | **540 672 Ko** (paquet 500 Mo + flux 20 Mo + marge), taille apparente, sondé toutes les 5 s | veilleur (`limite`) |
-| `travail/` + `maison/` | **8 Go**, sondés toutes les 60 s | veilleur (`limite`) |
+| `travail/` + `maison/` | **8 Go** ; projet Flutter : **16 Go** avec les couches hautes des SDK (`flutter-up`, `android-up` ; Gradle prend 3 à 5 Go dans `maison/`), sondés toutes les 60 s | veilleur (`limite`) |
 | Disque du serveur | plancher de **5 Go** libres (`df`), sondé toutes les 5 s | veilleur (`limite`) |
-| Places d'agent par serveur | **2** par défaut, de **1 à 4** (réglage `agents_serveur_max` du projet quand il est donné) | enveloppe (verrous `flock`) |
+| Places d'agent par serveur | **2** par défaut, de **1 à 4** (réglage `agents_serveur_max` du projet quand il est donné) ; elles comptent des agents, **pas de la mémoire** : 2 agents Flutter (24 Go) + l'émulation (6 Go) + des campagnes de tests (jetons de mémoire de 14e, tests seulement) peuvent approcher les 62 Go du serveur | enveloppe (verrous `flock`) |
 | Attente d'une place | nouvel essai toutes les **15 s**, **600 s** au plus | poste |
 | Suivi par le poste | durée de la tâche **+ 120 s**, puis arrêt et rapatriement du travail | exécuteur distant |
 | Consigne, message | 1 Mo au plus chacun ; options de `claude` : 64 Ko | poste |
@@ -365,20 +403,57 @@ conteneur des agents des projets Flutter.
   `docker run --rm --network none` bref qui le monte (un overlay n'est monté qu'au lancement d'un conteneur) ; refusé : la
   tâche échoue « **flutter : overlay refusé** », jamais de repli en écriture sur le SDK de l'hôte. Il est retiré à la fin
   de la tâche, sur un échec de l'enveloppe et, à chaque lancement d'un agent Flutter, pour les tâches finies (balayage) ;
-  `flutter-up` compte dans le plafond `travail/` + `maison/`. L'image `agent` ne change pas. `~/android-sdk` sur
-  `/opt/android-sdk` en lecture seule. L'entrée pose des valeurs **fixes** :
+  `flutter-up` compte dans le plafond `travail/` + `maison/`. `~/android-sdk` suit le même chemin (même fonction
+  `preparer_overlay`) : volume `asdk-<id>`, couches `android-up` et `android-work`, sur `/opt/android-sdk`, prouvé de
+  même (« **SDK Android : overlay refusé** » sinon), retiré et balayé de même, `android-up` compté. L'entrée pose des
+  valeurs **fixes** :
   `PATH` (`/opt/flutter-sdk/bin` en tête), `FLUTTER_ROOT`, `PUB_CACHE=/maison/.pub-cache` (inscriptible, gardé à la
-  reprise, compté dans les 8 Go de `travail/` + `maison/`), `ANDROID_HOME`, `CI=true`, `FLUTTER_SUPPRESS_ANALYTICS=true`.
+  reprise, compté dans les 8 Go de `travail/` + `maison/`), `ANDROID_HOME`, `JAVA_HOME` (JDK 17 de l'image),
+  `GRADLE_USER_HOME=/maison/.gradle`, `CI=true`, `FLUTTER_SUPPRESS_ANALYTICS=true`, et `ANDROID_USER_HOME=/maison/.android`
+  (créé par l'enveloppe) avec `JAVA_TOOL_OPTIONS=-Duser.home=/maison` : la JVM prend sinon `user.home` dans `/etc/passwd`
+  (le `/home` de l'hôte, en lecture seule dans le conteneur) et Gradle/AGP échouaient sur `~/.android`.
   `flutter pub get` passe par le **réseau sortant ouvert** des agents (pub.dev).
 - **Le droit d'appeler `flutter`** n'est jamais donné par la capacité : c'est la règle `Bash(flutter:*)` de la fiche de
   l'agent (jamais `Bash` seul), ouverte par le Directeur (décision `outil_agent`, « Autoriser ce programme ») ou par
   `{"action": "ouvrir_outil", "cle": "<agent>", "outil": "Bash(flutter:*)"}` envoyé à `orchestrateur/outil.py --factory <F>
   lancer fiche`. La règle couvre une commande qui **commence** par `flutter` ; dans une commande composée (`cd x && flutter
   test`), chaque morceau doit être couvert : préférer `flutter pub get --directory android_app`, et pour `flutter test`
-  un `cd android_app` seul puis `flutter test`.
-- **Limites** : l'image n'a pas de JDK : `flutter build apk` ne marche pas dans le conteneur d'agent (seulement
-  `pub get`, `analyze`, `test`). Les tests routés au serveur (`lancer.py tests`) ne connaissent pas encore la famille
-  `flutter`.
+  un `cd android_app` seul puis `flutter test`. La consigne de départ d'un agent serveur d'un projet Flutter le dit
+  (`depart.CONSIGNE_FLUTTER_SERVEUR` : commandes simples, ni `&&`, `;`, `|`, `timeout` ni variable en préfixe).
+- **Commandes uniques** (`serveur_ovh/agent-outils/outil-flutter.sh`, déposé par le poste avec l'enveloppe, monté en lecture
+  seule sous `/opt/outils`, en tête du `PATH` du conteneur, image inchangée) : `analyser-flutter`, `tester-flutter`,
+  `construire-apk [release|debug]` (défaut `release`) ; elles se placent dans le dossier Flutter du projet (transmis par le
+  poste, `"flutter_dossier"`, motif strict), lancent `flutter pub get` si les paquets ne sont pas à jour puis l'étape
+  (sortie bornée aux 200 000 derniers octets) ; tout autre argument : code 2 sans rien lancer. Chacune s'ouvre à la fiche
+  par sa règle (`Bash(analyser-flutter:*)`, `Bash(tester-flutter:*)`, `Bash(construire-apk:*)`, jamais `Bash` seul), par la
+  décision `outil_agent` ou la commande `fiche` `ouvrir_outil`.
+- **Construire l'APK au serveur : JDK 17, SDK Android et Flutter en copie sur écriture par tâche.** L'image `agent`
+  porte le JDK 17 de la distribution (`openjdk-17-jdk-headless`) : elle change, la capacité `agent` redevient
+  « À mettre à jour » jusqu'à la réinstallation d'`agent-serveur`. `flutter build apk` est appelé par `flutter` (règle
+  `Bash(flutter:*)`) ; Gradle (wrapper) et AGP sont lancés par flutter, pas par l'agent : aucune règle `java` ou
+  `gradle` n'est requise tant que l'agent n'appelle pas `./gradlew` lui-même (sinon `Bash(./gradlew:*)` serait à demander
+  : un chemin relatif, que la fiche n'ouvre pas). Gradle et ses dépendances passent par le réseau sortant ouvert ; leur
+  cache vit sous `/maison/.gradle` (compté dans les 8 Go). L'APK est écrit dans le dépôt de l'agent
+  (`build/app/outputs/flutter-apk/` du dossier Flutter), qui est hors des commits (`build/` ignoré) : il ne revient
+  **pas** au poste par la branche ; le rapatrier est à faire.
+- **Signature : la clé de debug du poste du Directeur.** Un projet qui signe sa release avec la configuration `debug`
+  (FM_Stats) doit signer au serveur avec la **même** clé que le poste, sinon l'APK ne se met pas à jour sur l'appareil
+  (conflit de signature). Décision du Directeur : sa clé `~/.android/debug.keystore` est copiée sur le serveur dans
+  `~/android-signature/debug.keystore` (dossier 0700, fichier 0400 ; étape manuelle, faite par le Directeur ou le
+  contrôleur, jamais par MyIAFactory, qui ne lit ni la clé ni son mot de passe). Pour un projet Flutter, l'enveloppe la monte
+  **en lecture seule** sur `/maison/.android/debug.keystore` (`user.home/.android` d'AGP, `HOME=/maison`), après avoir
+  créé elle-même la cible (un fichier vide de `maison/.android/`, sous l'uid de l'hôte). **Absente** : rien n'est monté,
+  la tâche continue et AGP signe avec une clé de debug **jetable** créée dans `/maison/.android` (l'APK ne remplacera pas
+  celui de l'appareil). **Présente mais pas un fichier ordinaire** (lien, dossier) : la tâche échoue (« clé de debug
+  refusée »). Un projet non Flutter ne la reçoit jamais.
+  **Risque accepté par le Directeur** : le code du projet qui tourne dans le conteneur (Gradle, scripts de build, tests)
+  et l'agent lui-même **peuvent lire cette clé** (clé de debug, projets du Directeur seulement). Elle ne doit **jamais**
+  être poussée ni rapatriée : `maison/` n'est jamais rapatrié (seuls `flux.jsonl`, `fin.json` et `resultat.bundle`
+  reviennent) et le paquet résultat ne contient que les commits du dépôt `/travail/projet` ; le fichier de `maison/.android`
+  sur l'hôte reste vide (le montage le recouvre). Limite : un agent qui **copierait** la clé dans le dépôt et la commiterait
+  la ferait entrer dans le paquet ; aucun contrôle ne le détecte aujourd'hui (contrairement au jeton de l'abonnement) :
+  relire les branches rapatriées (un fichier `*.keystore` ne doit jamais y apparaître).
+- **Limites** : les tests routés au serveur (`lancer.py tests`) ne connaissent pas encore la famille `flutter`.
 
 <a id="connexion-a-l-abonnement"></a>
 ## Connexion à l'abonnement
@@ -464,3 +539,9 @@ Tout ce qui précède est vérifié par des tests simulés. À prouver sur le se
   haute d'environ 76 Ko) ; restent `flutter pub get`, `analyze` et `test` dans le conteneur de l'agent lancé par
   l'enveloppe, la suppression du volume en fin de tâche, les bibliothèques système dont `flutter_tester` a besoin dans l'image (Ubuntu
   minimal) ; le nom exact de l'archive et la présence de la 3.47.1 dans `releases_linux.json`.
+- **APK au serveur** : `flutter build apk --debug` dans l'agent (téléchargement de Gradle et des dépendances par le
+  réseau de l'agent, durée, mémoire sous 4 Go, taille de `/maison/.gradle` et de `android-up`, chemin réel du JDK dans
+  l'image, overlay du SDK Android).
+- **Livrables rapatriés** (voir cette section) : le manifeste et l'envoi au vrai serveur (`stat`, `sha256sum`, `find -links`),
+  la durée d'un APK de 50 à 150 Mo par `executer_vers_fichier`, le chemin réellement déclaré par l'agent dans son rapport, et le
+  bouton « Télécharger » du bureau sur le fichier rapatrié.

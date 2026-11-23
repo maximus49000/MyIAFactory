@@ -170,6 +170,16 @@ class TestDepart(unittest.TestCase):
             self.assertEqual(len(facultatifs), st.FACULTATIFS.get(nom, 0), v)
             self.assertEqual(args[len(args) - len(facultatifs):], facultatifs, v)     # les facultatifs à la fin
 
+    def test_consigne_serveur_flutter_commandes_simples(self):
+        for mode in ("seul", "pilote"):
+            c = depart.consigne_serveur(mode, "t7", flutter=True)
+            self.assertIn("personne n'approuve tes commandes", c)
+            for mot in ("`&&`", "`;`", "`|`", "`timeout`", "`cd android_app`", "`flutter build apk --release`", "Read/Glob/Grep",
+                        "JAVA_HOME"):
+                self.assertIn(mot, c)
+            self.assertEqual(depart.consigne_serveur(mode, "t7"), depart.consigne_serveur(mode, "t7", flutter=False))
+            self.assertNotIn("personne n'approuve", depart.consigne_serveur(mode, "t7"))
+
     def test_consigne_serveur_seul_et_pilote(self):
         seul, pilote = depart.consigne_serveur("seul", "t7"), depart.consigne_serveur("pilote", "t7")
         for c in (seul, pilote):

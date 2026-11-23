@@ -17,6 +17,7 @@ import tempfile
 import threading
 import time
 from dataclasses import dataclass, replace
+from datetime import datetime, timezone
 from pathlib import Path
 from types import MappingProxyType
 
@@ -31,10 +32,13 @@ from plateforme import DOSSIER_DISTANT, RACINE_SERVEUR
 
 LIMITES_AGENT = {"duree_s": 2400, "tours": 200, "memoire_mo": 4096, "cpus": 2, "paquet_octets": 524288000,
                  "flux_octets": 20971520}
+# Projet Flutter : un build APK (démons Gradle et Kotlin, gen_snapshot, flutter) dépasse 4 Go (essai réel : démon Gradle
+# tué par le cgroup) : 12 Go et 4 processeurs par défaut et au plus ; les autres projets gardent LIMITES_AGENT.
+LIMITES_AGENT_FLUTTER = {**LIMITES_AGENT, "memoire_mo": 12288, "cpus": 4}
 MODES_AGENT = ("seul", "pilote")
 PLACES_DEFAUT = 2
 CLES_DEMANDE_AGENT = frozenset({"id", "projet", "tache", "mode", "modele", "branche", "base", "limites", "reprend", "places",
-                                "genre", "flutter", "signature"})
+                                "genre", "flutter", "flutter_dossier", "signature"})
 # Signature des APK (tâche 15e, réglage `signature_apk` du projet) : `debug_serveur` monte la clé de debug du serveur en lecture seule
 # dans le conteneur de l'agent ; `aucune` et `poste_signe` ne montent aucune clé (la clé de release reste au poste).
 SIGNATURES = ("aucune", "debug_serveur", "poste_signe")
@@ -44,6 +48,9 @@ GENRES_AGENT = ("tache", "reponse")
 MOTIF_TACHE = re.compile(r"[A-Za-z0-9_.-]{1,60}", re.ASCII)
 MOTIF_BRANCHE = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_./-]{0,199}", re.ASCII)
 MOTIF_BASE = re.compile(r"[0-9a-f]{40}", re.ASCII)
+# le dossier Flutter du projet (`projet_flutter.dossier_flutter`) : « . » ou un sous-dossier direct, jamais « .. » (relu par
+# lancer_agent.sh et par les commandes uniques de l'agent avec le même motif)
+MOTIF_DOSSIER_FLUTTER = re.compile(r"\.|[A-Za-z0-9_][A-Za-z0-9_.-]{0,99}", re.ASCII)
 MOTIF_MODELE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._\[\]-]{0,59}", re.ASCII)
 ENTETE_MAX = 65536                 # en-tête d'un paquet Git : lu sur 64 Ko au plus
 FIN_MAX_OCTETS = 65536
@@ -65,6 +72,7 @@ class DemandeAgent:
     genre: str = "tache"
     # projet Flutter (vu sur le poste, `projet_flutter`) : le serveur doit avoir flutter-sdk, monté en lecture seule
     flutter: bool = False
+    flutter_dossier: object = None     # le sous-dossier Flutter du projet (« . » pour la racine), ou None
     signature: str = "aucune"
 
 
@@ -194,11 +202,12 @@ def _ref_valide(nom, git_, drapeau=()):
     return code == 0, sortie.decode("utf-8", "replace").strip()
 
 
-def _entier_limite(cle, v):
+def _entier_limite(cle, v, plafonds=None):
+    plafonds = plafonds or LIMITES_AGENT
     if isinstance(v, bool) or not isinstance(v, int):
         raise ValueError(f"La limite « {cle} » doit être un nombre entier.")
-    if not 1 <= v <= LIMITES_AGENT[cle]:
-        raise ValueError(f"La limite « {cle} » doit être comprise entre 1 et {LIMITES_AGENT[cle]}.")
+    if not 1 <= v <= plafonds[cle]:
+        raise ValueError(f"La limite « {cle} » doit être comprise entre 1 et {plafonds[cle]}.")
     return v
 
 
@@ -253,20 +262,26 @@ def valider_demande_agent(brut, git=_git):
     flutter = brut.get("flutter", False)
     if flutter is not True and flutter is not False:
         raise ValueError("« flutter » vaut true ou false.")
+    flutter_dossier = brut.get("flutter_dossier")
+    if flutter_dossier is not None and (not flutter or not isinstance(flutter_dossier, str)
+                                        or not MOTIF_DOSSIER_FLUTTER.fullmatch(flutter_dossier) or flutter_dossier == ".."):
+        raise ValueError("Dossier Flutter invalide : « . » ou un nom de sous-dossier direct (lettres, chiffres, _ . -), "
+                         "pour un projet Flutter seulement.")
     signature = brut.get("signature", "aucune")
     if not isinstance(signature, str) or signature not in SIGNATURES:
         raise ValueError("« signature » vaut aucune, debug_serveur ou poste_signe.")
     limites_brutes = brut.get("limites")
     if limites_brutes is not None and not isinstance(limites_brutes, dict):
         raise ValueError("Les limites doivent être un dictionnaire.")
-    limites = dict(LIMITES_AGENT)
+    plafonds = LIMITES_AGENT_FLUTTER if flutter else LIMITES_AGENT
+    limites = dict(plafonds)
     for cle, v in (limites_brutes or {}).items():
         if cle not in LIMITES_AGENT:
             raise ValueError("Limite inconnue : " + repr(str(cle)[:40]) + ".")
-        limites[cle] = _entier_limite(cle, v)
+        limites[cle] = _entier_limite(cle, v, plafonds)
     return DemandeAgent(id=ident, projet=projet, tache=tache, mode=mode, modele=modele, branche=branche, base=base,
                         limites=MappingProxyType(limites), reprend=reprend, places=places, genre=genre,
-                        flutter=flutter, signature=signature)
+                        flutter=flutter, flutter_dossier=flutter_dossier, signature=signature)
 
 
 def capacites_requises(d):
@@ -283,7 +298,8 @@ def _demande_dict(d):
     `limites.duree_s` est la valeur même passée à l'enveloppe (une seule source) ; `flutter` (true ou false, une seule
     fois) est relu par l'enveloppe par motif strict."""
     brut = {"id": d.id, "type": "agent", "projet": d.projet, "tache": d.tache, "mode": d.mode, "modele": d.modele,
-            "branche": d.branche, "base": d.base, "limites": dict(d.limites), "reprend": d.reprend, "flutter": d.flutter}
+            "branche": d.branche, "base": d.base, "limites": dict(d.limites), "reprend": d.reprend, "flutter": d.flutter,
+            "flutter_dossier": d.flutter_dossier}
     if d.signature != "aucune":      # une seule fois, relue par l'enveloppe par motif strict ; absente = aucune
         brut["signature"] = d.signature
     return brut
@@ -294,7 +310,8 @@ def _demande_sure(demande):
         brut = {"id": demande.id, "projet": demande.projet, "tache": demande.tache, "mode": demande.mode,
                 "modele": demande.modele, "branche": demande.branche, "base": demande.base,
                 "limites": dict(demande.limites), "reprend": demande.reprend, "places": demande.places,
-                "genre": demande.genre, "flutter": demande.flutter, "signature": demande.signature}
+                "genre": demande.genre, "flutter": demande.flutter, "flutter_dossier": demande.flutter_dossier,
+                "signature": demande.signature}
     elif isinstance(demande, dict):
         brut = demande
     else:
@@ -367,25 +384,37 @@ def changements_non_commites(projet, git=_git):
 
 
 def controle_branche_agent(projet, tache, base, git=_git):
-    """Message de refus si la branche locale `agent/<tâche>` existe déjà et n'est pas un ancêtre de `base` : le résultat de
-    l'agent ne pourrait pas la faire avancer (récupération sans réécriture). Même nom de tâche avec une base nouvelle, après
-    un travail non fusionné : choisir un autre nom (ou fusionner ou supprimer l'ancienne branche). Refus aussi, AVANT tout
-    envoi, si `agent/<tâche>` est la branche extraite d'un dossier de travail du projet (le travail de l'agent ne pourrait
-    pas y être récupéré). None sinon."""
+    """Message de refus, AVANT tout envoi, si `agent/<tâche>` est la branche extraite d'un dossier de travail du projet (le
+    travail de l'agent ne pourrait pas y être récupéré). None sinon. (Une branche existante qui n'est pas un ancêtre de la
+    base n'est plus un refus : `ranger_branche_agent` la renomme.)"""
     ref = f"refs/heads/agent/{tache}"
     code, sortie, _e = git(Path(projet), ["worktree", "list", "--porcelain"], max_octets=4 * 1024 * 1024)
     if code == 0 and f"branch {ref}" in sortie.decode("utf-8", "replace").splitlines():
         return (f"La branche agent/{tache} est extraite dans un dossier de travail du projet : changez de branche avant de "
                 "lancer l'agent (son travail ne pourrait pas y être récupéré).")
+    return None
+
+
+def ranger_branche_agent(projet, tache, base, git=_git, maintenant=None):
+    """Règle seul le cas d'une tâche relancée : si `agent/<tâche>` existe déjà et n'est pas un ancêtre de `base`, elle est
+    RENOMMÉE en `agent/<tâche>-ancienne-<horodatage>` (`git branch -m` : même commit, rien supprimé ni réécrit), de sorte que
+    la branche repart de la base. Rend le nouveau nom, ou None si rien n'a été renommé (branche absente, ancêtre de la base,
+    ou renommage impossible : le résultat de l'agent sera alors refusé à la récupération, sans rien perdre)."""
+    ref = f"refs/heads/agent/{tache}"
     code, _o, _e = git(Path(projet), ["rev-parse", "--verify", "-q", ref])
     if code != 0:
         return None
     code, _o, _e = git(Path(projet), ["merge-base", "--is-ancestor", ref, base])
     if code == 0:
         return None
-    return (f"La branche agent/{tache} existe déjà dans le projet et n'est pas un ancêtre de la base envoyée : le résultat "
-            "de l'agent ne pourrait pas la mettre à jour. Choisissez un autre nom de tâche, ou fusionnez ou supprimez "
-            "d'abord cette branche.")
+    horodatage = (maintenant or datetime.now(timezone.utc)).strftime("%Y%m%d-%H%M%S")
+    for i in range(100):
+        nouveau = f"agent/{tache}-ancienne-{horodatage}" + (f"-{i}" if i else "")
+        if git(Path(projet), ["rev-parse", "--verify", "-q", f"refs/heads/{nouveau}"])[0] == 0:
+            continue
+        code, _o, _e = git(Path(projet), ["branch", "-m", f"agent/{tache}", nouveau])
+        return nouveau if code == 0 else None
+    return None
 
 
 def _analyser_entete(paquet, ref, base):
@@ -471,6 +500,7 @@ def _verifier_et_recuperer_paquet(projet, paquet, tache, base, git):
 
 AGENT_SCRIPT = "taches/lancer_agent.sh"
 AGENT_DISTANT = f"{DOSSIER_DISTANT}/{AGENT_SCRIPT}"
+OUTIL_FLUTTER = "agent-outils/outil-flutter.sh"     # les commandes uniques d'un agent Flutter (montées sur /opt/outils)
 PONT_HOTE = "taches/pont_hote.py"          # mode pilote : le pont hôte, et l'enveloppe d'émulation qu'il lance
 EMULATION_SCRIPT = st.ENVELOPPE            # taches/lancer_emulation.sh
 FICHIERS_ENTREE = ("projet.bundle", "argv.json", "consigne.md", "message.md", "demande.json")
@@ -506,12 +536,16 @@ d=$(mktemp -d "$HOME/myiafactory/.depot.XXXXXX") || exit 1
 f="$d/{AGENT_SCRIPT}"
 c="$d/{st.COMMUN}"
 p="$d/{PONT_HOTE}"
+o="$d/{OUTIL_FLUTTER}"
 e="$d/{EMULATION_SCRIPT}"
 r=1
 if tar -x --no-same-owner -C "$d" -f - && [ -f "$f" ] && [ ! -L "$f" ] && [ -s "$f" ] && [ -f "$c" ] && [ ! -L "$c" ] && [ -s "$c" ]; then
   mkdir -p "{DOSSIER_DISTANT}/taches" && mv -f "$c" "{st.COMMUN_DISTANT}" && mv -f "$f" "{AGENT_DISTANT}" && r=0
   if [ "$r" = 0 ] && [ -f "$e" ] && [ ! -L "$e" ] && [ -s "$e" ]; then mv -f "$e" "{st.ENVELOPPE_DISTANTE}" || r=1; fi
   if [ "$r" = 0 ] && [ -f "$p" ] && [ ! -L "$p" ] && [ -s "$p" ]; then mv -f "$p" "{DOSSIER_DISTANT}/{PONT_HOTE}" || r=1; fi
+  if [ "$r" = 0 ] && [ -f "$o" ] && [ ! -L "$o" ] && [ -s "$o" ]; then
+    mkdir -p "{DOSSIER_DISTANT}/agent-outils" && mv -f "$o" "{DOSSIER_DISTANT}/{OUTIL_FLUTTER}" || r=1
+  fi
 fi
 rm -rf "$d"
 exit $r
@@ -542,18 +576,23 @@ def _script(modele, ident, **valeurs):
     return st._script(modele, ident, **valeurs)
 
 
-def _deposer_agent(serveur, ssh, avec_pont):
+def _deposer_agent(serveur, ssh, avec_pont, avec_flutter=False):
     """Dépose lancer_agent.sh, commun.sh (qu'il source) et, pour le mode pilote, pont_hote.py et lancer_emulation.sh (que le
     pont hôte lance au premier `demarrer`). None si réussi, sinon le message."""
     fichiers = []
     a_deposer = [(AGENT_SCRIPT, 0o755), (st.COMMUN, 0o644)]
     if avec_pont:
         a_deposer += [(EMULATION_SCRIPT, 0o755), (PONT_HOTE, 0o644)]
+    if avec_flutter:
+        a_deposer.append((OUTIL_FLUTTER, 0o755))
     for rel, mode in a_deposer:
         source = RACINE_SERVEUR / rel
         if source.is_symlink() or not source.is_file():
             return f"Fichier du dépôt introuvable : serveur_ovh/{rel}."
-        fichiers.append((rel, source.read_bytes(), mode))
+        donnees = source.read_bytes()
+        if rel.endswith('.sh'):                         # un script depose au serveur est TOUJOURS en LF (un CRLF casse son shebang)
+            donnees = donnees.replace(bytes([13, 10]), bytes([10]))
+        fichiers.append((rel, donnees, mode))
     code, _o, erreur = st._octets(serveur, ssh, _DEPOSER_AGENT, st._archive(fichiers), delai=120, silencieux=True)
     if code != 0:
         return f"Dépôt de l'enveloppe d'agent sur le serveur impossible (code {code}) : {st._court(erreur, 200)}"
@@ -641,10 +680,12 @@ def lancer_agent(demande, paquet, argv, consigne, message, apk=None, dossier=pla
     ne serait pas un ancêtre de la base est refusée avant tout envoi."""
     d = _demande_sure(demande)
     avertissement = None
+    sauvegarde = None
     if projet is not None:
         message_branche = controle_branche_agent(projet, d.tache, d.base, git)
         if message_branche:
             raise st.RefusLancement(message_branche)
+        sauvegarde = ranger_branche_agent(projet, d.tache, d.base, git)
         lignes = changements_non_commites(projet, git)
         if lignes is None:
             avertissement = ("État des fichiers du projet illisible (git status en échec) : d'éventuels changements non "
@@ -654,6 +695,10 @@ def lancer_agent(demande, paquet, argv, consigne, message, apk=None, dossier=pla
                              "l'agent (" + st._court(" ; ".join(l.strip() for l in lignes[:5]), 200)
                              + (" ; ..." if len(lignes) > 5 else "") + ").")
     resultat = _lancer_agent(d, paquet, argv, consigne, message, apk, dossier, ssh, attente_max_s, dormir)
+    if sauvegarde and isinstance(resultat, dict) and resultat.get("id"):
+        ligne = (f"{st._maintenant_iso()} La branche agent/{d.tache} existait déjà sans être un ancêtre de la base : "
+                 f"renommée en {sauvegarde} (sauvegarde, rien supprimé) ; la tâche repart de la base.")
+        st._noter(dossier, resultat["id"], {"branche_sauvegardee": sauvegarde, "journal": [ligne]})
     if avertissement and isinstance(resultat, dict):
         resultat["avertissement"] = avertissement
     return resultat
@@ -668,8 +713,8 @@ def _lancer_agent(demande, paquet, argv, consigne, message, apk, dossier, ssh, a
     `RefusLancement` avant tout envoi : demande, paquet, argv, APK ou délai invalide, aucun serveur prêt, tâche du même
     nom déjà active (à la casse près).
 
-    Rejouer le même nom de tâche avec une base nouvelle : refusé tant que `agent/<tâche>` existe localement sans être un
-    ancêtre de la base (voir `controle_branche_agent`) ; sinon la nouvelle branche avance l'ancienne."""
+    Rejouer le même nom de tâche avec une base nouvelle : une `agent/<tâche>` locale qui n'est pas un ancêtre de la base
+    est renommée en sauvegarde (voir `ranger_branche_agent`) ; sinon la nouvelle branche avance l'ancienne."""
     d = demande
     if not isinstance(d, DemandeAgent):
         d = _demande_sure(demande)
@@ -734,7 +779,7 @@ def _lancer_agent(demande, paquet, argv, consigne, message, apk, dossier, ssh, a
         st._bash(serveur, ssh, _script(st._EFFACER, d.id))
         return sortie("echouee", erreur=f"{st._court(e)} : tâche non démarrée, rien ne tourne sur le serveur.")
 
-    probleme = _deposer_agent(serveur, ssh, d.mode == "pilote")
+    probleme = _deposer_agent(serveur, ssh, d.mode == "pilote", d.flutter)
     if probleme:
         st._bash(serveur, ssh, _script(st._EFFACER, d.id))
         avert = st._noter(dossier, d.id, {"etat": "echouee", "statut": "erreur", "fin": st._maintenant_iso(),

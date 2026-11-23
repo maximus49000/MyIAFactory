@@ -1045,6 +1045,15 @@ class FusionLocale(__import__("unittest").TestCase):
         self.assertIn("agent/t1", cloud.fusionner(".", "agent/t1", executer=executer, distante=False))
         self.assertFalse(any("merge" in a for a in vus))
 
+    def test_pieces_de_validation_autorisees_le_reste_de_factory_reserve(self):
+        for ok in (".factory/pieces/f1/correction-t14.md", ".factory/pieces/f3/capture.png",
+                   ".factory/pieces/f1/maquette.html"):
+            self.assertFalse(cloud.chemin_reserve(ok), ok)
+        for refus in (".factory/pieces/f1/script.sh", ".factory/pieces/f1/x.py", ".factory/factory.json",
+                      ".factory/fiches/a.md", ".factory/pieces/.git/config.md", ".factory/pieces/../fiches/a.md",
+                      ".factory/pieces/a.md", ".factory/pieces/f1/factory.json/x.md", "fiches/a.md"):
+            self.assertTrue(cloud.chemin_reserve(refus), refus)
+
     def test_branche_sans_chemin_reserve_fusionnee(self):
         from moteur import cloud
         vus = []

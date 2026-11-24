@@ -3,6 +3,29 @@
 Plan : `docs/superpowers/plans/2026-11-23-tests-sur-le-serveur-route.md` (§ Task 17). Serveur : `serveur-ovh`
 (54.36.123.238, 64 Go, 3,6 To). Départ : `origin/main` 0391af2 (PR 26). Mené par un agent en autonomie le 2026-11-24.
 
+## Bilan
+
+| jalon | statut |
+|---|---|
+| J1 image `tests-image` | fait (et refaite après la correction `python3-venv`) |
+| J2 suite complète au serveur | fait : 5 156 tests, 0 échec, 204 s |
+| J3 places | fait : **N = 3** recommandé ; réglage au bureau **à faire par le Directeur** |
+| J4 lots Linux 9–12 | fait (par J2) |
+| J5 Node et Python | fait (1 panne corrigée : `python3-venv`) |
+| J6 défaut du bureau | constaté pour MyIAFactory (réglage du projet) ; défaut du bureau **à faire par le Directeur** |
+| J7 repli | fait |
+| J8 Gradle Android | fait, verdict `passe` (6 pannes corrigées) |
+| J9 images dérivées | fait (2 pannes corrigées : image dérivée jamais prise, ramassage Docker 29) |
+| J10 cache hors ligne | fait (cache intact, overlay) |
+| J11 parallélisme pondéré | fait, budget confirmé |
+| J12 sur-la-route, Python | fait (1 panne corrigée : limite d'instantané 1 Go) |
+| J13 expérience B | **non terminé** : licence acceptée en B2 ; bloqué par l'échauffement Unity (brique à construire, feu vert demandé) |
+| J14 confinement A | sans objet (B2 accepte la licence) |
+
+Méthode : les projets d'essai (Node, Python, copies de MyFridgeCleaner et de sur-la-route, Node 20/18) sont des copies
+jetables dans le bloc-notes de la session, enregistrées dans un **bureau d'essai** (le `BUREAU` des modules remplacé en
+mémoire) : le bureau du Directeur, ses projets, le moteur et le port 8770 n'ont pas été touchés.
+
 ## J1 — image `tests-image` : FAIT
 
 - `py -3.12 lancer.py plateforme serveurs installer serveur-ovh tests-serveur --accord` : 3 min 10 s, code 0.
@@ -193,6 +216,42 @@ bureau d'essai, `lancer.py tests --serveur --dossier <copie> -- python3 -m unitt
 - Instantané : 4 039 fichiers, 0 écarté ; **aucun nom évoquant une licence** (`.ulf`, `Unity_lic`, `licens`,
   `entitlement`, `unityhub`, `.config/unity3d`) ; `Library/` absent.
 
+## J13 — expérience B (licence Unity en conteneur)
+
+- **Panne corrigée d'abord** : rien ne fournissait le digest local de l'image GameCI ; `rendre_dockerfile` levait pour
+  tout projet Unity, l'image ne pouvait pas être construite. `construire_image` le lit maintenant au serveur
+  (`tests_images.commande_digest_unity` / `lire_digest_unity`, lecture seule de `RepoDigests`). Reste au bureau : la
+  décision `tests_image_derivee` d'un projet Unity (`decision_image_derivee`) n'a pas encore ce digest (voir points).
+- Image `myiafactory/tests-unity-6000.6.7f1` (= `myiafactory/tests-0dcb15df6338`) construite sur
+  `unityci/editor@sha256:dab2a408…` présente (aucun tirage) : **451 s**.
+- Essai `tests_unity_essai.py --serveur-id serveur-ovh --dossier <copie de sur-la-route> --test BiomeMixTests
+  --variantes B1,B2` (par le bureau d'essai, accord du projet de la copie) :
+  - inventaire : **2 fichiers de licence (noms et tailles seulement), 2 sockets du client** ;
+  - **B1 : 81, licence refusée** (50 s ; motif reconnu, jamais affiché) ;
+  - **B2 : licence ACCEPTÉE** (« Unity Personal, Assigned » dans le journal filtré) mais l'éditeur abandonne :
+    « Insufficient shared memory available - if using Docker, please run the container with --shm-size=1025M ».
+    **Corrigé** : `--shm-size 2g` pour la famille unity (test dans `test_unity_montages_de_licence_en_lecture_seule`).
+    Verdict de ce premier essai : `indetermine` (rien écrit dans `unity-licence`, comme prévu).
+  - Second essai (après `--shm-size`) : B1 81 de nouveau ; **B2 : licence acceptée, éditeur démarré** (moteur
+    initialisé, domaine rechargé), puis **résolution des paquets impossible hors réseau** : `com.coplaydev.unity-mcp`,
+    `com.vrmc.gltf`, `com.vrmc.univrm`, `com.vrmc.vrm` (dépôts git sur `github.com`) et `com.unity.ide.visualstudio`
+    (`packages.unity.com`). Éditeur : code 1, aucun XML → `indetermine` (94 s pour B2, pic mémoire 0,9 Go).
+- **J13 : NON TERMINÉ — brique manquante, non construite ici** : l'**échauffement Unity** (`Library/` et paquets UPM,
+  conception § 5.13/§ 5.16 : import `-batchmode -nographics -quit` avec la licence ET le réseau des registres UPM par le
+  mandataire, cache `unity-<16 hexa>` de 10 Go au plus monté en copie sur écriture). Aujourd'hui l'enveloppe le refuse
+  d'emblée (`deps_echec unity-tache-14g`) et `tests_profil.empreinte_deps` rend `None` pour Unity. Raison de ne pas l'avoir
+  construit en autonomie : c'est la seule étape où **la licence et une sortie réseau coexistent avec du code du projet**
+  (exposition de la licence plus large que B2) ; la conception l'a prévue (Q4), mais son exécution mérite le feu vert
+  explicite du Directeur et une tâche à part (plan esquissé dans « Points à trancher »).
+- Conclusion utile dès maintenant : **B2 suffit pour la licence** (aucun réseau vers Unity nécessaire) : QU1 (B3) n'a pas
+  à être posée, et l'option A (J14) n'est pas justifiée.
+
+## J14 — confinement A : SANS OBJET (pour l'instant)
+
+J14 n'a lieu que si J13 rend `hote`. J13 montre au contraire que la licence passe en conteneur (B2). Rien n'a été fait
+(ni étape `unity_bac_a_sable`, ni installation par Hub, ni audit). Si le Directeur voulait malgré tout l'option A : voir
+« À faire par le Directeur ».
+
 ## J7 — repli : FAIT
 
 Copie de `serveurs.json` + `serveurs-etat.json` dans un dossier d'état d'essai, toutes les capacités marquées
@@ -201,3 +260,51 @@ Copie de `serveurs.json` + `serveurs-etat.json` dans un dossier d'état d'essai,
   injoignable ou état inconnu à la dernière sonde).) : tests au poste (une campagne à la fois). » ;
 - **aucune connexion** (l'objet SSH n'a jamais été appelé) ; campagne au poste sous le verrou, code 0 (10 tests) ;
 - elle a attendu 21 min le verrou du poste (une campagne ZooRunner tournait) : la règle « une campagne à la fois » tient.
+
+## À faire par le Directeur
+
+1. **Places du serveur (J3) : `places_tests = 3`.** Le bureau **n'a pas encore de champ** pour ce réglage (voir
+   points). En attendant : ouvrir `C:\Users\maxim\MyIAFactory\serveurs.json` dans un éditeur, ajouter dans l'objet
+   `"id": "serveur-ovh"` la ligne `"places_tests": 3,` (valeurs permises 1 à 4), enregistrer. Lu à chaque campagne :
+   rien à relancer. (Défaut actuel : 2.)
+2. **Défaut du bureau `tests` sur serveur (J6).** Bureau (http://localhost:8770), barre des paramètres → **Réglages**
+   (« Global, type, projet ») → niveau **Global** → Déport, action **tests** → lieu **serveur**, enregistrer. Effet : tout
+   projet enregistré qui ne règle pas lui-même ses tests part au serveur (MyIAFactory l'est déjà par ses propres réglages).
+3. **Après fusion de cette branche** : relancer une fois `py -3.12 lancer.py plateforme serveurs installer serveur-ovh
+   tests-serveur-android --accord` (ou le bouton d'installation de la carte du serveur) si le serveur a été réinstallé
+   depuis une autre branche : il redépose l'enveloppe corrigée (la péremption des fichiers déposés le détecte seule).
+4. **Unity (J13), décision** : donner (ou non) le feu vert pour construire l'**échauffement Unity** (voir point 1
+   ci-dessous). J14 (installation de 6000.6.7f1 par Hub, bac à sable) : inutile tant que B2 marche ; rien à faire.
+
+## Points à trancher
+
+1. **Échauffement Unity** (bloque J13). Esquisse : clé `unity` de `empreinte_deps` (manifeste, verrou des paquets,
+   version, empreinte d'image) ; dans l'enveloppe, `echauffer` pour Unity = conteneur `deps-<id>` de l'image
+   `tests-unity-<v>` avec les montages B2 (licence en lecture seule, `machine-id`, `--hostname`), `--shm-size 2g`, le
+   réseau interne + mandataire limité à `packages.unity.com`, `download.packages.unity.com`, `github.com`,
+   `codeload.github.com` (`HTTPS_PROXY` pour UPM et git), commande `-batchmode -nographics -projectPath /work -quit` ;
+   `Library/` déplacée dans le cache (10 Go au plus) ; à la campagne, `entree-unity.sh` lie `/work/Library` au cache en
+   copie sur écriture. Risque : licence + réseau + code du projet dans le même conteneur (mandataire à liste fermée).
+2. `nb_tests` vaut `null` pour Gradle dans le verdict d'évaluation (Gradle ne compte pas les tests dans sa sortie) :
+   lire les rapports XML de `build/test-results` dans l'enveloppe, ou laisser tel quel.
+3. Décision `tests_image_derivee` d'un projet Unity au bureau : `decision_image_derivee` n'a pas le digest GameCI
+   (seule la construction le lit maintenant au serveur) ; le bureau ne peut donc pas encore montrer ce Dockerfile.
+4. `DIST_HOTES` élargi à `github.com`, `release-assets.githubusercontent.com`, `objects.githubusercontent.com` (la
+   distribution Gradle est désormais servie par les « releases » GitHub) : l'intégrité reste garantie par la somme
+   officielle ; à confirmer.
+5. L'échauffement Gradle Android exécute désormais `testDebugUnitTest` (les tests du projet tournent une fois avec la
+   sortie par le mandataire) : alternative plus stricte possible (résolution des artefacts par l'init-script), plus
+   fragile avec AGP.
+6. Un `gradlew` en fins de ligne Windows est refusé avec une raison claire, pas corrigé à la volée : convertir les fins
+   de ligne dans l'instantané (gradlew, mvnw) serait plus confortable.
+7. `places_tests` et `budget_tests_mo` ne se règlent que dans `serveurs.json` : un champ sur la carte du serveur au
+   bureau manque (règle « tout réparable depuis le bureau »).
+
+## Nettoyage
+
+- Serveur : `~/tests/.deps` (caches d'essai, 1,4 Go) et `~/tests/.construction` effacés ; images dérivées Node
+  ramassées ; image `myiafactory/tests-unity-6000.6.7f1` retirée (à reconstruire pour reprendre J13 : 451 s) ; dossiers
+  des deux tâches d'émulation effacés ; conteneur `j9-tenue` retiré. Restent les images de capacité voulues :
+  `myiafactory/tests` (reconstruite), `myiafactory/tests-android` (nouvelle). Aucun conteneur, réseau ou volume d'essai.
+- Poste : registre `~/MyIAFactory/tests-images.json` (créé par les essais) supprimé. Gardés comme relevés :
+  `tests-places-mesure.json`, `tests-unity-essai.json`. Les tâches d'émulation restent dans l'index `taches.json`.

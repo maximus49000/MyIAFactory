@@ -17,7 +17,8 @@
 | 3 | 226 s | 1,0 Go |
 | 2, pendant une émulation | 217 s | 1,0 Go |
 
-**N recommandé : 3** (à régler dans le bureau, carte du serveur ; 2 par défaut). Au-delà, le processeur est plein
+**N recommandé : 3** (`places_tests` du serveur dans `serveurs.json`, aucun champ au bureau pour l'instant ; 2 par
+défaut). Au-delà, le processeur est plein
 (3 × 4 fils = 12 fils).
 
 ### Mémoire (`budget_tests_mo`, jalon J11)

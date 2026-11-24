@@ -92,6 +92,61 @@ d'essai** (`bureau_essai.py` remplace `BUREAU` des modules `deport_types`, `test
 - Reste le geste du plan, **défaut du bureau** `deport.lieux.tests = "serveur"` (pour tous les projets qui ne règlent
   rien eux-mêmes) : à faire par le Directeur, voir la section finale.
 
+## J8 — Gradle Android (MyFridgeCleaner)
+
+- `installer serveur-ovh tests-serveur-android --accord` : `tests-android` « fait » en 116 s
+  (`base=…fichiers=a2c5ecc8f989e4f8;jdk=17,21;fichiers=50cb6444be1e5ed1`).
+- Projet : **une copie** de MyFridgeCleaner (`git clone` local dans le bloc-notes ; le dépôt du Directeur n'est pas touché),
+  enregistrée au bureau d'essai, `deport.lieux.tests = "serveur"` et `tests.adoption.reseau_echauffement = "accorde"`
+  (Q4, accord du réseau d'échauffement pour ce projet). Évaluation par `tests_adoption.evaluer(…, accord=lambda r: None,
+  reseau=lambda r: True)` (ce que fait le bouton du Directeur), sans écrire `tests.adoption`.
+- Trois pannes réelles trouvées et corrigées (TDD), dans l'ordre où elles sont apparues :
+  1. `#deps-echec somme-gradle-illisible` : `services.gradle.org` renvoie maintenant (301) les sommes vers
+     `downloads.gradle.org`, et la distribution (307) vers `github.com/gradle/gradle-distributions/releases`, puis (302)
+     vers `release-assets.githubusercontent.com` (URL signée avec `?`, `&`, `%`). `telecharger` ne suivait aucune
+     redirection (le corps HTML de la 301 était lu comme une somme). **Corrigé** : redirections suivies à la main (4 au
+     plus, jamais `curl -L`) vers les seuls hôtes de `DIST_HOTES`, élargi à `github.com`,
+     `release-assets.githubusercontent.com`, `objects.githubusercontent.com` ; motif d'URL accepté avec la requête. La
+     distribution reste vérifiée par sa somme officielle (`downloads.gradle.org`). Test `test_redirections_gradle_actuelles`.
+  2. L'enveloppe corrigée **n'arrivait pas au serveur** : `lancer_tests.sh`, `tests_hote.py`, `commun.sh`,
+     `construire_image_tests.sh`, `entree-unity.sh` sont déposés avec l'étape `tests_image` mais hors de l'empreinte de
+     l'image ; marqueur à jour = capacité « présente » = rien n'est redéposé. **Corrigé par une règle générale**
+     (`serveur_installation._deposes_perimes`) : pour toute capacité à marqueur, les fichiers déposés hors empreinte sont
+     comparés (`sha256sum` au serveur, lecture seule) ; une différence rend la capacité « périmée » et l'installation les
+     redépose (image inchangée : « déjà à jour », 9 s). Vaut aussi pour `agent` (`enregistrer_jeton.sh`, `pont_hote.py`).
+     Test `test_fichiers_deposes_hors_empreinte_perimes`.
+  3. `usage : tests_hote.py --commande | …` : `--echauffer gradle gradle-android` refusé, le motif de famille
+     (`[a-z][a-z-]{1,11}`) n'admettait que 12 caractères. Aucun échauffement Gradle Android n'avait donc jamais pu tourner.
+     **Corrigé** (`{1,23}`), test `test_echauffer_accepte_toutes_les_familles` (toutes les familles de `FAMILLES`).
+  4. `FileNotFoundError: './gradlew'` : la copie avait été extraite avec `core.autocrlf=true` (gradlew en CRLF,
+     « #!/bin/sh\r »). Le dépôt du Directeur, lui, est en LF (0 CR). Copie refaite en LF. **Ajouté** : un gradlew en CRLF
+     est refusé AVANT tout conteneur avec la raison fermée `gradlew-fins-de-ligne-windows` (remède : `gradlew text eol=lf`
+     dans `.gitattributes`). Test `test_gradlew_en_fins_de_ligne_windows`.
+  5. `/home/ubuntu/.android: Read-only file system` : AGP écrit dans `~/.android` (`user.home` de Java, racine en
+     lecture seule). **Corrigé** : `ANDROID_USER_HOME=/tmp/android` (tmpfs) pour l'échauffement et les tests
+     gradle-android ; test dans `test_enveloppe_image_et_famille`.
+  6. `Could not download … No cached version available for offline mode` (jars de `debugUnitTestRuntimeClasspath`) :
+     l'échauffement ne faisait que compiler (`compileDebugUnitTestSources`) ; les jars d'exécution des tests,
+     transformés par AGP, n'étaient jamais téléchargés. **Corrigé** : l'étape facultative de l'échauffement
+     gradle-android lance `testDebugUnitTest` (test `test_plan_gradle_android_resout_le_classpath_des_tests`).
+     Conséquence à connaître : les tests du projet s'exécutent une fois pendant l'échauffement (même conteneur durci,
+     sortie par le mandataire seulement).
+- **Résultat** (`lancer.py tests --serveur --dossier <copie> -- ./gradlew testDebugUnitTest`, cache froid) :
+  échauffement en ligne puis campagne hors ligne, **BUILD SUCCESSFUL** (1 min 8 s de Gradle pour la campagne),
+  **266 s de bout en bout** (échauffement compris), **pic mémoire 3,2 Go** au-dessus du départ, cache
+  `gradle-4b7d6124c1a8e4ac` **1,2 Go**, 8 137 fichiers. Wrapper 9.3.1 vérifié contre sa somme publiée
+  (`~/tests/.deps/.gradle-wrapper/9.3.1.sha256`), distribution téléchargée par l'hôte et vérifiée.
+- **Verdict d'évaluation** (`tests_adoption.evaluer`, cache chaud) : **`passe`**, **83 s**, pic mémoire **2,6 Go**.
+  J8 FAIT. Petit défaut relevé : `nb_tests` vaut `null` pour Gradle (`_nb_tests` ne lit pas la sortie de Gradle, qui
+  ne compte pas les tests par défaut) — à trancher (voir points).
+
+## J10 — cache hors ligne et copie sur écriture : FAIT
+
+Sur le cache Gradle de J8 : empreinte de l'arbre (`find contenu -type f -printf "%P %s %T@"` trié, puis `sha256sum`)
+**identique avant et après** la campagne hors ligne d'évaluation (`d9be7b66…`, 8 137 fichiers, 1,2 Go) : le volume
+`overlay` protège le cache. Aucune ligne « copie sur écriture indisponible » : pas de bascule en lecture seule,
+`GRADLE_RO_DEP_CACHE` inutile. (Les caches Node et Python de J5 ont servi aussi deux fois sans réchauffement.)
+
 ## J7 — repli : FAIT
 
 Copie de `serveurs.json` + `serveurs-etat.json` dans un dossier d'état d'essai, toutes les capacités marquées

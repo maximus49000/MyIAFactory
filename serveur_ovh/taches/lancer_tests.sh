@@ -500,7 +500,9 @@ if [ "$FAMILLE" = unity ]; then
     [[ $nom_hote =~ ^[A-Za-z0-9][A-Za-z0-9.-]{0,62}$ ]] || echouer 77 "nom d'hôte illisible : licence $LICENCE impossible."
     LICENCE_ARGS+=(-v "$MACHINE_ID:$MACHINE_ID:ro" --hostname "$nom_hote")
   fi
-  LICENCE_ARGS+=(-e MYIAFACTORY_TESTS_FAMILLE=unity)
+  # L'éditeur demande 1 Go de mémoire partagée (« --shm-size=1025M » ; 64 Mo par défaut) : sinon il abandonne avant
+  # d'importer le projet (jalon J13). Compté dans la limite mémoire du conteneur.
+  LICENCE_ARGS+=(--shm-size 2g -e MYIAFACTORY_TESTS_FAMILLE=unity)
 fi
 DEPS_RACINE=""; CACHE=""
 if [ "$DEPS" != - ]; then

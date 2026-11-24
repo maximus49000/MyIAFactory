@@ -138,6 +138,9 @@ class TestEnveloppeUnity(D.Banc):
         self.assertEqual([b for a, b in self.paires(run) if a == "--network"], ["none"])
         self.assertFalse([a for a in run if "machine-id" in a or a.startswith("--hostname")], run)
         self.assertIn(("--tmpfs", "/tmp:size=6g,mode=1777,exec"), self.paires(run))
+        # J13 (2026-11-24) : « Insufficient shared memory available - if using Docker, please run the container with
+        # --shm-size=1025M » (64 Mo par défaut) : l'éditeur abandonnait avant d'importer le projet.
+        self.assertIn(("--shm-size", "2g"), self.paires(run))
         for paire in (("--cap-drop", "ALL"), ("--user", "1000:1000"), ("--security-opt", "no-new-privileges")):
             self.assertIn(paire, self.paires(run))
         self.assertIn("--read-only", run)

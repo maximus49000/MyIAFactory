@@ -10,6 +10,7 @@ import io
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tarfile
@@ -89,7 +90,15 @@ CURL = r'''echo "curl $*" >> "$FAUX_JOURNAL"
 o=""; w=""; prec=""
 for a in "$@"; do [ "$prec" = -o ] && o="$a"; [ "$prec" = -w ] && w=1; prec="$a"; u="$a"; done
 [ -n "${FAUX_CURL_ECHEC:-}" ] && exit 22
+# FAUX_SERVICES_REDIRIGE : services.gradle.org/distributions renvoie (301) vers downloads.gradle.org (constaté le 2026-11-24) ;
+# FAUX_REDIRECTION_2 : la seconde redirection (github.com -> release-assets…, avec une requête signée).
+if [ -n "${FAUX_SERVICES_REDIRIGE:-}" ]; then
+  case "$u" in https://services.gradle.org/distributions/*)
+    : > "$o"; printf '301 https://downloads.gradle.org/distributions/%s' "${u##*/}"; exit 0 ;; esac
+fi
 case "$u" in
+  https://github.com/*) : > "$o"; printf '302 %s' "$FAUX_REDIRECTION_2"; exit 0 ;;
+  https://release-assets.githubusercontent.com/*) printf '%s' "''' + ZIP.decode() + r'''" > "$o"; printf '200 '; exit 0 ;;
   */versions/all) printf '%s' "$FAUX_VERSIONS" > "$o" ;;
   *-wrapper.jar.sha256) v="${u##*/gradle-}"; v="${v%-wrapper.jar.sha256}"; s=""
     for x in $FAUX_SOMMES; do [ "${x%%=*}" = "$v" ] && s="${x#*=}"; done
@@ -97,9 +106,10 @@ case "$u" in
     printf '%s\n' "$s" > "$o" ;;
   *.zip.sha256) printf '%s\n' "$FAUX_SOMME_ZIP" > "$o" ;;
   *.zip) if [ -n "${FAUX_REDIRECTION:-}" ]; then : > "$o"; printf '302 %s' "$FAUX_REDIRECTION"; exit 0; fi
-         printf '%s' "''' + ZIP.decode() + r'''" > "$o"; [ -n "$w" ] && printf '200 ' ;;
+         printf '%s' "''' + ZIP.decode() + r'''" > "$o" ;;
   *) exit 22 ;;
 esac
+[ -n "$w" ] && printf '200 '
 exit 0'''
 FAUX = dict(banc.FAUX, docker=DOCKER, du=DU, curl=CURL)
 
@@ -305,7 +315,7 @@ class TestEchauffement(Banc):
     def test_distribution_gradle_par_l_hote(self):
         # I4 : la distribution est téléchargée par l'hôte, vérifiée, déposée dans le cache ; redirection hors liste refusée.
         code, err, etat = self.lancer(*GRADLE, "accorde", "40", tar=TAR_GRADLE, ident=banc.ident(5), deps="2" * 16,
-                                      env={"FAUX_REDIRECTION": "https://github.com/gradle/x.zip"})
+                                      env={"FAUX_REDIRECTION": "https://evil.example/gradle/x.zip"})
         self.assertEqual(code, 79, err)
         self.assertIn("#deps-echec distribution-redirection", err)
         code, err, etat = self.lancer(*GRADLE, "accorde", "40", tar=TAR_GRADLE, ident=ID_B, deps="1" * 16,
@@ -321,6 +331,26 @@ class TestEchauffement(Banc):
         self.assertNotRegex(self.journal, r"curl [^\n]*-L")
         vu = (etat / f"deps-vu-deps-{ID}.txt").read_text(encoding="utf-8")
         self.assertIn("gradle-8.7-bin.zip", vu)                                   # présente AVANT le conteneur
+
+    def test_redirections_gradle_actuelles(self):
+        # J8 (2026-11-24) : services.gradle.org renvoie (301) les sommes vers downloads.gradle.org, et la distribution (307)
+        # vers les « releases » GitHub, puis (302) vers release-assets.githubusercontent.com avec une requête signée
+        # (?, &, %) : suivies à la main, hôtes de DIST_HOTES seulement ; la somme officielle reste vérifiée.
+        assets = ("https://release-assets.githubusercontent.com/github-production-release-asset/696192900/abc"
+                  "?sp=r&sv=2018-11-09&sr=b&spr=https&se=2026-11-24T00%3A47%3A26Z&sig=a%2Bb%3D&rscd=attachment%3B")
+        env = {"FAUX_SERVICES_REDIRIGE": "1", "FAUX_REDIRECTION_2": assets,
+               "FAUX_REDIRECTION": "https://github.com/gradle/gradle-distributions/releases/download/v8.7/gradle-8.7-bin.zip"}
+        code, err, etat = self.lancer(*GRADLE, "accorde", "40", tar=TAR_GRADLE, ident=banc.ident(6), deps="3" * 16, env=env)
+        self.assertEqual(code, 0, err)
+        self.assertIn("https://downloads.gradle.org/distributions/gradle-8.7-wrapper.jar.sha256", self.journal)
+        self.assertIn("https://downloads.gradle.org/distributions/gradle-8.7-bin.zip.sha256", self.journal)
+        self.assertIn(assets, self.journal)
+        self.assertNotRegex(self.journal, r"curl [^\n]*-L")
+        env["FAUX_REDIRECTION_2"] = "https://evil.example/x?a=b"
+        shutil.rmtree(self.home / "tests" / ".deps" / ".gradle-wrapper" / "dist")       # sinon la distribution gardée sert
+        code, err, etat = self.lancer(*GRADLE, "accorde", "40", tar=TAR_GRADLE, ident=banc.ident(7), deps="4" * 16, env=env)
+        self.assertEqual(code, 79, err)
+        self.assertIn("#deps-echec distribution-redirection", err)
 
     def test_wrapper_contre_toutes_les_sommes_publiees(self):
         # I4 : un jar d'une autre version publiée est admis ; un jar inconnu de toutes les versions est refusé.

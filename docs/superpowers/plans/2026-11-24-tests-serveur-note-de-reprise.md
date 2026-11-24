@@ -166,6 +166,21 @@ Sur le cache Gradle de J8 : empreinte de l'arbre (`find contenu -type f -printf 
 `overlay` protège le cache. Aucune ligne « copie sur écriture indisponible » : pas de bascule en lecture seule,
 `GRADLE_RO_DEP_CACHE` inutile. (Les caches Node et Python de J5 ont servi aussi deux fois sans réchauffement.)
 
+## J11 — parallélisme pondéré : FAIT
+
+`tests_mesure_places.py --serveur-id serveur-ovh --mixte gradle:2,python:2 --dossier-gradle <copie de MyFridgeCleaner>`
+(cache Gradle chaud ; Python = suite MyIAFactory complète) :
+
+| essai | Gradle ×2 (médiane) | Python ×2 (médiane) | pic mémoire cumulé | durée |
+|---|---|---|---|---|
+| seul | 136 s | 243 s (+15 % contre 211 s seule) | **5,1 Go** | 245 s |
+| pendant une émulation pilote (MyFridgeCleaner, émulateur démarré) | 147 s | 245 s | **5,7 Go** | 316 s |
+
+Codes tous 0. Une campagne a attendu sa place un instant (« rang 2/2 », `places` du palier = 4, jetons). Budget mémoire :
+le défaut `budget_tests_mo` (16 jetons de 2 Go = 32 Go) est **confirmé** : 4 campagnes mixtes restent sous 6 Go au-dessus
+de la charge courante, sur 64 Go ; la limite réelle est le processeur (12 fils). Rien à corriger au bureau. Dossier de la
+tâche d'émulation `t20261124-004813-5b55` effacé au serveur (même raison qu'en J3).
+
 ## J12 — tests Python de sur-la-route : FAIT
 
 Copie de `C:\Users\maxim\UnityProjects\sur-la-route-bureau` (clone local, le projet n'est pas touché), enregistrée au

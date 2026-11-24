@@ -5251,7 +5251,7 @@ def _suite_cadrage(projet, etat, t, r):
         lancer(projet, "fonctionnalite", {"id": fid, "nom": r["nom"][:80]})
     if isinstance(r.get("en_clair"), str) and r["en_clair"].strip():    # l'objectif pour n'importe qui (panneau)
         lancer(projet, "fonctionnalite", {"id": fid, "en_clair": r["en_clair"]})
-        lancer(projet, "tache", {"id": t["id"], "titre": wf.titre_du_cadrage(_fonc(projet, fid), r["nom"][:80])})
+        lancer(projet, "tache", {"id": t["id"], "titre": wf.titre_du_cadrage(_fonc(projet, fid), (r.get("nom") or "")[:80] or None)})
     fiche = _fiche_correction(projet, t, r)
     if fiche:
         return _suite_fiche_correction(projet, fid, fiche, etat=etat, r=r)

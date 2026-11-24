@@ -94,6 +94,24 @@ class TestCatalogue(unittest.TestCase):
             with self.assertRaises(tests_serveur.Repli):
                 tests_serveur._image_de_la_campagne(p, sdk)
 
+    def test_image_derivee_construite_prise_par_la_route(self):
+        # J9 (2026-11-24) : une image dérivée construite et notée au registre n'était jamais prise : la route rendait
+        # toujours « image dérivée à construire ». Elle la prend maintenant, si le registre la connaît POUR CE serveur.
+        p = profil(["node"], node="18")
+        etiquette = tests_images.etiquette_derivee(p)
+        self.assertEqual(tests_serveur._image_de_la_campagne(p, None, derivee_permise=True),
+                         (etiquette, "node", ("tests-image",)))
+        empreinte = tests_profil.empreinte_image(p)
+        vus = []
+        connue = lambda sid, e: vus.append((sid, e)) or (etiquette if (sid, e) == ("srv", empreinte) else None)  # noqa: E731
+        tests_serveur._verifier_derivee(etiquette, p, "srv", connue)
+        self.assertEqual(vus, [("srv", empreinte)])
+        with self.assertRaises(tests_serveur.Repli) as e:
+            tests_serveur._verifier_derivee(etiquette, p, "autre", connue)
+        self.assertIn("image dérivée à construire", e.exception.raison)
+        tests_serveur._verifier_derivee("myiafactory/tests-android", p, "autre", connue)   # image du catalogue : rien
+        tests_serveur._verifier_derivee(None, p, "autre", connue)
+
     def test_interrupteur_du_cache_gradle(self):
         self.assertEqual(tests_serveur._image_de_la_campagne(profil(["gradle-jvm"], jdk="17"), None)[1], "gradle-jvm")
         tests_images.CACHE_GRADLE_PRET = False                                        # interrupteur : tout Gradle au poste

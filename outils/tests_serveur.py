@@ -312,7 +312,32 @@ def _commande_unity(commande):
     return tests_profil._famille_lancee(commande_conteneur(list(commande))) == "unity"
 
 
-def _image_de_la_campagne(profil, sdk_android, commande=None):
+def _verifier_derivee(image, profil, serveur_id, connue=None):
+    """Une image dérivée (`myiafactory/tests-<12 hexa>`) n'est prise que si le registre du poste la dit construite sur CE
+    serveur pour l'empreinte d'image du profil (`tests_images.image_connue`) ; sinon `Repli` (elle est à construire).
+    Toute autre image : rien (jalon J9)."""
+    if not image or not tests_images.ETIQUETTE_DERIVEE.fullmatch(str(image)):
+        return
+    import tests_profil
+    if (connue or tests_images.image_connue)(serveur_id, tests_profil.empreinte_image(profil)) != image:
+        raise Repli("indisponible (aucune image du catalogue ne convient à ce projet : image dérivée à construire)")
+
+
+def _marquer_usage(serveur, ssh, etiquette, maintenant):
+    """Image dérivée prise par une campagne : « utilisée maintenant » au registre du poste et au serveur
+    (`construire_image_tests.sh --utilise`, ce que lit le ramassage). Au mieux : jamais un échec de la campagne."""
+    try:
+        tests_images.noter_usage(serveur.id, etiquette, time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(maintenant())))
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        ssh.executer(serveur_etat.cible(serveur),
+                     f"bash \"{DOSSIER_DISTANT}/taches/construire_image_tests.sh\" --utilise {etiquette}", serveur.cle, delai=20)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _image_de_la_campagne(profil, sdk_android, commande=None, derivee_permise=False):
     """(image, famille, capacités requises) d'après le catalogue ; `image` est None pour l'image par défaut (l'enveloppe la
     prend seule : la ligne de commande reste celle d'avant). `Repli` si aucune image du catalogue ne convient (les images
     dérivées ne sont pas encore construites) ou si le SDK Android du serveur ne couvre pas le projet.
@@ -333,6 +358,13 @@ def _image_de_la_campagne(profil, sdk_android, commande=None):
             raise Repli("refusé (image Unity hors motif)")
         return image, "unity", (tests_images.CATALOGUE_IMAGES[tests_images.IMAGE_DEFAUT]["capacite"],)
     choix = tests_images.choisir_image(profil, sdk_android)
+    if choix["derivee"] and derivee_permise:
+        # l'image dérivée du profil ; sa présence sur le serveur choisi est vérifiée ensuite (`_verifier_derivee`)
+        etiquette = tests_images.etiquette_derivee(profil)
+        famille = profil.familles[0] if profil.familles else None
+        if not tests_images.ETIQUETTE_DERIVEE.fullmatch(etiquette) or famille is None:
+            raise Repli("refusé (image dérivée ou famille hors motif)")
+        return etiquette, famille, (tests_images.CATALOGUE_IMAGES[tests_images.IMAGE_DEFAUT]["capacite"],)
     if choix["derivee"]:
         raise Repli("indisponible (aucune image du catalogue ne convient à ce projet : image dérivée à construire)")
     if choix["manque"]:
@@ -964,7 +996,7 @@ def _au_serveur(commande, racine, attendre, places, dossier_etat, ssh, noter, ho
     if not evaluation:
         _controler_adoption(profil, racine)
     limites = limites_de(profil, (ressources_forcees or _limites_forcees_par_defaut)(racine))
-    image, famille, requises = _image_de_la_campagne(profil, sdk_android, commande)
+    image, famille, requises = _image_de_la_campagne(profil, sdk_android, commande, derivee_permise=True)
     if licence is not None and famille != "unity":
         raise Repli("refusé (licence Unity hors de la famille unity)")
     if executeur == "hote_bac_a_sable" and famille != "unity":
@@ -987,6 +1019,9 @@ def _au_serveur(commande, racine, attendre, places, dossier_etat, ssh, noter, ho
         serveur_etat.cible(serveur)
     except ValueError as e:
         raise Repli(f"mal déclaré ({e})") from None
+    _verifier_derivee(image, profil, serveur.id)
+    if image and tests_images.ETIQUETTE_DERIVEE.fullmatch(image):
+        _marquer_usage(serveur, ssh, image, maintenant)
     if famille == "unity":
         # Choix de l'exécuteur (§ 5.16) d'après l'état LOCAL du serveur choisi, avant toute connexion. Jamais l'hôte sans
         # unity-licence=hote ET unity-bac-a-sable présente, même demandé explicitement (outil J14).

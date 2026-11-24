@@ -252,6 +252,14 @@ def _contexte_distant(etiquette):
     return f"\"$HOME/tests/.construction/{etiquette}\""
 
 
+def _digest_unity(profil, serveur, ssh):
+    """Le digest local de l'image GameCI du profil Unity, lu au serveur (lecture seule) ; None si illisible."""
+    version = (profil.outils or {}).get("unity")
+    code, sortie, _e = ssh.executer_octets(tests_serveur.serveur_etat.cible(serveur), tests_images.commande_digest_unity(version),
+                                           serveur.cle, entree=None, delai=DEPOT_DOCKERFILE_S)
+    return tests_images.lire_digest_unity(sortie) if code == 0 else None
+
+
 def construire_image(profil, sha_approuve, serveur=None, ssh=None, noter=None, maintenant=None, dire=None) -> bool:
     """Construit au serveur l'image dérivée de `profil` si son Dockerfile rendu est EXACTEMENT celui que le Directeur a
     approuvé (`sha_approuve`) : dépôt du seul `Dockerfile` dans `~/tests/.construction/<étiquette>/`, puis
@@ -259,18 +267,23 @@ def construire_image(profil, sha_approuve, serveur=None, ssh=None, noter=None, m
     local. Rend vrai si l'image est construite et notée ; faux sinon (dit par `dire`). Le Dockerfile vient du gabarit
     (`tests_images.rendre_dockerfile`), jamais d'un texte reçu."""
     dire = dire or (lambda _m: None)
-    texte, sha = tests_images.rendre_dockerfile(profil)
-    etiquette = tests_images.etiquette_derivee(profil)
-    if sha != sha_approuve or not tests_images.ETIQUETTE_DERIVEE.fullmatch(etiquette):
-        dire("Construction refusée : le Dockerfile du profil n'est pas celui que vous avez approuvé (nouvelle évaluation).")
-        return False
     ssh = ssh or tests_serveur.plateforme_ssh
+    etiquette = tests_images.etiquette_derivee(profil)
     d = _contexte_distant(etiquette)
     depot = (f"umask 077 && rm -rf -- {d} && mkdir -p -- {d} && set -C && cat > {d}/Dockerfile")
     try:
         if serveur is None:
             serveur = tests_serveur.serveur_tache.choisir_serveur(tests_serveur.plateforme_acces.DOSSIER,
                                                                   requises=tests_serveur.REQUISES)
+        # Unity : la base GameCI est épinglée par son digest LOCAL, lu au serveur (jalon J13 : rien ne le fournissait)
+        digest = _digest_unity(profil, serveur, ssh) if "unity" in tuple(profil.familles) else None
+        if "unity" in tuple(profil.familles) and digest is None:
+            dire("Construction impossible : image GameCI de la version du projet absente du serveur (capacité unity-cli).")
+            return False
+        texte, sha = tests_images.rendre_dockerfile(profil, digest)
+        if sha != sha_approuve or not tests_images.ETIQUETTE_DERIVEE.fullmatch(etiquette):
+            dire("Construction refusée : le Dockerfile du profil n'est pas celui que vous avez approuvé (nouvelle évaluation).")
+            return False
         cible = tests_serveur.serveur_etat.cible(serveur)
         code, _s, erreur = ssh.executer_octets(cible, depot, serveur.cle, entree=texte.encode("utf-8"),
                                                delai=DEPOT_DOCKERFILE_S)

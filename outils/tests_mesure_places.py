@@ -28,10 +28,11 @@ PART_MEMOIRE = 0.5
 
 
 def recommander(mesures, memoire_serveur_mo):
-    """`mesures` : {k: {"durees": [s, ...], "pics_mo": [Mo, ...]}} ; rend le plus grand k acceptable, 1 au moins."""
+    """`mesures` : {k: {"durees": [s, ...], "pics_mo": [Mo, ...]}} ; rend le plus grand k acceptable, 1 au moins ; None sans
+    palier 1 mesuré (aucune référence : rien à recommander)."""
     seule = mesures.get(1) or mesures.get("1")
     if not seule or not seule.get("durees"):
-        return 1
+        return None
     base = statistics.median(seule["durees"])
     meilleur = 1
     for k in sorted(int(c) for c in mesures):
@@ -291,7 +292,7 @@ def _principal(args, tests_serveur, sonde):
     for k, m in mesures.items():
         print(f"{k} campagne(s) : médiane {statistics.median(m['durees']):.0f} s, codes {m['codes']}, "
               f"pic mémoire {m['pics_mo'] or '?'} Mo")
-    print(f"Recommandation : places_tests = {reco}")
+    print(f"Recommandation : places_tests = {reco}" if reco else "Pas de recommandation : mesurez aussi le palier 1.")
     return 0
 
 

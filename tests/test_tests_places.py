@@ -42,6 +42,10 @@ class TestPlaces(unittest.TestCase):
         self.assertEqual([len(mesures[k]["durees"]) for k in (1, 2, 3)], [1, 2, 3])
         self.assertEqual(mesures[1]["pics_mo"], [])
 
+    def test_sans_palier_seul_pas_de_recommandation(self):
+        # J3 (2026-11-24) : « --paliers 2 --avec-emulation » rendait « places_tests = 1 », faute de référence
+        self.assertIsNone(mp.recommander({2: {"durees": [217, 217], "pics_mo": [996]}}, 62 * 1024))
+
     def test_memoire_utilisee(self):
         texte = "MemTotal:       65731000 kB\nMemFree:  100 kB\nMemAvailable:   58388000 kB\n"
         self.assertEqual(mp.memoire_utilisee_mo(texte), (65731000 - 58388000) // 1024)

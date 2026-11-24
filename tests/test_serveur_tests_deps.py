@@ -619,6 +619,17 @@ class TestAides(unittest.TestCase):
             with self.assertRaises(ValueError):
                 self.aide.plan_echauffement("unity", "unity", str(w))
 
+    def test_plan_gradle_android_resout_le_classpath_des_tests(self):
+        # J8 (2026-11-24) : compileDebugUnitTestSources ne télécharge pas les jars d'exécution des tests
+        # (debugUnitTestRuntimeClasspath, transformés par AGP ; c.resolve() de l'init-script n'y suffit pas) :
+        # « No cached version available for offline mode » au passage hors ligne. L'étape facultative lance testDebugUnitTest.
+        with tempfile.TemporaryDirectory() as t:
+            (Path(t) / "gradlew").write_text("#!/bin/sh\n", encoding="utf-8")
+            plan = self.aide.plan_echauffement("gradle", "gradle-android", t)
+            self.assertEqual(plan["etapes"][1]["commande"][-1], "testDebugUnitTest")
+            self.assertFalse(plan["etapes"][1]["obligatoire"])
+            self.assertEqual(self.aide.plan_echauffement("gradle", "gradle-jvm", t)["etapes"][1]["commande"][-1], "testClasses")
+
     def test_requirements_sans_option_ni_url(self):
         # C2 : seules des exigences nommées et `-r` vers un fichier local du projet
         for refus in ("--index-url https://evil/simple\na==1\n", "--extra-index-url https://x\n", "-f https://x\n",

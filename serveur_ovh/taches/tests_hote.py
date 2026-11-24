@@ -585,7 +585,9 @@ def plan_echauffement(cle, famille, travail, deps="/deps"):
         env = {"GRADLE_USER_HOME": f"{deps}/gradle", "GRADLE_OPTS": _GRADLE_OPTS}
         base = ["./gradlew", "--no-daemon", "--no-configuration-cache"]
         etape(base + ["--init-script", "/tmp/myiafactory-resoudre.gradle", "myiafactoryResoudre"], env)
-        etape(base + ["compileDebugUnitTestSources" if famille == "gradle-android" else "testClasses"], env, obligatoire=False)
+        # gradle-android : testDebugUnitTest, pas seulement la compilation : les jars d'exécution des tests
+        # (debugUnitTestRuntimeClasspath, transformés par AGP) ne sont téléchargés qu'à l'exécution (jalon J8).
+        etape(base + ["testDebugUnitTest" if famille == "gradle-android" else "testClasses"], env, obligatoire=False)
         verrouille = existe("gradle.lockfile")
     elif cle == "maven":
         outil = "./mvnw" if existe("mvnw") else "mvn"

@@ -2214,6 +2214,15 @@ class Validation(Base):
         self.assertIn("Le site s'ouvre depuis le lien d'accès et répond sans erreur", d["points"])
         self.assertEqual(self.taches(etape="validation:valider")[0].get("bloquee"), None)
 
+    def test_la_maquette_du_cahier_est_de_quoi_verifier(self):
+        # Essai réel (FM_Stats, f8) : la maquette HTML existait, l'étape disait « déjà faite » sans la joindre.
+        self.projet_avec_validation()
+        self.assertFalse(regles._maquette_du_cahier(self.projet, "f1"))
+        self.fichier("pieces/f1/maquette.html", b"<html></html>")
+        self.ok("fonctionnalite", entree={"id": "f1", "cahier": {
+            "maquette": [{"chemin": "pieces/f1/maquette.html", "legende": "L'onglet"}], "etapes": ["Faire"]}})
+        self.assertTrue(regles._maquette_du_cahier(self.projet, "f1"))
+
     # --- La nature de ce qu'on fait valider : les preuves qui conviennent (règle de l'utilisateur).
 
     MODE = ["Installez l'apk sur le téléphone.", "Ouvrez le jeu.", "Touchez Jouer et observez le menu."]

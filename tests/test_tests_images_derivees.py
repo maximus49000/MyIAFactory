@@ -224,7 +224,16 @@ case "$1" in
                esac
                exit 0 ;;
     esac ;;
-  ps) while read -r v; do [ -n "$v" ] && echo "$v $(cat "$(resoudre "$v")")"; done < "$MONDE/vivantes" 2>/dev/null; exit 0 ;;
+  # Docker 29 (serveur, 2026-11-24) : `ps --format` ne connaît pas {{.ImageID}} ; l'identifiant d'image d'un conteneur se
+  # lit par `docker inspect --format {{.Image}} <conteneurs>` (sha256:<64 hexa>).
+  ps) case "$*" in *ImageID*) echo "can't evaluate field ImageID in type *formatter.ContainerContext" >&2; exit 1 ;; esac
+      n=0
+      while read -r v; do [ -n "$v" ] || continue; n=$((n + 1))
+        case "$*" in *-aq*|*" -q"*) echo "c$n" ;; *) echo "$v" ;; esac
+      done < "$MONDE/vivantes" 2>/dev/null; exit 0 ;;
+  inspect) shift; [ "$1" = --format ] && shift 2
+      for c; do n=${c#c}; v=$(sed -n "${n}p" "$MONDE/vivantes"); i=$(cat "$(resoudre "$v")") || exit 1
+        printf 'sha256:%s%s\n' "$i" "0000000000000000000000000000000000000000000000000000"; done; exit 0 ;;
   rmi) f=$(resoudre "$2") && rm -f "$f"; exit 0 ;;
 esac
 exit 0

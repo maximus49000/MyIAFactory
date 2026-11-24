@@ -199,6 +199,9 @@ class TestEnveloppe(unittest.TestCase):
         self.assertNotIn("$H/android-sdk:/opt/android-sdk", run)
         self.assertEqual(run[-2], "myiafactory/tests-android")
         self.assertIn("ANDROID_HOME=/opt/android-sdk", run)
+        # J8 (2026-11-24) : AGP écrit dans ~/.android (user.home de Java = /home/ubuntu, racine en lecture seule) :
+        # « /home/ubuntu/.android: Read-only file system » ; son dossier va dans /tmp (tmpfs)
+        self.assertIn("ANDROID_USER_HOME=/tmp/android", run)
         self.assertTrue(any(a.startswith("GRADLE_OPTS=") for a in run))
         self.assertIn("GRADLE_USER_HOME=/tmp/gradle", run)                           # inscriptible (tmpfs), jamais /deps
         self.assertFalse(any(a.startswith("GRADLE_RO_DEP_CACHE") for a in run))      # pas de cache monté

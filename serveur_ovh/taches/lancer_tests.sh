@@ -801,7 +801,8 @@ if [ "$FAMILLE" = gradle-android ]; then
       printf '%s\n' "lancer_tests : copie sur écriture du SDK indisponible : SDK monté en lecture seule." >&2
     fi
   fi
-  SDK_MONTAGE+=(-e ANDROID_HOME=/opt/android-sdk)
+  # AGP écrit dans ~/.android (user.home de Java : /home/ubuntu, racine en lecture seule) : son dossier dans /tmp (tmpfs).
+  SDK_MONTAGE+=(-e ANDROID_HOME=/opt/android-sdk -e ANDROID_USER_HOME=/tmp/android)
 fi
 
 prendre_echauffement() {   # une des ECHAUFFEMENTS_MAX places d'échauffement (descripteur 6), en file avec #attente

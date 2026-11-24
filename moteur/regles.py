@@ -3858,6 +3858,51 @@ def _partenaires_au_cadrage(projet):
 
 SECTIONS_CORRECTION = {"correctif": "Correctif", "verification": "Vérification", "livraison": "Livraison"}
 
+# (a) et (d) Une correction d'un projet à livrable (APK) : le livrable est rendu AVANT la validation du Directeur, par
+# l'étape qui la précède (correctif, ou vérification), même quand rien n'a changé. Choix : garder l'ordre correctif →
+# validation → livraison (une validation n'est jamais la dernière étape, et la livraison intègre ce qui est validé) et
+# faire du livrable une pièce exigée de la validation (`_apk_exige`, `_attendre_le_directeur`) plutôt que de déplacer
+# la livraison : la règle vaut aussitôt pour les workflows de correction déjà écrits, sans les réécrire, et son échec
+# passe par la relance unique déjà en place (`_rien_a_verifier`). Essai réel FM_Stats (2026-11-24) : la validation
+# arrivait avant l'étape qui construit l'APK, « Rien à valider », série close à vide ; « correctif déjà présent »
+# concluait sans rien livrer.
+CONSIGNE_APK_AVANT_VALIDATION = (
+    "Projet à livrable (APK) : le Directeur valide la correction en essayant l'APK. Avant ton rapport, construis l'APK de "
+    "ta branche, même si tu n'as rien modifié (correctif déjà présent, anomalie introuvable) : c'est alors l'APK actuel "
+    "qu'il essaie. S'il est déjà construit pour cette branche par l'étape d'avant, joins-le sans le reconstruire. "
+    "Déclare-le dans `fichiers` avec `\"livrable\": true` et `\"element\": \"correction\"` (chemin relatif au projet). "
+    "Sans cet APK, l'étape est refaite.")
+CONSIGNE_APK_A_LA_LIVRAISON = (
+    "Projet à livrable (APK) : construis l'APK de la branche livrée, même si rien n'a changé depuis la validation, et "
+    "déclare-le dans `fichiers` avec `\"livrable\": true` et `\"element\": \"correction\"`.")
+CONSIGNE_APK_FLUTTER = (
+    "Projet Flutter : construis l'APK par la commande unique `construire-apk` (au serveur ; elle se place dans le dossier "
+    "Flutter et rend le fichier sous `build/app/outputs/flutter-apk/`), jamais `flutter build` directement (refusé au "
+    "poste). Aucun émulateur n'est nécessaire : l'APK suffit, c'est le Directeur qui l'essaie.")
+CONSIGNE_APK_AU_DIAGNOSTIC = (
+    "Projet à livrable (APK) : une petite correction faite au diagnostic est validée sur l'APK. Si tu peux le construire "
+    "(au serveur : `construire-apk`, jamais `flutter build` directement), joins-le dans `fichiers` avec "
+    "`\"livrable\": true` ; sinon rends quand même la fiche et le correctif, sans essayer de le construire : l'APK sera "
+    "construit au serveur avant la validation.")
+
+
+def _livrable_du_projet(projet):
+    """Le livrable téléchargeable que produit le projet (`apk` pour un projet Flutter), ou None."""
+    return "apk" if _projet_flutter(projet) else None
+
+
+def _apk_exige(projet, v):
+    """Vrai si la validation de cet élément exige l'APK : une correction d'un projet qui produit un APK."""
+    return (_fonc(projet, v["fid"]) or {}).get("nature") == "correction" and _livrable_du_projet(projet) == "apk"
+
+
+def _consigne_apk_de_correction(projet, pas):
+    """Ce que l'étape `pas` (`correctif`, `verification`, `livraison`) d'une correction doit rendre comme livrable ;
+    rien pour un projet sans livrable."""
+    if _livrable_du_projet(projet) != "apk" or pas not in SECTIONS_CORRECTION:
+        return []
+    return [CONSIGNE_APK_A_LA_LIVRAISON if pas == "livraison" else CONSIGNE_APK_AVANT_VALIDATION, CONSIGNE_APK_FLUTTER]
+
 
 def _consigne_de_correction(pas):
     """La section de `consignes-correction.md` de l'étape (`correctif`, `verification`, `livraison`), titre compris ;
@@ -4038,6 +4083,8 @@ def _matiere(projet, etat, t):
                         "Discussion avec l'utilisateur :", _texte_discussion(f, projet=projet),
                         "Rends `fiche_correction` dès que tu peux reproduire et comprendre l'attendu ; sinon des "
                         "questions courtes à choix (`message.questions`, `attend: true`)."]
+            if _livrable_du_projet(projet) == "apk":
+                parties.append(CONSIGNE_APK_AU_DIAGNOSTIC)
             parties += _contexte_concerne(projet, f)
         else:
             parties += ["Discussion avec l'utilisateur :", _texte_discussion(f, projet=projet),
@@ -4074,7 +4121,8 @@ def _matiere(projet, etat, t):
             parties += [f"Élément : {t.get('element')}", f"Étape du flux : {pas}",
                         "C'est une **correction**, pas une nouvelle fonctionnalité. Fiche de correction :",
                         "\n".join(f"- {x}" for x in (f.get("cahier") or {}).get("etapes") or []) or "(vide)"]
-            parties += ([consigne] if consigne else []) + _contexte_concerne(projet, f)
+            parties += ([consigne] if consigne else []) + _consigne_apk_de_correction(projet, pas.removeprefix(f"{fid}-"))
+            parties += _contexte_concerne(projet, f)
             parties.append(_consigne_des_controles(projet, t, f))
         else:
             methode = (f or {}).get("methode") or {}
@@ -5261,7 +5309,8 @@ def _attendre_le_directeur(projet, etat, v, s):
     n'est pas posée (voir `_rien_a_verifier`)."""
     precedent = v.get("dernier_rapport") or {}
     nature = precedent.get("nature") if rel.nature_ok(precedent.get("nature")) else None
-    if nature in ("visuel", "son", "mecanique"):      # jamais l'apk pour juger un visuel, un son ou une mécanique
+    apk_exige = _apk_exige(projet, v)      # une correction d'un projet à APK : validée sur l'APK, quelle que soit sa nature
+    if nature in ("visuel", "son", "mecanique") and not apk_exige:   # jamais l'apk pour juger un visuel, un son…
         precedent = {**precedent, "fichiers": [x for x in precedent.get("fichiers") or []
                                                if not rel.est_executable(x.get("chemin"))]}
     if not rel.texte_dit_ok(precedent.get("doit_marcher"), rel.MAX_DOIT_MARCHER):
@@ -5284,6 +5333,8 @@ def _attendre_le_directeur(projet, etat, v, s):
     manques = ([] if _de_quoi_verifier(projet, precedent) else ["rien"]) \
         + ([] if rel.texte_dit_ok(precedent.get("doit_marcher"), rel.MAX_DOIT_MARCHER) else ["doit_marcher"]) \
         + _manques_de_nature(projet, nature, precedent)
+    if apk_exige and "livrable" not in manques and not _fichier_existe(projet, precedent, rel.est_executable):
+        manques.append("apk")
     if v.pop("rapport_du_suivi", False):
         # le rapport a été perdu pendant l'arrêt du moteur (relu dans le suivi) : la validation est posée avec ce qu'il y
         # a à vérifier, l'étape n'est refaite que s'il n'y a rien du tout
@@ -5427,10 +5478,14 @@ CONSIGNES_DE_NATURE = {
     "document": "Validation d'une mécanique sans document explicatif : écris un document (md ou pdf) qui explique la "
                 "mécanique, joins-le dans `fichiers` (avec, si utile, images ou schémas), jamais l'apk (sauf si la "
                 "mécanique est déjà jouable : alors `nature: en_jeu`).",
+    "apk": "Correction d'un projet à livrable sans APK : construis l'APK de la branche (au serveur, `construire-apk`, "
+           "jamais `flutter build` directement), même si rien n'a changé, et joins-le dans `fichiers` avec "
+           "`\"livrable\": true` et `\"element\": \"correction\"`.",
 }
 QUOI_MANQUE = {"rien": "sans rien à vérifier", "doit_marcher": "sans dire ce qui doit marcher",
                "livrable": "sans livrable à essayer", "mode_operatoire": "sans mode opératoire",
-               "image": "sans image", "son": "sans son", "document": "sans document explicatif"}
+               "image": "sans image", "son": "sans son", "document": "sans document explicatif",
+               "apk": "sans l'APK à essayer"}
 
 
 CONSIGNE_DOIT_MARCHER = (

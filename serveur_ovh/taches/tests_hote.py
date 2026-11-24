@@ -294,7 +294,7 @@ def texte_sur(texte):
 # =====================================================================================================================
 
 CLES = ("npm", "pnpm", "yarn", "yarn-berry", "pip", "pip-sources", "gradle", "maven", "dotnet", "cargo", "go", "unity")
-_MOTIF_CLE = re.compile(r"[a-z][a-z-]{1,11}")
+_MOTIF_CLE = re.compile(r"[a-z][a-z-]{1,23}")      # familles comprises (« gradle-android » : 14 caractères)
 
 
 def _executable(x):

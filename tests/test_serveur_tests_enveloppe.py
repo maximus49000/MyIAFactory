@@ -720,6 +720,19 @@ class TestAidesHote(unittest.TestCase):
         self.assertEqual(self.aide.Nettoyeur().traiter("a\u2028b".encode()), b"a\\u2028b")
         self.assertEqual(self.aide.Nettoyeur().traiter(b"a\x0cb\r\nc\rd"), b"a\\x0cb\nc\nd")
 
+    def test_echauffer_accepte_toutes_les_familles(self):
+        # J8 (2026-11-24) : « --echauffer gradle gradle-android » rendait l'usage (motif de famille de 12 caractères au
+        # plus) : aucun échauffement Gradle Android n'avait jamais pu tourner au serveur.
+        from unittest import mock
+        familles = re.search(r'^FAMILLES="([^"]*)"', (RACINE / "serveur_ovh" / "taches" / "lancer_tests.sh")
+                             .read_text(encoding="utf-8"), re.M).group(1).split()
+        self.assertIn("gradle-android", familles)
+        with mock.patch.object(self.aide, "echauffer", lambda cle, famille: 0) as _:
+            for famille in familles:
+                with self.subTest(famille=famille):
+                    self.assertEqual(self.aide.principal(["--echauffer", "gradle", famille]), 0)
+            self.assertEqual(self.aide.principal(["--echauffer", "gradle", "Famille;rm"]), 2)
+
     def test_codes_de_l_archive(self):
         """3 = refus explicite (l'enveloppe rend 70) ; un plantage de python rend 1 (l'enveloppe rend 77)."""
         mauvais = self.t / "mauvais.tar"

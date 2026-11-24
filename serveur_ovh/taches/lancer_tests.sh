@@ -205,7 +205,7 @@ RAISONS=" reseau-non-accorde wrapper-modifie wrapper-absent wrapper-illisible di
   somme-gradle-injoignable somme-gradle-illisible sommes-gradle-inaccessibles curl-absent distribution-injoignable
   distribution-redirection distribution-somme echauffement plafond inodes duree memoire disque copie-sur-ecriture
   unity-tache-14g cache-inaccessible echauffement-concurrent ecriture reseau-interne mandataire reseau-sans-liste cache-verrou
-  cache-disparu "
+  cache-disparu gradlew-fins-de-ligne-windows "
 RAISONS="${RAISONS//$'\n'/ }"
 RAISONS_MEMOIRE=" echauffement plafond inodes duree distribution-redirection distribution-somme "
 RAISONS_BREVES=" distribution-injoignable mandataire reseau-interne "

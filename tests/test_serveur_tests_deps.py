@@ -669,6 +669,20 @@ class TestAides(unittest.TestCase):
             somme, version, genre, hache = self.aide.wrapper_gradle(str(tar))
             self.assertEqual((somme, version, genre, hache), (hashlib.sha256(JAR).hexdigest(), "8.7", "bin", HACHE_DIST))
 
+    def test_gradlew_en_fins_de_ligne_windows(self):
+        # J8 (2026-11-24) : une copie Windows (core.autocrlf=true) donne un gradlew en CRLF ; au serveur « #!/bin/sh\r »
+        # rend ENOENT et l'échauffement échoue sans raison lisible. Raison fermée et claire, AVANT tout conteneur.
+        with tempfile.TemporaryDirectory() as t:
+            tar = Path(t) / "e.tar"
+            base = {"gradle/wrapper/gradle-wrapper.jar": JAR, "gradle/wrapper/gradle-wrapper.properties": PROPS}
+            tar.write_bytes(_tar({**base, "gradlew": b"#!/bin/sh\r\nexec java\r\n"}))
+            with self.assertRaisesRegex(ValueError, "^gradlew-fins-de-ligne-windows$"):
+                self.aide.wrapper_gradle(str(tar))
+            tar.write_bytes(_tar({**base, "gradlew": b"#!/bin/sh\nexec java\n"}))
+            self.assertEqual(self.aide.wrapper_gradle(str(tar))[1], "8.7")
+        raisons = re.search(r'^RAISONS="([^"]*)"', banc.SCRIPT.read_text(encoding="utf-8"), re.M).group(1).split()
+        self.assertIn("gradlew-fins-de-ligne-windows", raisons)
+
 
 class TestProfilEtRoute(unittest.TestCase):
     def test_table_des_echauffements_miroir_de_l_enveloppe(self):

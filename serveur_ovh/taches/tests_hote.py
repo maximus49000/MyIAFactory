@@ -694,9 +694,13 @@ def wrapper_gradle(chemin):
     (comme java.util.Properties). ValueError : jar ou propriétés absents, ou URL hors de services.gradle.org."""
     import hashlib
     jar, props = "gradle/wrapper/gradle-wrapper.jar", "gradle/wrapper/gradle-wrapper.properties"
-    m = _membres(chemin, {jar, props})
+    m = _membres(chemin, {jar, props, "gradlew"})
     if jar not in m or props not in m:
         raise ValueError("wrapper-absent")
+    # Copie Windows (core.autocrlf=true) : « #!/bin/sh\r » rend ENOENT sous Linux ; dit clairement, avant tout conteneur
+    # (jalon J8). Remède côté projet : `gradlew text eol=lf` dans .gitattributes, puis une nouvelle extraction du fichier.
+    if b"\r\n" in m.get("gradlew", b"")[:4096]:
+        raise ValueError("gradlew-fins-de-ligne-windows")
     # LIMITE CONNUE (relecture M2) : ce n'est pas un analyseur java.util.Properties complet (lignes continuées par « \\ »,
     # échappements \\uXXXX, clés échappées) : une telle forme est refusée (URL hors motif) ou ignorée, jamais suivie. La somme du
     # jar et le mandataire restent les garde-fous.

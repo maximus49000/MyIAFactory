@@ -82,6 +82,16 @@ d'essai** (`bureau_essai.py` remplace `BUREAU` des modules `deport_types`, `test
 - **Le contrôleur devra relancer J1 après fusion** si l'image du serveur a été reconstruite depuis une autre branche
   (empreinte `fichiers=a2c5ecc8f989e4f8` = cette branche).
 
+## J6 — MyIAFactory au serveur : constaté ; réglage du défaut du bureau À FAIRE PAR LE DIRECTEUR
+
+- Le dépôt est déjà enregistré au bureau (`C:\Users\maxim\Downloads\MyIAFactory\.factory\reglages.json`) avec
+  `deport.lieux.tests = "serveur"` dans ses réglages propres : `py -3.12 outils/tests_paralleles.py --touches` part au
+  serveur depuis cette copie de travail (conteneur `tests-t20261124-000115-ac33` vu au serveur, aucun verrou du poste
+  pris pendant qu'une campagne ZooRunner le tenait). Les changements de cette branche touchant `outils/`, la sélection
+  a pris toute la suite : **5 163 tests, 0 morceau en échec, 204 s au serveur, 230 s de bout en bout**.
+- Reste le geste du plan, **défaut du bureau** `deport.lieux.tests = "serveur"` (pour tous les projets qui ne règlent
+  rien eux-mêmes) : à faire par le Directeur, voir la section finale.
+
 ## J7 — repli : FAIT
 
 Copie de `serveurs.json` + `serveurs-etat.json` dans un dossier d'état d'essai, toutes les capacités marquées

@@ -123,6 +123,15 @@ class TestCorrection(Base):
         self.assertEqual(f["en_clair"], en_clair)          # en tête du panneau de la tâche
         # une fiche sans « en clair » reste acceptée (rien ne bloque) : elle commence au symptôme
 
+    def test_un_rapport_de_cadrage_sans_nom_est_applique(self):
+        # Essai réel (FM_Stats, f7) : un « en clair » sans « nom » levait KeyError 'nom' ; le diagnostic restait sans
+        # restitution au Directeur.
+        self.corriger()
+        (t,) = self.taches(etape="cadrage")
+        regles._suite_cadrage(self.projet, self.etat, t, {"en_clair": "Rien à corriger.", "fiche_correction": FICHE})
+        self.assertEqual(self.fonc()["etape"], "serie")
+        self.assertEqual(self.fonc()["en_clair"], "Rien à corriger.")
+
     def test_la_validation_reprend_l_en_clair_de_la_fiche(self):
         # Le Directeur lit d'abord, sans jargon, le problème et ce qu'on fait : en tête de sa fenêtre de validation.
         self.corriger()

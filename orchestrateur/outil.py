@@ -736,6 +736,7 @@ def _fonc_compacte(f):
         "id": f["id"], "nom": f["nom"], "etape": f["etape"], "genre": f.get("genre"), "workflow": f.get("workflow"),
         "deplacee_vers": f.get("deplacee_vers"), "agent_cadrage": f["agent_cadrage"], "en_clair": f.get("en_clair"),
         "nature": f.get("nature") or "fonctionnalite", "concerne": f.get("concerne"),
+        "en_file_derriere": f.get("en_file_derriere"),
         "attend_reponse": f["attend_reponse"], "catalogue": f["catalogue"], "decisions": f["decisions"],
         "cahier": {"maquette": len(cahier.get("maquette") or []), "etapes": len(cahier.get("etapes") or []),
                    "valide_le": cahier.get("valide_le")} if cahier else None,
@@ -891,6 +892,13 @@ def cmd_fonctionnalite(ctx, e):
             f["en_clair"] = " ".join(texte(e, "en_clair").split())[:rel.MAX_EN_CLAIR]
         if "deplacee_vers" in e:   # le nom du projet où la fonctionnalité est partie (étape « deplacee »)
             f["deplacee_vers"] = texte(e, "deplacee_vers", obligatoire=False)
+        if "en_file_derriere" in e:     # une correction qui attend la fin d'une correction du même sujet (moteur)
+            derriere = e["en_file_derriere"]
+            if derriere is not None:
+                if not isinstance(derriere, str) or derriere == i:
+                    raise Refus("« en_file_derriere » : l'identifiant d'une autre fonctionnalité, ou nul.")
+                _fonc(s, derriere)
+            f["en_file_derriere"] = derriere
         if "agent_cadrage" in e:
             if e["agent_cadrage"] is not None and e["agent_cadrage"] not in cles:
                 raise Refus(f"Agent de cadrage inconnu : {e['agent_cadrage']}")

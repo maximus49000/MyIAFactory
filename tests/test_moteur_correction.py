@@ -315,6 +315,76 @@ class TestCorrectionAvecApk(Base):
         self.assertEqual(len(self.decisions("valider_etape")), 1)
 
 
+class TestCorrectionsDuMemeSujet(Base):
+    """Essai réel FM_Stats (2026-11-24) : une nouvelle correction sur le sujet d'une chaîne encore ouverte (f5, bloquée)
+    a lancé une chaîne concurrente (f6) qui modifiait les mêmes fichiers : conflits de fusion en cascade. Une correction
+    qui recoupe une correction encore ouverte du projet (même fonctionnalité concernée, ou même titre) attend sa fin ;
+    une demande indépendante part aussitôt, et le Directeur peut toujours lancer la correction en file tout de suite."""
+    def corriger(self, texte="Le score ne se remet pas à zéro", **plus):
+        return self.traiter(type="fonctionnalite", texte=texte, nature="correction", **plus)
+
+    def setUp(self):
+        super().setUp()
+        briefs = self.dossier / "fiches" / "briefs"
+        briefs.mkdir(parents=True, exist_ok=True)
+        (briefs / "dev.md").write_text("# Brief du rôle : dev\n\nFait son métier.\n", encoding="utf-8")
+        self.fonctionnalite(etape="terminee")         # f1 : la fonctionnalité que les corrections concernent
+
+    def en_file(self, fid):
+        f = self.fonc(fid)
+        return f.get("en_file_derriere"), f.get("workflow")
+
+    def test_une_correction_du_meme_sujet_attend_la_fin_de_la_premiere(self):
+        self.corriger(concerne="f1")                                         # f2 : part
+        d, actions = self.corriger(concerne="f1", texte="La comparaison doit suivre l'onglet actif")    # f3
+        self.assertEqual(actions, [])
+        self.assertEqual(self.en_file("f2"), (None, "w-f2"))
+        self.assertEqual(self.en_file("f3"), ("f2", None))
+        self.assertEqual(self.statut(d["id"])["statut"], "traitée")
+        dit = self.fonc("f3")["discussion"][-1]
+        self.assertIn("f2", dit["texte"])
+        self.assertIn(regles.LANCER_LA_CORRECTION_MAINTENANT, dit["questions"][0]["choix"])
+        regles.avancer(self.projet, self.etat)
+        self.assertEqual(self.en_file("f3"), ("f2", None))                # rien ne part tant que f2 est ouverte
+        self.ok("fonctionnalite", entree={"id": "f2", "etape": "terminee"})
+        regles.avancer(regles.Projet(self.factory, feu_vert=lambda: True), regles.nouvel_etat())   # moteur relancé
+        self.assertEqual(self.en_file("f3"), (None, "w-f3"))
+
+    def test_meme_titre_sans_fonctionnalite_concernee(self):
+        self.corriger()
+        _, actions = self.corriger()
+        self.assertEqual(self.en_file("f3"), ("f2", None))
+
+    def test_une_correction_independante_part_aussitot(self):
+        self.corriger(concerne="f1")
+        self.corriger(texte="Le bouton Partager ne fait rien")
+        self.assertEqual(self.en_file("f3"), (None, "w-f3"))
+
+    def test_le_directeur_peut_la_lancer_tout_de_suite(self):
+        self.corriger(concerne="f1")
+        self.corriger(concerne="f1", texte="Autre chose sur l'écran")
+        self.traiter(type="message", fonctionnalite="f3", texte="Plus tard")
+        self.assertEqual(self.en_file("f3"), ("f2", None))                # un autre message ne la débloque pas
+        self.traiter(type="message", fonctionnalite="f3", texte=regles.LANCER_LA_CORRECTION_MAINTENANT)
+        self.assertEqual(self.en_file("f3"), (None, "w-f3"))
+
+    def test_les_corrections_en_file_partent_l_une_apres_l_autre(self):
+        self.corriger(concerne="f1")
+        self.corriger(concerne="f1", texte="Deuxième")
+        self.corriger(concerne="f1", texte="Troisième")
+        self.assertEqual(self.en_file("f4")[0], "f2")
+        self.ok("fonctionnalite", entree={"id": "f2", "etape": "terminee"})
+        regles.avancer(self.projet, self.etat)
+        self.assertEqual(self.en_file("f3"), (None, "w-f3"))
+        self.assertEqual(self.en_file("f4"), ("f3", None))               # derrière celle qui vient de partir
+
+    def test_l_outil_refuse_une_file_vers_une_fonctionnalite_inconnue(self):
+        code, objet = self.outil("lancer", "fonctionnalite", entree={"id": "f1", "en_file_derriere": "f9"})
+        self.assertEqual(code, 1)
+        code, objet = self.outil("lancer", "fonctionnalite", entree={"id": "f1", "en_file_derriere": "f1"})
+        self.assertEqual(code, 1)
+
+
 class TestPetiteCorrection(TestCorrection):
     """Essai réel (2026-11-17) : deux lignes de CSS ont payé diagnostic, correctif et livraison, trois agents et 0,94 €.
     Une petite correction, jugée au diagnostic, fait le correctif dans la même tâche ; la livraison est faite par

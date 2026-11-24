@@ -593,6 +593,8 @@ def _transmettre_a_l_agent(projet, demande, fid, tid, agent):
 def _sur_message(projet, demande, etat):
     fid = demande["fonctionnalite"]
     f = _fonc(projet, fid)
+    if f.get("en_file_derriere"):      # une correction qui attend la fin d'une autre du même sujet
+        return _message_en_file(projet, etat, demande, f)
     accord = _m(etat, "accords").get(fid)
     if accord is not None and f["etape"] in ("cadrage", "cahier", "prototype", "serie"):
         return _reponse_a_une_question(projet, etat, demande, f, accord)
@@ -1121,13 +1123,108 @@ def _correction_sans_workflow(f):
     return (f or {}).get("nature") == "correction" and not f.get("workflow")
 
 
-def _sur_correction(projet, demande, etat):
+def _sur_correction(projet, demande, etat, file=True):
     """Une correction : ni classement de genre, ni workflow proposé ; son workflow est construit par le code, puis le
-    cadrage court démarre."""
+    cadrage court démarre. Une correction du même sujet qu'une correction encore ouverte attend sa fin (`file`, voir
+    `_correction_du_meme_sujet`)."""
     fid = demande["fonctionnalite"]
     _nommer(projet, fid)
-    return _lancer_la_correction(projet, etat, fid, {"demande": demande["id"], "fonctionnalite": fid},
-                                 _role_de_correction(projet))
+    suite = {"demande": demande.get("id"), "fonctionnalite": fid}
+    if file:
+        rivale = _correction_du_meme_sujet(projet, fid)
+        if rivale is not None:
+            return _mettre_en_file(projet, fid, rivale, suite)
+    return _lancer_la_correction(projet, etat, fid, suite, _role_de_correction(projet))
+
+
+# (c) Les corrections du même sujet, l'une après l'autre. Essai réel FM_Stats (2026-11-24) : une correction demandée
+# pendant qu'une autre, sur le même écran, attendait (bloquée) a lancé une chaîne concurrente ; les deux modifiaient les
+# mêmes fichiers, d'où des conflits de fusion et des tâches de reprise en cascade. Heuristique volontairement simple :
+# même fonctionnalité concernée (choisie par le Directeur), ou même titre une fois normalisé. La correction en file
+# n'est jamais bloquée pour de bon : elle part dès que l'autre est terminée (vu à chaque passage du moteur, gardé dans
+# le suivi : un redémarrage ne l'oublie pas), et le Directeur peut la lancer tout de suite.
+LANCER_LA_CORRECTION_MAINTENANT = "Lancer maintenant, en parallèle"
+ATTENDRE_LA_CORRECTION = "Attendre la fin de l'autre correction"
+ETAPES_FINIES = ("terminee", "deplacee")
+
+
+def _sujet(nom):
+    """Le titre d'une correction, comparable : minuscules, sans accents ni ponctuation, sans « Corriger : »."""
+    t = normaliser_mot(str(nom or ""))
+    t = re.sub(r"^corriger\b", "", t)
+    return " ".join(re.findall(r"[a-z0-9]+", t))
+
+
+def _correction_du_meme_sujet(projet, fid):
+    """La première correction encore ouverte du projet (ni terminée, ni partie ailleurs, ni elle-même en file) qui
+    concerne la même fonctionnalité que `fid`, ou qui porte le même titre ; None sinon."""
+    court = _etat(projet)
+    f = next((x for x in court["fonctionnalites"] if x["id"] == fid), None)
+    if f is None:
+        return None
+    sujet = _sujet(f.get("nom"))
+    for x in court["fonctionnalites"]:
+        if (x["id"] == fid or x.get("nature") != "correction" or x["etape"] in ETAPES_FINIES
+                or x.get("en_file_derriere")):
+            continue
+        if (f.get("concerne") and x.get("concerne") == f["concerne"]) or (sujet and _sujet(x.get("nom")) == sujet):
+            return x
+    return None
+
+
+def _mettre_en_file(projet, fid, rivale, suite):
+    """La correction attend la fin de `rivale` : notée dans le suivi, dite dans les deux discussions."""
+    lancer(projet, "fonctionnalite", {"id": fid, "en_file_derriere": rivale["id"]})
+    texte = (f"Cette correction porte sur le même sujet que « {rivale['nom']} » ({rivale['id']}), encore en cours : "
+             "elle démarrera dès que celle-ci sera terminée, pour ne pas modifier les mêmes fichiers en parallèle. "
+             "Vous pouvez aussi la lancer tout de suite.")
+    _dire(projet, fid, texte, attend=True,
+          questions=[{"texte": texte, "choix": [ATTENDRE_LA_CORRECTION, LANCER_LA_CORRECTION_MAINTENANT]}])
+    _terminer(projet, suite, texte)
+    return []
+
+
+def _sortir_de_la_file(projet, etat, fid, texte, suite=None, file=True):
+    """La correction quitte la file et démarre (`file` : sauf si une autre correction du même sujet est ouverte)."""
+    lancer(projet, "fonctionnalite", {"id": fid, "en_file_derriere": None})
+    _dire(projet, fid, texte)
+    return _sur_correction(projet, {"id": (suite or {}).get("demande"), "fonctionnalite": fid}, etat, file=file)
+
+
+def _relancer_les_corrections_en_file(projet, etat, court):
+    """Chaque passage : une correction en file dont la correction attendue est terminée (ou n'existe plus) démarre,
+    ou se remet en file derrière une autre correction du même sujet encore ouverte."""
+    actions = []
+    par_id = {f["id"]: f for f in court["fonctionnalites"]}
+    for f in court["fonctionnalites"]:
+        derriere = f.get("en_file_derriere")
+        if not derriere:
+            continue
+        attendue = par_id.get(derriere)
+        if attendue is not None and attendue["etape"] not in ETAPES_FINIES:
+            continue
+        nom = attendue["nom"] if attendue else derriere
+        autre = _correction_du_meme_sujet(projet, f["id"])
+        if autre is not None:       # une autre correction du même sujet est partie entre-temps : derrière elle
+            lancer(projet, "fonctionnalite", {"id": f["id"], "en_file_derriere": autre["id"]})
+            _dire(projet, f["id"], f"La correction « {nom} » est terminée ; celle-ci attend maintenant « {autre['nom']} » "
+                                   f"({autre['id']}), du même sujet.")
+            continue
+        actions += _sortir_de_la_file(projet, etat, f["id"], f"La correction « {nom} » est terminée : celle-ci démarre.",
+                                      file=False)
+    return actions
+
+
+def _message_en_file(projet, etat, demande, f):
+    """Un message du Directeur sur une correction en file : « Lancer maintenant » la démarre tout de suite ; tout autre
+    message est gardé dans sa discussion pour son diagnostic."""
+    suite = {"demande": demande["id"], "fonctionnalite": f["id"]}
+    if normaliser_mot(LANCER_LA_CORRECTION_MAINTENANT) in normaliser_mot(demande.get("texte") or ""):
+        _terminer(projet, suite, "La correction démarre tout de suite.")
+        return _sortir_de_la_file(projet, etat, f["id"], "Lancée tout de suite à la demande du Directeur.", file=False)
+    _terminer(projet, suite, f"C'est noté : cette correction attend la fin de {f['en_file_derriere']}, son diagnostic "
+                             "lira votre message.")
+    return []
 
 
 def _role_de_correction(projet):
@@ -6009,7 +6106,7 @@ def avancer(projet, etat):
     if court["pause"]:
         _noter_les_attentes_sans_risque(projet, etat)
         return analyses
-    actions = analyses
+    actions = analyses + _relancer_les_corrections_en_file(projet, etat, court)
     for f in court["fonctionnalites"]:
         if f["etape"] in ("cadrage", "cahier") and f["attend_reponse"]:
             actions += _repondre_cadrage(projet, etat, f["id"])

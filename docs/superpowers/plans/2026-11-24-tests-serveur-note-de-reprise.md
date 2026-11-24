@@ -140,12 +140,43 @@ d'essai** (`bureau_essai.py` remplace `BUREAU` des modules `deport_types`, `test
   J8 FAIT. Petit défaut relevé : `nb_tests` vaut `null` pour Gradle (`_nb_tests` ne lit pas la sortie de Gradle, qui
   ne compte pas les tests par défaut) — à trancher (voir points).
 
+## J9 — images dérivées : FAIT (Node 20 et Node 18)
+
+Godot 4.7 pour ZooRunner n'a pas été pris (projet du Directeur, campagne ZooRunner en cours au poste) : deux projets
+d'essai Node (`.nvmrc` 20 et 18, même vitest), décision « construire » prise en autonomie (Dockerfile rendu par
+`tests_images.rendre_dockerfile`, somme approuvée = la sienne), `tests_adoption.construire_image` :
+- `myiafactory/tests-4160b6728b10` (Node 20.20.2) : **44 s**, 1,14 Go apparents, **224 Mo propres** ;
+- `myiafactory/tests-bacde38ffe62` (Node 18.20.8) : **45 s**, 1,13 Go apparents, **215 Mo propres**.
+- Seconde demande à empreinte égale : `evaluer` → **`passe`, 11 s, aucune construction** (registre `image_connue`).
+- **Panne trouvée et corrigée** : une image dérivée construite n'était **jamais prise** par la route
+  (`_image_de_la_campagne` rendait toujours « image dérivée à construire »). Maintenant : l'étiquette dérivée est prise
+  si le registre du poste la connaît pour le serveur choisi (`_verifier_derivee`), et son usage est noté (registre et
+  `construire_image_tests.sh --utilise`). Campagnes vitest au serveur : 23 s et 22 s (échauffement npm compris).
+- **Ramassage** : 1er essai en échec réel — `docker ps --format '{{.ImageID}}'` est inconnu de Docker 29.10.0 (« can't
+  evaluate field ImageID ») : le ramassage s'arrêtait sans rien supprimer. **Corrigé** (identifiants par
+  `docker inspect --format {{.Image}}` des conteneurs). Puis, budget 1 Go : rien ne part (439 Mo propres au total,
+  sous le budget : juste). Usages vieillis de 40 jours + un conteneur `j9-tenue` sur l'image Node 20 :
+  `#ramassee myiafactory/tests-bacde38ffe62` seulement ; **l'image tenue reste**. Conteneur retiré, puis image Node 20
+  ramassée à son tour (nettoyage).
+
 ## J10 — cache hors ligne et copie sur écriture : FAIT
 
 Sur le cache Gradle de J8 : empreinte de l'arbre (`find contenu -type f -printf "%P %s %T@"` trié, puis `sha256sum`)
 **identique avant et après** la campagne hors ligne d'évaluation (`d9be7b66…`, 8 137 fichiers, 1,2 Go) : le volume
 `overlay` protège le cache. Aucune ligne « copie sur écriture indisponible » : pas de bascule en lecture seule,
 `GRADLE_RO_DEP_CACHE` inutile. (Les caches Node et Python de J5 ont servi aussi deux fois sans réchauffement.)
+
+## J12 — tests Python de sur-la-route : FAIT
+
+Copie de `C:\Users\maxim\UnityProjects\sur-la-route-bureau` (clone local, le projet n'est pas touché), enregistrée au
+bureau d'essai, `lancer.py tests --serveur --dossier <copie> -- python3 -m unittest discover -s Tools/factory/tests` :
+- 1er essai refusé : « instantané trop gros : plus de 200,0 Mo ». **Panne corrigée** : `ecrire_tar` ignorait la limite
+  de la famille (`limites_pour` : 1 Go pour Unity/Godot) et le serveur (`tests_hote.py --archive`) refusait lui aussi
+  tout instantané de plus de 200 Mo. Le poste applique la limite de la famille, le serveur la plus grande (1 Go).
+- Puis : **109 tests, OK (2 ignorés), 46 s de bout en bout** (instantané de ~650 Mo envoyé compris), profil `python`,
+  image `myiafactory/tests`, aucune licence.
+- Instantané : 4 039 fichiers, 0 écarté ; **aucun nom évoquant une licence** (`.ulf`, `Unity_lic`, `licens`,
+  `entitlement`, `unityhub`, `.config/unity3d`) ; `Library/` absent.
 
 ## J7 — repli : FAIT
 

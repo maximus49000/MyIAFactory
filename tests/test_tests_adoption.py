@@ -232,6 +232,42 @@ class AdoptionTest(unittest.TestCase):
             self.assertFalse(ta.construire_image(p, sha, serveur=serveur, ssh=faux, noter=notees.append))
         self.assertEqual(len(notees), 1)
 
+    def test_construire_image_unity_lit_le_digest_gameci(self):
+        # J13 (2026-11-24) : rien ne fournissait le digest local de l'image GameCI : rendre_dockerfile levait pour tout
+        # projet Unity et l'image tests-unity-<version> ne pouvait pas être construite.
+        p = analyse(str(FIXTURES / "unity-asmdef"))
+        digest = "sha256:" + "d" * 64
+        texte, sha = ta.tests_images.rendre_dockerfile(p, digest)
+        self.assertIn(f"@{digest}", texte)
+        sortie = json.dumps([f"unityci/editor@{digest}"])
+        self.assertEqual(ta.tests_images.lire_digest_unity(sortie), digest)
+        for mauvaise in ("", "[]", "pas du json", json.dumps(["autre/image@" + digest]), json.dumps(["unityci/editor@sha256:x"])):
+            self.assertIsNone(ta.tests_images.lire_digest_unity(mauvaise), mauvaise)
+        version = (p.outils or {}).get("unity")
+        self.assertEqual(ta.tests_images.commande_digest_unity(version),
+                         "sudo -n docker image inspect --format '{{json .RepoDigests}}' "
+                         f"unityci/editor:ubuntu-{version}-android-{ta.tests_images.UNITY_GAMECI}")
+        etiquette = ta.tests_images.etiquette_derivee(p)
+        serveur = type("S", (), {"id": "ovh-1", "cle": "cle"})()
+
+        class Ssh:
+            def __init__(self):
+                self.appels = []
+
+            def executer_octets(self, cible, commande, cle, entree=None, delai=60):
+                self.appels.append(commande)
+                if "RepoDigests" in commande:
+                    return 0, sortie.encode(), ""
+                return (0, b"", "") if "cat >" in commande else (0, f"#image {etiquette} 40\n".encode(), "")
+
+        orig = ta.tests_serveur.serveur_etat.cible
+        ta.tests_serveur.serveur_etat.cible = lambda s: "u@h"
+        self.addCleanup(setattr, ta.tests_serveur.serveur_etat, "cible", orig)
+        ssh = Ssh()
+        self.assertTrue(ta.construire_image(p, sha, serveur=serveur, ssh=ssh, noter=lambda *a: None, maintenant="2026-11-24T01:00:00"))
+        self.assertIn("RepoDigests", ssh.appels[0])
+        self.assertIn(f"construire_image_tests.sh\" {etiquette} {sha}", ssh.appels[-1])
+
     def test_android_tests_lieu_serveur(self):
         self.assertIn("serveur", ANDROID["tests"]["lieux"])
         self.assertNotIn("serveur", ANDROID["emulateur"]["lieux"])

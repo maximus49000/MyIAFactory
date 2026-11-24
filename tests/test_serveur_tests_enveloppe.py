@@ -644,6 +644,14 @@ class TestAidesHote(unittest.TestCase):
                 self.assertIsNotNone(self.archive(octets=octets))
         self.assertIsNone(self.archive(octets=bon))
 
+    def test_limite_totale_du_serveur_couvre_toutes_les_familles(self):
+        # J12 (2026-11-24) : le serveur refusait tout instantané de plus de 200 Mo, même d'un projet Unity (1 Go permis
+        # au poste) ; le poste applique la limite de la famille, le serveur la plus grande.
+        sys.path.insert(0, str(RACINE / "outils"))
+        import tests_instantane
+        self.assertEqual(self.aide.MAX_TOTAL, max(tests_instantane.MAX_TOTAL_FAMILLE.values()))
+        self.assertEqual(self.aide.MAX_FICHIER, tests_instantane.MAX_FICHIER)
+
     def test_limites_de_l_archive(self):
         with mock.patch.object(self.aide, "MAX_FICHIERS", 2):
             self.assertIsNone(self.archive([self.fichier("a"), self.fichier("b")]))
@@ -719,6 +727,19 @@ class TestAidesHote(unittest.TestCase):
                              [morceaux.decode("utf-8").replace("\n", "")], piege)
         self.assertEqual(self.aide.Nettoyeur().traiter("a\u2028b".encode()), b"a\\u2028b")
         self.assertEqual(self.aide.Nettoyeur().traiter(b"a\x0cb\r\nc\rd"), b"a\\x0cb\nc\nd")
+
+    def test_echauffer_accepte_toutes_les_familles(self):
+        # J8 (2026-11-24) : « --echauffer gradle gradle-android » rendait l'usage (motif de famille de 12 caractères au
+        # plus) : aucun échauffement Gradle Android n'avait jamais pu tourner au serveur.
+        from unittest import mock
+        familles = re.search(r'^FAMILLES="([^"]*)"', (RACINE / "serveur_ovh" / "taches" / "lancer_tests.sh")
+                             .read_text(encoding="utf-8"), re.M).group(1).split()
+        self.assertIn("gradle-android", familles)
+        with mock.patch.object(self.aide, "echauffer", lambda cle, famille: 0) as _:
+            for famille in familles:
+                with self.subTest(famille=famille):
+                    self.assertEqual(self.aide.principal(["--echauffer", "gradle", famille]), 0)
+            self.assertEqual(self.aide.principal(["--echauffer", "gradle", "Famille;rm"]), 2)
 
     def test_codes_de_l_archive(self):
         """3 = refus explicite (l'enveloppe rend 70) ; un plantage de python rend 1 (l'enveloppe rend 77)."""

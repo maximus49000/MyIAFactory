@@ -39,7 +39,10 @@ import stat
 import sys
 
 MAX_FICHIER = 50 * 1024 * 1024           # mêmes limites que outils/tests_instantane.py
-MAX_TOTAL = 200 * 1024 * 1024
+# La plus grande des limites par famille de tests_instantane.MAX_TOTAL_FAMILLE (1 Go : Unity, Godot) : le poste applique
+# celle de la famille du projet ; le serveur ne connaît que la famille de la commande (un projet Unity peut lancer ses
+# tests Python), il borne donc à la plus grande (jalon J12).
+MAX_TOTAL = 1024 * 1024 * 1024
 MAX_FICHIERS = 50000
 BLOC = 512
 # Chaque membre : un en-tête et au plus 511 octets de bourrage ; fin : deux blocs nuls et le bourrage jusqu'à un
@@ -294,7 +297,7 @@ def texte_sur(texte):
 # =====================================================================================================================
 
 CLES = ("npm", "pnpm", "yarn", "yarn-berry", "pip", "pip-sources", "gradle", "maven", "dotnet", "cargo", "go", "unity")
-_MOTIF_CLE = re.compile(r"[a-z][a-z-]{1,11}")
+_MOTIF_CLE = re.compile(r"[a-z][a-z-]{1,23}")      # familles comprises (« gradle-android » : 14 caractères)
 
 
 def _executable(x):
@@ -585,7 +588,9 @@ def plan_echauffement(cle, famille, travail, deps="/deps"):
         env = {"GRADLE_USER_HOME": f"{deps}/gradle", "GRADLE_OPTS": _GRADLE_OPTS}
         base = ["./gradlew", "--no-daemon", "--no-configuration-cache"]
         etape(base + ["--init-script", "/tmp/myiafactory-resoudre.gradle", "myiafactoryResoudre"], env)
-        etape(base + ["compileDebugUnitTestSources" if famille == "gradle-android" else "testClasses"], env, obligatoire=False)
+        # gradle-android : testDebugUnitTest, pas seulement la compilation : les jars d'exécution des tests
+        # (debugUnitTestRuntimeClasspath, transformés par AGP) ne sont téléchargés qu'à l'exécution (jalon J8).
+        etape(base + ["testDebugUnitTest" if famille == "gradle-android" else "testClasses"], env, obligatoire=False)
         verrouille = existe("gradle.lockfile")
     elif cle == "maven":
         outil = "./mvnw" if existe("mvnw") else "mvn"
@@ -692,9 +697,13 @@ def wrapper_gradle(chemin):
     (comme java.util.Properties). ValueError : jar ou propriétés absents, ou URL hors de services.gradle.org."""
     import hashlib
     jar, props = "gradle/wrapper/gradle-wrapper.jar", "gradle/wrapper/gradle-wrapper.properties"
-    m = _membres(chemin, {jar, props})
+    m = _membres(chemin, {jar, props, "gradlew"})
     if jar not in m or props not in m:
         raise ValueError("wrapper-absent")
+    # Copie Windows (core.autocrlf=true) : « #!/bin/sh\r » rend ENOENT sous Linux ; dit clairement, avant tout conteneur
+    # (jalon J8). Remède côté projet : `gradlew text eol=lf` dans .gitattributes, puis une nouvelle extraction du fichier.
+    if b"\r\n" in m.get("gradlew", b"")[:4096]:
+        raise ValueError("gradlew-fins-de-ligne-windows")
     # LIMITE CONNUE (relecture M2) : ce n'est pas un analyseur java.util.Properties complet (lignes continuées par « \\ »,
     # échappements \\uXXXX, clés échappées) : une telle forme est refusée (URL hors motif) ou ignorée, jamais suivie. La somme du
     # jar et le mandataire restent les garde-fous.

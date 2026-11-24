@@ -77,7 +77,15 @@ if [ "${1:-}" = "--ramasser" ]; then
   # qui porte encore le label et doit pouvoir être ramassée.
   ids=$(dk 60 image ls --filter label=myiafactory.genre=tests-derivee --format '{{.ID}}') \
     || echouer 1 "liste des images impossible (docker)."
-  vivantes=$(dk 60 ps -a --format '{{.Image}} {{.ImageID}}') || echouer 1 "liste des conteneurs impossible (docker) : rien n'est supprimé."
+  # L'image de chaque conteneur : son nom (ps --format {{.Image}}) ET son identifiant (inspect {{.Image}}) ; jamais
+  # {{.ImageID}} de `ps --format`, inconnu de Docker 29 (serveur, 2026-11-24 : le ramassage échouait sans rien supprimer).
+  vivantes=$(dk 60 ps -a --format '{{.Image}}') || echouer 1 "liste des conteneurs impossible (docker) : rien n'est supprimé."
+  conteneurs=$(dk 60 ps -aq) || echouer 1 "liste des conteneurs impossible (docker) : rien n'est supprimé."
+  if [ -n "$conteneurs" ]; then
+    # shellcheck disable=SC2086  # identifiants hexadécimaux de docker, un par mot
+    images_c=$(dk 60 inspect --format '{{.Image}}' $conteneurs) || echouer 1 "images des conteneurs illisibles (docker) : rien n'est supprimé."
+    vivantes+=$'\n'"$images_c"
+  fi
   vivantes=$(tr ' ' '\n' <<< "$vivantes" | sed -e 's/^sha256://' -e 's/^\([0-9a-f]\{12\}\)[0-9a-f]*$/\1/')
   # Tailles propres « <id 12 hexa> <Mo> » (UNIQUE SIZE, unités décimales de docker, Mo de 1 048 576 octets arrondis au-dessus).
   propres=$(dk 120 system df -v 2>/dev/null | awk '

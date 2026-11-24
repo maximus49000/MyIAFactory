@@ -94,6 +94,24 @@ class TestCatalogue(unittest.TestCase):
             with self.assertRaises(tests_serveur.Repli):
                 tests_serveur._image_de_la_campagne(p, sdk)
 
+    def test_image_derivee_construite_prise_par_la_route(self):
+        # J9 (2026-11-24) : une image dérivée construite et notée au registre n'était jamais prise : la route rendait
+        # toujours « image dérivée à construire ». Elle la prend maintenant, si le registre la connaît POUR CE serveur.
+        p = profil(["node"], node="18")
+        etiquette = tests_images.etiquette_derivee(p)
+        self.assertEqual(tests_serveur._image_de_la_campagne(p, None, derivee_permise=True),
+                         (etiquette, "node", ("tests-image",)))
+        empreinte = tests_profil.empreinte_image(p)
+        vus = []
+        connue = lambda sid, e: vus.append((sid, e)) or (etiquette if (sid, e) == ("srv", empreinte) else None)  # noqa: E731
+        tests_serveur._verifier_derivee(etiquette, p, "srv", connue)
+        self.assertEqual(vus, [("srv", empreinte)])
+        with self.assertRaises(tests_serveur.Repli) as e:
+            tests_serveur._verifier_derivee(etiquette, p, "autre", connue)
+        self.assertIn("image dérivée à construire", e.exception.raison)
+        tests_serveur._verifier_derivee("myiafactory/tests-android", p, "autre", connue)   # image du catalogue : rien
+        tests_serveur._verifier_derivee(None, p, "autre", connue)
+
     def test_interrupteur_du_cache_gradle(self):
         self.assertEqual(tests_serveur._image_de_la_campagne(profil(["gradle-jvm"], jdk="17"), None)[1], "gradle-jvm")
         tests_images.CACHE_GRADLE_PRET = False                                        # interrupteur : tout Gradle au poste
@@ -199,6 +217,9 @@ class TestEnveloppe(unittest.TestCase):
         self.assertNotIn("$H/android-sdk:/opt/android-sdk", run)
         self.assertEqual(run[-2], "myiafactory/tests-android")
         self.assertIn("ANDROID_HOME=/opt/android-sdk", run)
+        # J8 (2026-11-24) : AGP écrit dans ~/.android (user.home de Java = /home/ubuntu, racine en lecture seule) :
+        # « /home/ubuntu/.android: Read-only file system » ; son dossier va dans /tmp (tmpfs)
+        self.assertIn("ANDROID_USER_HOME=/tmp/android", run)
         self.assertTrue(any(a.startswith("GRADLE_OPTS=") for a in run))
         self.assertIn("GRADLE_USER_HOME=/tmp/gradle", run)                           # inscriptible (tmpfs), jamais /deps
         self.assertFalse(any(a.startswith("GRADLE_RO_DEP_CACHE") for a in run))      # pas de cache monté

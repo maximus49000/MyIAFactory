@@ -190,7 +190,12 @@ ECH_HOTES[cargo]="index.crates.io static.crates.io crates.io"
 ECH_HOTES[go]="proxy.golang.org sum.golang.org"
 SOMMES_GRADLE_URL="https://services.gradle.org/distributions"
 VERSIONS_GRADLE_URL="https://services.gradle.org/versions/all"
-DIST_HOTES=" services.gradle.org downloads.gradle.org "  # redirections admises pour la distribution (hôte), jamais d'autre
+# Redirections admises (hôte seulement : sommes, liste des versions, distribution), jamais d'autre. Constaté le 2026-11-24 :
+# services.gradle.org renvoie (301) les sommes vers downloads.gradle.org et la distribution (307) vers les « releases » de
+# github.com/gradle/gradle-distributions, qui renvoient (302) vers release-assets.githubusercontent.com (URL signée). La
+# distribution reste vérifiée par sa somme OFFICIELLE (downloads.gradle.org) : l'hôte qui la sert ne fait pas foi.
+DIST_HOTES=" services.gradle.org downloads.gradle.org github.com release-assets.githubusercontent.com objects.githubusercontent.com "
+MOTIF_REDIRECTION='^https://[a-z0-9.-]{1,253}/[A-Za-z0-9._/%+=&?~-]{1,2000}$'
 INODES_MAX=500000                                      # inodes d'un cache en préparation et de son /work (tmpfs)
 ECHAUFFEMENTS_MAX=2                                    # échauffements simultanés au serveur (~/taches/.echauffement-1..2)
 # Mots fermés de `#deps-echec` (tout autre : « inconnue »). Échecs d'échauffement retenus pour CETTE empreinte (repli immédiat,
@@ -200,7 +205,7 @@ RAISONS=" reseau-non-accorde wrapper-modifie wrapper-absent wrapper-illisible di
   somme-gradle-injoignable somme-gradle-illisible sommes-gradle-inaccessibles curl-absent distribution-injoignable
   distribution-redirection distribution-somme echauffement plafond inodes duree memoire disque copie-sur-ecriture
   unity-tache-14g cache-inaccessible echauffement-concurrent ecriture reseau-interne mandataire reseau-sans-liste cache-verrou
-  cache-disparu "
+  cache-disparu gradlew-fins-de-ligne-windows "
 RAISONS="${RAISONS//$'\n'/ }"
 RAISONS_MEMOIRE=" echauffement plafond inodes duree distribution-redirection distribution-somme "
 RAISONS_BREVES=" distribution-injoignable mandataire reseau-interne "
@@ -495,7 +500,9 @@ if [ "$FAMILLE" = unity ]; then
     [[ $nom_hote =~ ^[A-Za-z0-9][A-Za-z0-9.-]{0,62}$ ]] || echouer 77 "nom d'hôte illisible : licence $LICENCE impossible."
     LICENCE_ARGS+=(-v "$MACHINE_ID:$MACHINE_ID:ro" --hostname "$nom_hote")
   fi
-  LICENCE_ARGS+=(-e MYIAFACTORY_TESTS_FAMILLE=unity)
+  # L'éditeur demande 1 Go de mémoire partagée (« --shm-size=1025M » ; 64 Mo par défaut) : sinon il abandonne avant
+  # d'importer le projet (jalon J13). Compté dans la limite mémoire du conteneur.
+  LICENCE_ARGS+=(--shm-size 2g -e MYIAFACTORY_TESTS_FAMILLE=unity)
 fi
 DEPS_RACINE=""; CACHE=""
 if [ "$DEPS" != - ]; then
@@ -667,8 +674,23 @@ essayer_volume() {   # essayer_volume <volume> : un conteneur bref, sans réseau
 # fermée). Ce contrôle écarte seulement un wrapper altéré (code arbitraire au tout premier lancement) et garde la
 # distribution hors du conteneur : elle est téléchargée par l'hôte, vérifiée, puis copiée dans le cache.
 SOMMES="$TESTS/.deps/.gradle-wrapper"
-telecharger() {   # telecharger <url> <fichier> : https seulement, sans suivre de redirection, borné
-  timeout -k 10 60 curl -fsS --proto =https --max-time 50 -o "$2" "$1" </dev/null >/dev/null 2>&1 8>&-
+telecharger() {   # telecharger <url> <fichier> : https seulement, borné ; 0 sur une réponse 200 ; redirections suivies à la
+  # main (jamais curl -L), 4 au plus, vers les seuls hôtes de DIST_HOTES (suivre_redirection)
+  local url="$1" r i
+  for i in 1 2 3 4 5; do
+    [ "$i" = 5 ] && return 1
+    r=$(timeout -k 10 60 curl -sS --proto =https --max-time 50 -o "$2" -w '%{http_code} %{redirect_url}' "$url" \
+          </dev/null 2>/dev/null 8>&-) || return 1
+    case "$r" in
+      "200 "*) return 0 ;;
+      30[1278]\ https://*) url=$(suivre_redirection "${r#* }") || return 1 ;;
+      *) return 1 ;;
+    esac
+  done
+}
+suivre_redirection() {   # suivre_redirection <url> : l'écrit si son hôte est dans DIST_HOTES et qu'elle suit MOTIF_REDIRECTION
+  local h="${1#https://}"; h="${h%%/*}"
+  [[ $DIST_HOTES == *" $h "* ]] && [[ $1 =~ $MOTIF_REDIRECTION ]] && printf '%s' "$1"
 }
 somme_publiee() {   # somme_publiee <version> : 0 si $SOMMES/<version>.sha256 (somme officielle) est là, récupérée au besoin
   local v="$1" f="$SOMMES/$1.sha256" o
@@ -744,10 +766,7 @@ distribution_gradle() {   # distribution_gradle <contenu du cache en préparatio
       case "$r" in
         "200 "*) break ;;
         30[1278]\ https://*)                            # redirection suivie à la main : seulement vers DIST_HOTES
-          loc="${r#* }"; h="${loc#https://}"; h="${h%%/*}"
-          [[ $DIST_HOTES == *" $h "* ]] && [[ $loc =~ ^https://[a-z0-9.-]{1,253}/[A-Za-z0-9._/%+=-]{1,500}$ ]] ||
-            { rm -f -- "$t"; deps_echec distribution-redirection; }
-          url="$loc" ;;
+          url=$(suivre_redirection "${r#* }") || { rm -f -- "$t"; deps_echec distribution-redirection; } ;;
         *) rm -f -- "$t"; deps_echec distribution-injoignable ;;
       esac
     done
@@ -784,7 +803,8 @@ if [ "$FAMILLE" = gradle-android ]; then
       printf '%s\n' "lancer_tests : copie sur écriture du SDK indisponible : SDK monté en lecture seule." >&2
     fi
   fi
-  SDK_MONTAGE+=(-e ANDROID_HOME=/opt/android-sdk)
+  # AGP écrit dans ~/.android (user.home de Java : /home/ubuntu, racine en lecture seule) : son dossier dans /tmp (tmpfs).
+  SDK_MONTAGE+=(-e ANDROID_HOME=/opt/android-sdk -e ANDROID_USER_HOME=/tmp/android)
 fi
 
 prendre_echauffement() {   # une des ECHAUFFEMENTS_MAX places d'échauffement (descripteur 6), en file avec #attente

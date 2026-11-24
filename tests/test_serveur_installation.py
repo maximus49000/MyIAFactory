@@ -2,6 +2,7 @@
 jamais le vrai ~/MyIAFactory."""
 import json
 import os
+import re
 import sys
 import tempfile
 import time
@@ -34,7 +35,10 @@ class FauxSsh:
         self.acces, self.injoignable, self.tomber_a = acces, injoignable, tomber_a
         self.appels, self.lancees, self.nb_sondes = [], [], 0
 
+    deposes_perimes = False                 # vrai : les fichiers déposés hors empreinte diffèrent du dépôt (jusqu'au prochain dépôt)
+
     def executer_octets(self, hote, commande, cle, entree=None, delai=60, runner=None):
+        self.deposes_perimes = False
         self.archives.append((commande, entree))
         self.appels.append({"hote": hote, "commande": commande, "stdin": None, "delai": delai})
         return self.depot_code, b"", ("tar: erreur" if self.depot_code else "")
@@ -54,6 +58,9 @@ class FauxSsh:
             if self.marqueur == 255:
                 return 255, "", "Connection reset"
             return (0, self.marqueur + "\n", "") if isinstance(self.marqueur, str) else (1, "", "No such file")
+        if commande.startswith(f'cd "{inst.DOSSIER_DISTANT}" && sha256sum -- '):
+            noms = re.findall(r'"([^"$]+)"', commande.split("sha256sum -- ", 1)[1])
+            return 0, "".join(f"{'0' * 64 if self.deposes_perimes else inst._somme_locale(n)}  {n}\n" for n in noms), ""
         etape = commande.rsplit("--etape ", 1)[1].strip()
         if self.tomber_a == etape:
             return 255, "", "Connection reset"
@@ -518,6 +525,36 @@ class TestEtatPerime(Base):
                     commande, octets = ssh.archives[0]
                     with tarfile.open(fileobj=io.BytesIO(octets)) as tar:
                         self.assertEqual(sorted(tar.getnames()), sorted(inst.FICHIERS_ETAPE["agent_image"]))
+
+    def test_fichiers_deposes_hors_empreinte_perimes(self):
+        # J8 (2026-11-24) : l'enveloppe des tests (lancer_tests.sh…) est déposée avec l'étape tests_image mais hors de
+        # l'empreinte de l'image : une enveloppe corrigée n'arrivait jamais au serveur tant que l'image ne changeait pas.
+        # Règle générale : marqueur à jour MAIS un fichier déposé hors empreinte différent -> capacité périmée, redéposée.
+        import io
+        import tarfile
+        from unittest import mock
+        import serveur_capacites
+        hors = [f for f in inst.FICHIERS_ETAPE["tests_image"] if f not in inst.EMPREINTE_FICHIERS["tests_image"]]
+        self.assertIn("taches/lancer_tests.sh", hors)
+        besoins = dict(serveur_capacites.BESOINS, tests_test=("tests-image",))
+        for perimes in (False, True):
+            with self.subTest(perimes=perimes), mock.patch.object(serveur_capacites, "BESOINS", besoins):
+                ssh = FauxSsh(presentes=("base", "tests-image"))
+                ssh.marqueur, ssh.deposes_perimes = inst.empreinte_etape("tests_image"), perimes
+                ap = inst.apercu(SERVEUR, ["tests_test"], ssh=ssh, dossier=self.dossier)
+                self.assertEqual(ap["perimees"], ["tests-image"] if perimes else [])
+                sommes = [a["commande"] for a in ssh.appels if "sha256sum" in a["commande"]]
+                self.assertEqual(len(sommes), 1)
+                for f in hors:
+                    self.assertIn(f'"{f}"', sommes[0])
+                ssh = FauxSsh(presentes=("base", "tests-image"))
+                ssh.marqueur, ssh.deposes_perimes = inst.empreinte_etape("tests_image"), perimes
+                r = self.installer(ssh, actions=["tests_test"])
+                self.assertEqual("tests_image" in ssh.lancees, perimes)
+                if perimes:
+                    self.assertEqual(r["capacites"]["tests-image"]["statut"], "fait", r)
+                    with tarfile.open(fileobj=io.BytesIO(ssh.archives[0][1])) as tar:
+                        self.assertIn("taches/lancer_tests.sh", tar.getnames())
 
     def test_lecture_du_marqueur_bornee_et_apercu_marque_la_capacite_perimee(self):
         ssh = FauxSsh(presentes=self.PRESENTES_IMAGE)

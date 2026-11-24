@@ -436,7 +436,36 @@ def _perimees(serveur, ssh, presentes, requises):
             continue
         if code != 0 or (sortie or "").strip() != attendue:
             perimees.add(i)
+        elif _deposes_perimes(serveur, ssh, etape):
+            perimees.add(i)
     return perimees
+
+
+def _somme_locale(rel):
+    return hashlib.sha256((RACINE_SERVEUR / rel).read_bytes()).hexdigest()
+
+
+def _deposes_perimes(serveur, ssh, etape):
+    """Vrai si un fichier déposé par l'étape HORS de l'empreinte de son image (enveloppe des tests, aides, scripts lancés
+    sur l'hôte) diffère au serveur de celui du dépôt : sans cela une enveloppe corrigée n'arriverait jamais tant que l'image
+    ne change pas (jalon J8, 2026-11-24). Lecture seule (`sha256sum`, noms fixes du dépôt) ; serveur injoignable : faux."""
+    hors = [f for f in FICHIERS_ETAPE.get(etape, ()) if f not in EMPREINTE_FICHIERS.get(etape, ())]
+    if not hors:
+        return False
+    try:
+        attendues = {f: _somme_locale(f) for f in hors}
+    except OSError:
+        return True
+    noms = " ".join(f'"{f}"' for f in hors)                 # noms fixes du dépôt, jamais une entrée externe
+    code, sortie, _e = ssh.executer(serveur_etat.cible(serveur), f'cd "{DOSSIER_DISTANT}" && sha256sum -- {noms} 2>/dev/null',
+                                    serveur.cle, delai=20)
+    if code in (255, 124):
+        return False
+    lues = {}
+    for ligne in (sortie or "").splitlines():
+        somme, _, nom = ligne.partition("  ")
+        lues[nom.strip()] = somme.strip()
+    return code != 0 or any(lues.get(f) != s for f, s in attendues.items())
 
 
 def _archive_fichiers(etape):

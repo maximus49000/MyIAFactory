@@ -345,6 +345,27 @@ def base_unity(version: str, digest: str) -> str:
     return f"{IMAGE_GAMECI}:ubuntu-{version}-android-{UNITY_GAMECI}@{digest}"
 
 
+def commande_digest_unity(version: str) -> str:
+    """La lecture (seule) du digest local de l'image GameCI de `version` au serveur : `RepoDigests` en JSON (jalon J13)."""
+    version = _version("unity", version)
+    return (f"sudo -n docker image inspect --format '{{{{json .RepoDigests}}}}' "
+            f"{IMAGE_GAMECI}:ubuntu-{version}-android-{UNITY_GAMECI}")
+
+
+def lire_digest_unity(sortie) -> Optional[str]:
+    """`sha256:<64 hexa>` du premier `unityci/editor@sha256:…` de la sortie de `commande_digest_unity` ; None sinon."""
+    texte = sortie.decode("utf-8", "replace") if isinstance(sortie, bytes) else str(sortie or "")
+    try:
+        liste = json.loads(texte.strip() or "null")
+    except ValueError:
+        return None
+    for x in liste if isinstance(liste, list) else ():
+        nom, _, digest = str(x).partition("@")
+        if nom == IMAGE_GAMECI and DIGEST.fullmatch(digest):
+            return digest
+    return None
+
+
 def _socle_unity(base: str) -> str:
     texte = GABARIT_UNITY.read_bytes().decode("ascii")
     if "\r" in texte or texte.count("@BASE@") != 1:

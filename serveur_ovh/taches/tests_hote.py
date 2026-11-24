@@ -39,7 +39,10 @@ import stat
 import sys
 
 MAX_FICHIER = 50 * 1024 * 1024           # mêmes limites que outils/tests_instantane.py
-MAX_TOTAL = 200 * 1024 * 1024
+# La plus grande des limites par famille de tests_instantane.MAX_TOTAL_FAMILLE (1 Go : Unity, Godot) : le poste applique
+# celle de la famille du projet ; le serveur ne connaît que la famille de la commande (un projet Unity peut lancer ses
+# tests Python), il borne donc à la plus grande (jalon J12).
+MAX_TOTAL = 1024 * 1024 * 1024
 MAX_FICHIERS = 50000
 BLOC = 512
 # Chaque membre : un en-tête et au plus 511 octets de bourrage ; fin : deux blocs nuls et le bourrage jusqu'à un

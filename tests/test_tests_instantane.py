@@ -234,6 +234,16 @@ class TestSansGit(unittest.TestCase):
                 ti.ecrire_tar(self.tmp, ["petit.py", "src/gros.bin"], io.BytesIO())
             self.assertIn("fichiers", c.exception.raison)
 
+    def test_limite_totale_de_la_famille(self):
+        # J12 (2026-11-24) : `limites_pour` disait 1 Go pour Unity/Godot mais `ecrire_tar` gardait 200 Mo : sur-la-route
+        # (647 Mo hors Library/) était refusé « plus de 200,0 Mo ».
+        _ecrire(self.tmp, "petit.py", b"123")
+        _ecrire(self.tmp, "src/gros.bin", b"0123456789A")
+        with mock.patch.object(ti, "MAX_TOTAL", 12), mock.patch.dict(ti.MAX_TOTAL_FAMILLE, {"unity": 100}):
+            self.assertEqual(ti.ecrire_tar(self.tmp, ["petit.py", "src/gros.bin"], io.BytesIO(), famille="unity")[0], 2)
+            with self.assertRaises(ti.HorsLimites):
+                ti.ecrire_tar(self.tmp, ["petit.py", "src/gros.bin"], io.BytesIO(), famille="python")
+
     def test_fichier_modifie_pendant_la_lecture(self):
         _ecrire(self.tmp, "a.py", b"0123456789")
         ouvrir = open

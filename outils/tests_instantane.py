@@ -508,8 +508,9 @@ def ecrire_tar(racine: str, fichiers: Iterable[str], destination: BinaryIO,
             if st.st_size > MAX_FICHIER:
                 raise HorsLimites("fichier trop gros : %s (%s, %s au plus)" % (nom, _mo(st.st_size), _mo(MAX_FICHIER)))
             total += st.st_size
-            if total > MAX_TOTAL:
-                raise HorsLimites("instantané trop gros : plus de %s" % _mo(MAX_TOTAL))
+            maximum = MAX_TOTAL_FAMILLE.get(famille or "", MAX_TOTAL)       # la limite de la famille (`limites_pour`)
+            if total > maximum:
+                raise HorsLimites("instantané trop gros : plus de %s" % _mo(maximum))
             source, raison = _ouvrir(racine, racine_reelle, nom, st)
             if source is None:
                 raise HorsLimites("fichier refusé : %s (%s)" % (nom, raison))

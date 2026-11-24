@@ -644,6 +644,14 @@ class TestAidesHote(unittest.TestCase):
                 self.assertIsNotNone(self.archive(octets=octets))
         self.assertIsNone(self.archive(octets=bon))
 
+    def test_limite_totale_du_serveur_couvre_toutes_les_familles(self):
+        # J12 (2026-11-24) : le serveur refusait tout instantané de plus de 200 Mo, même d'un projet Unity (1 Go permis
+        # au poste) ; le poste applique la limite de la famille, le serveur la plus grande.
+        sys.path.insert(0, str(RACINE / "outils"))
+        import tests_instantane
+        self.assertEqual(self.aide.MAX_TOTAL, max(tests_instantane.MAX_TOTAL_FAMILLE.values()))
+        self.assertEqual(self.aide.MAX_FICHIER, tests_instantane.MAX_FICHIER)
+
     def test_limites_de_l_archive(self):
         with mock.patch.object(self.aide, "MAX_FICHIERS", 2):
             self.assertIsNone(self.archive([self.fichier("a"), self.fichier("b")]))

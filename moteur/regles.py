@@ -5422,12 +5422,12 @@ def _attendre_le_directeur(projet, etat, v, s):
             # fois : l'agent du correctif, jugeant l'anomalie déjà corrigée, rendait sa preuve sans le dire, et l'étape
             # était refaite pour rien). La validation est posée sans relancer d'agent.
             precedent = {**precedent, "doit_marcher": attendu}
-        elif v.get("rien_a_verifier") and (_de_quoi_verifier(projet, precedent) or _maquette_du_cahier(projet, v["fid"])):
+        elif v.get("rien_a_verifier") and (_de_quoi_verifier(projet, precedent) or _maquette_du_cahier(projet, v["fid"], v["element"]["id"])):
             # Second essai toujours muet, mais il y a de quoi vérifier : la validation est posée avec l'objectif de
             # l'étape comme consigne, plutôt que bloquée (essai réel : trois validations arrêtées, l'agent jugeant
             # qu'il n'y avait « rien à modifier »). Le Directeur juge, et renvoie s'il le faut.
             precedent = {**precedent, "doit_marcher": _doit_marcher_derive(_objectif_de(projet, v, s))}
-    manques = ([] if _de_quoi_verifier(projet, precedent) or _maquette_du_cahier(projet, v["fid"]) else ["rien"]) \
+    manques = ([] if _de_quoi_verifier(projet, precedent) or _maquette_du_cahier(projet, v["fid"], v["element"]["id"]) else ["rien"]) \
         + ([] if rel.texte_dit_ok(precedent.get("doit_marcher"), rel.MAX_DOIT_MARCHER) else ["doit_marcher"]) \
         + _manques_de_nature(projet, nature, precedent)
     if apk_exige and "livrable" not in manques and not _fichier_existe(projet, precedent, rel.est_executable):
@@ -5536,18 +5536,21 @@ def _de_quoi_verifier(projet, precedent):
         projet, precedent, lambda c: rel.est_image(c) or rel.est_telechargeable(c))
 
 
-def _maquette_du_cahier(projet, fid):
-    """Vrai si la maquette du cahier de la fonctionnalité (image ou page HTML) existe dans le projet : le Directeur peut
-    la juger même si l'étape, la trouvant déjà faite, ne l'a pas jointe à son rapport. Essai réel (FM_Stats, f8,
-    2026-11-25) : la maquette HTML existait, l'agent disait « déjà faite », la validation restait « Rien à valider » et
-    l'élément était laissé de côté."""
+def _maquette_du_cahier(projet, fid, element=None):
+    """Vrai si le projet porte déjà de quoi montrer au Directeur, même si l'étape, la trouvant « déjà faite », ne l'a
+    pas jointe à son rapport : la maquette du cahier de la fonctionnalité (image ou page HTML), ou une pièce déjà
+    rangée comme livrable (pour cet élément s'il est donné). Une validation ne dépend jamais de ce que l'agent a pensé
+    à joindre. Essais réels (FM_Stats, f8, 2026-11-25 ; f5/f7, 2026-11-24) : « Rien à valider » deux fois, élément
+    laissé de côté, série close sans rien montrer."""
     try:
         f = fa.lire(projet.factory)
-        maquette = (_fonc(projet, fid).get("cahier") or {}).get("maquette") or []
+        fonc = _fonc(projet, fid)
     except (fa.FactoryInvalide, KeyError):
         return False
-    return any(isinstance(x, dict) and outil.fichier_du_projet(f, projet.dossier, x.get("chemin")) is not None
-               for x in maquette)
+    chemins = [x.get("chemin") for x in (fonc.get("cahier") or {}).get("maquette") or [] if isinstance(x, dict)]
+    chemins += [d.get("chemin") for d in fonc.get("documents") or []
+                if d.get("livrable") is True and (element is None or d.get("element") in (None, element))]
+    return any(outil.fichier_du_projet(f, projet.dossier, c) is not None for c in chemins)
 
 
 def _fichier_existe(projet, precedent, convient):

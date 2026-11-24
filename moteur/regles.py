@@ -3291,6 +3291,8 @@ def _demarrer_en_attente(projet, etat, fid):
     lots = [x for lot in lots for x in ([{"ids": [i], "modele": lot["modele"], "lot": None} for i in lot["ids"]]
                                         if len(lot["ids"]) > 1 and mn.rang(lot["modele"]) >= mn.rang(mn.FABLE)
                                         else [lot])]
+    corrections_au_serveur = _corrections_au_serveur(projet, fac)
+    natures = {f["id"]: f.get("nature") for f in court["fonctionnalites"]}
     polyvalents = any(_polyvalent(a) for a in court["agents"])
     if polyvalents:      # n'importe quel agent libre peut prendre une tâche : on occupe d'abord toutes les places
         lots = _repartir_sur_les_places(lots, places["locaux"] + places["cloud"] + places["serveur"])
@@ -3307,6 +3309,11 @@ def _demarrer_en_attente(projet, etat, fid):
         cloud_ok = places["cloud"] > 0 and "local" not in reserves
         # le serveur : ses propres places (`agents_serveur_max`), jamais une tâche qui exige le poste ou le cloud
         serveur_ok = places["serveur"] > 0 and not reserves & {"local", "cloud"}
+        epinglee = (corrections_au_serveur and not reserves & {"local", "cloud"}
+                    and "serveur" in dep.ordre_du_metier(fac, premiere.get("role"))
+                    and any(_etape_de_correction(par_id[i], natures) for i in lot["ids"]))
+        if epinglee:      # une étape de correction d'un projet Flutter : au serveur seulement (`_corrections_au_serveur`)
+            local_ok = cloud_ok = False
         if polyvalents and mn.rang(_modele_voulu(projet, court, premiere, lot["modele"])) >= mn.rang(mn.FABLE):
             accord = premiere.get("fable_accordee")
             if accord is None:       # la décision au bureau de direction, avant tout départ ; la tâche attend
@@ -3320,6 +3327,9 @@ def _demarrer_en_attente(projet, etat, fid):
         ancien = next((a for a in court["agents"] if a["cle"] == premiere.get("agent")), None)
         if voulu is None and ancien is not None and _polyvalent(ancien) and premiere.get("debut"):
             voulu = ancien["cle"]      # une tâche reprise revient de préférence au même agent polyvalent
+        if epinglee and voulu is not None and next(
+                (a for a in court["agents"] if a["cle"] == voulu), {}).get("lieu") != "serveur":
+            voulu = None       # jamais l'agent local d'un essai précédent : un agent du serveur la reprend
         agent = None
         if voulu is not None:
             libre = next((a for a in court["agents"] if a["cle"] == voulu), {})
@@ -3469,6 +3479,35 @@ def demarrer_installation(projet, etat, tid):
         if agent is None:
             return []
     return [_partir(projet, etat, court, agent, [tid], None, {tid: t})]
+
+
+def _projet_flutter(projet):
+    """Vrai pour un projet Flutter (`outils/projet_flutter.py`, lu dans le dossier du projet) ; faux s'il ne l'est pas ou
+    si la lecture échoue."""
+    try:
+        outils = str(Path(__file__).resolve().parent.parent / "outils")
+        if outils not in sys.path:
+            sys.path.append(outils)
+        import projet_flutter
+        return projet_flutter.est_flutter(projet.dossier)
+    except Exception:       # noqa: BLE001 — une lecture ratée : le choix d'avant
+        return False
+
+
+def _corrections_au_serveur(projet, fac):
+    """Vrai quand les étapes du flux d'une correction doivent partir au serveur, jamais en local : un projet Flutter qui
+    a des places serveur, serveur prêt pour lui. Essai réel FM_Stats (2026-11-24) : l'agent local du correctif tentait
+    `flutter build apk` au poste, refusé (personne pour l'approuver) ; aucun APK, la validation du Directeur restait
+    « Rien à valider ». Au serveur, `construire-apk` construit l'APK et le moteur le rapatrie. Serveur hors ligne ou sans
+    place réglée : le choix d'avant (la tâche n'attend jamais un serveur qui ne viendra pas)."""
+    if not (fac.get("agents_serveur_max") or 0) or not _projet_flutter(projet):
+        return False
+    return outil.raison_serveur(fac) is None
+
+
+def _etape_de_correction(t, natures):
+    """Vrai pour une tâche du flux (correctif, vérification, livraison) d'une correction."""
+    return str(t.get("etape") or "").startswith(ETAPES_DE_FLUX) and natures.get(t.get("fonctionnalite")) == "correction"
 
 
 def _ordre_des_lieux(fac, role):

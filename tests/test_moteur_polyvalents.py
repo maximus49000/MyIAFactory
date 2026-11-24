@@ -48,7 +48,8 @@ class Base(AvecProjet):
 
     def tache(self, etape, element="e1", titre="Écran", **extra):
         entree = {"titre": titre, "fonctionnalite": "f1", "colonne": etape.split(":")[-1], "etape": etape,
-                  "element": element, "active": False, **extra}
+                  "element": element, "active": False}
+        entree.update(extra)
         if not etape.startswith("validation:"):
             entree["role"] = "qa" if etape == "flux:qa" else "dev"
         return self.ok("tache", entree=entree)["id"]
@@ -127,10 +128,8 @@ class Lieux(Base):
         self.assertEqual(self.parties(self.demarrer()), {t: "cloud-1"})
 
 
-class OrdreDesLieux(Base):
-    """Le choix de l'agent suit l'ordre des lieux du projet (`ordre_lieux`) et ses places serveur (`agents_serveur_max`),
-    comptées à part des places locales ; un lieu imposé (étape, métier) l'emporte. Essai réel FM_Stats : ordre [serveur,
-    local], deux fiches serveur libres, serveur en ligne, et le prototype partait quand même sur une fiche locale."""
+class AvecServeur(Base):
+    """Deux fiches locales, deux fiches serveur, serveur en ligne, ordre [serveur, local]."""
     locaux, cloud = 2, 0
 
     def setUp(self):
@@ -165,6 +164,12 @@ class OrdreDesLieux(Base):
 
     def lieu_de(self, cle):
         return {"agent-1": "local", "agent-2": "local", "agent-3": "serveur", "agent-4": "serveur"}[cle]
+
+
+class OrdreDesLieux(AvecServeur):
+    """Le choix de l'agent suit l'ordre des lieux du projet (`ordre_lieux`) et ses places serveur (`agents_serveur_max`),
+    comptées à part des places locales ; un lieu imposé (étape, métier) l'emporte. Essai réel FM_Stats : ordre [serveur,
+    local], deux fiches serveur libres, serveur en ligne, et le prototype partait quand même sur une fiche locale."""
 
     def test_tache_libre_part_au_serveur(self):
         t = self.tache("flux:dev")
@@ -224,6 +229,62 @@ class OrdreDesLieux(Base):
         self.ok("tache", entree={"id": occupee, "agent": "agent-3", "active": True})
         t = self.tache("flux:dev")
         self.assertNotIn(t, self.parties(self.demarrer()))
+
+
+PUBSPEC_FLUTTER = "name: app\ndependencies:\n  flutter:\n    sdk: flutter\n"
+
+
+class CorrectionAuServeur(AvecServeur):
+    """Essai réel FM_Stats (2026-11-24) : l'étape de correction d'un projet Flutter partait chez un agent local, qui
+    tentait `flutter build apk` au poste (refusé) : aucun APK, validation bloquée. Une étape du flux d'une correction
+    d'un projet Flutter part au serveur, jamais en local, même quand l'ordre du projet met le poste d'abord."""
+
+    def setUp(self):
+        super().setUp()
+        self.regler(ordre=["local", "serveur"])
+        self.ok("actions", entree={"type": "fonctionnalite", "texte": "Le score est faux", "nature": "correction"})
+        self.ok("demande-traitee", entree={"id": "r2"})
+        self.ok("fonctionnalite", entree={"id": "f2", "etape": "serie"})
+
+    def flutter(self):
+        (self.dossier / "pubspec.yaml").write_text(PUBSPEC_FLUTTER, encoding="utf-8")
+
+    def test_correction_flutter_part_au_serveur(self):
+        self.flutter()
+        t = self.tache("flux:dev", fonctionnalite="f2")
+        self.assertEqual(self.lieu_de(self.parties(self.demarrer())[t]), "serveur")
+
+    def test_correction_flutter_attend_le_serveur_plutot_que_le_poste(self):
+        self.flutter()
+        self.regler(serveur=1)
+        occupee = self.tache("flux:dev", element="e9", titre="Occupée")
+        self.ok("tache", entree={"id": occupee, "agent": "agent-3", "active": True})
+        t = self.tache("flux:dev", fonctionnalite="f2")
+        self.assertNotIn(t, self.parties(self.demarrer()))
+
+    def test_reprise_d_une_correction_flutter_ne_revient_pas_a_l_agent_local(self):
+        self.flutter()
+        t = self.tache("flux:dev", fonctionnalite="f2")
+        self.commencee(t, "agent-1")
+        etat = regles.nouvel_etat()
+        etat["a_lancer"].append(t)
+        self.assertEqual(self.lieu_de(self.parties(self.demarrer(etat))[t]), "serveur")
+
+    def test_fonctionnalite_ordinaire_suit_l_ordre_du_projet(self):
+        self.flutter()
+        t = self.tache("flux:dev")
+        self.assertEqual(self.lieu_de(self.parties(self.demarrer())[t]), "local")
+
+    def test_correction_hors_flutter_suit_l_ordre_du_projet(self):
+        t = self.tache("flux:dev", fonctionnalite="f2")
+        self.assertEqual(self.lieu_de(self.parties(self.demarrer())[t]), "local")
+
+    def test_serveur_hors_ligne_la_correction_n_attend_pas_indefiniment(self):
+        from orchestrateur import outil
+        self.flutter()
+        t = self.tache("flux:dev", fonctionnalite="f2")
+        with mock.patch.object(outil, "serveur_hors_ligne", return_value=True):
+            self.assertEqual(self.lieu_de(self.parties(self.demarrer())[t]), "local")
 
 
 class Amont(Base):

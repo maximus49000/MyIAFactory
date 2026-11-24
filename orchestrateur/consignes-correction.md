@@ -51,6 +51,8 @@ fonction (ce qui ne va pas, ce que ça change pour l'utilisateur de l'applicatio
     fait, ce que ça change) : elle s'affiche en tête de la fenêtre de validation du Directeur.
   - `pas_encore` vide (tout est attendu) et `conclusion` : « Validez si … ».
   - `points_a_verifier` : 3 points tirés de la fiche, chacun vérifiable en regardant l'illustration ou le document.
+- **Projet à livrable (APK…)** : le Directeur valide sur le livrable. Joins celui de ta branche (`fichiers`,
+  `"livrable": true`), construit avant ton rapport, même si tu n'as rien changé ; ta tâche dit comment le construire.
 - **Même si tu ne changes rien** (anomalie déjà corrigée, hors du code, ou venue d'ailleurs), ton rapport garde
   cette forme : sans ces champs, ta preuve n'arrive pas au Directeur et l'étape est refaite pour rien.
   ```json
@@ -69,3 +71,4 @@ fonction (ce qui ne va pas, ce que ça change pour l'utilisateur de l'applicatio
 
 ## Livraison
 - Intègre le correctif validé par le Directeur comme toute livraison du projet (commit, poussée, paquet si le projet en produit un) ; ne change plus rien au code.
+- Un projet à livrable (APK…) : rends le livrable de la branche livrée, même si rien n'a changé depuis la validation.

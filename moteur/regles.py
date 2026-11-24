@@ -593,6 +593,8 @@ def _transmettre_a_l_agent(projet, demande, fid, tid, agent):
 def _sur_message(projet, demande, etat):
     fid = demande["fonctionnalite"]
     f = _fonc(projet, fid)
+    if f.get("en_file_derriere"):      # une correction qui attend la fin d'une autre du même sujet
+        return _message_en_file(projet, etat, demande, f)
     accord = _m(etat, "accords").get(fid)
     if accord is not None and f["etape"] in ("cadrage", "cahier", "prototype", "serie"):
         return _reponse_a_une_question(projet, etat, demande, f, accord)
@@ -1121,13 +1123,108 @@ def _correction_sans_workflow(f):
     return (f or {}).get("nature") == "correction" and not f.get("workflow")
 
 
-def _sur_correction(projet, demande, etat):
+def _sur_correction(projet, demande, etat, file=True):
     """Une correction : ni classement de genre, ni workflow proposé ; son workflow est construit par le code, puis le
-    cadrage court démarre."""
+    cadrage court démarre. Une correction du même sujet qu'une correction encore ouverte attend sa fin (`file`, voir
+    `_correction_du_meme_sujet`)."""
     fid = demande["fonctionnalite"]
     _nommer(projet, fid)
-    return _lancer_la_correction(projet, etat, fid, {"demande": demande["id"], "fonctionnalite": fid},
-                                 _role_de_correction(projet))
+    suite = {"demande": demande.get("id"), "fonctionnalite": fid}
+    if file:
+        rivale = _correction_du_meme_sujet(projet, fid)
+        if rivale is not None:
+            return _mettre_en_file(projet, fid, rivale, suite)
+    return _lancer_la_correction(projet, etat, fid, suite, _role_de_correction(projet))
+
+
+# (c) Les corrections du même sujet, l'une après l'autre. Essai réel FM_Stats (2026-11-24) : une correction demandée
+# pendant qu'une autre, sur le même écran, attendait (bloquée) a lancé une chaîne concurrente ; les deux modifiaient les
+# mêmes fichiers, d'où des conflits de fusion et des tâches de reprise en cascade. Heuristique volontairement simple :
+# même fonctionnalité concernée (choisie par le Directeur), ou même titre une fois normalisé. La correction en file
+# n'est jamais bloquée pour de bon : elle part dès que l'autre est terminée (vu à chaque passage du moteur, gardé dans
+# le suivi : un redémarrage ne l'oublie pas), et le Directeur peut la lancer tout de suite.
+LANCER_LA_CORRECTION_MAINTENANT = "Lancer maintenant, en parallèle"
+ATTENDRE_LA_CORRECTION = "Attendre la fin de l'autre correction"
+ETAPES_FINIES = ("terminee", "deplacee")
+
+
+def _sujet(nom):
+    """Le titre d'une correction, comparable : minuscules, sans accents ni ponctuation, sans « Corriger : »."""
+    t = normaliser_mot(str(nom or ""))
+    t = re.sub(r"^corriger\b", "", t)
+    return " ".join(re.findall(r"[a-z0-9]+", t))
+
+
+def _correction_du_meme_sujet(projet, fid):
+    """La première correction encore ouverte du projet (ni terminée, ni partie ailleurs, ni elle-même en file) qui
+    concerne la même fonctionnalité que `fid`, ou qui porte le même titre ; None sinon."""
+    court = _etat(projet)
+    f = next((x for x in court["fonctionnalites"] if x["id"] == fid), None)
+    if f is None:
+        return None
+    sujet = _sujet(f.get("nom"))
+    for x in court["fonctionnalites"]:
+        if (x["id"] == fid or x.get("nature") != "correction" or x["etape"] in ETAPES_FINIES
+                or x.get("en_file_derriere")):
+            continue
+        if (f.get("concerne") and x.get("concerne") == f["concerne"]) or (sujet and _sujet(x.get("nom")) == sujet):
+            return x
+    return None
+
+
+def _mettre_en_file(projet, fid, rivale, suite):
+    """La correction attend la fin de `rivale` : notée dans le suivi, dite dans les deux discussions."""
+    lancer(projet, "fonctionnalite", {"id": fid, "en_file_derriere": rivale["id"]})
+    texte = (f"Cette correction porte sur le même sujet que « {rivale['nom']} » ({rivale['id']}), encore en cours : "
+             "elle démarrera dès que celle-ci sera terminée, pour ne pas modifier les mêmes fichiers en parallèle. "
+             "Vous pouvez aussi la lancer tout de suite.")
+    _dire(projet, fid, texte, attend=True,
+          questions=[{"texte": texte, "choix": [ATTENDRE_LA_CORRECTION, LANCER_LA_CORRECTION_MAINTENANT]}])
+    _terminer(projet, suite, texte)
+    return []
+
+
+def _sortir_de_la_file(projet, etat, fid, texte, suite=None, file=True):
+    """La correction quitte la file et démarre (`file` : sauf si une autre correction du même sujet est ouverte)."""
+    lancer(projet, "fonctionnalite", {"id": fid, "en_file_derriere": None})
+    _dire(projet, fid, texte)
+    return _sur_correction(projet, {"id": (suite or {}).get("demande"), "fonctionnalite": fid}, etat, file=file)
+
+
+def _relancer_les_corrections_en_file(projet, etat, court):
+    """Chaque passage : une correction en file dont la correction attendue est terminée (ou n'existe plus) démarre,
+    ou se remet en file derrière une autre correction du même sujet encore ouverte."""
+    actions = []
+    par_id = {f["id"]: f for f in court["fonctionnalites"]}
+    for f in court["fonctionnalites"]:
+        derriere = f.get("en_file_derriere")
+        if not derriere:
+            continue
+        attendue = par_id.get(derriere)
+        if attendue is not None and attendue["etape"] not in ETAPES_FINIES:
+            continue
+        nom = attendue["nom"] if attendue else derriere
+        autre = _correction_du_meme_sujet(projet, f["id"])
+        if autre is not None:       # une autre correction du même sujet est partie entre-temps : derrière elle
+            lancer(projet, "fonctionnalite", {"id": f["id"], "en_file_derriere": autre["id"]})
+            _dire(projet, f["id"], f"La correction « {nom} » est terminée ; celle-ci attend maintenant « {autre['nom']} » "
+                                   f"({autre['id']}), du même sujet.")
+            continue
+        actions += _sortir_de_la_file(projet, etat, f["id"], f"La correction « {nom} » est terminée : celle-ci démarre.",
+                                      file=False)
+    return actions
+
+
+def _message_en_file(projet, etat, demande, f):
+    """Un message du Directeur sur une correction en file : « Lancer maintenant » la démarre tout de suite ; tout autre
+    message est gardé dans sa discussion pour son diagnostic."""
+    suite = {"demande": demande["id"], "fonctionnalite": f["id"]}
+    if normaliser_mot(LANCER_LA_CORRECTION_MAINTENANT) in normaliser_mot(demande.get("texte") or ""):
+        _terminer(projet, suite, "La correction démarre tout de suite.")
+        return _sortir_de_la_file(projet, etat, f["id"], "Lancée tout de suite à la demande du Directeur.", file=False)
+    _terminer(projet, suite, f"C'est noté : cette correction attend la fin de {f['en_file_derriere']}, son diagnostic "
+                             "lira votre message.")
+    return []
 
 
 def _role_de_correction(projet):
@@ -3291,6 +3388,8 @@ def _demarrer_en_attente(projet, etat, fid):
     lots = [x for lot in lots for x in ([{"ids": [i], "modele": lot["modele"], "lot": None} for i in lot["ids"]]
                                         if len(lot["ids"]) > 1 and mn.rang(lot["modele"]) >= mn.rang(mn.FABLE)
                                         else [lot])]
+    corrections_au_serveur = _corrections_au_serveur(projet, fac)
+    natures = {f["id"]: f.get("nature") for f in court["fonctionnalites"]}
     polyvalents = any(_polyvalent(a) for a in court["agents"])
     if polyvalents:      # n'importe quel agent libre peut prendre une tâche : on occupe d'abord toutes les places
         lots = _repartir_sur_les_places(lots, places["locaux"] + places["cloud"] + places["serveur"])
@@ -3307,6 +3406,11 @@ def _demarrer_en_attente(projet, etat, fid):
         cloud_ok = places["cloud"] > 0 and "local" not in reserves
         # le serveur : ses propres places (`agents_serveur_max`), jamais une tâche qui exige le poste ou le cloud
         serveur_ok = places["serveur"] > 0 and not reserves & {"local", "cloud"}
+        epinglee = (corrections_au_serveur and not reserves & {"local", "cloud"}
+                    and "serveur" in dep.ordre_du_metier(fac, premiere.get("role"))
+                    and any(_etape_de_correction(par_id[i], natures) for i in lot["ids"]))
+        if epinglee:      # une étape de correction d'un projet Flutter : au serveur seulement (`_corrections_au_serveur`)
+            local_ok = cloud_ok = False
         if polyvalents and mn.rang(_modele_voulu(projet, court, premiere, lot["modele"])) >= mn.rang(mn.FABLE):
             accord = premiere.get("fable_accordee")
             if accord is None:       # la décision au bureau de direction, avant tout départ ; la tâche attend
@@ -3320,6 +3424,9 @@ def _demarrer_en_attente(projet, etat, fid):
         ancien = next((a for a in court["agents"] if a["cle"] == premiere.get("agent")), None)
         if voulu is None and ancien is not None and _polyvalent(ancien) and premiere.get("debut"):
             voulu = ancien["cle"]      # une tâche reprise revient de préférence au même agent polyvalent
+        if epinglee and voulu is not None and next(
+                (a for a in court["agents"] if a["cle"] == voulu), {}).get("lieu") != "serveur":
+            voulu = None       # jamais l'agent local d'un essai précédent : un agent du serveur la reprend
         agent = None
         if voulu is not None:
             libre = next((a for a in court["agents"] if a["cle"] == voulu), {})
@@ -3469,6 +3576,35 @@ def demarrer_installation(projet, etat, tid):
         if agent is None:
             return []
     return [_partir(projet, etat, court, agent, [tid], None, {tid: t})]
+
+
+def _projet_flutter(projet):
+    """Vrai pour un projet Flutter (`outils/projet_flutter.py`, lu dans le dossier du projet) ; faux s'il ne l'est pas ou
+    si la lecture échoue."""
+    try:
+        outils = str(Path(__file__).resolve().parent.parent / "outils")
+        if outils not in sys.path:
+            sys.path.append(outils)
+        import projet_flutter
+        return projet_flutter.est_flutter(projet.dossier)
+    except Exception:       # noqa: BLE001 — une lecture ratée : le choix d'avant
+        return False
+
+
+def _corrections_au_serveur(projet, fac):
+    """Vrai quand les étapes du flux d'une correction doivent partir au serveur, jamais en local : un projet Flutter qui
+    a des places serveur, serveur prêt pour lui. Essai réel FM_Stats (2026-11-24) : l'agent local du correctif tentait
+    `flutter build apk` au poste, refusé (personne pour l'approuver) ; aucun APK, la validation du Directeur restait
+    « Rien à valider ». Au serveur, `construire-apk` construit l'APK et le moteur le rapatrie. Serveur hors ligne ou sans
+    place réglée : le choix d'avant (la tâche n'attend jamais un serveur qui ne viendra pas)."""
+    if not (fac.get("agents_serveur_max") or 0) or not _projet_flutter(projet):
+        return False
+    return outil.raison_serveur(fac) is None
+
+
+def _etape_de_correction(t, natures):
+    """Vrai pour une tâche du flux (correctif, vérification, livraison) d'une correction."""
+    return str(t.get("etape") or "").startswith(ETAPES_DE_FLUX) and natures.get(t.get("fonctionnalite")) == "correction"
 
 
 def _ordre_des_lieux(fac, role):
@@ -3819,6 +3955,51 @@ def _partenaires_au_cadrage(projet):
 
 SECTIONS_CORRECTION = {"correctif": "Correctif", "verification": "Vérification", "livraison": "Livraison"}
 
+# (a) et (d) Une correction d'un projet à livrable (APK) : le livrable est rendu AVANT la validation du Directeur, par
+# l'étape qui la précède (correctif, ou vérification), même quand rien n'a changé. Choix : garder l'ordre correctif →
+# validation → livraison (une validation n'est jamais la dernière étape, et la livraison intègre ce qui est validé) et
+# faire du livrable une pièce exigée de la validation (`_apk_exige`, `_attendre_le_directeur`) plutôt que de déplacer
+# la livraison : la règle vaut aussitôt pour les workflows de correction déjà écrits, sans les réécrire, et son échec
+# passe par la relance unique déjà en place (`_rien_a_verifier`). Essai réel FM_Stats (2026-11-24) : la validation
+# arrivait avant l'étape qui construit l'APK, « Rien à valider », série close à vide ; « correctif déjà présent »
+# concluait sans rien livrer.
+CONSIGNE_APK_AVANT_VALIDATION = (
+    "Projet à livrable (APK) : le Directeur valide la correction en essayant l'APK. Avant ton rapport, construis l'APK de "
+    "ta branche, même si tu n'as rien modifié (correctif déjà présent, anomalie introuvable) : c'est alors l'APK actuel "
+    "qu'il essaie. S'il est déjà construit pour cette branche par l'étape d'avant, joins-le sans le reconstruire. "
+    "Déclare-le dans `fichiers` avec `\"livrable\": true` et `\"element\": \"correction\"` (chemin relatif au projet). "
+    "Sans cet APK, l'étape est refaite.")
+CONSIGNE_APK_A_LA_LIVRAISON = (
+    "Projet à livrable (APK) : construis l'APK de la branche livrée, même si rien n'a changé depuis la validation, et "
+    "déclare-le dans `fichiers` avec `\"livrable\": true` et `\"element\": \"correction\"`.")
+CONSIGNE_APK_FLUTTER = (
+    "Projet Flutter : construis l'APK par la commande unique `construire-apk` (au serveur ; elle se place dans le dossier "
+    "Flutter et rend le fichier sous `build/app/outputs/flutter-apk/`), jamais `flutter build` directement (refusé au "
+    "poste). Aucun émulateur n'est nécessaire : l'APK suffit, c'est le Directeur qui l'essaie.")
+CONSIGNE_APK_AU_DIAGNOSTIC = (
+    "Projet à livrable (APK) : une petite correction faite au diagnostic est validée sur l'APK. Si tu peux le construire "
+    "(au serveur : `construire-apk`, jamais `flutter build` directement), joins-le dans `fichiers` avec "
+    "`\"livrable\": true` ; sinon rends quand même la fiche et le correctif, sans essayer de le construire : l'APK sera "
+    "construit au serveur avant la validation.")
+
+
+def _livrable_du_projet(projet):
+    """Le livrable téléchargeable que produit le projet (`apk` pour un projet Flutter), ou None."""
+    return "apk" if _projet_flutter(projet) else None
+
+
+def _apk_exige(projet, v):
+    """Vrai si la validation de cet élément exige l'APK : une correction d'un projet qui produit un APK."""
+    return (_fonc(projet, v["fid"]) or {}).get("nature") == "correction" and _livrable_du_projet(projet) == "apk"
+
+
+def _consigne_apk_de_correction(projet, pas):
+    """Ce que l'étape `pas` (`correctif`, `verification`, `livraison`) d'une correction doit rendre comme livrable ;
+    rien pour un projet sans livrable."""
+    if _livrable_du_projet(projet) != "apk" or pas not in SECTIONS_CORRECTION:
+        return []
+    return [CONSIGNE_APK_A_LA_LIVRAISON if pas == "livraison" else CONSIGNE_APK_AVANT_VALIDATION, CONSIGNE_APK_FLUTTER]
+
 
 def _consigne_de_correction(pas):
     """La section de `consignes-correction.md` de l'étape (`correctif`, `verification`, `livraison`), titre compris ;
@@ -3999,6 +4180,8 @@ def _matiere(projet, etat, t):
                         "Discussion avec l'utilisateur :", _texte_discussion(f, projet=projet),
                         "Rends `fiche_correction` dès que tu peux reproduire et comprendre l'attendu ; sinon des "
                         "questions courtes à choix (`message.questions`, `attend: true`)."]
+            if _livrable_du_projet(projet) == "apk":
+                parties.append(CONSIGNE_APK_AU_DIAGNOSTIC)
             parties += _contexte_concerne(projet, f)
         else:
             parties += ["Discussion avec l'utilisateur :", _texte_discussion(f, projet=projet),
@@ -4035,7 +4218,8 @@ def _matiere(projet, etat, t):
             parties += [f"Élément : {t.get('element')}", f"Étape du flux : {pas}",
                         "C'est une **correction**, pas une nouvelle fonctionnalité. Fiche de correction :",
                         "\n".join(f"- {x}" for x in (f.get("cahier") or {}).get("etapes") or []) or "(vide)"]
-            parties += ([consigne] if consigne else []) + _contexte_concerne(projet, f)
+            parties += ([consigne] if consigne else []) + _consigne_apk_de_correction(projet, pas.removeprefix(f"{fid}-"))
+            parties += _contexte_concerne(projet, f)
             parties.append(_consigne_des_controles(projet, t, f))
         else:
             methode = (f or {}).get("methode") or {}
@@ -5222,7 +5406,8 @@ def _attendre_le_directeur(projet, etat, v, s):
     n'est pas posée (voir `_rien_a_verifier`)."""
     precedent = v.get("dernier_rapport") or {}
     nature = precedent.get("nature") if rel.nature_ok(precedent.get("nature")) else None
-    if nature in ("visuel", "son", "mecanique"):      # jamais l'apk pour juger un visuel, un son ou une mécanique
+    apk_exige = _apk_exige(projet, v)      # une correction d'un projet à APK : validée sur l'APK, quelle que soit sa nature
+    if nature in ("visuel", "son", "mecanique") and not apk_exige:   # jamais l'apk pour juger un visuel, un son…
         precedent = {**precedent, "fichiers": [x for x in precedent.get("fichiers") or []
                                                if not rel.est_executable(x.get("chemin"))]}
     if not rel.texte_dit_ok(precedent.get("doit_marcher"), rel.MAX_DOIT_MARCHER):
@@ -5245,6 +5430,8 @@ def _attendre_le_directeur(projet, etat, v, s):
     manques = ([] if _de_quoi_verifier(projet, precedent) else ["rien"]) \
         + ([] if rel.texte_dit_ok(precedent.get("doit_marcher"), rel.MAX_DOIT_MARCHER) else ["doit_marcher"]) \
         + _manques_de_nature(projet, nature, precedent)
+    if apk_exige and "livrable" not in manques and not _fichier_existe(projet, precedent, rel.est_executable):
+        manques.append("apk")
     if v.pop("rapport_du_suivi", False):
         # le rapport a été perdu pendant l'arrêt du moteur (relu dans le suivi) : la validation est posée avec ce qu'il y
         # a à vérifier, l'étape n'est refaite que s'il n'y a rien du tout
@@ -5388,10 +5575,14 @@ CONSIGNES_DE_NATURE = {
     "document": "Validation d'une mécanique sans document explicatif : écris un document (md ou pdf) qui explique la "
                 "mécanique, joins-le dans `fichiers` (avec, si utile, images ou schémas), jamais l'apk (sauf si la "
                 "mécanique est déjà jouable : alors `nature: en_jeu`).",
+    "apk": "Correction d'un projet à livrable sans APK : construis l'APK de la branche (au serveur, `construire-apk`, "
+           "jamais `flutter build` directement), même si rien n'a changé, et joins-le dans `fichiers` avec "
+           "`\"livrable\": true` et `\"element\": \"correction\"`.",
 }
 QUOI_MANQUE = {"rien": "sans rien à vérifier", "doit_marcher": "sans dire ce qui doit marcher",
                "livrable": "sans livrable à essayer", "mode_operatoire": "sans mode opératoire",
-               "image": "sans image", "son": "sans son", "document": "sans document explicatif"}
+               "image": "sans image", "son": "sans son", "document": "sans document explicatif",
+               "apk": "sans l'APK à essayer"}
 
 
 CONSIGNE_DOIT_MARCHER = (
@@ -5915,7 +6106,7 @@ def avancer(projet, etat):
     if court["pause"]:
         _noter_les_attentes_sans_risque(projet, etat)
         return analyses
-    actions = analyses
+    actions = analyses + _relancer_les_corrections_en_file(projet, etat, court)
     for f in court["fonctionnalites"]:
         if f["etape"] in ("cadrage", "cahier") and f["attend_reponse"]:
             actions += _repondre_cadrage(projet, etat, f["id"])

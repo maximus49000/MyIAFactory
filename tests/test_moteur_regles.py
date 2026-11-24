@@ -2223,6 +2223,14 @@ class Validation(Base):
             "maquette": [{"chemin": "pieces/f1/maquette.html", "legende": "L'onglet"}], "etapes": ["Faire"]}})
         self.assertTrue(regles._maquette_du_cahier(self.projet, "f1"))
 
+    def test_un_livrable_deja_range_pour_l_element_est_de_quoi_verifier(self):
+        self.projet_avec_validation()
+        self.fichier("pieces/f1/page.html", b"<html></html>")
+        self.ok("document", entree={"fonctionnalite": "f1", "chemin": "pieces/f1/page.html", "titre": "Page",
+                                    "livrable": True, "element": "e1"})
+        self.assertTrue(regles._maquette_du_cahier(self.projet, "f1", "e1"))
+        self.assertFalse(regles._maquette_du_cahier(self.projet, "f1", "e2"))
+
     # --- La nature de ce qu'on fait valider : les preuves qui conviennent (règle de l'utilisateur).
 
     MODE = ["Installez l'apk sur le téléphone.", "Ouvrez le jeu.", "Touchez Jouer et observez le menu."]

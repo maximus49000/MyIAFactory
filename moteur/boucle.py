@@ -1040,19 +1040,27 @@ class Moteur:
         projet (accord permanent, `deport_types.accord_serveur`) ET qu'un APK est trouvé (`apk_pour_le_pilote`) ; sinon
         `("seul", None)`. Une lecture qui échoue vaut « seul ». Le pilote exige aussi, à la dernière sonde, un serveur
         prêt pour lui (`agent-pilote` : agent, abonnement ET image de l'émulateur) : sinon « seul », et le journal le dit."""
+        def dire(mode, raison):      # chaque lancement dit le mode choisi et pourquoi (cause des agents sans émulateur)
+            self._noter(projet, f"agent serveur : mode {mode} ({raison})")
+
         try:
             plus = {"bureau": str(Path(self.bureau).expanduser())} if self.bureau else {}
             if not deport_types.accord_serveur(str(projet.dossier), ACTION_PILOTE, **plus):
+                dire("seul", f"accord {ACTION_PILOTE} absent")
                 return "seul", None
             apk = apk_pour_le_pilote(projet.dossier)
-        except Exception:                    # noqa: BLE001 — jamais une raison de ne pas partir
+        except Exception as e:               # noqa: BLE001 — jamais une raison de ne pas partir
+            dire("seul", f"lecture impossible : {e!r}"[:200])
             return "seul", None
         if not apk:
+            dire("seul", "aucun APK trouvé")
             return "seul", None
         refus = self._pilote_impossible()
         if refus:
             self._noter(projet, f"mode pilote impossible, l'agent serveur part seul (sans émulateur) : {refus}")
+            dire("seul", refus)
             return "seul", None
+        dire("pilote", f"accord {ACTION_PILOTE} et APK {Path(str(apk)).name}")
         return "pilote", apk
 
     @staticmethod

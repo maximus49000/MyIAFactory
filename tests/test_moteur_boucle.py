@@ -883,6 +883,48 @@ class Serveur(Base):
         self.assertTrue(any("mode pilote impossible" in j and "emulateur-image" in j for j in self.moteur.journal),
                         self.moteur.journal)
 
+    def _poser_apk(self):
+        sorties = self.dossier / "app" / "build" / "outputs" / "apk" / "debug"
+        sorties.mkdir(parents=True, exist_ok=True)
+        (sorties / "app-debug.apk").write_bytes(b"PK")
+
+    def test_mode_seul_dit_pourquoi_accord_absent(self):
+        self.accord = False
+        self.assertEqual(self.moteur._mode_serveur(self.projet), ("seul", None))
+        self.assertIn("mode seul (accord recette-emulateur absent)", self.moteur.journal[-1])
+        self.assertIn("agent serveur", self.moteur.journal[-1])
+
+    def test_mode_seul_dit_pourquoi_aucun_apk(self):
+        self.accord = True
+        self.assertEqual(self.moteur._mode_serveur(self.projet), ("seul", None))
+        self.assertIn("mode seul (aucun APK trouvé)", self.moteur.journal[-1])
+
+    def test_mode_seul_dit_pourquoi_serveur_sans_emulateur(self):
+        self._poser_apk()
+        self.accord = True
+        self.pilote_refus = "ovh : emulateur-image manquante"
+        self.assertEqual(self.moteur._mode_serveur(self.projet), ("seul", None))
+        self.assertIn("mode seul (", self.moteur.journal[-1])
+        self.assertIn("ovh : emulateur-image manquante", self.moteur.journal[-1])
+
+    def test_mode_seul_dit_pourquoi_lecture_en_echec(self):
+        from bureau import deport_types
+
+        def casse(*a, **kw):
+            raise OSError("x" * 500)
+        with mock.patch.object(deport_types, "accord_serveur", casse):
+            self.assertEqual(self.moteur._mode_serveur(self.projet), ("seul", None))
+        self.assertIn("mode seul (lecture impossible : OSError", self.moteur.journal[-1])
+        self.assertLess(len(self.moteur.journal[-1]), 400)
+
+    def test_mode_pilote_est_journalise(self):
+        self._poser_apk()
+        self.accord = True
+        mode, apk = self.moteur._mode_serveur(self.projet)
+        self.assertEqual(mode, "pilote")
+        self.assertIn("mode pilote", self.moteur.journal[-1])
+        self.assertIn(self.projet.nom + " : agent serveur : mode pilote", self.moteur.journal[-1])
+
     def regler_places_serveur(self, n):
         f = json.loads(self.factory.read_text(encoding="utf-8"))
         f["agents_serveur_max"] = n

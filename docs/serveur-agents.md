@@ -8,6 +8,12 @@ Conception : [`2026-11-19-agents-serveur-design.md`](superpowers/specs/2026-11-1
 [`2026-11-20-agents-serveur-tranche-b.md`](superpowers/plans/2026-11-20-agents-serveur-tranche-b.md). Le serveur lui-même :
 [`serveur.md`](serveur.md) ; l'émulateur et le pont (tranche A) : [`serveur-taches.md`](serveur-taches.md).
 
+> **Service permanent.** Un agent (serveur ou poste) qui livre un serveur, une API ou des pages web qui doivent **rester en
+> place** ne les déploie jamais lui-même : il prépare `.factory/service.json` et le service (santé publique, jeton
+> `Authorization: Bearer` partout ailleurs, données sous `/data`), puis le moteur déploie après la livraison validée. Il ne lit
+> que `python lancer.py deporter service etat|journal` ; les secrets sont saisis par le Directeur seul (zone Services du
+> bureau). Voir [`serveur-services.md`](serveur-services.md).
+
 > **Rien de cette tranche n'a encore tourné sur un vrai serveur.** Tout est vérifié par de faux SSH, de faux `docker`, de faux
 > `claude` et des dépôts Git jetables. La liste de ce qui reste à prouver est dans « Non vérifié sur un vrai serveur », et la marche
 > à suivre pour le prouver dans « Essais réels ». **Aucun agent n'est possible tant que le Directeur n'a pas fait la

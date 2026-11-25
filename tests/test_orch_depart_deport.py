@@ -52,6 +52,15 @@ class TestDeportConsigne(unittest.TestCase):
                 self.assertNotIn("recette-emulateur", t, (lieu, catalogue is ANDROID))
                 self.assertNotIn("Recette sur émulateur", t)
 
+    def test_service_permanent_prepare_jamais_deploye(self):
+        for catalogue in (GENERIQUE, ANDROID):
+            self.assertEqual(depart.deport_consigne({"service": "poste"}, catalogue), "")
+            t = depart.deport_consigne({"service": "serveur"}, catalogue, dossier="D:/p")
+            for mot in (".factory/service.json", 'deporter service etat --dossier "D:/p"', "deporter service journal",
+                        "jamais déployer", "Directeur seul", "SERVICE_JETON", "DONNÉE"):
+                self.assertIn(mot, t)
+            self.assertNotIn("deporter service deployer", t)
+
     def test_generique_tout_sur_github_dans_le_budget(self):
         t = depart.deport_consigne({**_tous("github"), "emulateur": "poste"}, GENERIQUE, dossier="D:/un/long/chemin")
         self.assertLess(len(t), 2200)

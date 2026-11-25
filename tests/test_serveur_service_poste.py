@@ -20,7 +20,7 @@ sys.path.insert(0, str(RACINE))
 import serveur_service as ss  # noqa: E402
 from tests.test_serveur_service_hote import DECLARATION, FauxHote, S  # noqa: E402
 
-CLE_PRIVEE = "C:/cles-privees/id_ed25519_ovh1_SECRET-CHEMIN"
+CLE_PRIVEE = "C:/cles-factices/cle-de-test-SECRET-CHEMIN"
 SECRET = "cle-api-football-tres-secrete-123"
 
 
@@ -72,13 +72,13 @@ class Base(unittest.TestCase):
         self.bureau = self.dossier / "bureau.json"
         self.bureau.write_text(json.dumps({"projets": [{"chemin": str(self.reglages)}]}), "utf-8")
         (self.dossier / "serveurs.json").write_text(json.dumps(
-            [{"id": "ovh1", "nom": "ovh1", "hote": "ovh1.exemple.net", "utilisateur": "ubuntu", "cle": CLE_PRIVEE}]),
+            [{"id": "srv1", "nom": "srv1", "hote": "serveur.exemple.test", "utilisateur": "ubuntu", "cle": CLE_PRIVEE}]),
             "utf-8")
         (self.dossier / "serveurs-etat.json").write_text(json.dumps(
-            {"ovh1": {"capacites": {"base": {"statut": "presente"}}, "installation": {"en_cours": False}}}), "utf-8")
+            {"srv1": {"capacites": {"base": {"statut": "presente"}}, "installation": {"en_cours": False}}}), "utf-8")
         _git("init", "-q", "-b", "main", cwd=self.projet)
-        _git("-c", "user.email=a@b.c", "-c", "user.name=t", "add", "-A", cwd=self.projet)
-        _git("-c", "user.email=a@b.c", "-c", "user.name=t", "commit", "-q", "-m", "init", cwd=self.projet)
+        _git("-c", "user.email=test@exemple.test", "-c", "user.name=t", "add", "-A", cwd=self.projet)
+        _git("-c", "user.email=test@exemple.test", "-c", "user.name=t", "commit", "-q", "-m", "init", cwd=self.projet)
         self.commit = subprocess.run(["git", "rev-parse", "HEAD"], cwd=self.projet, capture_output=True,
                                      text=True).stdout.strip()
         self.ssh = FauxSsh(t / "services-serveur")
@@ -115,7 +115,7 @@ class TestDeploiement(Base):
         code, rep = self.deployer()
         self.assertEqual(code, 0, rep)
         self.assertEqual(rep["statut"], "ok")
-        self.assertRegex(rep["adresse"], r"^http://ovh1\.exemple\.net:18\d{3}$")
+        self.assertRegex(rep["adresse"], r"^http://serveur\.exemple\.test:18\d{3}$")
         jeton = ss.lire_jeton("fm-stats", self.dossier)
         self.assertGreaterEqual(len(jeton), 40)
         cache = json.loads((self.dossier / "services.json").read_text("utf-8"))
@@ -157,8 +157,8 @@ class TestDeploiement(Base):
     def test_retour_arriere_rapporte(self):
         self.deployer()
         (self.projet / "x.txt").write_text("x", "utf-8")
-        _git("-c", "user.email=a@b.c", "-c", "user.name=t", "add", "-A", cwd=self.projet)
-        _git("-c", "user.email=a@b.c", "-c", "user.name=t", "commit", "-q", "-m", "b", cwd=self.projet)
+        _git("-c", "user.email=test@exemple.test", "-c", "user.name=t", "add", "-A", cwd=self.projet)
+        _git("-c", "user.email=test@exemple.test", "-c", "user.name=t", "commit", "-q", "-m", "b", cwd=self.projet)
         nouveau = subprocess.run(["git", "rev-parse", "HEAD"], cwd=self.projet, capture_output=True,
                                  text=True).stdout.strip()
         self.ssh.hote.images_malades.add(S.nom_image("fm-stats", nouveau))

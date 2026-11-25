@@ -579,11 +579,16 @@ def cmd_recevoir(service, commit, entree, hote, simuler, **_):
 
 
 def cmd_poser(service, entree, simuler, fichier, quoi, **_):
+    """Ajoute ou remplace les valeurs reçues ; celles déjà posées et non reprises sont gardées. Ne rend que les NOMS."""
     valeurs = valider_valeurs(entree.read(ENTREE_MAX + 1), quoi)
+    deja = lire_json_local(service.chemin(fichier), {})
+    tout = dict(deja if isinstance(deja, dict) else {}, **valeurs)
+    if len(tout) > NOMS_MAX:
+        raise Refus(f"{quoi} : {NOMS_MAX} au plus.")
     if not simuler:
-        ecrire_prive(service.chemin(fichier), json.dumps(valeurs, ensure_ascii=False))
+        ecrire_prive(service.chemin(fichier), json.dumps(tout, ensure_ascii=False))
     return 0, {"statut": "simule" if simuler else "ok", "detail": f"{len(valeurs)} {quoi} posé(s).",
-               quoi: sorted(valeurs)}
+               quoi: sorted(tout)}
 
 
 def cmd_deployer(service, commit, hote, simuler, uid, gid, **_):

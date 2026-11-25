@@ -22,13 +22,13 @@ class TestCatalogues(unittest.TestCase):
                 self.assertEqual(set(entree), CLES, nom)
 
     def test_le_generique_est_le_catalogue_d_origine(self):
-        self.assertEqual(list(GENERIQUE), ["apk", "tests", "emulateur", "charge", "recette-emulateur"])
+        self.assertEqual(list(GENERIQUE), ["apk", "tests", "emulateur", "charge", "recette-emulateur", "service"])
         self.assertEqual(GENERIQUE["tests"]["consomme"], ["apk"])
         self.assertEqual(GENERIQUE["apk"]["produit"], "apk")
 
     def test_android_valeurs_du_catalogue(self):
         self.assertEqual(list(ANDROID), ["apk", "tests", "lint", "emulateur", "release", "release-signe",
-                                         "recette-emulateur"])
+                                         "recette-emulateur", "service"])
         self.assertNotIn("charge", ANDROID)
         self.assertEqual(ANDROID["apk"]["commande"], "./gradlew assembleDebug")
         self.assertEqual(ANDROID["apk"]["artefact"], "app/build/outputs/apk/debug/*.apk")

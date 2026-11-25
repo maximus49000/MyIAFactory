@@ -136,6 +136,8 @@ _BESOINS = {
     # et `lancer.py plateforme serveurs apercu|installer <id> recette-emulateur` installent emulateur-image (et sa chaîne)
     "recette-emulateur": ("emulateur-image",),
     "charge": (),
+    # le service permanent d'un projet (docs/serveur-services.md) : Docker et ufw de la base suffisent
+    "service": ("base",),
     # un agent du projet tourne sur le serveur : seul (branche et rapport) ou pilote (il conduit l'émulateur par le pont fermé)
     "agent-serveur": ("agent", "agent-abonnement"),
     "agent-pilote": ("agent", "agent-abonnement", "emulateur-image"),

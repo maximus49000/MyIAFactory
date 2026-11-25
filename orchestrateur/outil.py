@@ -1298,6 +1298,7 @@ def _accord_a_donner(ctx, s, e):
 
 
 CAPTURES_DE_VALIDATION_MAX = 8   # comme `moteur.regles.CAPTURES_MAX`
+MOMENTS_DE_CAPTURE = ("avant", "apres")   # l'« avant » et l'« après » d'une correction
 PROMPT_PARTENAIRE_MAX = 4000   # le plafond général ; certains partenaires en ont un plus bas (`partenaires.etat.PROMPT_MAX`)
 MAX_REGLAGES, MAX_ETAPES_CHEZ, MAX_ELEMENTS_CHEZ = 12, 10, 12
 
@@ -1466,19 +1467,29 @@ def _validation_decidee(ctx, s, e):
         plus["acces"] = {k: v for k, v in e["acces"].items() if v is not None}
     if e.get("captures") is not None:     # les captures de l'application prises pour la validation, dans l'ordre
         captures = e["captures"]
-        if (not isinstance(captures, list) or len(captures) > CAPTURES_DE_VALIDATION_MAX
+        # `moment` (facultatif) : « avant » (l'APK de la dernière livraison) ou « apres », pour une correction ; au plus
+        # 8 par moment (8 « avant » et 8 « après »), 8 sans moment
+        if (not isinstance(captures, list) or len(captures) > 2 * CAPTURES_DE_VALIDATION_MAX
                 or not all(isinstance(x, dict) and chemin_d_image_sur(x.get("chemin"))
                            and isinstance(x.get("legende", ""), str) and len(x.get("legende", "")) <= 200
-                           for x in captures)):
-            raise Refus(f"« captures » est une liste de {CAPTURES_DE_VALIDATION_MAX} {{chemin, legende}} au plus : "
-                        "chaque chemin, relatif au projet (ni absolu, ni « .. »), désigne une image PNG ou JPEG ; "
-                        "légende de 200 caractères au plus.")
-        rangees = [{"chemin": ctx.image_rangee(x["chemin"].strip(), fid), "legende": x.get("legende", "").strip()}
-                   for x in captures]
+                           and x.get("moment", "apres") in MOMENTS_DE_CAPTURE for x in captures)
+                or sum(1 for x in captures if x.get("moment") == "avant") > CAPTURES_DE_VALIDATION_MAX
+                or sum(1 for x in captures if x.get("moment") != "avant") > CAPTURES_DE_VALIDATION_MAX):
+            raise Refus(f"« captures » est une liste de {CAPTURES_DE_VALIDATION_MAX} {{chemin, legende, moment?}} au "
+                        "plus (et autant de « avant ») : chaque chemin, relatif au projet (ni absolu, ni « .. »), "
+                        "désigne une image PNG ou JPEG ; légende de 200 caractères au plus ; moment « avant » ou "
+                        "« apres ».")
+        rangees = [{"chemin": ctx.image_rangee(x["chemin"].strip(), fid), "legende": x.get("legende", "").strip(),
+                    **({"moment": x["moment"]} if "moment" in x else {})} for x in captures]
         # une image absente, hors du projet ou qui n'en est pas une n'est jamais montrée au Directeur
         plus["captures"] = [x for x in rangees if image_servie(ctx.f, ctx.f["base"].parent, x["chemin"])]
     if e.get("sans_capture") is not None:     # pourquoi la validation n'a pas de capture (une ligne)
         plus["sans_capture"] = _phrase_courte(e, "sans_capture", 300)
+    if "avant_indisponible" in e:      # une correction sans l'« avant » de ses captures (l'APK précédent manquait)
+        if not isinstance(e["avant_indisponible"], bool):
+            raise Refus("« avant_indisponible » est vrai ou faux.")
+        if e["avant_indisponible"]:
+            plus["avant_indisponible"] = True
     return {"fonctionnalite": fid, "element": {"id": element["id"], "nom": element["nom"]}, "etape": e["etape"],
             "tache": tache, "compte_rendu": compte_rendu, **plus,
             "fichiers": [_fichier_a_valider(ctx, x, fid) for x in fichiers]}

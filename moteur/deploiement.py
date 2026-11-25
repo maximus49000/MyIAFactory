@@ -61,4 +61,17 @@ def demande(f, restant):
             + " et ".join(restant) + ". Propose où le mettre en place (le serveur déjà déclaré du projet en priorité, sinon "
             "dis les options et leur coût), déploie ce qui doit l'être, installe l'application, vérifie que cela fonctionne en "
             "réel. Il te manque peut-être un accès (serveur, clé, appareil) ou une décision "
-            "de dépense : demande-les au Directeur avant d'agir, ne devine rien." + rappel)
+            "de dépense : demande-les au Directeur avant d'agir, ne devine rien. " + OUTIL_SERVICE + rappel)
+
+
+# L'outil de la plateforme pour un service qui reste en place sur le serveur OVH (docs/serveur-services.md) : l'agent le
+# prépare, le moteur le déploie ; la demande de déploiement le cite pour que l'agent ne l'invente pas à la main.
+OUTIL_SERVICE = ("Pour un serveur, une API ou des pages web qui doivent rester en place sur le serveur OVH, utilise le "
+                 "service permanent de la plateforme : prépare `.factory/service.json` (nom, dockerfile ou image épinglée "
+                 "@sha256, port_interne, sante « /sante », donnees « /data », noms des variables et des secrets ; le "
+                 "service exige « Authorization: Bearer » sauf sur /sante, lit son jeton dans SERVICE_JETON et écrit ses "
+                 "données sous /data ; voir docs/serveur-services.md). Tu ne déploies jamais toi-même : le moteur le "
+                 "déploie après la livraison validée (accord du Directeur : action « service » réglée sur serveur), avec "
+                 "contrôle de santé et retour arrière. Tu lis l'état et le journal par « python lancer.py deporter "
+                 "service etat|journal ». Les clés (secrets) sont saisies par le Directeur seul dans la zone Services du "
+                 "bureau : demande-lui de les saisir, ne les lis, ne les écris ni ne les recopies jamais.")

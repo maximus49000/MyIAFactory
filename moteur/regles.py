@@ -32,7 +32,7 @@ from datetime import datetime
 from pathlib import Path
 
 from installation import estimation, proposition
-from moteur import accord_outil, agents, cloud, detache, deploiement, environnement, jugement, rapport
+from moteur import accord_outil, agents, cloud, detache, deploiement, environnement, jugement, rapport, service_permanent
 from moteur.appel import est_une_limite as appel_limite
 from moteur.jugement import ACTIONS_CONSEIL, COMMANDES_INTERDITES_AU_CONSEIL  # noqa: F401
 from bureau import fichiers_joints
@@ -5371,6 +5371,7 @@ def _suite_de_tache(projet, etat, t, execution, r):
         return []
     if etape.startswith(ETAPES_DE_FLUX):
         _archiver_le_livrable(projet, t, r)
+        _deployer_le_service(projet, t, r)
         return _apres_flux(projet, etat, v, r)
     if etape == "relecture":
         return _apres_relecture(projet, etat, v, execution.agent, r)
@@ -5822,6 +5823,20 @@ def _archiver_le_livrable(projet, t, r):
         lancer(projet, "tache", {"id": t["id"], "journal": [ligne[:500]]})
     except Refus:
         pass
+
+
+def _deployer_le_service(projet, t, r):
+    """À la fin d'une livraison faite (elle suit toujours la validation du Directeur), le service permanent du projet
+    (`.factory/service.json`, accord « service » sur serveur) est redéployé au serveur dans un fil
+    (`service_permanent.declencher`) ; la ligne dite va au journal de la tâche. Jamais une raison d'arrêter la livraison."""
+    if not isinstance(r, dict) or r.get("statut") != "fait" or not _est_une_livraison(projet, t):
+        return
+    ligne = service_permanent.declencher(projet.dossier)
+    if ligne:
+        try:
+            lancer(projet, "tache", {"id": t["id"], "journal": [ligne[:500]]})
+        except Refus:
+            pass
 
 
 def _element_de_captures(projet, etat, t):

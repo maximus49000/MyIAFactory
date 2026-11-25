@@ -1,5 +1,7 @@
 """Le parcours court d'une correction : ni genre, ni workflow proposé, ni cahier."""
 import json
+import os
+import time
 import unittest
 from unittest import mock
 
@@ -315,6 +317,52 @@ class TestCorrectionAvecApk(Base):
         self.rendre(rendu)
         (d,) = self.decisions("valider_etape")
         self.assertIn(APK, [x["chemin"] for x in d["fichiers"]])
+
+    def dater(self, chemin, decalage):
+        """Date un fichier du projet : `decalage` secondes par rapport à maintenant (le moteur écrit son suivi pendant
+        le test : un APK « récent » doit donc être daté dans le futur pour l'être vraiment)."""
+        t = time.time() + decalage
+        os.utime(self.dossier / chemin, (t, t))
+
+    def source(self, nom="lib/main.dart", decalage=0):
+        s = self.dossier / nom
+        s.parent.mkdir(parents=True, exist_ok=True)
+        s.write_text("void main() {}\n", encoding="utf-8")
+        self.dater(nom, decalage)
+
+    def test_un_apk_plus_ancien_que_le_code_n_est_pas_montre_au_directeur(self):
+        """Essai réel FM_Stats (2026-11-25, deux fois) : l'APK transmis datait d'avant les corrections fusionnées ; le
+        Directeur l'installait et ne voyait rien de changé. Un APK construit avant la dernière modification du code est
+        refusé : l'étape est refaite, avec la consigne de le reconstruire."""
+        rendu = {"statut": "fait", "message": {"texte": "Corrigé ; APK joint."}, "nature": "mecanique",
+                 "fichiers": [self.preuve(), self.apk()], "doit_marcher": "La comparaison suit l'onglet."}
+        self.source()
+        self.dater(APK, -3600)                      # l'APK date d'il y a une heure, le code d'à l'instant
+        self.rendre(rendu)
+        self.assertEqual(self.decisions("valider_etape"), [])
+        correctifs = self.taches(etape="flux:f1-correctif")
+        self.assertEqual(len(correctifs), 2)
+        consigne = " ".join(j["texte"] for j in correctifs[-1]["journal"])
+        self.assertIn("construire-apk", consigne)
+        self.assertIn("plus ancien", consigne)
+
+    def test_un_apk_construit_apres_le_code_est_montre(self):
+        rendu = {"statut": "fait", "message": {"texte": "Corrigé ; APK joint."}, "nature": "mecanique",
+                 "fichiers": [self.preuve(), self.apk()], "doit_marcher": "La comparaison suit l'onglet."}
+        self.source()
+        self.dater(APK, 7200)                       # construit après toutes les écritures du test
+        self.rendre(rendu)
+        self.assertEqual(len(self.decisions("valider_etape")), 1)
+
+    def test_les_dossiers_de_sortie_et_les_documents_ne_comptent_pas_comme_du_code(self):
+        rendu = {"statut": "fait", "message": {"texte": "Corrigé ; APK joint."}, "nature": "mecanique",
+                 "fichiers": [self.preuve(), self.apk()], "doit_marcher": "La comparaison suit l'onglet."}
+        for nom in ("build/intermediates/x.class", ".dart_tool/package_config.json", "CHANGELOG.md",
+                    ".factory/suivi.json", "Livrables/FM_Stats_1.apk"):
+            self.source(nom, decalage=10800)        # plus récents que l'APK, et pourtant ignorés
+        self.dater(APK, 7200)
+        self.rendre(rendu)
+        self.assertEqual(len(self.decisions("valider_etape")), 1)
 
     def test_un_projet_sans_livrable_n_exige_pas_d_apk(self):
         (self.dossier / "pubspec.yaml").unlink()

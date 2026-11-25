@@ -5439,6 +5439,8 @@ def _attendre_le_directeur(projet, etat, v, s):
         + _manques_de_nature(projet, nature, precedent)
     if apk_exige and "livrable" not in manques and not _fichier_existe(projet, precedent, rel.est_executable):
         manques.append("apk")
+    elif apk_exige and "livrable" not in manques and _apk_perime(projet, precedent):
+        manques.append("apk_ancien")      # construit avant la dernière modification du code : à reconstruire
     if v.pop("rapport_du_suivi", False):
         # le rapport a été perdu pendant l'arrêt du moteur (relu dans le suivi) : la validation est posée avec ce qu'il y
         # a à vérifier, l'étape n'est refaite que s'il n'y a rien du tout
@@ -5570,6 +5572,50 @@ def _fichier_existe(projet, precedent, convient):
                for x in precedent.get("fichiers") or [])
 
 
+# Ce qui ne compte pas comme « le code » quand on compare à la date de l'APK : les sorties de construction, les caches, le
+# dépôt, les dossiers de la factory et des livrables, et les documents (une note ne change pas l'application).
+DOSSIERS_HORS_CODE = {".git", ".factory", ".dart_tool", ".gradle", ".idea", "build", "node_modules", "livrables", "pieces",
+                      "__pycache__"}
+EXTENSIONS_HORS_CODE = {".md", ".txt", ".apk", ".aab", ".sha1", ".log", ".png", ".jpg", ".jpeg"}
+TOLERANCE_APK = 2.0       # secondes : une écriture voisine de la fin de la construction n'est pas « après » elle
+
+
+def _date_du_code(dossier):
+    """La date (secondes) de la dernière modification d'un fichier de code du projet, hors sorties de construction,
+    caches, documents et dossiers de la factory ; 0 si rien n'est lisible."""
+    plus_recent = 0.0
+    for racine, dossiers, fichiers in os.walk(dossier):
+        dossiers[:] = [d for d in dossiers if d.lower() not in DOSSIERS_HORS_CODE]
+        for nom in fichiers:
+            if os.path.splitext(nom)[1].lower() in EXTENSIONS_HORS_CODE:
+                continue
+            try:
+                plus_recent = max(plus_recent, os.stat(os.path.join(racine, nom)).st_mtime)
+            except OSError:
+                continue
+    return plus_recent
+
+
+def _apk_perime(projet, precedent):
+    """Vrai si l'APK joint à une validation date d'avant la dernière modification du code du projet : le Directeur
+    l'installerait sans voir les corrections (essai réel FM_Stats, 2026-11-25, deux fois). Faux sans APK lisible."""
+    try:
+        f = fa.lire(projet.factory)
+    except fa.FactoryInvalide:
+        return False
+    dates = []
+    for x in precedent.get("fichiers") or []:
+        if not rel.est_executable(x.get("chemin")):
+            continue
+        p = outil.fichier_du_projet(f, projet.dossier, x.get("chemin"))
+        try:
+            dates.append(Path(p).stat().st_mtime if p is not None else None)
+        except OSError:
+            continue
+    dates = [d for d in dates if d is not None]
+    return bool(dates) and max(dates) + TOLERANCE_APK < _date_du_code(projet.dossier)
+
+
 def _manques_de_nature(projet, nature, precedent):
     """Ce que la nature déclarée de la validation exige et que le rapport n'a pas donné : en jeu, un livrable à essayer
     (ou un lien d'accès) et son mode opératoire ; un visuel, une image (plus les sons) ; un son, un fichier audio ;
@@ -5602,11 +5648,15 @@ CONSIGNES_DE_NATURE = {
     "apk": "Correction d'un projet à livrable sans APK : construis l'APK de la branche (au serveur, `construire-apk`, "
            "jamais `flutter build` directement), même si rien n'a changé, et joins-le dans `fichiers` avec "
            "`\"livrable\": true` et `\"element\": \"correction\"`.",
+    "apk_ancien": "L'APK joint est plus ancien que le code de la branche : le Directeur l'installerait sans voir tes "
+                  "corrections. Reconstruis-le maintenant, après ta dernière modification (au serveur, `construire-apk`, "
+                  "jamais `flutter build` directement), puis joins le nouveau fichier dans `fichiers` avec "
+                  "`\"livrable\": true` et `\"element\": \"correction\"`.",
 }
 QUOI_MANQUE = {"rien": "sans rien à vérifier", "doit_marcher": "sans dire ce qui doit marcher",
                "livrable": "sans livrable à essayer", "mode_operatoire": "sans mode opératoire",
                "image": "sans image", "son": "sans son", "document": "sans document explicatif",
-               "apk": "sans l'APK à essayer"}
+               "apk": "sans l'APK à essayer", "apk_ancien": "avec un APK plus ancien que le code"}
 
 
 CONSIGNE_DOIT_MARCHER = (

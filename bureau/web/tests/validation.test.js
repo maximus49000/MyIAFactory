@@ -92,6 +92,51 @@ test("la fenêtre : « Ce qui a changé » entre « En clair » et « Ce que vou
   assert.ok(!rendre({...D, sans_capture: "non demandée"}).boite.textContent.includes("Ce qui a changé"));
 });
 
+const AVANT = [{chemin: "captures/v7/avant-1.png", legende: "Le menu, avant", moment: "avant"},
+  {chemin: "captures/v7/avant-2.png", legende: "Le score, avant", moment: "avant"}];
+const APRES = [{chemin: "captures/v7/1.png", legende: "Le menu, après", moment: "apres"},
+  {chemin: "captures/v7/2.png", legende: "Le score, après", moment: "apres"}];
+
+test("avant / après : les captures appariées dans l'ordre, toutes dans la visionneuse", () => {
+  const v = V.aVerifier({...D, captures: [...AVANT, ...APRES]});
+  assert.deepEqual(v.comparaisons.map((p) => [p.avant?.chemin, p.apres?.chemin, p.numero]),
+    [["captures/v7/avant-1.png", "captures/v7/1.png", "1/2"], ["captures/v7/avant-2.png", "captures/v7/2.png", "2/2"]]);
+  assert.deepEqual(v.changements.map((c) => c.chemin), [...AVANT, ...APRES].map((c) => c.chemin));
+  assert.equal(v.avantIndisponible, false);
+  // un après de plus que d'avant : il reste seul dans sa paire
+  const plus = V.aVerifier({...D, captures: [AVANT[0], ...APRES]});
+  assert.deepEqual(plus.comparaisons.map((p) => [p.avant?.chemin ?? null, p.apres?.chemin]),
+    [["captures/v7/avant-1.png", "captures/v7/1.png"], [null, "captures/v7/2.png"]]);
+  // sans « avant » (ou sans moment) : pas de comparaison, la liste d'avant
+  for (const caps of [APRES, CAPS]) assert.deepEqual(V.aVerifier({...D, captures: caps}).comparaisons, []);
+});
+
+test("la fenêtre : « Avant » et « Après » côte à côte ; « Avant non disponible » sinon ; inchangée sans moment", () => {
+  const {boite} = rendre({...D, captures: [...AVANT, ...APRES]});
+  const paires = boite.tous((n) => n.className === "val-comparaison");
+  assert.equal(paires.length, 2);
+  const t1 = paires[0].textContent;
+  assert.ok(t1.indexOf("Avant") >= 0 && t1.indexOf("Avant") < t1.indexOf("Après"), t1);
+  assert.ok(t1.includes("Le menu, avant") && t1.includes("Le menu, après"), t1);
+  assert.equal(paires[0].tous((n) => n.tagName === "img").length, 2);
+  assert.ok(!boite.textContent.includes("Avant non disponible"));
+  // un clic sur l'« après » ouvre la visionneuse sur sa place dans toute la suite
+  const seul = rendre({...D, avant_indisponible: true, captures: APRES}).boite;
+  assert.ok(seul.textContent.includes("Avant non disponible"));
+  assert.equal(seul.tous((n) => n.className === "val-comparaison").length, 0);
+  assert.ok(seul.textContent.includes("1/2 · Le menu, après"));
+  const ancienne = rendre({...D, captures: CAPS.slice(0, 2)}).boite;
+  assert.equal(ancienne.tous((n) => n.className === "val-comparaison").length, 0);
+  assert.ok(!ancienne.textContent.includes("Avant non disponible") && !ancienne.textContent.includes("Après"));
+  assert.ok(ancienne.textContent.includes("1/2 · L'accueil"));
+});
+
+test("le style : avant / après côte à côte, l'un sous l'autre sur un téléphone", () => {
+  const css = readFileSync(new URL("../style.css", import.meta.url), "utf8");
+  assert.match(css, /\.val-comparaison\s*\{[^}]*grid-template-columns:\s*1fr 1fr/);
+  assert.match(css, /@media \(max-width: 520px\)\s*\{[^}]*\.val-comparaison\s*\{[^}]*grid-template-columns:\s*1fr[;\s]/);
+});
+
 test("lien d'accès : direct sur l'ordinateur, relayé au téléphone, direct pour un site d'ailleurs", () => {
   assert.deepEqual(V.lienAcces(D, {hotePage: "127.0.0.1", projet: "demo"}),
     {url: "http://127.0.0.1:5173/jeu/?mode=essai", description: "Le jeu dans le navigateur", relaye: false,

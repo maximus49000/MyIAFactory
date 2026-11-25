@@ -30,6 +30,15 @@ test("la demande d'une correction porte nature et concerne ; celle d'une fonctio
   assert.deepEqual(demandeNouvelle("Bug", [], {nature: "correction", concerne: ""}), {type: "fonctionnalite", texte: "Bug", nature: "correction"});
 });
 
+test("la demande porte captures: true seulement quand la case est cochée (captures === true)", () => {
+  assert.deepEqual(demandeNouvelle("Idée", [], {captures: true}), {type: "fonctionnalite", texte: "Idée", captures: true});
+  assert.deepEqual(demandeNouvelle("Bug", [], {nature: "correction", captures: true}),
+                   {type: "fonctionnalite", texte: "Bug", nature: "correction", captures: true});
+  assert.deepEqual(demandeNouvelle("Idée", [], {captures: false}), {type: "fonctionnalite", texte: "Idée"});
+  assert.deepEqual(demandeNouvelle("Idée", [], {captures: "oui"}), {type: "fonctionnalite", texte: "Idée"});
+  assert.deepEqual(demandeNouvelle("Idée", []), {type: "fonctionnalite", texte: "Idée"});
+});
+
 test("une correction se reconnaît, a son brouillon, et la liste des visées écarte les corrections terminées", () => {
   assert.equal(estCorrection({nature: "correction"}), true);
   assert.equal(estCorrection({}), false);

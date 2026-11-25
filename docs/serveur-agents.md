@@ -213,6 +213,40 @@ ses images depuis la sortie de l'émulation vers `~/taches/<id>/outil`, que le c
 réponse du pont donne le chemin `/outil/...`. Seuls des fichiers ordinaires à un seul lien sont copiés, sans jamais suivre un lien (`O_NOFOLLOW`),
 dans un temporaire puis renommés ; 64 Mo au plus par fichier, 160 Mo pour tout `outil/`. L'agent lit les captures lui-même.
 
+### Captures de validation
+
+Avant de poser la décision de validation d'un élément, le moteur peut faire **prendre des captures de l'application** par un agent pilote, pour que le
+Directeur voie ce qui a changé sans chercher l'écran lui-même.
+
+- **Le choix.** Le champ `captures` de la demande (fonctionnalité ou correction) : case du bureau, cochée par défaut quand `captures_possibles` (le projet produit un APK
+  et le serveur peut piloter). Absent ou autre que `true` = non : rien ne part sans « oui » (coût). Les demandes qui ne viennent pas du bureau valent « non ».
+- **L'étape.** Phase `captures` de l'élément, tâche d'étape `captures:<validation>` (une seule par validation, retrouvée après un redémarrage du moteur). Toujours en
+  **pilote**, jamais seule, sur **l'APK joint à la validation** (pas le plus récent du dossier). Elle exige : le choix « oui », un APK présent et non périmé, l'accord
+  `recette-emulateur` sur serveur, des places d'agent serveur réglées, un agent du serveur dans l'équipe, une sonde récente avec `emulateur-image`. Sinon la validation est
+  posée sans capture, la raison dite.
+- **L'« avant » d'une correction** (au mieux, jamais exigé). À la fin de **chaque** livraison du projet (correction : étape `<fid>-livraison` ; fonctionnalité :
+  la dernière étape de son workflow, celle qui remet le livrable), l'APK déclaré `livrable` est copié (jamais déplacé, jamais à travers un lien, jamais une raison
+  d'arrêter la livraison) dans `<projet>/.factory/livrables-precedents/dernier.apk` (hors du dépôt, écrasé à chaque livraison) : l'« avant » est donc toujours la
+  dernière livraison, même si une fonctionnalité a été livrée depuis la correction précédente. À la validation suivante d'une correction, une **première** tâche de capture (« Captures « avant » : … ») installe cet APK ; ses images
+  s'appellent `avant-…` et portent `moment: "avant"`. Puis la capture ordinaire sur l'APK de la validation (`moment: "apres"`). Sans APK précédent : « après » seul,
+  `avant_indisponible`.
+- **Les limites.** Par tâche de capture : 20 minutes d'attente d'une place sur le serveur (`ATTENTE_CRENEAU_S`, sans second essai) et 15 minutes de travail
+  (`TRAVAIL_CAPTURES_S`) ; 8 captures au plus par moment ; avec l'« avant », la phase est bornée à 2 x (20 + 15) = **70 minutes**. Le minuteur des 20 minutes vit
+  dans la mémoire du moteur : un redémarrage le relance. Passé une limite, ou si l'agent échoue, est arrêté ou ne rend rien : la validation est posée sans capture, jamais
+  retenue.
+- **Le trajet des images.** L'agent copie `/outil/captures/<nom>.png` (en lecture seule, hors du projet) vers `<pièces>/<fid>/captures/<tid>/<nom>.png` (`<tid>` : sa
+  tâche de capture, un dossier à elle seule : deux éléments en validation en même temps, ou une re-validation après « À revoir », n'écrivent jamais le même fichier),
+  commite, et cite le chemin relatif au projet dans `message.images` (jamais `/outil/...`). Une image citée hors de `<pièces>/<fid>/captures/<tid>/` (ancienne
+  capture, celle d'une autre tâche, maquette du projet) est écartée. Avant la fusion, le moteur **extrait les images citées de la branche rapatriée de l'agent**
+  (`moteur/cloud.py : extraire_de_la_branche`) : seuls les chemins `.factory/pieces/<x>/…` en `.png`/`.jpg`/`.jpeg` sont acceptés ; refus d'un chemin absolu, avec `..`, d'un
+  lecteur, de plus de 500 caractères, d'un lien (fichier ou dossier du chemin), d'autre chose qu'un blob, d'un fichier de plus de 20 Mo ou sans signature PNG/JPEG ; jamais
+  d'écrasement d'un fichier existant ; fichier tronqué supprimé. Une image non extraite est écartée.
+- **La décision `valider_etape`** porte `captures` : `[{chemin, legende, moment}]` (8 au plus par moment, légende de 200 caractères au plus ; `moment` « avant » ou
+  « apres »), `sans_capture` (la raison, 300 caractères au plus : `écran introuvable : …`, `émulateur indisponible : …`, `créneau d'émulation pris plus de 20 minutes`,
+  `hors délai : … 15 minutes`, `captures rendues mais non retrouvées dans le projet (n écartées)`, etc.) et `avant_indisponible` (vrai si l'« avant » d'une correction manque). « Non demandée » : aucun des champs. Le bureau les montre
+  dans « Ce qui a changé ».
+- **Le journal du moteur** dit chaque départ : `agent serveur : mode <seul|pilote> (<raison>)`. C'est la première chose à lire quand un agent part « seul ».
+
 ## Le pont hôte
 
 `serveur_ovh/taches/pont_hote.py <id> <duree_s>` (Python 3 de l'hôte, bibliothèque standard, lancé détaché par `lancer_agent.sh`, chef de son

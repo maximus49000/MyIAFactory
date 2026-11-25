@@ -1090,6 +1090,13 @@ class TestVersion4(unittest.TestCase):
         r["titulaires"][0]["lecons"] = [{"id": "l", "texte": "T", "etat": "à valider", "etage_propose": "skill"}]
         self.refus(r, "texte_general")
 
+    def test_releve_lit_captures_absent_comme_faux(self):
+        n = releve.normaliser(v4(fonctionnalites=[fonc(), fonc(captures=True), fonc(captures="oui")]))
+        self.assertEqual([f["captures"] for f in n["fonctionnalites"]], [False, True, False])
+
+    def test_captures_booleen(self):
+        self.refus(v4(fonctionnalites=[fonc(captures="oui")]), "captures")
+
     def test_normaliser_v4_defauts(self):
         r = v4(fonctionnalites=[fonc()], lecons=[{"id": "l1", "agent": "d1", "texte": "T"}])
         n = releve.normaliser(r)

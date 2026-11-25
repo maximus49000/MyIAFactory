@@ -221,8 +221,24 @@ export function lienAcces(d, {hotePage = "127.0.0.1", projet = projetCourant(), 
 // les livrables téléchargeables (nom, taille, date), les autres fichiers (nommés) et le lien d'accès.
 export function aVerifier(d, options = {}) {
   const images = [], sons = [], livrables = [], autres = [], documents = [];
+  // Ce qui a changé : les captures de la décision, dans l'ordre (numérotées « 1/3 » quand il y en a plusieurs) ; sans
+  // capture, la raison (rien quand elle n'a pas été demandée). Elles ne sont pas redites dans la liste des images.
+  const caps = (Array.isArray(d?.captures) ? d.captures : []).filter((c) => plein(c?.chemin) && estImage(c.chemin));
+  const changements = caps.map((c, n) => ({chemin: c.chemin, legende: plein(c.legende) ? c.legende.trim() : "",
+    numero: caps.length > 1 ? `${n + 1}/${caps.length}` : "", moment: c.moment === "avant" ? "avant" : "apres"}));
+  const sansCapture = !changements.length && plein(d?.sans_capture) && d.sans_capture.trim().toLowerCase() !== "non demandée"
+    ? d.sans_capture.trim() : "";
+  // Une correction : l'« avant » (l'APK de la dernière livraison) et l'« après », appariés dans l'ordre (la n-ième
+  // capture « avant » avec la n-ième « après ») ; `rang` est la place de chaque image dans toute la suite (visionneuse).
+  const avants = changements.map((c, rang) => ({...c, rang})).filter((c) => c.moment === "avant");
+  const apres = changements.map((c, rang) => ({...c, rang})).filter((c) => c.moment !== "avant");
+  const n = avants.length && apres.length ? Math.max(avants.length, apres.length) : 0;
+  const comparaisons = Array.from({length: n}, (_, i) => ({avant: avants[i] || null, apres: apres[i] || null,
+    numero: n > 1 ? `${i + 1}/${n}` : ""}));
+  const avantIndisponible = d?.avant_indisponible === true;
+  const dejaMontrees = new Set(changements.map((c) => c.chemin));
   for (const f of Array.isArray(d?.fichiers) ? d.fichiers : []) {
-    if (!plein(f?.chemin)) continue;
+    if (!plein(f?.chemin) || dejaMontrees.has(f.chemin)) continue;
     const nom = f.chemin.split(/[\\/]/).pop();
     const titre = plein(f.titre) ? f.titre : nom;
     const projet = options.projet ?? projetCourant(), origine = options.origine || null;
@@ -241,7 +257,8 @@ export function aVerifier(d, options = {}) {
                                              options.origine || null)});
     } else autres.push({chemin: f.chemin, titre});
   }
-  return {images, sons, livrables, documents, autres, acces: lienAcces(d, options)};
+  return {changements, comparaisons, avantIndisponible, sansCapture, images, sons, livrables, documents, autres,
+    acces: lienAcces(d, options)};
 }
 
 // La demande envoyée : `null` tant qu'un point n'a pas sa réponse ; sinon une réponse par point (dans l'ordre), le
@@ -303,6 +320,53 @@ export function contenuValidation(ctx, d, {fermer = () => {}, hotePage = hoteDeL
     boite.append(s0);
   }
 
+  const v = aVerifier(d, {hotePage, origine});
+
+  // 0 bis. Ce qui a changé : les captures de l'application (légendées, agrandissables), ou la raison de leur absence.
+  // Une correction : « Avant » et « Après » côte à côte (l'un sous l'autre sur un téléphone), ou « Avant non disponible ».
+  if (v.changements.length || v.sansCapture) {
+    const sc = section("Ce qui a changé");
+    sc.className = "val-partie val-changements";
+    const capture = (im, rang, texte, moment = "") => {
+      const fig = el("figure", "val-capture" + (moment ? " val-capture-" + moment : ""));
+      if (moment) fig.append(el("p", "val-moment", moment === "avant" ? "Avant" : "Après"));
+      const b = el("button", "val-vignette");
+      b.type = "button";
+      b.setAttribute("aria-label", "Agrandir : " + (im.legende || im.chemin));
+      const img = el("img", "");
+      img.src = urlImageValidation(im.chemin);
+      img.alt = im.legende || im.chemin;
+      reessayerImage(img);
+      b.append(img);
+      b.addEventListener("click", () => ouvrirVisionneuse(v.changements, rang, urlImageValidation, b));
+      fig.append(b);
+      if (texte) fig.append(el("figcaption", "val-legende", texte));
+      return fig;
+    };
+    if (v.comparaisons.length) {
+      for (const p of v.comparaisons) {
+        const paire = el("div", "val-comparaison");
+        if (p.numero) paire.setAttribute("aria-label", `Écran ${p.numero}`);
+        for (const moment of ["avant", "apres"]) {
+          const im = p[moment];
+          if (im) paire.append(capture(im, im.rang, [p.numero, im.legende].filter(Boolean).join(" · "), moment));
+          else paire.append(el("p", "val-sans-capture val-capture-" + moment, moment === "avant" ? "Avant : pas de capture"
+            : "Après : pas de capture"));
+        }
+        sc.append(paire);
+      }
+    } else if (v.changements.length) {
+      const liste = el("div", "val-captures");
+      v.changements.forEach((im, n) => liste.append(capture(im, n, [im.numero, im.legende].filter(Boolean).join(" · "))));
+      sc.append(liste);
+    } else sc.append(el("p", "val-sans-capture", `Pas de capture : ${v.sansCapture}`));
+    // sans aucune capture, « Pas de capture » dit déjà tout : l'« avant » manquant n'est pas redit
+    if (v.avantIndisponible && !v.comparaisons.length && !v.sansCapture) sc.append(el("p",
+      "val-sans-capture val-avant-indisponible",
+      "Avant non disponible : la version livrée précédemment n'a pas pu être montrée."));
+    boite.append(sc);
+  }
+
   // 1. Ce qu'il y a à valider.
   const s1 = section("Ce que vous validez");
   for (const x of enteteValidation(d)) {
@@ -321,7 +385,6 @@ export function contenuValidation(ctx, d, {fermer = () => {}, hotePage = hoteDeL
   boite.append(s1);
 
   // 2. De quoi vérifier.
-  const v = aVerifier(d, {hotePage, origine});
   const s2 = section("À vérifier");
   for (const l of v.livrables) {
     const ligne = el("div", "val-livrable");

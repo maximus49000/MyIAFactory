@@ -243,6 +243,12 @@ class Moteur:
         projet.installations_a_part = True  # les installations sont lancées par `_installations`, avant tout le reste
         if getattr(projet, "mesure_commune", None) is None:
             projet.mesure_commune = self._mesure_du_tour    # une seule mesure de charge par tour pour tout le bureau
+        deja = getattr(projet, "pilote_possible", None)
+        if deja is None or getattr(deja, "du_moteur", False):     # l'étape de capture ne part qu'en pilote (`regles`)
+            def pilote_possible():
+                return self._pilote_possible(projet)
+            pilote_possible.du_moteur = True
+            projet.pilote_possible = pilote_possible
         self.projets.append(projet)
         self.etats[str(projet.factory)] = regles.nouvel_etat()
 
@@ -864,6 +870,12 @@ class Moteur:
             raise regles.Refus(f"agent inconnu : {cle}")
         modele = (d.get("modele") or fiche["modele"] or "Sonnet").lower()
         fiche = self._fiche_avec_accord(self._fiche_du_metier(projet, fiche, taches), modele, d.get("fable_accorde"))
+        if fiche["lieu"] != "serveur" and self._limites(projet, taches[0]):
+            # l'étape de capture ne part qu'au serveur, en pilote : un agent du poste ou du cloud n'a pas d'émulateur
+            self._sans_capture(projet, fiche, modele, taches[0], d.get("lot"),
+                               "émulateur indisponible : aucun agent du serveur pour les captures (serveur hors "
+                               "ligne, ou pas d'agent ni de place au serveur)")
+            return
         if fiche["lieu"] == "serveur":
             self._lancer_serveur(projet, fiche, modele, taches[0], depart, matiere, d.get("lot"),
                                  tache_serveur=tache_serveur, noms_du_lot=tuple(taches))
@@ -949,11 +961,29 @@ class Moteur:
         serveur active portant l'un d'eux (index illisible au redémarrage : jamais un second agent sur le lot).
         L'`Execution` rendue porte `serveur` et, après des commits rapatriés, `branche`."""
         nom = tache_serveur or tache
+        limites = self._limites(projet, tache) if reponse is None else {}
         if reponse is not None:
             mode, apk, base = "seul", None, {"projet": projet.nom, "genre": "reponse"}
             self._garder_la_reponse(projet, tache, fiche, modele, reprendre, reponse)
         else:
-            (mode, apk), base = self._mode_serveur(projet), {"projet": projet.nom}
+            if limites:      # l'étape de capture : en pilote sur l'APK joint à la validation, jamais « seul »
+                restante = regles.attente_restante_des_captures(projet, self._etat(projet), tache)
+                if restante is not None and restante <= 0:
+                    self._sans_capture(projet, fiche, modele, tache, lot, "créneau d'émulation pris plus de "
+                                       f"{regles.ATTENTE_CRENEAU_S // 60} minutes")
+                    return
+                if restante is not None:     # les 20 minutes couvrent l'attente au moteur ET au serveur
+                    limites = {**limites, "attente_max_s": max(1, int(restante))}
+                joint = regles.apk_des_captures(projet, self._etat(projet), tache)
+                raisons = []
+                mode, apk = self._mode_serveur(projet, apk=joint, raisons=raisons) if joint else ("seul", None)
+                if mode != "pilote":
+                    raison = raisons[-1] if raisons else "APK de la validation introuvable sur le poste"
+                    self._sans_capture(projet, fiche, modele, tache, lot, f"émulateur indisponible : {raison}")
+                    return
+            else:
+                mode, apk = self._mode_serveur(projet)
+            base = {"projet": projet.nom}
             depart = (depart.rstrip() + "\n\n"       # projet Flutter (vu sur le poste) : les commandes simples
                       + dp.consigne_serveur(mode, nom, flutter=executeur_serveur._projet_flutter(projet.dossier)) + "\n")
         signature = regles.reglage_effectif(projet, "signature_apk")
@@ -965,10 +995,13 @@ class Moteur:
         plus_ex = {"apk": apk} if apk else {}
         if noms_du_lot and reponse is None:
             plus_ex["autres_noms"] = tuple(noms_du_lot)
+        plus = {"reprendre": reprendre} if reprendre else {}
+        if limites:          # l'étape de capture : 20 min d'attente d'une place (un seul essai), 15 min de travail
+            plus_ex.update(attente_max_s=limites["attente_max_s"], attente_finale=True)
+            plus["delai_s"] = limites["delai_s"]
         executeur = executeur_serveur.ExecuteurServeur(projet.dossier, nom, mode, base, **plus_ex)
         cle = (str(projet.factory), f"{tache}.reponse" if reponse is not None else tache)
         self._serveurs[cle] = executeur
-        plus = {"reprendre": reprendre} if reprendre else {}
 
         def travail():
             try:
@@ -1011,6 +1044,22 @@ class Moteur:
         else:
             threading.Thread(target=travail, name=f"agent-serveur-{fiche['cle']}", daemon=True).start()
 
+    @staticmethod
+    def _limites(projet, tache):
+        """Les limites propres à la tâche (`regles.limites_de_la_tache` : l'étape de capture), `{}` sinon."""
+        try:
+            return regles.limites_de_la_tache(regles._tache(projet, tache))
+        except (regles.Refus, regles.ErreurMoteur):
+            return {}
+
+    def _sans_capture(self, projet, fiche, modele, tache, lot, raison):
+        """L'agent de capture ne part pas (pas de pilote possible) : son retour, sans rapport, porte la raison ;
+        `regles._retour_de_captures` pose la validation sans capture en la disant. Jamais un agent « seul »."""
+        self._noter(projet, f"captures de validation sans agent ({tache}) : {raison}"[:500])
+        e = agents.Execution(tache, fiche["cle"], lot, erreur=raison, modele=modele)
+        e.sans_capture = raison
+        self.retours.put((projet, e))
+
     # La réponse aux questions d'un agent serveur, gardée sur le poste pendant qu'elle tourne (`<tâche>.reponse-serveur`,
     # sans `.json` : le registre des agents locaux ne la lit pas) : au redémarrage, elle est rattachée ou redemandée.
     FICHIER_REPONSE = ".reponse-serveur"
@@ -1035,25 +1084,67 @@ class Moteur:
         except OSError:
             pass
 
-    def _mode_serveur(self, projet):
+    def _mode_serveur(self, projet, apk=None, raisons=None):
         """`(mode, apk)` : `("pilote", apk)` seulement si le Directeur a réglé `recette-emulateur` sur serveur pour ce
         projet (accord permanent, `deport_types.accord_serveur`) ET qu'un APK est trouvé (`apk_pour_le_pilote`) ; sinon
         `("seul", None)`. Une lecture qui échoue vaut « seul ». Le pilote exige aussi, à la dernière sonde, un serveur
-        prêt pour lui (`agent-pilote` : agent, abonnement ET image de l'émulateur) : sinon « seul », et le journal le dit."""
+        prêt pour lui (`agent-pilote` : agent, abonnement ET image de l'émulateur) : sinon « seul », et le journal le dit.
+        `apk` donné (l'APK joint à une validation, étape de capture) : c'est CET APK que le pilote installe, jamais le plus
+        récent du dossier ; absent du poste, « seul ». `raisons` (liste) : reçoit la raison dite au journal."""
+        def dire(mode, raison):      # chaque lancement dit le mode choisi et pourquoi (cause des agents sans émulateur)
+            self._noter(projet, f"agent serveur : mode {mode} ({raison})")
+            if raisons is not None:
+                raisons.append(raison)
+
+        donne = apk
         try:
-            plus = {"bureau": str(Path(self.bureau).expanduser())} if self.bureau else {}
-            if not deport_types.accord_serveur(str(projet.dossier), ACTION_PILOTE, **plus):
+            raison = self._sans_accord_pilote(projet)
+            if raison:
+                dire("seul", raison)
                 return "seul", None
-            apk = apk_pour_le_pilote(projet.dossier)
-        except Exception:                    # noqa: BLE001 — jamais une raison de ne pas partir
+            apk = apk_pour_le_pilote(projet.dossier) if donne is None else (str(donne) if Path(donne).is_file() else None)
+        except Exception as e:               # noqa: BLE001 — jamais une raison de ne pas partir
+            dire("seul", f"lecture impossible : {e!r}"[:200])
             return "seul", None
         if not apk:
+            dire("seul", "aucun APK trouvé" if donne is None else f"APK joint introuvable : {Path(str(donne)).name}")
             return "seul", None
         refus = self._pilote_impossible()
         if refus:
             self._noter(projet, f"mode pilote impossible, l'agent serveur part seul (sans émulateur) : {refus}")
+            dire("seul", refus)
             return "seul", None
+        dire("pilote", f"accord {ACTION_PILOTE} et APK {Path(str(apk)).name}")
         return "pilote", apk
+
+    def _sans_accord_pilote(self, projet):
+        """La raison pour laquelle le Directeur n'a pas ouvert le mode pilote à ce projet (`recette-emulateur` pas réglé
+        sur serveur), ou None. Une lecture qui échoue lève (l'appelant la dit)."""
+        plus = {"bureau": str(Path(self.bureau).expanduser())} if self.bureau else {}
+        if not deport_types.accord_serveur(str(projet.dossier), ACTION_PILOTE, **plus):
+            return f"accord {ACTION_PILOTE} absent"
+        return None
+
+    def _pilote_possible(self, projet):
+        """`Projet.pilote_possible` (posé par `_ajouter`) : None si un agent de capture peut partir en pilote pour ce
+        projet — accord `recette-emulateur` sur serveur, places d'agent serveur réglées, serveur prêt pour le pilote à la
+        dernière sonde (`emulateur-image`…) — sinon la raison, dite au Directeur sur la validation. L'APK n'est pas
+        regardé ici : c'est celui de la validation (`regles._captures_demandees`)."""
+        try:
+            raison = self._sans_accord_pilote(projet)
+        except Exception as e:               # noqa: BLE001
+            return f"lecture impossible : {e}"[:300]
+        if raison:
+            return f"{raison} (l'émulateur n'est pas réglé sur le serveur pour ce projet)"
+        if not self._places_serveur(projet):
+            return "aucune place d'agent serveur réglée pour ce projet"
+        try:
+            equipe = fi.lire_toutes(fa.lire(projet.factory)["fiches"])
+        except Exception as e:               # noqa: BLE001
+            return f"équipe illisible : {e}"[:300]
+        if not any(x.get("lieu") == "serveur" for x in equipe):
+            return "aucun agent du serveur dans l'équipe du projet"
+        return self._pilote_impossible()
 
     @staticmethod
     def _pilote_impossible():

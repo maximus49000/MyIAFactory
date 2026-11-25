@@ -315,6 +315,41 @@ def image_d_agent_rangee(f, dossier_projet, image, fid, servie="images"):
     return image_rangee(f, dossier_projet, image, fid, servie)
 
 
+CHEMIN_IMAGE_MAX = 500
+
+
+def chemin_d_image_sur(chemin):
+    """Vrai si `chemin` a la forme d'une image servie : un chemin relatif (ni absolu, ni lecteur, ni « .. »), de 500
+    caractères au plus, d'extension PNG ou JPEG. Rien n'est lu sur le disque."""
+    if not isinstance(chemin, str) or not chemin.strip() or len(chemin) > CHEMIN_IMAGE_MAX or "\x00" in chemin:
+        return False
+    propre = chemin.strip().replace("\\", "/")
+    if propre.startswith("/") or re.match(r"[A-Za-z]:", propre) or ".." in propre.split("/"):
+        return False
+    return Path(propre).suffix.lower() in SIGNATURES
+
+
+def image_servie(f, dossier_projet, chemin):
+    """Vrai si `chemin` (compté depuis le fichier de factory, comme le rend `image_rangee`) désigne une vraie image PNG
+    ou JPEG (début du contenu vérifié, 20 Mo au plus) qui existe dans le dossier du projet, sous une racine d'images
+    servie par le bureau. Faux pour un chemin absolu, avec « .. », absent, hors du projet ou lien sortant."""
+    if not chemin_d_image_sur(chemin):
+        return False
+    p = Path(chemin.strip().replace("\\", "/"))
+    _base, racines, pieces = racines_servies(f, "images")
+    try:
+        source = (Path(f["base"]) / p).resolve()
+        if (not source.is_file() or not _sous(source, Path(dossier_projet).resolve())
+                or not any(_sous(source, r) for r in racines + [pieces])
+                or source.stat().st_size > IMAGE_RANGEE_MAX_OCTETS):
+            return False
+        signature = SIGNATURES[p.suffix.lower()][0]
+        with open(source, "rb") as h:
+            return h.read(len(signature)) == signature
+    except OSError:
+        return False
+
+
 ORIGINE_DOCUMENT = ("agent", "etape", "tache", "element", "sous_tache")
 
 
@@ -581,7 +616,8 @@ def cmd_actions(ctx, e):
                 raise Refus("« nature » vaut fonctionnalite ou correction.")
             if e.get("concerne") is not None:
                 _fonc(s, e["concerne"])
-            f = su.nouvelle_fonctionnalite(s, texte(e, "texte")[:40], nature=nature, concerne=e.get("concerne"))
+            f = su.nouvelle_fonctionnalite(s, texte(e, "texte")[:40], nature=nature, concerne=e.get("concerne"),
+                                       captures=e.get("captures") is True)
             images, fichiers = _pieces_jointes(ctx, e, f["id"])
             su.ajouter_message(s, f, "utilisateur", e["texte"], images, demande["t"], fichiers)
             ranger_documents(s, f, images, agent="utilisateur", etape=f["etape"])
@@ -1261,6 +1297,8 @@ def _accord_a_donner(ctx, s, e):
     return d
 
 
+CAPTURES_DE_VALIDATION_MAX = 8   # comme `moteur.regles.CAPTURES_MAX`
+MOMENTS_DE_CAPTURE = ("avant", "apres")   # l'« avant » et l'« après » d'une correction
 PROMPT_PARTENAIRE_MAX = 4000   # le plafond général ; certains partenaires en ont un plus bas (`partenaires.etat.PROMPT_MAX`)
 MAX_REGLAGES, MAX_ETAPES_CHEZ, MAX_ELEMENTS_CHEZ = 12, 10, 12
 
@@ -1427,6 +1465,31 @@ def _validation_decidee(ctx, s, e):
         if not rel.acces_ok(e["acces"]):
             raise Refus("« acces » est {url (http ou https), description? (200 caractères au plus)}.")
         plus["acces"] = {k: v for k, v in e["acces"].items() if v is not None}
+    if e.get("captures") is not None:     # les captures de l'application prises pour la validation, dans l'ordre
+        captures = e["captures"]
+        # `moment` (facultatif) : « avant » (l'APK de la dernière livraison) ou « apres », pour une correction ; au plus
+        # 8 par moment (8 « avant » et 8 « après »), 8 sans moment
+        if (not isinstance(captures, list) or len(captures) > 2 * CAPTURES_DE_VALIDATION_MAX
+                or not all(isinstance(x, dict) and chemin_d_image_sur(x.get("chemin"))
+                           and isinstance(x.get("legende", ""), str) and len(x.get("legende", "")) <= 200
+                           and x.get("moment", "apres") in MOMENTS_DE_CAPTURE for x in captures)
+                or sum(1 for x in captures if x.get("moment") == "avant") > CAPTURES_DE_VALIDATION_MAX
+                or sum(1 for x in captures if x.get("moment") != "avant") > CAPTURES_DE_VALIDATION_MAX):
+            raise Refus(f"« captures » est une liste de {CAPTURES_DE_VALIDATION_MAX} {{chemin, legende, moment?}} au "
+                        "plus (et autant de « avant ») : chaque chemin, relatif au projet (ni absolu, ni « .. »), "
+                        "désigne une image PNG ou JPEG ; légende de 200 caractères au plus ; moment « avant » ou "
+                        "« apres ».")
+        rangees = [{"chemin": ctx.image_rangee(x["chemin"].strip(), fid), "legende": x.get("legende", "").strip(),
+                    **({"moment": x["moment"]} if "moment" in x else {})} for x in captures]
+        # une image absente, hors du projet ou qui n'en est pas une n'est jamais montrée au Directeur
+        plus["captures"] = [x for x in rangees if image_servie(ctx.f, ctx.f["base"].parent, x["chemin"])]
+    if e.get("sans_capture") is not None:     # pourquoi la validation n'a pas de capture (une ligne)
+        plus["sans_capture"] = _phrase_courte(e, "sans_capture", 300)
+    if "avant_indisponible" in e:      # une correction sans l'« avant » de ses captures (l'APK précédent manquait)
+        if not isinstance(e["avant_indisponible"], bool):
+            raise Refus("« avant_indisponible » est vrai ou faux.")
+        if e["avant_indisponible"]:
+            plus["avant_indisponible"] = True
     return {"fonctionnalite": fid, "element": {"id": element["id"], "nom": element["nom"]}, "etape": e["etape"],
             "tache": tache, "compte_rendu": compte_rendu, **plus,
             "fichiers": [_fichier_a_valider(ctx, x, fid) for x in fichiers]}

@@ -515,7 +515,7 @@ def _verifier_fonctionnalites(r, cles_agents, erreurs, ids_decisions):
             erreurs.append(f"{nom} : « nature » vaut fonctionnalite ou correction.")
         if not _texte_ou_nul(f.get("concerne")):
             erreurs.append(f"{nom} : « concerne » doit être un texte ou nul.")
-        for champ in ("attend_reponse", "catalogue"):
+        for champ in ("attend_reponse", "catalogue", "captures"):
             if f.get(champ) is not None and not isinstance(f[champ], bool):
                 erreurs.append(f"{nom} : « {champ} » doit être vrai ou faux.")
         if f.get("genre") is not None and not _genre_valide(f["genre"]):
@@ -1384,6 +1384,7 @@ def _normaliser_v4(n):
         f["catalogue"] = f.get("catalogue") is True
         f["nature"] = f["nature"] if f.get("nature") in ("fonctionnalite", "correction") else "fonctionnalite"
         f["concerne"] = f["concerne"] if isinstance(f.get("concerne"), str) else None
+        f["captures"] = f.get("captures") is True
         for c in ("cahier", "methode", "livrable", "agent_cadrage"):
             f.setdefault(c, None)
     for t in n["taches"]:

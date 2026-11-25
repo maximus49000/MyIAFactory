@@ -217,6 +217,15 @@ class TestGardeFousDuServeur(AvecFichierDuBureau):
             [{"id": "s1", "nom": "S1", "hote": "s1.example.org", "utilisateur": "ubuntu", "cle": "C:/cles/s1"}]),
             encoding="utf-8")
 
+    def test_le_service_permanent_se_regle_sur_serveur(self):
+        """Essai réel (FM_Stats, 2026-11-25) : « Serveur (bientôt) » grisé pour « Service permanent »."""
+        self.declarer_un_serveur()
+        ligne = self.lignes()["deport.service"]
+        self.assertTrue(ligne["servie_au_serveur"])
+        r, rep = self.poster("projet", "deport.service", "serveur")
+        self.assertEqual(r.status, 200, rep)
+        self.assertEqual(rep["valeur"], "serveur")
+
     def test_servie_au_serveur_publiee_par_ligne(self):
         lignes = self.lignes()
         self.assertIs(lignes[self.RECETTE]["servie_au_serveur"], True)

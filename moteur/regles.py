@@ -6112,6 +6112,16 @@ def _refus_sans_suite(projet, t):
     return dernier["texte"].split(" : ", 1)[-1]
 
 
+def _travail_apres_la_fin(projet, court, f):
+    """Vrai si une fonctionnalité (pas une correction) terminée a une tâche de flux ou de validation plus récente que sa
+    fin : son travail a repris après coup."""
+    fin = (_fonc(projet, f["id"]).get("fin") or {}).get("date")      # le relevé court n'a pas la fin
+    if not fin or f.get("nature") == "correction":
+        return False
+    return any(t.get("fonctionnalite") == f["id"] and str(t.get("etape") or "").startswith(("flux:", "validation:"))
+               and str(t.get("maj") or "") > fin for t in court["taches"])
+
+
 def avancer(projet, etat):
     """Ce que le parcours demande à chaque étape : rien en pause (les demandes, elles, sont traitées). Ce que la charge
     retient est noté dans `etat["attente_charge"]`, refait à chaque passage."""
@@ -6129,6 +6139,12 @@ def avancer(projet, etat):
             actions += _repondre_cadrage(projet, etat, f["id"])
         elif f["etape"] == "prototype" and f["attend_reponse"]:
             actions += _rejouer_le_retour(projet, etat, f["id"])
+        elif f["etape"] == "terminee" and _travail_apres_la_fin(projet, court, f):
+            # Essai réel (FM_Stats, f8, 2026-11-25) : la série close avec un élément laissé de côté, le Chef le renvoie,
+            # l'élément est validé et développé... mais la fonctionnalité restait « terminée » : ni fin, ni livraison,
+            # rien au bureau. Du travail de flux plus récent que la fin la rouvre ; elle se referme avec une nouvelle fin.
+            lancer(projet, "fonctionnalite", {"id": f["id"], "etape": "serie"})
+            actions += _avancer_serie(projet, etat, f["id"])
         elif f["etape"] == "serie":
             actions += _avancer_serie(projet, etat, f["id"])
     en_serie = {f["id"] for f in court["fonctionnalites"] if f["etape"] == "serie"}

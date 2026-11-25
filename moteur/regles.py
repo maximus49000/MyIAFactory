@@ -6554,7 +6554,19 @@ def _sur_serie_arretee(projet, demande, etat):
 
 # --- La fin d'une fonctionnalité : annoncée au Directeur (« Fonctionnalités terminées »), avec ses liens d'accès.
 
-LIVRABLES_A_LA_FIN = 10
+PRODUITS = (".apk", ".aab", ".exe", ".msi", ".ipa", ".dmg", ".zip")     # ce qui s'installe : le vrai livrable
+
+
+def _livrable_final(documents):
+    """Le seul livrable que l'avis de fin transmet au Directeur : le produit le plus récent (apk, exe, zip…), sinon
+    le dernier livrable déclaré. Jamais les maquettes, les anciennes versions ni les copies (essai réel, FM_Stats f8,
+    2026-11-25 : trois liens dont une maquette et un APK renommé, le Directeur : « que le livrable final »)."""
+    declares = [d for d in reversed(documents) if d.get("livrable") is True and d.get("chemin")]
+    produits = [d for d in declares if str(d["chemin"]).lower().endswith(PRODUITS)]
+    d = (produits or declares or [None])[0]
+    if d is None:
+        return []
+    return [{"chemin": d["chemin"], "titre": d.get("titre") or d["chemin"].rsplit("/", 1)[-1]}]
 
 
 CAPTURES_A_LA_FIN = 4     # les captures du résultat final montrées dans l'avis de fin
@@ -6565,10 +6577,7 @@ def _fin_de_fonctionnalite(projet, etat, fid, bloques=()):
     « Vu ») : les livrables déclarés de la fonctionnalité (téléchargeables), le dernier lien d'accès d'un site rendu par
     ses éléments, les éléments laissés de côté. Le coût se lit au bureau (`/api/couts`)."""
     f = _fonc(projet, fid)
-    livrables = []
-    for d in reversed(f.get("documents") or []):
-        if d.get("livrable") is True and all(x["chemin"] != d["chemin"] for x in livrables):
-            livrables.append({"chemin": d["chemin"], "titre": d.get("titre") or d["chemin"].rsplit("/", 1)[-1]})
+    livrables = _livrable_final(f.get("documents") or [])
     acces, captures = None, []
     for v in _m(etat, "elements").values():
         a = (v.get("dernier_rapport") or {}).get("acces") if v["fid"] == fid else None
@@ -6577,7 +6586,7 @@ def _fin_de_fonctionnalite(projet, etat, fid, bloques=()):
         c = (v.get("dernier_rapport") or {}).get("captures") if v["fid"] == fid else None
         if c:      # la capture du résultat final : celle du dernier élément qui en a rendu une
             captures = c
-    fin = {"livrables": list(reversed(livrables[:LIVRABLES_A_LA_FIN]))}
+    fin = {"livrables": livrables}
     if acces:
         fin["acces"] = {k: acces[k] for k in ("url", "description") if acces.get(k)}
     if captures:

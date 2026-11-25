@@ -239,6 +239,21 @@ class FinDeFonctionnalite(AvecValidation):
         self.assertTrue(self.fonc()["fin"]["vu"])
         self.assertEqual(self.fonc()["etape"], "terminee")
 
+    def test_l_avis_de_fin_ne_transmet_que_le_livrable_final(self):
+        """Le Directeur (2026-11-25) : maquette, anciens APK et copies renommées encombraient l'avis de fin ; il ne veut
+        que le dernier livrable (le dernier APK)."""
+        docs = [{"chemin": "pieces/f8/maquette.html", "titre": "Maquette", "livrable": True},
+                {"chemin": "Livrables/FM_Stats_1.apk", "titre": "APK copie", "livrable": True},
+                {"chemin": "android_app/build/app/outputs/flutter-apk/app-release.apk", "titre": "APK final",
+                 "livrable": True},
+                {"chemin": "pieces/f8/notes.html", "titre": "Notes", "livrable": True},
+                {"chemin": "pieces/f8/image.png", "titre": "Image"}]
+        self.assertEqual(regles._livrable_final(docs),
+                         [{"chemin": "android_app/build/app/outputs/flutter-apk/app-release.apk", "titre": "APK final"}])
+        # sans produit installable : le dernier livrable déclaré ; sans livrable : rien
+        self.assertEqual(regles._livrable_final(docs[:1] + docs[3:4])[0]["chemin"], "pieces/f8/notes.html")
+        self.assertEqual(regles._livrable_final(docs[4:]), [])
+
     def test_l_avis_de_fin_montre_la_capture_du_resultat_final(self):
         """Essai réel (2026-11-17) : la fonctionnalité livrée, le Directeur ne savait ni où regarder ni à quoi
         s'attendre. L'avis de fin garde la capture rendue à la dernière étape, avec sa légende, et le lien d'accès."""

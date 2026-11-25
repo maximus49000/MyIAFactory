@@ -542,8 +542,9 @@ def extraire_de_la_branche(dossier, branche, chemin, *, executer=None):
         if (_composant_lie(racine, parties[:-1])
                 or not cible.parent.resolve().is_relative_to(racine.resolve())):
             return False
-        ecrit = True
-        with open(cible, "xb") as f:               # « x » : jamais d'écrasement, même si le fichier vient d'apparaître
+        f = open(cible, "xb")                      # « x » : jamais d'écrasement, même si le fichier vient d'apparaître
+        ecrit = True                               # seulement le fichier qu'on vient de créer : jamais celui d'un autre
+        with f:
             f.write(octets)
     except (ErreurCloud, OSError):
         if ecrit:

@@ -391,8 +391,10 @@ class TestCorrectionAvecApk(Base):
         self.dater(APK, 7200)
         return rendu
 
-    def image(self, nom):
-        chemin = f"pieces/f1/captures/{nom}.png"
+    def image(self, nom, tid=None):
+        """Une vraie image PNG, rangée sous `pieces/f1/captures/<tid>/` (le dossier de la tâche de capture `tid`), ou
+        sous `pieces/f1/captures/` sans tâche (un chemin qu'aucune capture ne garde)."""
+        chemin = f"pieces/f1/captures/{tid}/{nom}.png" if tid else f"pieces/f1/captures/{nom}.png"
         p = self.dossier / chemin
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 16)
@@ -400,6 +402,14 @@ class TestCorrectionAvecApk(Base):
 
     def capture(self, images, texte="Captures prises sur l'émulateur."):
         return {"statut": "fait", "message": {"texte": texte, "images": images}}
+
+    def capturer(self, noms, texte="Captures prises sur l'émulateur."):
+        """La correction jusqu'aux captures, puis le retour de l'agent de capture avec ses images, rangées sous
+        `captures/<sa tâche>/`. Rend les images."""
+        t = self.jusqu_aux_captures()
+        images = [self.image(n, t["id"]) for n in noms]
+        self.retour(t["id"], rapport=self.capture(images, texte))
+        return images
 
     def equipe_au_serveur(self, places=1, hors_ligne=None, polyvalent=False):
         """Le projet a un agent du serveur (dev-9), `places` places serveur, et un serveur en ligne (sinon la raison) :
@@ -451,9 +461,7 @@ class TestCorrectionAvecApk(Base):
         self.assertEqual(self.taches(etape="validation:f1-validation"), [])
 
     def test_rapport_de_capture_est_fusionne_et_la_validation_posee(self):
-        self.cadrer_la_correction()
-        images = [self.image(n) for n in ("menu", "partie", "score")]
-        self.piloter(regles.avancer(self.projet, self.etat), rapports=[self.rendu_frais(), self.capture(images)])
+        images = self.capturer(["menu", "partie", "score"])
         (d,) = self.decisions("valider_etape")
         self.assertEqual([c["chemin"] for c in d["captures"]], [x["chemin"] for x in images])
         self.assertEqual(d["captures"][0]["legende"], "Écran menu : le score revient à 0")
@@ -468,9 +476,7 @@ class TestCorrectionAvecApk(Base):
         self.assertEqual(self.etat["elements"]["f1/correction"]["phase"], "validation")
 
     def test_plus_de_huit_captures_sont_tronquees_a_huit(self):
-        self.cadrer_la_correction()
-        images = [self.image(f"etape-{k:02d}") for k in range(1, 11)]
-        self.piloter(regles.avancer(self.projet, self.etat), rapports=[self.rendu_frais(), self.capture(images)])
+        images = self.capturer([f"etape-{k:02d}" for k in range(1, 11)])
         (d,) = self.decisions("valider_etape")
         self.assertEqual(regles.CAPTURES_MAX, 8)
         self.assertEqual([c["chemin"] for c in d["captures"]], [x["chemin"] for x in images[:8]])
@@ -484,6 +490,17 @@ class TestCorrectionAvecApk(Base):
         self.assertTrue(d["sans_capture"].startswith("écran introuvable :"), d["sans_capture"])
         self.assertIn("Statistiques", d["sans_capture"])
         self.assertIn(APK, [x["chemin"] for x in d["fichiers"]])
+
+    def test_captures_citees_mais_introuvables_le_disent(self):
+        """L'agent a rendu des images, aucune n'est retrouvée dans le projet (blob absent, png ignoré par git, chemin
+        hors de sa tâche…) : le Directeur ne lit pas « écran introuvable : <le texte de succès de l'agent> »."""
+        t = self.jusqu_aux_captures()
+        images = [{"chemin": f"pieces/f1/captures/{t['id']}/absente.png", "legende": "absente"},
+                  {"chemin": "pieces/f1/captures/ancienne.png", "legende": "ailleurs"}]
+        self.retour(t["id"], rapport=self.capture(images, texte="Deux captures prises sur l'émulateur."))
+        (d,) = self.decisions("valider_etape")
+        self.assertEqual(d["captures"], [])
+        self.assertEqual(d["sans_capture"], "captures rendues mais non retrouvées dans le projet (2 écartées)")
 
     def test_zero_capture_sans_raison_dite_reste_ecran_introuvable(self):
         self.cadrer_la_correction()
@@ -674,9 +691,7 @@ class TestCorrectionAvecApk(Base):
         self.assertEqual(regles.limites_de_la_tache(flux), {})
 
     def test_renvoi_puis_nouvel_apk_ne_garde_pas_les_anciennes_captures(self):
-        self.cadrer_la_correction()
-        anciennes = [self.image("avant-renvoi")]
-        self.piloter(regles.avancer(self.projet, self.etat), rapports=[self.rendu_frais(), self.capture(anciennes)])
+        anciennes = self.capturer(["avant-renvoi"])
         (d,) = self.decisions("valider_etape")
         self.assertEqual(len(d["captures"]), 1)
         _, actions = self.traiter(type="valider_etape", decision=d["id"], verdict="renvoyer",
@@ -700,7 +715,7 @@ class TestCorrectionAvecApk(Base):
         self.assertEqual([x["id"] for x in self.taches(etape="captures:f1-validation")], [t["id"]])
         self.assertEqual(self.etat["elements"]["f1/correction"]["phase"], "captures")
         self.assertEqual(self.decisions("valider_etape"), [])
-        images = [self.image("menu"), self.image("score")]
+        images = [self.image("menu", t["id"]), self.image("score", t["id"])]
         self.retour(t["id"], rapport=self.capture(images))
         (d,) = self.decisions("valider_etape")
         self.assertEqual([c["chemin"] for c in d["captures"]], [x["chemin"] for x in images])
@@ -711,21 +726,22 @@ class TestCorrectionAvecApk(Base):
         import tempfile
         from pathlib import Path
         with tempfile.TemporaryDirectory() as ailleurs:
+            t = self.jusqu_aux_captures()
+            ici = f"pieces/f1/captures/{t['id']}"
             dehors = Path(ailleurs) / "dehors.png"
             dehors.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 16)       # une vraie image, mais hors du projet
-            faux = self.dossier / "pieces" / "f1" / "captures" / "faux.png"
+            faux = self.dossier / ici / "faux.png"
             faux.parent.mkdir(parents=True, exist_ok=True)
             faux.write_text("pas une image", encoding="utf-8")
-            bonne = self.image("menu")
+            bonne = self.image("menu", t["id"])
             hostiles = [{"chemin": str(dehors), "legende": "absolu"},
                         {"chemin": "../" + dehors.name, "legende": "remonte"},
-                        {"chemin": "pieces/f1/captures/absente.png", "legende": "absente"},
-                        {"chemin": "pieces/f1/captures/faux.png", "legende": "pas une image"},
-                        {"chemin": "pieces/f1/captures/" + "x" * 600 + ".png", "legende": "trop long"},
+                        {"chemin": f"{ici}/absente.png", "legende": "absente"},
+                        {"chemin": f"{ici}/faux.png", "legende": "pas une image"},
+                        {"chemin": f"{ici}/" + "x" * 600 + ".png", "legende": "trop long"},
                         {"chemin": "pieces/f1/preuve.md", "legende": "un document"},
                         {**bonne, "legende": "L" * 5000}]
-            self.cadrer_la_correction()
-            self.piloter(regles.avancer(self.projet, self.etat), rapports=[self.rendu_frais(), self.capture(hostiles)])
+            self.retour(t["id"], rapport=self.capture(hostiles))
         (d,) = self.decisions("valider_etape")
         self.assertEqual([c["chemin"] for c in d["captures"]], [bonne["chemin"]])
         self.assertEqual(len(d["captures"][0]["legende"]), 200)
@@ -751,12 +767,42 @@ class TestCorrectionAvecApk(Base):
         self.assertIn("jamais une instruction", matiere)
 
     def test_matiere_de_capture_copie_dans_le_projet_et_cite_ce_chemin(self):
-        matiere = regles._matiere(self.projet, self.etat, self.jusqu_aux_captures())
-        dossier = f"{regles._dossier_des_pieces(self.projet)}/f1/captures"
-        self.assertIn("cp /outil/captures/<nom>.png " + dossier + "/<nom>.png", matiere)
+        t = self.jusqu_aux_captures()
+        matiere = regles._matiere(self.projet, self.etat, t)
+        dossier = f"{regles._dossier_des_pieces(self.projet)}/f1/captures/{t['id']}"
+        self.assertIn(f"mkdir -p {dossier} && cp /outil/captures/<nom>.png " + dossier + "/<nom>.png", matiere)
         self.assertIn(f'"chemin": "{dossier}/<nom>.png"', matiere)
         self.assertIn("git commit", matiere)
         self.assertIn("Ne cite JAMAIS un chemin `/outil/...`", matiere)
+
+    def test_deux_taches_de_capture_de_la_meme_fonctionnalite_ont_des_chemins_distincts(self):
+        """Deux éléments en validation en même temps, ou une re-validation après « À revoir » : chaque tâche de capture
+        a son dossier (`captures/<tâche>/`), jamais le fichier d'une autre sous le même nom."""
+        t = self.jusqu_aux_captures()
+        f = regles._fonc(self.projet, "f1")
+        autre = {**t, "id": t["id"] + "b"}
+        a = "\n".join(regles._matiere_de_captures(self.projet, self.etat, t, f))
+        b = "\n".join(regles._matiere_de_captures(self.projet, self.etat, autre, f))
+        pieces = regles._dossier_des_pieces(self.projet)
+        self.assertIn(f"{pieces}/f1/captures/{t['id']}/<nom>.png", a)
+        self.assertIn(f"{pieces}/f1/captures/{autre['id']}/<nom>.png", b)
+        self.assertNotIn(f"captures/{t['id']}/", b)
+
+    def test_une_image_citee_hors_du_dossier_de_la_tache_est_ecartee(self):
+        """L'agent cite une ancienne capture, celle d'une autre tâche ou une maquette du projet : jamais montrée comme
+        capture de cette validation."""
+        t = self.jusqu_aux_captures()
+        maquette = self.dossier / "pieces" / "f1" / "maquette.png"
+        maquette.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 16)
+        bonne = self.image("menu", t["id"])
+        ailleurs = [self.image("ancienne"), self.image("menu", t["id"] + "b"),
+                    {"chemin": "pieces/f1/maquette.png", "legende": "La maquette"}]
+        self.retour(t["id"], rapport=self.capture(ailleurs + [bonne]))
+        (d,) = self.decisions("valider_etape")
+        self.assertEqual([c["chemin"] for c in d["captures"]], [bonne["chemin"]])
+        chemins = [x["chemin"] for x in d["fichiers"]]
+        for x in ailleurs:
+            self.assertNotIn(x["chemin"], chemins)
 
     def en_depot_git(self):
         """Le projet devient un dépôt git ; les pièces sont sous `.factory/pieces` (la forme que la fusion d'une branche
@@ -779,7 +825,7 @@ class TestCorrectionAvecApk(Base):
         self.piloter(regles.avancer(self.projet, self.etat), rapports=[self.rendu_frais()], limite=1)
         (t,) = self.taches(etape="captures:f1-validation")
         git = self.en_depot_git()
-        chemin = ".factory/pieces/f1/captures/menu.png"
+        chemin = f".factory/pieces/f1/captures/{t['id']}/menu.png"
         git("checkout", "-q", "-b", "agent/captures")
         (self.dossier / chemin).parent.mkdir(parents=True, exist_ok=True)
         (self.dossier / chemin).write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 16)
@@ -801,7 +847,7 @@ class TestCorrectionAvecApk(Base):
         self.piloter(regles.avancer(self.projet, self.etat), rapports=[self.rendu_frais()], limite=1)
         (t,) = self.taches(etape="captures:f1-validation")
         self.en_depot_git()
-        images = [{"chemin": ".factory/pieces/f1/captures/menu.png", "legende": "Le menu"}]
+        images = [{"chemin": f".factory/pieces/f1/captures/{t['id']}/menu.png", "legende": "Le menu"}]
         self.retour(t["id"], rapport=self.capture(images), branche="agent/inconnue")
         (d,) = self.decisions("valider_etape")
         self.assertEqual(d["captures"], [])
@@ -875,13 +921,35 @@ class TestCorrectionAvecApk(Base):
         self.assertEqual(self.archive().read_bytes(), b"PK\x03\x04apk livre v2")
         self.assertEqual([p.name for p in self.archive().parent.iterdir()], ["dernier.apk"])   # aucun fichier temporaire
 
-    def test_seul_l_apk_declare_livrable_de_la_correction_est_archive(self):
+    def nature(self, nature):
+        suivi = self.suivi()
+        for f in suivi["fonctionnalites"]:
+            if f["id"] == "f1":
+                f["nature"] = nature
+        (self.dossier / "suivi.json").write_text(json.dumps(suivi), encoding="utf-8")
+
+    def test_la_livraison_d_une_fonctionnalite_rafraichit_l_avant_de_la_correction_suivante(self):
+        """Spec §5.2 : l'« avant » est la DERNIÈRE livraison du projet. Une fonctionnalité livrée entre deux corrections
+        rafraîchit l'archive ; la correction suivante compare à cet APK, pas à celui de la correction d'avant."""
+        self.apk_precedent(b"PK\x03\x04livraison de la correction d'avant")
+        self.cadrer_la_correction(captures=False)
+        self.nature("fonctionnalite")
+        (self.dossier / APK).parent.mkdir(parents=True, exist_ok=True)
+        (self.dossier / APK).write_bytes(b"PK\x03\x04fonctionnalite livree")
+        t = {"id": "t0", "etape": "flux:f1-livraison", "fonctionnalite": "f1", "element": "e1"}
+        regles._archiver_le_livrable(self.projet, t, {"fichiers": [{"chemin": APK, "titre": "APK", "element": "e1",
+                                                                    "livrable": True}]})
+        self.assertEqual(self.archive().read_bytes(), b"PK\x03\x04fonctionnalite livree")
+        self.nature("correction")                     # la correction suivante, avec son APK corrigé
+        v = {"fid": "f1", "dernier_rapport": {"fichiers": [self.apk()]}}
+        self.assertEqual(regles._apk_avant(self.projet, v), self.archive())
+
+    def test_seul_l_apk_declare_livrable_est_archive(self):
         t = {"id": "t0", "etape": "flux:f1-livraison", "fonctionnalite": "f1", "element": "correction"}
         self.cadrer_la_correction(captures=False)
         (self.dossier / APK).parent.mkdir(parents=True, exist_ok=True)
         (self.dossier / APK).write_bytes(b"PK\x03\x04x")
         for fichiers in ([{"chemin": APK, "titre": "APK", "element": "correction"}],          # pas déclaré livrable
-                         [{"chemin": APK, "titre": "APK", "element": "autre", "livrable": True}],
                          [{"chemin": "pieces/f1/preuve.md", "titre": "P", "element": "correction", "livrable": True}]):
             regles._archiver_le_livrable(self.projet, t, {"fichiers": fichiers})
             self.assertFalse(self.archive().exists(), fichiers)
@@ -953,7 +1021,7 @@ class TestCorrectionAvecApk(Base):
         self.assertIn("avant-", matiere)
         self.assertIn("dernière livraison", matiere)
         self.assertEqual(self.decisions("valider_etape"), [])
-        images_avant = [self.image("avant-menu"), self.image("avant-score")]
+        images_avant = [self.image("avant-menu", avant["id"]), self.image("avant-score", avant["id"])]
         actions = self.retour(avant["id"], rapport=self.capture(images_avant))
         self.assertEqual(self.decisions("valider_etape"), [])               # l'« après » d'abord
         captures = self.taches(etape="captures:f1-validation")
@@ -966,7 +1034,7 @@ class TestCorrectionAvecApk(Base):
         matiere = regles._matiere(self.projet, self.etat, regles._tache(self.projet, apres["id"]))
         self.assertIn("mêmes écrans", matiere)
         self.assertIn("Écran avant-menu", matiere)                            # les légendes de l'avant, dans l'ordre
-        images_apres = [self.image("menu"), self.image("score")]
+        images_apres = [self.image("menu", apres["id"]), self.image("score", apres["id"])]
         self.retour(apres["id"], rapport=self.capture(images_apres))
         (d,) = self.decisions("valider_etape")
         self.assertEqual([(c["chemin"], c["moment"]) for c in d["captures"]],
@@ -977,9 +1045,9 @@ class TestCorrectionAvecApk(Base):
 
     def test_une_image_de_l_avant_mal_nommee_ou_celle_de_l_apres_nommee_avant_est_ecartee(self):
         avant = self.avant_puis_apres()
-        self.retour(avant["id"], rapport=self.capture([self.image("menu-ancien"), self.image("avant-menu")]))
+        self.retour(avant["id"], rapport=self.capture([self.image(n, avant["id"]) for n in ("menu-ancien", "avant-menu")]))
         apres = self.taches(etape="captures:f1-validation")[1]
-        self.retour(apres["id"], rapport=self.capture([self.image("avant-faux"), self.image("menu")]))
+        self.retour(apres["id"], rapport=self.capture([self.image(n, apres["id"]) for n in ("avant-faux", "menu")]))
         (d,) = self.decisions("valider_etape")
         self.assertEqual([(c["chemin"].rsplit("/", 1)[-1], c["moment"]) for c in d["captures"]],
                          [("avant-menu.png", "avant"), ("menu.png", "apres")])
@@ -991,7 +1059,7 @@ class TestCorrectionAvecApk(Base):
         self.assertEqual(av["colonne"], "fait")
         self.assertFalse(av.get("bloquee"))
         self.assertIn("Avant non disponible", " ".join(j["texte"] for j in regles._tache(self.projet, av["id"])["journal"]))
-        images = [self.image("menu")]
+        images = [self.image("menu", apres["id"])]
         self.retour(apres["id"], rapport=self.capture(images))
         (d,) = self.decisions("valider_etape")
         self.assertEqual([(c["chemin"], c["moment"]) for c in d["captures"]], [(images[0]["chemin"], "apres")])
@@ -1001,7 +1069,7 @@ class TestCorrectionAvecApk(Base):
         avant = self.avant_puis_apres()
         self.retour(avant["id"], erreur="x", sans_capture="émulateur indisponible : APK précédent introuvable")
         apres = self.taches(etape="captures:f1-validation")[1]
-        self.retour(apres["id"], rapport=self.capture([self.image("menu")]))
+        self.retour(apres["id"], rapport=self.capture([self.image("menu", apres["id"])]))
         (d,) = self.decisions("valider_etape")
         self.assertEqual(len(d["captures"]), 1)
         self.assertIs(d["avant_indisponible"], True)
@@ -1015,16 +1083,14 @@ class TestCorrectionAvecApk(Base):
         (av, apres) = self.taches(etape="captures:f1-validation")
         self.assertEqual(av["id"], avant["id"])
         self.assertFalse(apres["titre"].startswith("Captures « avant »"))
-        self.retour(apres["id"], rapport=self.capture([self.image("menu")]))
+        self.retour(apres["id"], rapport=self.capture([self.image("menu", apres["id"])]))
         (d,) = self.decisions("valider_etape")
         self.assertIs(d["avant_indisponible"], True)
         self.assertEqual(len(self.taches(etape="captures:f1-validation")), 2)
 
     def test_sans_apk_precedent_apres_seul_et_mention(self):
         self.assertFalse(self.archive().exists())
-        self.cadrer_la_correction()
-        images = [self.image("menu")]
-        self.piloter(regles.avancer(self.projet, self.etat), rapports=[self.rendu_frais(), self.capture(images)])
+        images = self.capturer(["menu"])
         (t,) = self.taches(etape="captures:f1-validation")
         self.assertFalse(t["titre"].startswith("Captures « avant »"))
         (d,) = self.decisions("valider_etape")
@@ -1033,8 +1099,7 @@ class TestCorrectionAvecApk(Base):
 
     def test_apk_precedent_identique_a_celui_de_la_validation_pas_d_avant(self):
         self.apk_precedent(b"PK\x03\x04apk")          # les mêmes octets que l'APK de la validation (`self.apk()`)
-        self.cadrer_la_correction()
-        self.piloter(regles.avancer(self.projet, self.etat), rapports=[self.rendu_frais(), self.capture([self.image("menu")])])
+        self.capturer(["menu"])
         (t,) = self.taches(etape="captures:f1-validation")
         self.assertFalse(t["titre"].startswith("Captures « avant »"))
         (d,) = self.decisions("valider_etape")
@@ -1043,15 +1108,12 @@ class TestCorrectionAvecApk(Base):
     def test_fonctionnalite_n_a_pas_d_avant(self):
         self.apk_precedent()
         self.cadrer_la_correction()
-        suivi = self.suivi()
-        for f in suivi["fonctionnalites"]:
-            if f["id"] == "f1":
-                f["nature"] = "fonctionnalite"            # une fonctionnalité (pas une correction), mêmes étapes
-        (self.dossier / "suivi.json").write_text(json.dumps(suivi), encoding="utf-8")
+        self.nature("fonctionnalite")                     # une fonctionnalité (pas une correction), mêmes étapes
         rendu = {**self.rendu_frais(), "nature": "autre"}
-        images = [self.image("menu")]
-        self.piloter(regles.avancer(self.projet, self.etat), rapports=[rendu, self.capture(images)])
+        self.piloter(regles.avancer(self.projet, self.etat), rapports=[rendu], limite=1)
         (t,) = self.taches(etape="captures:f1-validation")
+        images = [self.image("menu", t["id"])]
+        self.retour(t["id"], rapport=self.capture(images))
         self.assertFalse(t["titre"].startswith("Captures « avant »"))
         (d,) = self.decisions("valider_etape")
         self.assertEqual([c["chemin"] for c in d["captures"]], [images[0]["chemin"]])
@@ -1117,6 +1179,28 @@ class TestCapturesEtBarriere(Base):
         self.assertEqual(regles._rang_de_tache(regles._tache(self.projet, captures), sortie["f1"]["rangs"]), 2)
         self.assertTrue(regles._avant_une_validation(regles._tache(self.projet, captures), {}))
         self.assertFalse(regles._amont_pret(self.projet, self.etat, regles._tache(self.projet, livraison)))
+
+
+class TestArchiveDeLaLivraison(Base):
+    """L'« avant » d'une correction est la dernière livraison du projet (spec §5.2) : la dernière étape du workflow d'une
+    fonctionnalité (qui remet le livrable) archive aussi son APK livré ; une étape d'avant (l'APK d'essai) jamais."""
+
+    def setUp(self):
+        super().setUp()
+        from tests.test_moteur_regles import Validation
+        self.VAL = Validation.VAL
+        Validation.projet_avec_validation(self)       # dev, essai, valider, livraison (id `livraison`)
+
+    def test_la_livraison_d_une_fonctionnalite_archive_son_apk(self):
+        apk = self.dossier / "build" / "jeu.apk"
+        apk.parent.mkdir(parents=True, exist_ok=True)
+        apk.write_bytes(b"PK\x03\x04jeu livre")
+        archive = self.dossier / ".factory" / "livrables-precedents" / "dernier.apk"
+        rendu = {"fichiers": [{"chemin": "build/jeu.apk", "titre": "APK", "element": "e1", "livrable": True}]}
+        regles._archiver_le_livrable(self.projet, {"id": "t0", "etape": "flux:essai", "fonctionnalite": "f1"}, rendu)
+        self.assertFalse(archive.exists())                 # l'APK d'essai n'est pas livré
+        regles._archiver_le_livrable(self.projet, {"id": "t0", "etape": "flux:livraison", "fonctionnalite": "f1"}, rendu)
+        self.assertEqual(archive.read_bytes(), b"PK\x03\x04jeu livre")
 
 
 class TestCorrectionsDuMemeSujet(Base):

@@ -131,6 +131,17 @@ test("la fenêtre : « Avant » et « Après » côte à côte ; « Avant non di
   assert.ok(ancienne.textContent.includes("1/2 · L'accueil"));
 });
 
+test("sans capture, « Avant non disponible » n'est pas redit ; le texte ne parle pas d'APK", () => {
+  const sans = rendre({...D, avant_indisponible: true, captures: [], sans_capture: "écran introuvable : pas de menu"}).boite;
+  assert.ok(sans.textContent.includes("Pas de capture : écran introuvable : pas de menu"));
+  assert.ok(!sans.textContent.includes("Avant non disponible"));
+  const [partie] = rendre({...D, avant_indisponible: true, captures: APRES}).boite
+    .tous((n) => n.className === "val-partie val-changements");
+  const seul = partie.textContent;
+  assert.ok(seul.includes("Avant non disponible : la version livrée précédemment n'a pas pu être montrée."), seul);
+  assert.ok(!seul.includes("APK"), seul);
+});
+
 test("le style : avant / après côte à côte, l'un sous l'autre sur un téléphone", () => {
   const css = readFileSync(new URL("../style.css", import.meta.url), "utf8");
   assert.match(css, /\.val-comparaison\s*\{[^}]*grid-template-columns:\s*1fr 1fr/);

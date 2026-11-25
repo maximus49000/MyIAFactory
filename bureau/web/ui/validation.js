@@ -360,8 +360,10 @@ export function contenuValidation(ctx, d, {fermer = () => {}, hotePage = hoteDeL
       v.changements.forEach((im, n) => liste.append(capture(im, n, [im.numero, im.legende].filter(Boolean).join(" · "))));
       sc.append(liste);
     } else sc.append(el("p", "val-sans-capture", `Pas de capture : ${v.sansCapture}`));
-    if (v.avantIndisponible && !v.comparaisons.length) sc.append(el("p", "val-sans-capture val-avant-indisponible",
-      "Avant non disponible : l'APK de la dernière livraison n'a pas pu être montré."));
+    // sans aucune capture, « Pas de capture » dit déjà tout : l'« avant » manquant n'est pas redit
+    if (v.avantIndisponible && !v.comparaisons.length && !v.sansCapture) sc.append(el("p",
+      "val-sans-capture val-avant-indisponible",
+      "Avant non disponible : la version livrée précédemment n'a pas pu être montrée."));
     boite.append(sc);
   }
 
@@ -383,7 +385,7 @@ export function contenuValidation(ctx, d, {fermer = () => {}, hotePage = hoteDeL
   boite.append(s1);
 
   // 2. De quoi vérifier.
-  const s2 =section("À vérifier");
+  const s2 = section("À vérifier");
   for (const l of v.livrables) {
     const ligne = el("div", "val-livrable");
     const texte = el("div", "val-livrable-texte");

@@ -224,22 +224,26 @@ Directeur voie ce qui a changé sans chercher l'écran lui-même.
   **pilote**, jamais seule, sur **l'APK joint à la validation** (pas le plus récent du dossier). Elle exige : le choix « oui », un APK présent et non périmé, l'accord
   `recette-emulateur` sur serveur, des places d'agent serveur réglées, un agent du serveur dans l'équipe, une sonde récente avec `emulateur-image`. Sinon la validation est
   posée sans capture, la raison dite.
-- **L'« avant » d'une correction** (au mieux, jamais exigé). À la fin de sa livraison, l'APK livré est copié dans `<projet>/.factory/livrables-precedents/dernier.apk`
-  (hors du dépôt, écrasé à chaque livraison). À la validation suivante, une **première** tâche de capture (« Captures « avant » : … ») installe cet APK ; ses images
+- **L'« avant » d'une correction** (au mieux, jamais exigé). À la fin de **chaque** livraison du projet (correction : étape `<fid>-livraison` ; fonctionnalité :
+  la dernière étape de son workflow, celle qui remet le livrable), l'APK déclaré `livrable` est copié (jamais déplacé, jamais à travers un lien, jamais une raison
+  d'arrêter la livraison) dans `<projet>/.factory/livrables-precedents/dernier.apk` (hors du dépôt, écrasé à chaque livraison) : l'« avant » est donc toujours la
+  dernière livraison, même si une fonctionnalité a été livrée depuis la correction précédente. À la validation suivante d'une correction, une **première** tâche de capture (« Captures « avant » : … ») installe cet APK ; ses images
   s'appellent `avant-…` et portent `moment: "avant"`. Puis la capture ordinaire sur l'APK de la validation (`moment: "apres"`). Sans APK précédent : « après » seul,
   `avant_indisponible`.
 - **Les limites.** Par tâche de capture : 20 minutes d'attente d'une place sur le serveur (`ATTENTE_CRENEAU_S`, sans second essai) et 15 minutes de travail
   (`TRAVAIL_CAPTURES_S`) ; 8 captures au plus par moment ; avec l'« avant », la phase est bornée à 2 x (20 + 15) = **70 minutes**. Le minuteur des 20 minutes vit
   dans la mémoire du moteur : un redémarrage le relance. Passé une limite, ou si l'agent échoue, est arrêté ou ne rend rien : la validation est posée sans capture, jamais
   retenue.
-- **Le trajet des images.** L'agent copie `/outil/captures/<nom>.png` (en lecture seule, hors du projet) vers `<pièces>/<fid>/captures/<nom>.png`, commite, et cite le chemin
-  relatif au projet dans `message.images` (jamais `/outil/...`). Avant la fusion, le moteur **extrait les images citées de la branche rapatriée de l'agent**
+- **Le trajet des images.** L'agent copie `/outil/captures/<nom>.png` (en lecture seule, hors du projet) vers `<pièces>/<fid>/captures/<tid>/<nom>.png` (`<tid>` : sa
+  tâche de capture, un dossier à elle seule : deux éléments en validation en même temps, ou une re-validation après « À revoir », n'écrivent jamais le même fichier),
+  commite, et cite le chemin relatif au projet dans `message.images` (jamais `/outil/...`). Une image citée hors de `<pièces>/<fid>/captures/<tid>/` (ancienne
+  capture, celle d'une autre tâche, maquette du projet) est écartée. Avant la fusion, le moteur **extrait les images citées de la branche rapatriée de l'agent**
   (`moteur/cloud.py : extraire_de_la_branche`) : seuls les chemins `.factory/pieces/<x>/…` en `.png`/`.jpg`/`.jpeg` sont acceptés ; refus d'un chemin absolu, avec `..`, d'un
   lecteur, de plus de 500 caractères, d'un lien (fichier ou dossier du chemin), d'autre chose qu'un blob, d'un fichier de plus de 20 Mo ou sans signature PNG/JPEG ; jamais
   d'écrasement d'un fichier existant ; fichier tronqué supprimé. Une image non extraite est écartée.
 - **La décision `valider_etape`** porte `captures` : `[{chemin, legende, moment}]` (8 au plus par moment, légende de 200 caractères au plus ; `moment` « avant » ou
   « apres »), `sans_capture` (la raison, 300 caractères au plus : `écran introuvable : …`, `émulateur indisponible : …`, `créneau d'émulation pris plus de 20 minutes`,
-  `hors délai : … 15 minutes`, etc.) et `avant_indisponible` (vrai si l'« avant » d'une correction manque). « Non demandée » : aucun des champs. Le bureau les montre
+  `hors délai : … 15 minutes`, `captures rendues mais non retrouvées dans le projet (n écartées)`, etc.) et `avant_indisponible` (vrai si l'« avant » d'une correction manque). « Non demandée » : aucun des champs. Le bureau les montre
   dans « Ce qui a changé ».
 - **Le journal du moteur** dit chaque départ : `agent serveur : mode <seul|pilote> (<raison>)`. C'est la première chose à lire quand un agent part « seul ».
 

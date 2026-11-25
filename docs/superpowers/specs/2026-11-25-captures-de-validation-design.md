@@ -146,7 +146,7 @@ avec le Directeur avant la mise en forme), le découpage en tests, et la manièr
    ligne à la place des captures, et la validation reste posée.
 
 8. **Faits finaux, différents de la proposition.** (a) Les images voyagent par la **copie de l'agent** (`/outil/captures/<nom>.png` vers
-   `<pièces>/<fid>/captures/`, commit, chemin relatif cité) puis l'**extraction par le moteur depuis la branche** rapatriée, avant la fusion
+   `<pièces>/<fid>/captures/<tid>/`, un dossier par tâche de capture, commit, chemin relatif cité) puis l'**extraction par le moteur depuis la branche** rapatriée, avant la fusion
    (`moteur/cloud.py : extraire_de_la_branche`) ; seuls les chemins d'images `.factory/pieces/<x>/…` sont acceptés. (b) L'« avant » est une **seconde tâche de capture**
    (une émulation = un APK), sur l'APK archivé `.factory/livrables-precedents/dernier.apk` ; la phase est bornée à 2 x (20 + 15) = 70 minutes. (c) Le minuteur des
    20 minutes vit dans la **mémoire du moteur** et repart après un redémarrage du moteur.

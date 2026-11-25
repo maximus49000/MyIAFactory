@@ -1276,6 +1276,18 @@ class ExtraireDeLaBranche(unittest.TestCase):
         self.assertFalse(self.extraire(self.BONNE))
         self.assertEqual((self.d / self.BONNE).read_bytes(), b"\x89PNG\r\n\x1a\nlocal")
 
+    def test_un_fichier_apparu_pendant_la_lecture_survit(self):
+        """Course : le fichier apparaît entre la vérification et l'écriture. `open(…, "xb")` refuse ; le fichier qu'on
+        n'a pas écrit n'est jamais effacé."""
+        vrai = cloud._executer
+
+        def pendant(argv, cwd, delai):
+            if "blob" in argv:
+                self.mettre(self.BONNE, b"\x89PNG\r\n\x1a\nvenu d'ailleurs")
+            return vrai(argv, cwd, delai)
+        self.assertFalse(cloud.extraire_de_la_branche(self.d, "agent/t1", self.BONNE, executer=pendant))
+        self.assertEqual((self.d / self.BONNE).read_bytes(), b"\x89PNG\r\n\x1a\nvenu d'ailleurs")
+
     def test_une_branche_avec_deux_points_est_refusee(self):
         self.assertFalse(self.extraire(self.BONNE, branche="agent/../main"))
         self.assertFalse((self.d / self.BONNE).exists())

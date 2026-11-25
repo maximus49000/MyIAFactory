@@ -2847,9 +2847,10 @@ def _concerne(element, etape_id):
 
 
 def _rang_de_tache(t, rangs):
-    """Le rang (dans la production) d'une tâche de flux ou de validation, `None` pour une autre tâche."""
+    """Le rang (dans la production) d'une tâche de flux ou de validation, `None` pour une autre tâche. Une tâche de
+    capture a le rang de la validation qu'elle précède."""
     etape = str(t.get("etape") or "")
-    for prefixe in (ETAPES_DE_FLUX, ETAPES_DE_VALIDATION):
+    for prefixe in (ETAPES_DE_FLUX, ETAPES_DE_VALIDATION, ETAPES_DE_CAPTURES):
         if etape.startswith(prefixe):
             return rangs.get(etape[len(prefixe):], len(rangs))     # une étape disparue du workflow : après tout
     return None
@@ -2881,7 +2882,9 @@ def _barrieres(projet, court, fac=None):
         for t in taches:
             r = _rang_de_tache(t, rangs)
             if t.get("element") and r is not None:
-                attend = str(t.get("etape")).startswith(ETAPES_DE_VALIDATION) and t["colonne"] != "fait"
+                # en captures, l'élément attend déjà sa validation (elle sera posée à leur retour) : il retient la barrière
+                attend = (str(t.get("etape")).startswith((ETAPES_DE_VALIDATION, ETAPES_DE_CAPTURES))
+                          and t["colonne"] != "fait")
                 position[t["element"]] = (r, attend, bool(t.get("bloquee")) and t["colonne"] != "fait")
         ouvertes, retiennent = {}, {}      # retiennent : rang -> [(élément, nom)] pas encore passés (dit au bureau)
         for k in validations:
@@ -2912,9 +2915,10 @@ def _barrieres(projet, court, fac=None):
 
 def _avant_une_validation(t, barrieres):
     """Vrai pour une tâche qui mène à une validation du Directeur pas encore faite : le cadrage (le cahier), le
-    prototype (la méthode), une étape de flux avant une barrière pas encore franchie."""
+    prototype (la méthode), l'étape de capture d'une validation, une étape de flux avant une barrière pas encore
+    franchie."""
     etape = str(t.get("etape") or "")
-    if etape in ("cadrage", "prototype"):
+    if etape in ("cadrage", "prototype") or etape.startswith(ETAPES_DE_CAPTURES):
         return True
     b = barrieres.get(t.get("fonctionnalite"))
     if not b or b["premiere"] is None:
@@ -3115,10 +3119,11 @@ class _Contexte:
 
     def nom_etape(self, t):
         etape = str(t.get("etape") or "")
-        for prefixe in (ETAPES_DE_FLUX, ETAPES_DE_VALIDATION):
+        for prefixe in (ETAPES_DE_FLUX, ETAPES_DE_VALIDATION, ETAPES_DE_CAPTURES):
             if etape.startswith(prefixe):
                 sid = etape[len(prefixe):]
-                return next((s["nom"] for s in self.production(t.get("fonctionnalite")) if s["id"] == sid), sid)
+                nom = next((s["nom"] for s in self.production(t.get("fonctionnalite")) if s["id"] == sid), sid)
+                return f"Captures avant « {nom} »" if prefixe == ETAPES_DE_CAPTURES else nom
         return etape or "étape"
 
     def qui(self, t):
@@ -3147,6 +3152,8 @@ def _ligne_d_element(ctx, fid, eid, nom):
         return f"« {nom} », {verbe} {ctx.qui(active)}"
     if any(str(t.get("etape")).startswith(ETAPES_DE_VALIDATION) for t in siennes):
         return f"« {nom} », attend votre validation"
+    if any(str(t.get("etape")).startswith(ETAPES_DE_CAPTURES) for t in siennes):
+        return f"« {nom} », captures en attente avant votre validation"
     if siennes:
         return f"« {nom} », {ctx.nom_etape(siennes[0])} pas encore partie"
     return f"« {nom} », pas encore commencé"
@@ -5639,12 +5646,18 @@ def _retour_de_captures(projet, etat, execution, t):
     return _demarrer_en_attente(projet, etat, fid)
 
 
-def _images_de_captures(rapport):
-    """Les images rendues par l'agent de capture (`message.images`), dans l'ordre : `[{chemin, legende}]`."""
+def _images_de_captures(projet, rapport):
+    """Les images rendues par l'agent de capture (`message.images`, déjà rangées par `_chemins_du_projet`), dans
+    l'ordre : `[{chemin, legende}]`. Seules restent les vraies images PNG ou JPEG rangées dans le projet
+    (`outil.image_servie`) : un chemin absolu, avec « .. », absent, hors du projet ou qui n'est pas une image est écarté."""
+    try:
+        f = fa.lire(projet.factory)
+    except fa.FactoryInvalide:
+        return []
     sortie = []
     for x in ((rapport or {}).get("message") or {}).get("images") or []:
         chemin = x.get("chemin") if isinstance(x, dict) else x
-        if not (isinstance(chemin, str) and chemin.strip() and rel.est_image(chemin)):
+        if not outil.image_servie(f, projet.dossier, chemin):
             continue
         if any(c["chemin"] == chemin for c in sortie):
             continue
@@ -5660,7 +5673,7 @@ def _conclure_captures(projet, etat, v, rapport, raison):
     de capture, puis pose la validation (`_attendre_le_directeur`)."""
     production = _production(projet, v["fid"])
     s = production[v["pas"]]
-    images = _images_de_captures(rapport)[:CAPTURES_MAX] if raison is None else []
+    images = _images_de_captures(projet, rapport)[:CAPTURES_MAX] if raison is None else []
     if raison is None and not images:
         texte = _ligne(((rapport or {}).get("message") or {}).get("texte"))
         raison = (texte if texte.lower().startswith("écran introuvable")

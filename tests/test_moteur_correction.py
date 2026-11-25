@@ -595,12 +595,90 @@ class TestCorrectionAvecApk(Base):
         self.assertIn(APK, [x["chemin"] for x in d["fichiers"]])
         self.assertEqual([x["id"] for x in self.taches(etape="captures:f1-validation")], [t["id"]])
 
+    def test_un_rapport_de_capture_hostile_ne_montre_que_les_vraies_images_du_projet(self):
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as ailleurs:
+            dehors = Path(ailleurs) / "dehors.png"
+            dehors.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 16)       # une vraie image, mais hors du projet
+            faux = self.dossier / "pieces" / "f1" / "captures" / "faux.png"
+            faux.parent.mkdir(parents=True, exist_ok=True)
+            faux.write_text("pas une image", encoding="utf-8")
+            bonne = self.image("menu")
+            hostiles = [{"chemin": str(dehors), "legende": "absolu"},
+                        {"chemin": "../" + dehors.name, "legende": "remonte"},
+                        {"chemin": "pieces/f1/captures/absente.png", "legende": "absente"},
+                        {"chemin": "pieces/f1/captures/faux.png", "legende": "pas une image"},
+                        {"chemin": "pieces/f1/captures/" + "x" * 600 + ".png", "legende": "trop long"},
+                        {"chemin": "pieces/f1/preuve.md", "legende": "un document"},
+                        {**bonne, "legende": "L" * 5000}]
+            self.cadrer_la_correction()
+            self.piloter(regles.avancer(self.projet, self.etat), rapports=[self.rendu_frais(), self.capture(hostiles)])
+        (d,) = self.decisions("valider_etape")
+        self.assertEqual([c["chemin"] for c in d["captures"]], [bonne["chemin"]])
+        self.assertEqual(len(d["captures"][0]["legende"]), 200)
+        chemins = [x["chemin"] for x in d["fichiers"]]
+        for x in hostiles[:5]:
+            self.assertNotIn(x["chemin"], chemins)
+
+    def test_l_outil_refuse_des_captures_hors_du_projet(self):
+        self.cadrer_la_correction()
+        self.piloter(regles.avancer(self.projet, self.etat),
+                     rapports=[self.rendu_frais(), self.capture([self.image("menu")])])
+        (d,) = self.decisions("valider_etape")
+        base = {"action": "poser", "portee": "projet", "genre": "valider_etape", "fonctionnalite": "f1",
+                "texte": "Encore ?", "element": d["element"], "etape": d["etape"], "tache": d["tache"],
+                "compte_rendu": "", "fichiers": []}
+        for chemin in ("C:/Windows/x.png", "/etc/x.png", "../x.png", "pieces/f1/x.md", "p/" + "x" * 600 + ".png"):
+            with self.assertRaises(regles.Refus, msg=chemin):
+                regles.lancer(self.projet, "decision", {**base, "captures": [{"chemin": chemin, "legende": "x"}]})
+        # une image bien formée mais absente : jamais montrée (écartée, la décision reste posée)
+        regles.lancer(self.projet, "decision", {**base, "captures": [{"chemin": "pieces/f1/absente.png"}],
+                                                "sans_capture": "aucune"})
+        derniere = self.decisions("valider_etape")[-1]
+        self.assertEqual(derniere["captures"], [])
+
     def test_lancer_captures_retrouve_la_tache_deja_creee(self):
         t = self.jusqu_aux_captures()
         v = self.etat["elements"]["f1/correction"]
         s = regles._production(self.projet, "f1")[v["pas"]]
         self.assertEqual(regles._lancer_captures(self.projet, self.etat, v, s), t["id"])
         self.assertEqual(len(self.taches(etape="captures:f1-validation")), 1)
+
+
+class TestCapturesEtBarriere(Base):
+    """Un élément en captures attend déjà sa validation : il retient la barrière comme un élément qui attend le
+    Directeur (sans cela, l'étape suivante d'un autre élément partait avant que sa validation soit posée)."""
+
+    def setUp(self):
+        super().setUp()
+        from tests.test_moteur_regles import Validation
+        self.VAL = Validation.VAL
+        Validation.projet_avec_validation(self, elements=2)       # dev, essai, valider (barrière), livraison
+
+    def tache(self, element, etape, fait, role=None):
+        tid = regles.lancer(self.projet, "tache", {"titre": f"{etape} {element}", "fonctionnalite": "f1",
+                                                   "etape": etape, "active": False, "element": element,
+                                                   "colonne": etape.split(":", 1)[1], **({"role": role} if role else {})})["id"]
+        if fait:
+            regles.lancer(self.projet, "tache", {"id": tid, "colonne": "fait"})
+        return tid
+
+    def test_un_element_en_captures_retient_la_barriere(self):
+        for eid in ("e1", "e2"):
+            regles.lancer(self.projet, "file-prendre", {"fonctionnalite": "f1", "element": eid})
+        for eid in ("e1", "e2"):
+            self.tache(eid, "flux:dev", True, "dev")
+            self.tache(eid, "flux:essai", True, "testeur")
+        captures = self.tache("e1", "captures:valider", False, "testeur")
+        self.tache("e2", "validation:valider", True)
+        livraison = self.tache("e2", "flux:livraison", False, "livreur")
+        sortie, retenues = regles._barrieres(self.projet, regles._etat(self.projet))
+        self.assertIn(livraison, retenues)
+        self.assertIn(2, sortie["f1"]["ouvertes"])
+        self.assertEqual(regles._rang_de_tache(regles._tache(self.projet, captures), sortie["f1"]["rangs"]), 2)
+        self.assertTrue(regles._avant_une_validation(regles._tache(self.projet, captures), {}))
+        self.assertFalse(regles._amont_pret(self.projet, self.etat, regles._tache(self.projet, livraison)))
 
 
 class TestCorrectionsDuMemeSujet(Base):

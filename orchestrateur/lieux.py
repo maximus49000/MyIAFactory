@@ -214,16 +214,31 @@ def etapes_locales_suggerees(flux, environnement):
     return sortie
 
 
+# Les exécutables que le serveur fournit déjà à ses agents (images Android et Flutter : docs/serveur-agents.md). Un outil
+# qui n'en cite que de ceux-là n'exige pas le poste : le moteur choisit le lieu (le serveur, sinon le poste, selon
+# l'ordre du projet et la capacité `flutter-sdk`).
+EXECUTABLES_DU_SERVEUR = frozenset({"flutter", "dart", "adb", "gradle", "sdkmanager", "java", "javac"})
+
+
+def _outil_du_serveur(outil):
+    """Vrai si tous les exécutables déclarés de l'outil sont fournis par le serveur (au moins un déclaré)."""
+    exes = [str(x).lower() for x in outil.get("executables") or [] if isinstance(x, str)]
+    return bool(exes) and all(x in EXECUTABLES_DU_SERVEUR for x in exes)
+
+
 def etapes_qui_exigent_le_poste(flux, environnement):
     """Les étapes d'agent du `flux` qui exigent les logiciels du poste : celles qu'un outil de l'environnement cite
     (voir `etapes_locales_suggerees`), sauf un outil que le cloud sait installer (`cloud: true`) ; une étape découpée
     passe l'exigence à sa partie `<id>-local`, et toute partie `-local` l'exige. Leur lieu est figé sur `local`."""
-    outils = [o for o in environnement or [] if isinstance(o, dict) and o.get("cloud") is not True]
+    outils = [o for o in environnement or [] if isinstance(o, dict) and o.get("cloud") is not True
+              and not _outil_du_serveur(o)]
     ids = {e["id"] for e in wf.etapes_d_agent(flux)}
     sortie = set()
     for i in etapes_locales_suggerees(flux, outils):
         sortie.add(f"{i}{SUFFIXE_LOCAL}" if f"{i}{SUFFIXE_LOCAL}" in ids else i)
-    sortie |= {i for i in ids if i.endswith(SUFFIXE_LOCAL)}
+    # Seule une vraie partie locale (`<id>-local` juste après `<id>`) l'exige : une étape simplement nommée « dev-local »
+    # (FM_Stats) n'est pas une partie découpée.
+    sortie |= {e["id"] for e in wf.etapes_d_agent(flux) if est_partie_locale(flux, e)}
     return sortie
 
 

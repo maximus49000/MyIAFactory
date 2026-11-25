@@ -103,6 +103,28 @@ class TestOutilFlutter(unittest.TestCase):
                 self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
                 self.assertEqual(self.appels, [])
 
+    def test_une_variante_ajoute_le_flavor(self):
+        r = self.lancer("construire-apk", "release", "client", OUTIL_FLUTTER_NUMERO="777")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("flutter build apk --release --build-number=777 --flavor=client", " ".join(self.appels))
+
+    def test_une_variante_hostile_ou_reservee_est_refusee_sans_rien_lancer(self):
+        for v in ("Client", "1a", "a;b", "a b", "a" * 31, "-x", "release", "debug", "profile", ""):
+            with self.subTest(v=v):
+                r = self.lancer("construire-apk", "release", v)
+                self.assertEqual(r.returncode, 2, v)
+                self.assertEqual(self.appels, [])
+
+    def test_variante_non_signee_rangee_sous_son_nom(self):
+        self.conf.parent.joinpath("signature").write_text("poste_signe\n", newline="\n")
+        sortie = self.projet / "android_app" / "build" / "app" / "outputs" / "flutter-apk"
+        sortie.mkdir(parents=True)
+        (sortie / "app-client-release.apk").write_bytes(b"apk")
+        r = self.lancer("construire-apk", "release", "client", OUTIL_FLUTTER_SIGNATURE=(self.conf.parent / "signature").as_posix())
+        self.assertEqual(r.returncode, 0, r.stderr + r.stdout)
+        self.assertTrue((sortie / "app-client-release-unsigned.apk").exists())
+        self.assertFalse((sortie / "app-client-release.apk").exists())
+
     def test_pub_get_seulement_si_necessaire(self):
         self.assertEqual(self.lancer("analyser-flutter").returncode, 0)
         self.journal_fichier.unlink()

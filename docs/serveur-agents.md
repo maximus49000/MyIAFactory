@@ -458,7 +458,7 @@ conteneur des agents des projets Flutter.
   (`depart.CONSIGNE_FLUTTER_SERVEUR` : commandes simples, ni `&&`, `;`, `|`, `timeout` ni variable en préfixe).
 - **Commandes uniques** (`serveur_ovh/agent-outils/outil-flutter.sh`, déposé par le poste avec l'enveloppe, monté en lecture
   seule sous `/opt/outils`, en tête du `PATH` du conteneur, image inchangée) : `analyser-flutter`, `tester-flutter`,
-  `construire-apk [release|debug]` (défaut `release`) ; elles se placent dans le dossier Flutter du projet (transmis par le
+  `construire-apk [release|debug] [variante]` (défaut `release` ; une variante Android, `--flavor`, donne `app-<variante>-release.apk`) ; elles se placent dans le dossier Flutter du projet (transmis par le
   poste, `"flutter_dossier"`, motif strict), lancent `flutter pub get` si les paquets ne sont pas à jour puis l'étape
   (sortie bornée aux 200 000 derniers octets) ; tout autre argument : code 2 sans rien lancer. Chacune s'ouvre à la fiche
   par sa règle (`Bash(analyser-flutter:*)`, `Bash(tester-flutter:*)`, `Bash(construire-apk:*)`, jamais `Bash` seul), par la

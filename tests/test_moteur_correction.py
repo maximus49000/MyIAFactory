@@ -401,7 +401,26 @@ class TestCorrectionAvecApk(Base):
     def capture(self, images, texte="Captures prises sur l'émulateur."):
         return {"statut": "fait", "message": {"texte": texte, "images": images}}
 
-    def cadrer_la_correction(self, captures=True):
+    def equipe_au_serveur(self, places=1, hors_ligne=None, polyvalent=False):
+        """Le projet a un agent du serveur (dev-9), `places` places serveur, et un serveur en ligne (sinon la raison) :
+        sans cela, une capture ne peut pas partir et la validation est posée sans capture."""
+        from tests.orch_aide import FICHE_LEA
+        fiche = (FICHE_LEA.replace("Clé : dev-1", "Clé : dev-9").replace("Prénom : Léa", "Prénom : Sam")
+                 .replace("Lieu : local", "Lieu : serveur"))
+        if polyvalent:
+            fiche = "Clé : dev-9\nPrénom : Sam\nLieu : serveur\n"      # le modèle polyvalent (test_moteur_polyvalents)
+        (self.dossier / "fiches" / "sam.md").write_text(fiche, encoding="utf-8")
+        f = json.loads(self.factory.read_text(encoding="utf-8"))
+        f["agents_serveur_max"] = places
+        self.factory.write_text(json.dumps(f), encoding="utf-8")
+        from orchestrateur import outil
+        p = mock.patch.object(outil, "raison_serveur", return_value=hors_ligne)
+        p.start()
+        self.addCleanup(p.stop)
+
+    def cadrer_la_correction(self, captures=True, serveur=True):
+        if serveur and not (self.dossier / "fiches" / "sam.md").exists():
+            self.equipe_au_serveur()
         self.corriger(captures=captures)
         (t,) = self.taches(etape="cadrage")
         regles._suite_cadrage(self.projet, self.etat, t, {"nom": "Corriger : score", "fiche_correction": FICHE})
@@ -569,28 +588,77 @@ class TestCorrectionAvecApk(Base):
     def test_la_capture_part_chez_un_agent_du_serveur(self):
         """Un projet à places serveur : l'agent de capture est un agent du serveur (le pilote y conduit l'émulateur),
         jamais l'agent du poste qui a fait l'étape d'avant."""
-        from tests.orch_aide import FICHE_LEA
-        (self.dossier / "fiches" / "sam.md").write_text(
-            FICHE_LEA.replace("Clé : dev-1", "Clé : dev-9").replace("Prénom : Léa", "Prénom : Sam")
-            .replace("Lieu : local", "Lieu : serveur"), encoding="utf-8")
-        f = json.loads(self.factory.read_text(encoding="utf-8"))
-        f["agents_serveur_max"] = 1
-        self.factory.write_text(json.dumps(f), encoding="utf-8")
-        from orchestrateur import outil
-        with mock.patch.object(outil, "raison_serveur", return_value=None):
-            t = self.jusqu_aux_captures()
+        t = self.jusqu_aux_captures()
         self.assertEqual(t["agent"], "dev-9")
 
-    def test_serveur_hors_ligne_la_capture_n_attend_pas_sans_fin(self):
-        """Serveur hors ligne : la tâche de capture n'est pas retenue pour le serveur ; elle part chez l'agent ordinaire,
-        que le moteur ne lance pas (il pose la validation sans capture, `boucle._sans_capture`)."""
-        f = json.loads(self.factory.read_text(encoding="utf-8"))
-        f["agents_serveur_max"] = 1
-        self.factory.write_text(json.dumps(f), encoding="utf-8")
+    def capture_close_sans_depart(self, raison):
+        """Le correctif rendu : la capture, qui ne peut pas partir, est close aussitôt (jamais confiée à un agent) et la
+        validation posée sans capture avec `raison`."""
+        self.piloter(regles.avancer(self.projet, self.etat), rapports=[self.rendu_frais()])
+        (t,) = self.taches(etape="captures:f1-validation")
+        self.assertEqual(t["colonne"], "fait")
+        self.assertFalse(t.get("debut"))                       # jamais partie
+        (d,) = self.decisions("valider_etape")
+        self.assertEqual((d["captures"], d["sans_capture"]), ([], raison))
+        self.assertIn(APK, [x["chemin"] for x in d["fichiers"]])
+
+    def test_serveur_hors_ligne_la_capture_est_close_aussitot(self):
+        self.equipe_au_serveur(hors_ligne="hors ligne")
+        self.cadrer_la_correction()
+        self.capture_close_sans_depart("émulateur indisponible : serveur hors ligne")
+
+    def test_sans_place_serveur_la_capture_est_close_aussitot(self):
+        """Le poste seul (aucune place serveur), ses places occupées ou non : la validation n'attend pas un agent du
+        poste qui serait de toute façon refusé."""
+        self.equipe_au_serveur(places=0)
+        self.cadrer_la_correction()
+        self.capture_close_sans_depart("émulateur indisponible : aucune place d'agent serveur réglée pour ce projet")
+
+    def test_sans_agent_du_serveur_la_capture_ne_peut_pas_partir(self):
+        """(Le flux d'un tel projet n'atteint pas la capture aujourd'hui : la règle est vérifiée directement.)"""
         from orchestrateur import outil
-        with mock.patch.object(outil, "raison_serveur", return_value="hors ligne"):
-            t = self.jusqu_aux_captures()
-        self.assertEqual(t["agent"], "dev-1")
+        court = regles._etat(self.projet)
+        fac = {"agents_serveur_max": 1}
+        with mock.patch.object(outil, "raison_serveur", return_value=None):
+            self.assertEqual(regles._capture_impossible(self.projet, {**court, "agents": [{"lieu": "local"}]}, fac),
+                             "émulateur indisponible : aucun agent du serveur dans l'équipe du projet")
+            self.assertIsNone(regles._capture_impossible(self.projet, {**court, "agents": [{"lieu": "serveur"}]}, fac))
+
+    def test_places_serveur_prises_la_capture_est_close_apres_vingt_minutes(self):
+        t = self.jusqu_aux_captures()
+        # la capture rendue à l'attente (pas encore partie) et l'agent du serveur occupé ailleurs : elle attend
+        regles.lancer(self.projet, "tache", {"id": t["id"], "active": False})
+        self.etat["en_cours"].discard(t["id"])
+        autre = regles._creer_tache(self.projet, "Autre travail", "f1", "dev", "flux:f1-correctif")
+        regles.lancer(self.projet, "tache", {"id": autre, "agent": "dev-9", "active": True})
+        debut = self.etat["elements"]["f1/correction"]["captures_depuis"]
+        with mock.patch.object(regles.time, "time", return_value=debut + regles.ATTENTE_CRENEAU_S - 1):
+            regles._demarrer_en_attente(self.projet, self.etat, "f1")
+        self.assertEqual(self.decisions("valider_etape"), [])        # elle attend encore
+        self.assertEqual(regles.attente_restante_des_captures(self.projet, self.etat, t["id"], maintenant=debut + 300),
+                         regles.ATTENTE_CRENEAU_S - 300)
+        with mock.patch.object(regles.time, "time", return_value=debut + regles.ATTENTE_CRENEAU_S):
+            regles._demarrer_en_attente(self.projet, self.etat, "f1")
+        (d,) = self.decisions("valider_etape")
+        self.assertEqual((d["captures"], d["sans_capture"]), ([], "créneau d'émulation pris plus de 20 minutes"))
+        (t,) = self.taches(etape="captures:f1-validation")
+        self.assertEqual(t["colonne"], "fait")
+
+    def test_une_capture_ne_demande_jamais_fable(self):
+        """Équipe polyvalente, capture qui demanderait Fable : ni décision Fable au Directeur, ni attente ; elle part
+        au serveur (sur Opus, faute d'accord)."""
+        self.cadrer_la_correction()
+        self.equipe_au_serveur(polyvalent=True)        # l'équipe devient polyvalente une fois la correction cadrée
+        vrai = regles._modele_necessaire
+
+        def fable_pour_la_capture(projet, court, t):
+            return "Fable" if str(t.get("etape")).startswith("captures:") else vrai(projet, court, t)
+        with mock.patch.object(regles, "_modele_necessaire", fable_pour_la_capture):
+            self.piloter(regles.avancer(self.projet, self.etat), rapports=[self.rendu_frais()], limite=1)
+        (t,) = self.taches(etape="captures:f1-validation")
+        self.assertTrue(t["active"])
+        self.assertEqual(t["agent"], "dev-9")
+        self.assertEqual(self.decisions(regles.GENRE_FABLE), [])
 
     def test_l_apk_des_captures_est_celui_de_la_validation(self):
         t = self.jusqu_aux_captures()

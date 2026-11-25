@@ -3372,6 +3372,9 @@ def _demarrer_en_attente(projet, etat, fid):
         attente = [t for t in attente if t.get("etape") != ETAPE_INSTALLATION]
     if not attente:
         return []
+    conclues = _captures_sans_depart(projet, etat, court, attente)
+    if conclues is not None:      # des captures closes sans départ : leurs validations sont posées, on recommence
+        return conclues + _demarrer_en_attente(projet, etat, fid)
     panne = _panne_en_cours(etat)
     if panne:      # le service Claude est indisponible : rien ne part avant le prochain essai (dit au bureau)
         etat["attente_charge"] = {"texte": panne["texte"], "taches": [t["id"] for t in attente], "charge": None,
@@ -3433,12 +3436,11 @@ def _demarrer_en_attente(projet, etat, fid):
                     and "serveur" in dep.ordre_du_metier(fac, premiere.get("role"))
                     and any(str(par_id[i].get("etape") or "").startswith(ETAPES_DE_FLUX)
                             or par_id[i].get("etape") in ("retour", "correction") for i in lot["ids"]))
-        # l'étape de capture d'un projet à places serveur, serveur en ligne, avec un agent du serveur : au serveur
-        # seulement (le pilote y conduit l'émulateur). Sinon le choix ordinaire : le moteur, qui ne la lance jamais hors
-        # du serveur, pose alors la validation sans capture (jamais une attente sans fin)
-        captures = (str(premiere.get("etape") or "").startswith(ETAPES_DE_CAPTURES)
-                    and bool(fac.get("agents_serveur_max")) and outil.raison_serveur(fac) is None
-                    and any(a["lieu"] == "serveur" for a in court["agents"]))
+        # l'étape de capture : au serveur seulement (le pilote y conduit l'émulateur) ; celles qui ne le peuvent pas, ou
+        # qui attendent une place depuis plus de 20 minutes, ont été closes sans capture (`_captures_sans_depart`)
+        captures = str(premiere.get("etape") or "").startswith(ETAPES_DE_CAPTURES)
+        if captures and mn.rang(lot["modele"]) >= mn.rang(mn.FABLE):
+            lot["modele"] = "Opus"      # jamais Fable pour une capture : ni accord à demander, ni serveur refusé
         epinglee = epinglee or captures
         if epinglee:
             # Une étape du flux (correction ou fonctionnalité) d'un projet Flutter : au serveur seulement
@@ -3447,7 +3449,8 @@ def _demarrer_en_attente(projet, etat, fid):
             # peut pas compiler (refusé) : ni APK, ni livraison.
             local_ok = cloud_ok = False
             serveur_ok = places["serveur"] > 0
-        if polyvalents and mn.rang(_modele_voulu(projet, court, premiere, lot["modele"])) >= mn.rang(mn.FABLE):
+        if (polyvalents and not captures      # la capture n'attend jamais un accord Fable (le serveur ne le prend pas)
+                and mn.rang(_modele_voulu(projet, court, premiere, lot["modele"])) >= mn.rang(mn.FABLE)):
             accord = premiere.get("fable_accordee")
             if accord is None:       # la décision au bureau de direction, avant tout départ ; la tâche attend
                 _demander_fable(projet, court, premiere)
@@ -3472,7 +3475,8 @@ def _demarrer_en_attente(projet, etat, fid):
                       and premiere.get("etape") != "cadrage"):
                 continue       # un spécialiste à l'ancienne, ou l'agent attitré du cadrage : la tâche l'attend
         if agent is None and captures:      # un agent du serveur, quel que soit l'ordre des lieux du métier
-            agent = _agent_local(projet, premiere, lot["modele"], serveur_ok, lieu="serveur", sans_lieu_impose=True)
+            # sans modèle demandé : tout agent du serveur convient, `_modele_de_depart` la ramène à son plafond
+            agent = _agent_local(projet, premiere, None, serveur_ok, lieu="serveur", sans_lieu_impose=True)
             if agent is None:
                 continue
         if agent is None:      # (un agent polyvalent occupé : n'importe quel autre agent libre la reprend)
@@ -5600,7 +5604,75 @@ def _lancer_captures(projet, etat, v, s):
                        (avant or {}).get("role") or s.get("role"), ETAPES_DE_CAPTURES + s["id"],
                        element=v["element"]["id"], colonne=s["id"], journal=journal)
     v["taches"].append(tid)
+    v["captures_depuis"] = time.time()       # les 20 minutes du créneau courent dès maintenant (moteur + serveur)
     return tid
+
+
+def _element_de_captures(projet, etat, t):
+    """`(v, s)` : l'élément qui attend la tâche de capture `t` et sa validation, ou `(None, None)` si elle ne sert plus
+    (ou si l'élément n'est pas encore repris après un redémarrage)."""
+    v = _m(etat, "elements").get(f"{t.get('fonctionnalite')}/{t.get('element')}")
+    if v is None or v.get("phase") != "captures":
+        return None, None
+    production = _production(projet, v["fid"])
+    s = production[v["pas"]] if v["pas"] < len(production) else None
+    if s is None or _tache_de_captures(projet, v, s) != t.get("id"):
+        return None, None
+    return v, s
+
+
+def attente_restante_des_captures(projet, etat, tid, maintenant=None):
+    """Les secondes qui restent, sur les 20 minutes du créneau (`ATTENTE_CRENEAU_S`, comptées depuis la création de la
+    tâche de capture), à attendre une place : sur le serveur, l'exécuteur n'attend que ce reste. None : pas une capture
+    en cours."""
+    try:
+        t = _tache(projet, tid)
+    except Refus:
+        return None
+    v, _s = _element_de_captures(projet, etat, t)
+    if v is None:
+        return None
+    maintenant = time.time() if maintenant is None else maintenant
+    return ATTENTE_CRENEAU_S - (maintenant - v.setdefault("captures_depuis", maintenant))
+
+
+def _capture_impossible(projet, court, fac):
+    """Pourquoi aucune tâche de capture ne peut partir au serveur maintenant, pour une raison qui ne passera pas d'elle-
+    même dans les 20 minutes, ou None."""
+    if not fac.get("agents_serveur_max"):
+        return "émulateur indisponible : aucune place d'agent serveur réglée pour ce projet"
+    raison = outil.raison_serveur(fac)
+    if raison:
+        return f"émulateur indisponible : serveur {raison}"
+    if not any(a["lieu"] == "serveur" for a in court["agents"]):
+        return "émulateur indisponible : aucun agent du serveur dans l'équipe du projet"
+    return None
+
+
+def _captures_sans_depart(projet, etat, court, attente, maintenant=None):
+    """Une règle pour toute capture qui attend son départ : jamais une validation retenue sans fin. Celle qui ne peut
+    pas partir au serveur (`_capture_impossible`) est close tout de suite sans capture ; celle qui attend une place
+    serveur depuis 20 minutes (`ATTENTE_CRENEAU_S`) aussi. Rend les actions des validations posées, ou None si aucune
+    capture n'a été close."""
+    captures = [t for t in attente if str(t.get("etape") or "").startswith(ETAPES_DE_CAPTURES)]
+    if not captures:
+        return None
+    maintenant = time.time() if maintenant is None else maintenant
+    impossible = _capture_impossible(projet, court, _factory(projet))
+    closes = 0
+    for t in captures:
+        v, s = _element_de_captures(projet, etat, t)
+        if v is None:
+            continue
+        raison = impossible
+        if raison is None and maintenant - v.setdefault("captures_depuis", maintenant) >= ATTENTE_CRENEAU_S:
+            raison = f"créneau d'émulation pris plus de {ATTENTE_CRENEAU_S // 60} minutes"
+        if raison is None:
+            continue
+        _m(etat, "liees").pop(t.get("id"), None)
+        _conclure_captures(projet, etat, v, None, raison)      # comme `_retour_de_captures` : la suite part ensuite
+        closes += 1
+    return [] if closes else None
 
 
 def limites_de_la_tache(t):
@@ -5704,6 +5776,7 @@ def _conclure_captures(projet, etat, v, rapport, raison):
     documents de l'étape d'avant gardés, les images ajoutées), `captures` (au plus 8 `{chemin, legende}`, dans l'ordre
     rendu), `sans_capture` (la raison quand il n'y en a pas ; aucune image : « écran introuvable : … ») — ferme la tâche
     de capture, puis pose la validation (`_attendre_le_directeur`)."""
+    v.pop("captures_depuis", None)
     production = _production(projet, v["fid"])
     s = production[v["pas"]]
     images = _images_de_captures(projet, rapport)[:CAPTURES_MAX] if raison is None else []

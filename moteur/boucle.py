@@ -967,11 +967,18 @@ class Moteur:
             self._garder_la_reponse(projet, tache, fiche, modele, reprendre, reponse)
         else:
             if limites:      # l'étape de capture : en pilote sur l'APK joint à la validation, jamais « seul »
+                restante = regles.attente_restante_des_captures(projet, self._etat(projet), tache)
+                if restante is not None and restante <= 0:
+                    self._sans_capture(projet, fiche, modele, tache, lot, "créneau d'émulation pris plus de "
+                                       f"{regles.ATTENTE_CRENEAU_S // 60} minutes")
+                    return
+                if restante is not None:     # les 20 minutes couvrent l'attente au moteur ET au serveur
+                    limites = {**limites, "attente_max_s": max(1, int(restante))}
                 joint = regles.apk_des_captures(projet, self._etat(projet), tache)
-                mode, apk = self._mode_serveur(projet, apk=joint) if joint else ("seul", None)
+                raisons = []
+                mode, apk = self._mode_serveur(projet, apk=joint, raisons=raisons) if joint else ("seul", None)
                 if mode != "pilote":
-                    raison = (self._pilote_possible(projet) if joint else None) or (
-                        "APK de la validation introuvable sur le poste")
+                    raison = raisons[-1] if raisons else "APK de la validation introuvable sur le poste"
                     self._sans_capture(projet, fiche, modele, tache, lot, f"émulateur indisponible : {raison}")
                     return
             else:
@@ -1077,15 +1084,17 @@ class Moteur:
         except OSError:
             pass
 
-    def _mode_serveur(self, projet, apk=None):
+    def _mode_serveur(self, projet, apk=None, raisons=None):
         """`(mode, apk)` : `("pilote", apk)` seulement si le Directeur a réglé `recette-emulateur` sur serveur pour ce
         projet (accord permanent, `deport_types.accord_serveur`) ET qu'un APK est trouvé (`apk_pour_le_pilote`) ; sinon
         `("seul", None)`. Une lecture qui échoue vaut « seul ». Le pilote exige aussi, à la dernière sonde, un serveur
         prêt pour lui (`agent-pilote` : agent, abonnement ET image de l'émulateur) : sinon « seul », et le journal le dit.
         `apk` donné (l'APK joint à une validation, étape de capture) : c'est CET APK que le pilote installe, jamais le plus
-        récent du dossier ; absent du poste, « seul »."""
+        récent du dossier ; absent du poste, « seul ». `raisons` (liste) : reçoit la raison dite au journal."""
         def dire(mode, raison):      # chaque lancement dit le mode choisi et pourquoi (cause des agents sans émulateur)
             self._noter(projet, f"agent serveur : mode {mode} ({raison})")
+            if raisons is not None:
+                raisons.append(raison)
 
         donne = apk
         try:
@@ -1129,6 +1138,12 @@ class Moteur:
             return f"{raison} (l'émulateur n'est pas réglé sur le serveur pour ce projet)"
         if not self._places_serveur(projet):
             return "aucune place d'agent serveur réglée pour ce projet"
+        try:
+            equipe = fi.lire_toutes(fa.lire(projet.factory)["fiches"])
+        except Exception as e:               # noqa: BLE001
+            return f"équipe illisible : {e}"[:300]
+        if not any(x.get("lieu") == "serveur" for x in equipe):
+            return "aucun agent du serveur dans l'équipe du projet"
         return self._pilote_impossible()
 
     @staticmethod

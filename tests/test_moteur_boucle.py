@@ -990,6 +990,33 @@ class Serveur(Base):
         self.regler_places_serveur(1)
         self.assertIsNone(self.projet.pilote_possible())
 
+    def test_capture_sans_agent_du_serveur_n_est_pas_possible(self):
+        self.accord = True
+        self.regler_places_serveur(1)
+        (self.dossier / "fiches" / "lea.md").unlink()
+        self.assertIn("aucun agent du serveur", self.projet.pilote_possible())
+
+    def test_capture_part_avec_le_reste_des_vingt_minutes(self):
+        self.accord = True
+        with mock.patch.object(regles, "attente_restante_des_captures", return_value=300.4):
+            self.partir_captures()
+        self.assertEqual(self.executeurs[-1].attente_max_s, 300)     # 20 min en tout : moteur + serveur
+
+    def test_capture_au_dela_des_vingt_minutes_ne_part_pas(self):
+        self.accord = True
+        with mock.patch.object(regles, "attente_restante_des_captures", return_value=0):
+            self.partir_captures()
+        self.assertEqual((self.executeurs, self.lances()), ([], []))
+        self.assertEqual(self.retour_sans_agent().sans_capture, "créneau d'émulation pris plus de 20 minutes")
+
+    def test_capture_seul_dit_la_vraie_raison(self):
+        self.accord = True
+        self.pilote_refus = "ovh : emulateur-image manquante"
+        self.partir_captures()
+        raison = self.retour_sans_agent().sans_capture
+        self.assertIn("emulateur-image manquante", raison)
+        self.assertNotIn("APK de la validation", raison)
+
     def test_capture_par_un_agent_du_poste_ne_part_pas(self):
         self.accord = True
         (self.dossier / "fiches" / "lea.md").write_text(

@@ -5436,7 +5436,7 @@ def _attendre_le_directeur(projet, etat, v, s):
             precedent = {**precedent, "doit_marcher": _doit_marcher_derive(_objectif_de(projet, v, s))}
     manques = ([] if _de_quoi_verifier(projet, precedent) or _maquette_du_cahier(projet, v["fid"], v["element"]["id"]) else ["rien"]) \
         + ([] if rel.texte_dit_ok(precedent.get("doit_marcher"), rel.MAX_DOIT_MARCHER) else ["doit_marcher"]) \
-        + _manques_de_nature(projet, nature, precedent)
+        + _manques_de_nature(projet, nature, precedent, apk_exige)
     if apk_exige and "livrable" not in manques and not _fichier_existe(projet, precedent, rel.est_executable):
         manques.append("apk")
     elif apk_exige and "livrable" not in manques and _apk_perime(projet, precedent):
@@ -5616,10 +5616,14 @@ def _apk_perime(projet, precedent):
     return bool(dates) and max(dates) + TOLERANCE_APK < _date_du_code(projet.dossier)
 
 
-def _manques_de_nature(projet, nature, precedent):
+def _manques_de_nature(projet, nature, precedent, apk_exige=False):
     """Ce que la nature déclarée de la validation exige et que le rapport n'a pas donné : en jeu, un livrable à essayer
     (ou un lien d'accès) et son mode opératoire ; un visuel, une image (plus les sons) ; un son, un fichier audio ;
-    une mécanique, un document explicatif. Sans nature (ou `autre`), rien de plus."""
+    une mécanique, un document explicatif. Sans nature (ou `autre`), rien de plus. Une correction d'un projet à APK est
+    validée sur l'APK, quelle que soit sa nature : l'APK exigé remplace le document, l'image ou le son (essai réel,
+    FM_Stats, 2026-11-25 : « décalage du nombre » déclaré `mecanique`, validation bloquée « sans document explicatif »)."""
+    if apk_exige and nature in ("visuel", "son", "mecanique"):
+        return []
     if nature == "en_jeu":
         return ([] if rel.acces_ok(precedent.get("acces")) or _fichier_existe(projet, precedent, rel.est_executable)
                 else ["livrable"]) + ([] if rel.mode_operatoire_ok(precedent.get("mode_operatoire")) else ["mode_operatoire"])

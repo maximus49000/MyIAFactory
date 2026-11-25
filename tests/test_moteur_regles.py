@@ -2259,6 +2259,15 @@ class Validation(Base):
                 self.tearDown()
                 self.setUp()
 
+    def test_une_correction_a_apk_n_exige_ni_document_ni_image_ni_son(self):
+        """Essai réel (FM_Stats, 2026-11-25) : une correction déclarée `mecanique` restait bloquée « sans document
+        explicatif » alors que le Directeur la valide sur l'APK."""
+        self.projet_avec_validation()
+        for nature, manque in (("mecanique", "document"), ("visuel", "image"), ("son", "son")):
+            self.assertEqual(regles._manques_de_nature(self.projet, nature, {}), [manque])
+            self.assertEqual(regles._manques_de_nature(self.projet, nature, {}, apk_exige=True), [])
+        self.assertEqual(regles._manques_de_nature(self.projet, "en_jeu", {}, apk_exige=True), ["livrable", "mode_operatoire"])
+
     def test_la_maquette_du_cahier_est_de_quoi_verifier(self):
         # Essai réel (FM_Stats, f8) : la maquette HTML existait, l'étape disait « déjà faite » sans la joindre.
         self.projet_avec_validation()

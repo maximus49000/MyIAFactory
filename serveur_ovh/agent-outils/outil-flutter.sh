@@ -3,7 +3,8 @@
 # trois noms dans /opt/outils (dans le PATH du conteneur) ; le nom d'appel choisit l'étape, valeurs figées :
 #   analyser-flutter          flutter analyze                 (aucun argument)
 #   tester-flutter            flutter test                    (aucun argument)
-#   construire-apk [release|debug]   flutter build apk --release (défaut) ou --debug, avec --build-number (temps en minutes)
+#   construire-apk [release|debug] [variante]   flutter build apk --release (défaut) ou --debug, avec --build-number (temps en
+#   minutes) ; une variante (flavor Android : minuscule puis lettres/chiffres, 30 au plus) ajoute --flavor <variante>
 # Au serveur personne n'approuve une commande : la fiche n'ouvre que des commandes SIMPLES (Bash(analyser-flutter:*)…) ;
 # chaque commande fait donc l'étape complète : elle se place d'elle-même dans le dossier Flutter du projet (nom relatif
 # écrit par l'enveloppe dans /opt/outils/dossier-flutter, motif strict, jamais « .. » ni chemin absolu, sous
@@ -35,7 +36,15 @@ case "${0##*/}" in
     [ $# -eq 0 ] || refuser 2 "tester-flutter : aucun argument admis."
     COMMANDE=(test) ;;
   construire-apk)
-    [ $# -le 1 ] || refuser 2 "construire-apk : un seul argument, release ou debug."
+    [ $# -le 2 ] || refuser 2 "construire-apk : release ou debug, puis au plus une variante."
+    # Une variante (flavor) Android : un APK par variante (app-<variante>-release.apk). Sans cela, un projet à deux variantes
+    # (Maître/Client) ne pouvait construire que la variante par défaut au serveur (essai réel FM_Stats, 2026-11-25).
+    VARIANTE=""
+    if [ $# -eq 2 ]; then
+      [[ $2 =~ ^[a-z][A-Za-z0-9]{0,29}$ ]] || refuser 2 "construire-apk : variante refusée (minuscule puis lettres ou chiffres, 30 au plus)."
+      case "$2" in release|debug|profile) refuser 2 "construire-apk : variante refusée (nom de mode réservé)." ;; esac
+      VARIANTE="$2"
+    fi
     # Chaque APK porte un numéro de version (versionCode) qui augmente : le temps en minutes depuis 1970 (tient dans les
     # 2,1 milliards d'un versionCode jusqu'en 2038). Sans lui tous les APK portaient 1 et rien ne distinguait le dernier
     # du précédent (essai réel FM_Stats, 2026-11-25). Valeur imposée possible pour les tests : OUTIL_FLUTTER_NUMERO.
@@ -46,7 +55,8 @@ case "${0##*/}" in
       release) COMMANDE=(build apk --release "--build-number=$NUMERO"); RELEASE=1 ;;
       debug) COMMANDE=(build apk --debug "--build-number=$NUMERO") ;;
       *) refuser 2 "construire-apk : release ou debug seulement." ;;
-    esac ;;
+    esac
+    [ -z "$VARIANTE" ] || COMMANDE+=("--flavor=$VARIANTE") ;;
   *) refuser 2 "Commande inconnue : analyser-flutter, tester-flutter ou construire-apk." ;;
 esac
 
@@ -89,16 +99,18 @@ if [ -n "$NON_SIGNEE" ]; then
 fi
 
 ranger_non_signee() {
-  local sorties=build/app/outputs non_signe=build/app/outputs/flutter-apk/app-release-unsigned.apk source=""
-  if [ -f "$sorties/flutter-apk/app-release.apk" ] && [ ! -L "$sorties/flutter-apk/app-release.apk" ]; then
-    source="$sorties/flutter-apk/app-release.apk"
-  elif [ -f "$sorties/apk/release/app-release-unsigned.apk" ] && [ ! -L "$sorties/apk/release/app-release-unsigned.apk" ]; then
-    source="$sorties/apk/release/app-release-unsigned.apk"
+  local sorties=build/app/outputs source="" nom="app-release" repertoire="release"
+  if [ -n "${VARIANTE:-}" ]; then nom="app-$VARIANTE-release"; repertoire="$VARIANTE/release"; fi
+  local non_signe="build/app/outputs/flutter-apk/$nom-unsigned.apk"
+  if [ -f "$sorties/flutter-apk/$nom.apk" ] && [ ! -L "$sorties/flutter-apk/$nom.apk" ]; then
+    source="$sorties/flutter-apk/$nom.apk"
+  elif [ -f "$sorties/apk/$repertoire/$nom-unsigned.apk" ] && [ ! -L "$sorties/apk/$repertoire/$nom-unsigned.apk" ]; then
+    source="$sorties/apk/$repertoire/$nom-unsigned.apk"
   fi
   [ -n "$source" ] || { echo "Release non signée introuvable dans $sorties." >&2; return 1; }
   mkdir -p -- "$sorties/flutter-apk" && rm -f -- "$non_signe" && cp -- "$source" "$non_signe" || return 1
   # jamais un nom de release signée pour un APK qui ne l'est pas
-  rm -f -- "$sorties/flutter-apk/app-release.apk" "$sorties/flutter-apk/app-release.apk.sha1"
+  rm -f -- "$sorties/flutter-apk/$nom.apk" "$sorties/flutter-apk/$nom.apk.sha1"
   echo "Release NON signée : $dossier/$non_signe (à déclarer livrable)."
   echo "La signature se fait au poste, par le Directeur : py -3.12 lancer.py signer-release --dossier <projet> --keystore <coffre> --alias <alias> --sortie <fichier>."
 }

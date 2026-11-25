@@ -1275,3 +1275,45 @@ class ExtraireDeLaBranche(unittest.TestCase):
         self.mettre(self.BONNE, b"\x89PNG\r\n\x1a\nlocal")
         self.assertFalse(self.extraire(self.BONNE))
         self.assertEqual((self.d / self.BONNE).read_bytes(), b"\x89PNG\r\n\x1a\nlocal")
+
+    def test_une_branche_avec_deux_points_est_refusee(self):
+        self.assertFalse(self.extraire(self.BONNE, branche="agent/../main"))
+        self.assertFalse((self.d / self.BONNE).exists())
+
+    def test_un_executeur_en_erreur_donne_faux(self):
+        def casse(argv, cwd, delai):
+            raise TimeoutError("trop long")
+        self.assertFalse(cloud.extraire_de_la_branche(self.d, "agent/t1", self.BONNE, executer=casse))
+        self.assertFalse((self.d / self.BONNE).exists())
+
+    def test_un_dossier_lie_sur_le_chemin_n_est_jamais_suivi(self):
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as dehors:
+            lien = self.d / ".factory" / "pieces" / "f1" / "d.png"
+            lien.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                lien.symlink_to(dehors, target_is_directory=True)
+            except (OSError, NotImplementedError):
+                self.skipTest("les liens symboliques ne peuvent pas être créés ici (droits Windows)")
+            self.mettre_dans_la_branche(".factory/pieces/f1/d.png/x/y.png", self.PNG)
+            self.assertFalse(self.extraire(".factory/pieces/f1/d.png/x/y.png"))
+            self.assertEqual(list(Path(dehors).iterdir()), [])
+
+    def mettre_dans_la_branche(self, chemin, octets):
+        """Un fichier de la branche seulement (le dossier lié du poste n'est pas touché par le commit)."""
+        import subprocess
+        sha = subprocess.run(["git", "hash-object", "-w", "--stdin"], cwd=self.d, input=octets, check=True,
+                             capture_output=True).stdout.decode().strip()
+        index = self.d / "idx-temp"
+        env = {**__import__("os").environ, "GIT_INDEX_FILE": str(index)}
+        subprocess.run(["git", "read-tree", "agent/t1"], cwd=self.d, env=env, check=True)
+        subprocess.run(["git", "update-index", "--add", "--cacheinfo", f"100644,{sha},{chemin}"], cwd=self.d,
+                       env=env, check=True)
+        arbre = subprocess.run(["git", "write-tree"], cwd=self.d, env=env, check=True,
+                               capture_output=True).stdout.decode().strip()
+        commit = subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "commit-tree", arbre, "-p",
+                                 "agent/t1", "-m", "x"], cwd=self.d, check=True, capture_output=True
+                                ).stdout.decode().strip()
+        self.git("update-ref", "refs/heads/agent/t1", commit)
+        index.unlink()

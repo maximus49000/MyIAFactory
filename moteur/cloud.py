@@ -500,7 +500,7 @@ def _piece_d_agent(parties):
 IMAGE_BRANCHE_MAX_OCTETS = 20 * 1024 * 1024      # ce que le bureau accepte de servir (`outil.IMAGE_RANGEE_MAX_OCTETS`)
 CHEMIN_IMAGE_BRANCHE_MAX = 500
 _SIGNATURES_IMAGE = {".png": b"\x89PNG\r\n\x1a\n", ".jpg": b"\xff\xd8\xff", ".jpeg": b"\xff\xd8\xff"}
-_BRANCHE_SURE = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_./-]{0,200}")
+_BRANCHE_SURE = re.compile(r"(?!.*\.\.)[A-Za-z0-9_][A-Za-z0-9_./-]{0,200}")
 
 
 def extraire_de_la_branche(dossier, branche, chemin, *, executer=None):
@@ -521,24 +521,51 @@ def extraire_de_la_branche(dossier, branche, chemin, *, executer=None):
     signature = _SIGNATURES_IMAGE.get(Path(parties[-1]).suffix.lower())
     if signature is None:
         return False
-    cible = Path(dossier).joinpath(*parties)
-    if os.path.lexists(cible):
+    racine = Path(dossier)
+    cible = racine.joinpath(*parties)
+    if os.path.lexists(cible) or _composant_lie(racine, parties[:-1]):
         return False
     ref = f"refs/heads/{branche}:{'/'.join(parties)}"
+    ecrit = False
     try:
+        code, sortie = _git(executer, dossier, "cat-file", "-t", ref, delai_s=30)
+        if code != 0 or _texte(sortie) != "blob":          # ni dossier ni sous-module (un lien est un blob, mais sa signature ne passe pas)
+            return False
         code, sortie = _git(executer, dossier, "cat-file", "-s", ref, delai_s=30)
         taille = _texte(sortie)
         if code != 0 or not taille.isdigit() or int(taille) > IMAGE_BRANCHE_MAX_OCTETS:
             return False
-        code, octets = _git(executer, dossier, "show", ref, delai_s=60)
+        code, octets = _git(executer, dossier, "cat-file", "blob", ref, delai_s=60)
         if code != 0 or not isinstance(octets, bytes) or not octets.startswith(signature):
             return False
         cible.parent.mkdir(parents=True, exist_ok=True)
+        if (_composant_lie(racine, parties[:-1])
+                or not cible.parent.resolve().is_relative_to(racine.resolve())):
+            return False
+        ecrit = True
         with open(cible, "xb") as f:               # « x » : jamais d'écrasement, même si le fichier vient d'apparaître
             f.write(octets)
     except (ErreurCloud, OSError):
+        if ecrit:
+            try:
+                cible.unlink()                      # jamais un fichier tronqué laissé en place
+            except OSError:
+                pass
         return False
     return True
+
+
+def _composant_lie(racine, parties):
+    """Vrai si un dossier déjà présent sur le chemin `racine/<parties>` est un lien symbolique ou une jonction : l'écriture
+    en suivrait la cible, hors du projet."""
+    courant = Path(racine)
+    for p in parties:
+        courant = courant / p
+        if os.path.islink(courant) or getattr(os.path, "isjunction", lambda _x: False)(courant):
+            return True
+        if not os.path.lexists(courant):
+            return False
+    return False
 
 
 def chemin_reserve(chemin):

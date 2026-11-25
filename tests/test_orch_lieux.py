@@ -250,6 +250,18 @@ class Suggestions(unittest.TestCase):
         decoupe.insert(k + 1, dict(decoupe[k], id="prototype-local", nom="Prototype : mise en place et tests"))
         self.assertEqual(lieux.etapes_qui_exigent_le_poste(decoupe, env), {"prototype-local"})
 
+    def test_un_outil_que_le_serveur_fournit_n_exige_pas_le_poste(self):
+        # FM_Stats : Flutter et l'Android SDK citent « livraison » mais le serveur les a (images android et flutter-sdk).
+        env = [{"outil": "Flutter SDK", "pour": "livraison", "executables": ["flutter", "dart"]},
+               {"outil": "Android SDK", "pour": "prototype", "executables": ["adb"]}]
+        self.assertEqual(lieux.etapes_qui_exigent_le_poste(FLUX, env), set())
+        env.append({"outil": "Godot 4", "pour": "prototype", "executables": ["godot"]})
+        self.assertEqual(lieux.etapes_qui_exigent_le_poste(FLUX, env), {"prototype"})
+
+    def test_une_etape_nommee_dev_local_n_est_pas_une_partie_locale(self):
+        flux = [dict(FLUX[0], id="dev-local", nom="Développement local")] + [dict(e) for e in FLUX[1:]]
+        self.assertEqual(lieux.etapes_qui_exigent_le_poste(flux, []), set())
+
     def test_jamais_une_validation(self):
         env = [{"outil": "x", "pour": "valid-design", "objectif": "Validation du design"}]
         self.assertEqual(lieux.etapes_locales_suggerees(FLUX, env), set())

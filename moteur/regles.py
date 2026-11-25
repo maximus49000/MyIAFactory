@@ -6113,13 +6113,15 @@ def _refus_sans_suite(projet, t):
 
 
 def _travail_apres_la_fin(projet, court, f):
-    """Vrai si une fonctionnalité (pas une correction) terminée a une tâche de flux ou de validation plus récente que sa
-    fin : son travail a repris après coup."""
-    fin = (_fonc(projet, f["id"]).get("fin") or {}).get("date")      # le relevé court n'a pas la fin
+    """Vrai si une fonctionnalité (pas une correction) terminée a, dans sa discussion, un message du moteur ou d'un
+    agent plus récent que sa fin : son travail a repris après coup (l'état court ne garde pas les tâches faites)."""
+    fonc = _fonc(projet, f["id"])
+    fin = (fonc.get("fin") or {}).get("date")
     if not fin or f.get("nature") == "correction":
         return False
-    return any(t.get("fonctionnalite") == f["id"] and str(t.get("etape") or "").startswith(("flux:", "validation:"))
-               and str(t.get("maj") or "") > fin for t in court["taches"])
+    return any(str(m.get("t") or "") > fin and m.get("auteur") != "utilisateur"
+               and not str(m.get("texte") or "").startswith("La série est terminée")
+               for m in fonc.get("discussion") or [])
 
 
 def avancer(projet, etat):

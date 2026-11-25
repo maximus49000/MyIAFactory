@@ -2223,8 +2223,7 @@ class Validation(Base):
         regles.avancer(self.projet, self.etat)
         self.assertEqual(self.fonc()["etape"], "terminee")      # rien de plus récent que la fin : elle reste close
         time.sleep(1.1)
-        (t,) = self.taches(etape="flux:dev")
-        self.ok("tache", entree={"id": t["id"], "journal": ["Le travail reprend."]})
+        regles._dire(self.projet, "f1", "« Accueil » est validé : l'élément continue.")
         regles.avancer(self.projet, self.etat)
         self.assertEqual(self.fonc()["etape"], "serie")
 

@@ -36,7 +36,26 @@ def raison_de_ne_pas_deployer(dossier, module=None):
     return None
 
 
-def declencher(dossier, synchrone=False, module=None, refus=raison_de_ne_pas_deployer):
+def annonce(resultat):
+    """Le message dit au Directeur après un déploiement : en ligne (adresse), retour arrière ou échec, avec la raison. Jamais le
+    jeton ni un secret (le jeton se copie dans la zone « Services » du bureau). `resultat` : `(code, réponse)` de `deployer`."""
+    try:
+        code, rep = resultat
+    except (TypeError, ValueError):
+        return "Le déploiement du service permanent n'a pas rendu de résultat lisible : voir la zone « Services » du bureau."
+    rep = rep if isinstance(rep, dict) else {}
+    detail = str(rep.get("detail") or "")[:300]
+    adresse = rep.get("adresse") if isinstance(rep.get("adresse"), str) else ""
+    if rep.get("statut") == "ok" and code == 0:
+        return ("Le service permanent est en ligne" + (f" : {adresse}" if adresse else "") + ". Le jeton d'accès se copie dans la "
+                "zone « Services » du bureau (il n'est jamais écrit dans un message)." + (f" {detail}" if detail else ""))
+    if rep.get("statut") == "retour_arriere":
+        return ("Le déploiement du service permanent a échoué : retour automatique à la version précédente"
+                + (f" ({adresse})" if adresse else "") + (f". {detail}" if detail else "."))
+    return "Le service permanent n'a pas pu être déployé" + (f" : {detail}" if detail else ".") + " Voir la zone « Services »."
+
+
+def declencher(dossier, synchrone=False, module=None, refus=raison_de_ne_pas_deployer, annoncer=None):
     """Lance le déploiement du service du projet `dossier` s'il le faut ; rend la ligne à mettre au journal de la tâche
     (None s'il n'y a pas de service). Jamais d'exception : un échec est dit, jamais une raison d'arrêter la livraison."""
     try:
@@ -58,9 +77,14 @@ def declencher(dossier, synchrone=False, module=None, refus=raison_de_ne_pas_dep
 
         def travail():
             try:
-                m.deployer(dossier)
+                resultat = m.deployer(dossier)
             except Exception:  # noqa: BLE001 — le cache garde l'état « en cours » ; le bureau le montre
-                pass
+                resultat = (1, {"statut": "echec", "detail": "erreur inattendue au poste"})
+            if annoncer is not None:
+                try:
+                    annoncer(annonce(resultat))
+                except Exception:  # noqa: BLE001 — l'annonce n'est jamais une raison d'échouer
+                    pass
         if synchrone:
             travail()
             return "Service permanent : déploiement fait au serveur (résultat dans la zone Services du bureau)."

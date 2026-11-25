@@ -3442,7 +3442,7 @@ def _demarrer_en_attente(projet, etat, fid):
                 continue       # un spécialiste à l'ancienne, ou l'agent attitré du cadrage : la tâche l'attend
         if agent is None:      # (un agent polyvalent occupé : n'importe quel autre agent libre la reprend)
             agent = _choisir_agent(projet, etat, court, premiere, lot["modele"], local_ok=local_ok, cloud_ok=cloud_ok,
-                                   serveur_ok=serveur_ok)
+                                   serveur_ok=serveur_ok, epinglee=epinglee)
             if agent is None:
                 continue
         lieu = next((a["lieu"] for a in court["agents"] if a["cle"] == agent), "local")
@@ -3621,7 +3621,7 @@ def _ordre_des_lieux(fac, role):
     return dep.ordre_du_metier(fac, role) if serveur or regle else None
 
 
-def _choisir_agent(projet, etat, court, tache, modele, local_ok=True, cloud_ok=None, serveur_ok=None):
+def _choisir_agent(projet, etat, court, tache, modele, local_ok=True, cloud_ok=None, serveur_ok=None, epinglee=False):
     """L'agent qui prend la tâche de modèle nécessaire `modele` : un agent local libre dont le plafond (le modèle de sa
     fiche) suffit, le plus petit d'abord (s'il reste une place locale) ; sinon, en renfort, un agent cloud libre au
     plafond suffisant (s'il reste une place cloud, voir `agents_cloud_max`, et si le projet est sur GitHub) ; sinon, si
@@ -3642,7 +3642,7 @@ def _choisir_agent(projet, etat, court, tache, modele, local_ok=True, cloud_ok=N
         if lieu == "local":
             cle = _agent_local(projet, tache, modele, local_ok)
         elif lieu == "serveur":
-            cle = _agent_local(projet, tache, modele, serveur_ok, lieu="serveur")
+            cle = _agent_local(projet, tache, modele, serveur_ok, lieu="serveur", sans_lieu_impose=epinglee)
         else:      # le repli sur l'agent local équivalent, seulement si le local fait partie de l'ordre
             cle = _agent_cloud(projet, etat, court, tache, modele, local_ok and "local" in ordre, cloud_ok)
         if cle:
@@ -3650,14 +3650,15 @@ def _choisir_agent(projet, etat, court, tache, modele, local_ok=True, cloud_ok=N
     return None
 
 
-def _agent_local(projet, tache, modele, ok, lieu="local"):
+def _agent_local(projet, tache, modele, ok, lieu="local", sans_lieu_impose=False):
     """L'agent libre du poste (ou du serveur, `lieu`) pour la tâche, par `agent-libre` (le `lieu` de son étape et le
     métier y sont lus), ou `None` (`ok` faux : plus de place à ce lieu)."""
     if not ok:
         return None
     de_la_tache = {"tache": tache["id"]} if tache.get("id") else {}    # le `lieu` de son étape
     return lancer(projet, "agent-libre", {"role": tache.get("role"), "lieu": lieu,
-                                          **({"modele": modele} if modele else {}), **de_la_tache})["agent"]
+                                          **({"modele": modele} if modele else {}), **de_la_tache,
+                                          **({"sans_lieu_impose": True} if sans_lieu_impose else {})})["agent"]
 
 
 def _agent_cloud(projet, etat, court, tache, modele, local_ok, cloud_ok):

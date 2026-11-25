@@ -3887,9 +3887,11 @@ def cmd_agent_libre(ctx, e):
         if plafond is not None:
             actifs, refus = actifs_abonnement(ctx, s)
         bascule["abonnement"], bascule["abonnement_refus"] = (actifs, plafond), refus
+    libre = e.get("sans_lieu_impose") is True      # le moteur épingle la tâche au serveur : ni brief ni étape « locale »
     cle, raison = depart.agent_libre(fiches_, s["taches"], role, modele, lieu,
-                                     ctx.f["agents_locaux_max"], lieu_reserve=lieu_reserve(ctx, role, fiches_),
-                                     lieu_etape=lieu_de_l_etape(ctx, s, t), **bascule)
+                                     ctx.f["agents_locaux_max"],
+                                     lieu_reserve=None if libre else lieu_reserve(ctx, role, fiches_),
+                                     lieu_etape=None if libre else lieu_de_l_etape(ctx, s, t), **bascule)
     sortie = {"agent": cle, "raison": raison}
     if cle is None and (lieu == "cloud" or (bascule and "session à créer" in raison)):   # la fiche qui attend sa session : la clé de la décision session_cloud
         sortie["sans_session"] = depart.sans_session(fiches_, role, modele)

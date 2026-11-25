@@ -3,6 +3,7 @@ le script `serveur_ovh/agent-outils/outil-flutter.sh` (faux `flutter`, arguments
 son montage en lecture seule sur /opt/outils par l'enveloppe (faux docker), le dossier Flutter transmis par la demande."""
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -67,17 +68,40 @@ class TestOutilFlutter(unittest.TestCase):
 
     def test_chaque_commande_fait_son_etape_dans_le_dossier_flutter(self):
         for nom, attendu in (("analyser-flutter", "flutter analyze"), ("tester-flutter", "flutter test"),
-                             ("construire-apk", "flutter build apk --release")):
+                             ("construire-apk", "flutter build apk --release --build-number=777")):
             with self.subTest(nom=nom):
                 shutil.rmtree(self.projet / "android_app" / ".dart_tool", ignore_errors=True)
                 self.journal_fichier.unlink(missing_ok=True)
-                r = self.lancer(nom)
+                r = self.lancer(nom, OUTIL_FLUTTER_NUMERO="777")
                 self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
                 self.assertEqual([x.split(" | ")[0] for x in self.appels], ["flutter pub get", attendu])
                 self.assertTrue(all(x.endswith("/android_app") for x in self.appels), self.appels)
-        r = self.lancer("construire-apk", "debug")
+        r = self.lancer("construire-apk", "debug", OUTIL_FLUTTER_NUMERO="777")
         self.assertEqual(r.returncode, 0)
-        self.assertEqual(self.appels[-1].split(" | ")[0], "flutter build apk --debug")
+        self.assertEqual(self.appels[-1].split(" | ")[0], "flutter build apk --debug --build-number=777")
+
+    def test_chaque_apk_porte_un_numero_de_version_qui_croit(self):
+        """Essai réel FM_Stats (2026-11-25) : tous les APK portaient versionCode 1, donc rien ne distinguait le dernier du
+        précédent. Sans numéro imposé, le numéro est le temps en minutes : il augmente à chaque construction."""
+        nombres = []
+        for _ in range(2):
+            self.journal_fichier.unlink(missing_ok=True)
+            r = self.lancer("construire-apk")
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            m = re.search(r"--build-number=(\d+)$", self.appels[-1].split(" | ")[0])
+            self.assertIsNotNone(m, self.appels)
+            nombres.append(int(m.group(1)))
+        self.assertGreater(nombres[0], 29_000_000)       # des minutes depuis 1970 : bien au-delà de 1
+        self.assertLess(nombres[0], 2_000_000_000)        # un versionCode Android tient dans 2,1 milliards
+        self.assertLessEqual(nombres[0], nombres[1])
+
+    def test_un_numero_de_version_hostile_est_refuse(self):
+        for numero in ("1; rm -rf /", "-3", "abc", "0", "2200000000"):
+            with self.subTest(numero=numero):
+                self.journal_fichier.unlink(missing_ok=True)
+                r = self.lancer("construire-apk", OUTIL_FLUTTER_NUMERO=numero)
+                self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
+                self.assertEqual(self.appels, [])
 
     def test_pub_get_seulement_si_necessaire(self):
         self.assertEqual(self.lancer("analyser-flutter").returncode, 0)

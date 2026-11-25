@@ -3,7 +3,7 @@
 # trois noms dans /opt/outils (dans le PATH du conteneur) ; le nom d'appel choisit l'étape, valeurs figées :
 #   analyser-flutter          flutter analyze                 (aucun argument)
 #   tester-flutter            flutter test                    (aucun argument)
-#   construire-apk [release|debug]   flutter build apk --release (défaut) ou --debug
+#   construire-apk [release|debug]   flutter build apk --release (défaut) ou --debug, avec --build-number (temps en minutes)
 # Au serveur personne n'approuve une commande : la fiche n'ouvre que des commandes SIMPLES (Bash(analyser-flutter:*)…) ;
 # chaque commande fait donc l'étape complète : elle se place d'elle-même dans le dossier Flutter du projet (nom relatif
 # écrit par l'enveloppe dans /opt/outils/dossier-flutter, motif strict, jamais « .. » ni chemin absolu, sous
@@ -36,9 +36,15 @@ case "${0##*/}" in
     COMMANDE=(test) ;;
   construire-apk)
     [ $# -le 1 ] || refuser 2 "construire-apk : un seul argument, release ou debug."
+    # Chaque APK porte un numéro de version (versionCode) qui augmente : le temps en minutes depuis 1970 (tient dans les
+    # 2,1 milliards d'un versionCode jusqu'en 2038). Sans lui tous les APK portaient 1 et rien ne distinguait le dernier
+    # du précédent (essai réel FM_Stats, 2026-11-25). Valeur imposée possible pour les tests : OUTIL_FLUTTER_NUMERO.
+    NUMERO="${OUTIL_FLUTTER_NUMERO:-$(( $(date +%s) / 60 ))}"
+    [[ $NUMERO =~ ^[1-9][0-9]{0,9}$ ]] && [ "$NUMERO" -le 2100000000 ] ||
+      refuser 2 "construire-apk : numéro de version refusé (entier de 1 à 2100000000)."
     case "${1-release}" in
-      release) COMMANDE=(build apk --release); RELEASE=1 ;;
-      debug) COMMANDE=(build apk --debug) ;;
+      release) COMMANDE=(build apk --release "--build-number=$NUMERO"); RELEASE=1 ;;
+      debug) COMMANDE=(build apk --debug "--build-number=$NUMERO") ;;
       *) refuser 2 "construire-apk : release ou debug seulement." ;;
     esac ;;
   *) refuser 2 "Commande inconnue : analyser-flutter, tester-flutter ou construire-apk." ;;

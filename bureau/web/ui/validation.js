@@ -326,7 +326,7 @@ export function contenuValidation(ctx, d, {fermer = () => {}, hotePage = hoteDeL
   for (const l of v.livrables) {
     const ligne = el("div", "val-livrable");
     const texte = el("div", "val-livrable-texte");
-    texte.append(el("strong", "", l.titre), el("span", "val-meta", [l.nom, l.taille, l.date ? dateFr(l.date) : ""]
+    texte.append(el("strong", "", l.titre), el("span", "val-meta", [l.nom, l.taille, l.date ? "construit le " + dateFr(l.date) : ""]
       .filter(Boolean).join(" · ")));
     const a = el("a", "bouton val-telecharger", "Télécharger");
     a.href = l.url;

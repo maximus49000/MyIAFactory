@@ -125,6 +125,8 @@ paquet. Après le rapport de l'agent, le moteur rapatrie donc **en octets**, au 
 que le rapport déclare livrables (`fichiers` avec `livrable: true`) ; le bureau peut alors les proposer au téléchargement
 (`outils/serveur_livrables.py`, appelé par `ExecuteurServeur.rapatrier_livrables`).
 
+Deux garde-fous évitent un livrable qui ne contient pas les corrections (essai réel FM_Stats, 2026-11-25) : `construire-apk` impose un `--build-number` qui augmente (le temps en minutes ; sans lui tous les APK portaient versionCode 1 et Android ne distinguait pas le dernier du précédent), et le moteur refuse d'ouvrir la validation d'une correction dont l'APK est plus ancien que le dernier fichier de code du projet (`regles._apk_perime`) : l'étape est refaite avec la consigne de le reconstruire. La validation affiche « construit le … » à côté de l'APK.
+
 - **Quels fichiers.** Seulement ceux du rapport, chacun revalidé au poste : chemin relatif au projet, sans `..`, sans lecteur ni `/`
   initial, segments au motif strict (lettres, chiffres, `_ . + -`, jamais un segment qui commence par « . ») ; extension dans une liste
   **fermée et minimale** propre au rapatriement : `.apk`, `.aab`, `.zip` (aucun exécutable du poste : ni `.exe`, `.msi`, `.dmg`,

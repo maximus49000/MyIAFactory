@@ -65,7 +65,8 @@ class ConstruireApkNonSigne(unittest.TestCase):
             self.signature.write_text(signature + "\n", newline="\n")
         e = dict(os.environ, PATH=self.bin.as_posix() + os.pathsep + os.environ["PATH"], FAUX_JOURNAL=self.journal.as_posix(),
                  OUTIL_FLUTTER_RACINE=self.projet.as_posix(), OUTIL_FLUTTER_CONF=self.conf.as_posix(),
-                 OUTIL_FLUTTER_SIGNATURE=self.signature.as_posix(), GRADLE_USER_HOME=self.gradle.as_posix(), **env)
+                 OUTIL_FLUTTER_SIGNATURE=self.signature.as_posix(), GRADLE_USER_HOME=self.gradle.as_posix(),
+                 OUTIL_FLUTTER_NUMERO="777", **env)
         return subprocess.run(["bash", (self.outils / "construire-apk").as_posix(), *args], capture_output=True, text=True,
                               encoding="utf-8", env=e, timeout=60, stdin=subprocess.DEVNULL)
 
@@ -75,7 +76,7 @@ class ConstruireApkNonSigne(unittest.TestCase):
     def test_poste_signe_release_non_signee_dans_les_sorties_rapatriables(self):
         r = self.lancer(signature="poste_signe")
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        self.assertEqual(self.appels()[-1], "flutter build apk --release | init")       # la signature retirée par Gradle
+        self.assertEqual(self.appels()[-1], "flutter build apk --release --build-number=777 | init")       # la signature retirée par Gradle
         self.assertFalse((self.gradle / INIT).exists())                                  # jamais laissé pour la suite
         apk = self.sorties / "flutter-apk" / "app-release-unsigned.apk"
         self.assertTrue(apk.is_file())
@@ -94,14 +95,14 @@ class ConstruireApkNonSigne(unittest.TestCase):
                 self.signature.unlink(missing_ok=True)
                 r = self.lancer(signature=signature)
                 self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-                self.assertEqual(self.appels()[-1], "flutter build apk --release | sans-init")
+                self.assertEqual(self.appels()[-1], "flutter build apk --release --build-number=777 | sans-init")
                 self.assertTrue((self.sorties / "flutter-apk" / "app-release.apk").is_file())
                 self.assertFalse((self.sorties / "flutter-apk" / "app-release-unsigned.apk").exists())
 
     def test_debug_jamais_touche(self):
         r = self.lancer("debug", signature="poste_signe")
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        self.assertEqual(self.appels()[-1], "flutter build apk --debug | sans-init")
+        self.assertEqual(self.appels()[-1], "flutter build apk --debug --build-number=777 | sans-init")
 
     def test_choix_hostile_refuse_sans_rien_lancer(self):
         for valeur in ("release", "poste_signe; rm -rf /", "../x", ""):

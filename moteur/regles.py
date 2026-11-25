@@ -3408,7 +3408,8 @@ def _demarrer_en_attente(projet, etat, fid):
         serveur_ok = places["serveur"] > 0 and not reserves & {"local", "cloud"}
         epinglee = (corrections_au_serveur and "cloud" not in reserves
                     and "serveur" in dep.ordre_du_metier(fac, premiere.get("role"))
-                    and any(str(par_id[i].get("etape") or "").startswith(ETAPES_DE_FLUX) for i in lot["ids"]))
+                    and any(str(par_id[i].get("etape") or "").startswith(ETAPES_DE_FLUX)
+                            or par_id[i].get("etape") in ("retour", "correction") for i in lot["ids"]))
         if epinglee:
             # Une étape du flux (correction ou fonctionnalité) d'un projet Flutter : au serveur seulement
             # (`_corrections_au_serveur`), même si le workflow la dit « locale ». Essai réel FM_Stats (f8, 2026-11-25) :

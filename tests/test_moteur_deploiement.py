@@ -18,6 +18,19 @@ class Detection(unittest.TestCase):
              "discussion": [{"auteur": "utilisateur", "texte": "Un écran Profil et un écran Accueil."}]}
         self.assertEqual(deploiement.restants(f, ["Accueil", "Profil"]), [])
 
+    def test_un_serveur_livre_propose_toujours_une_mise_en_place(self):
+        f = {"nom": "Synchro des données", "genre": "application-mobile-android"}
+        self.assertEqual(deploiement.restants(f, ["Serveur de synchro (API REST)"]),
+                         [deploiement.LIBELLE_SERVEUR, deploiement.LIBELLE_INSTALLATION])
+        self.assertEqual(deploiement.restants({"nom": "Pages web de lecture"})[0], deploiement.LIBELLE_SERVEUR)
+
+    def test_la_demande_de_deploiement_rappelle_la_consigne_d_origine(self):
+        f = {"nom": "Serveur distant", "discussion": [{"auteur": "utilisateur",
+             "texte": "Crée une instance permanente sur le serveur OVH avec les outils de gestion et d'appel."}]}
+        texte = deploiement.demande(f, [deploiement.LIBELLE_SERVEUR])
+        self.assertIn("instance permanente sur le serveur OVH", texte)
+        self.assertTrue(texte.startswith(deploiement.TITRE))
+
     def test_ce_que_dit_un_agent_ne_compte_pas(self):
         f = {"nom": "Profil", "discussion": [{"auteur": "chef", "texte": "On pourrait déployer plus tard."}]}
         self.assertEqual(deploiement.restants(f), [])

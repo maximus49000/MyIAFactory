@@ -24,6 +24,9 @@
   py -3.12 lancer.py serveur-tache <lancer --apk <fichier> --mode scenario|pilote [--scenario <nom>] [--projet <dossier>] [--attendre]|etat <id>|arreter <id>|rapatrier <id> [--destination <dossier>] [--projet <dossier>]|lister> [--dossier <dossier>]
   py -3.12 lancer.py serveur-outil <id> <verbe> [arguments] [--projet <dossier>] [--dossier <dossier>]
       (les tâches d'émulation sur le serveur : voir `outils/serveur_tache_cli.py`)
+  py -3.12 lancer.py service <etat|journal|deployer|mettre-a-jour|redemarrer|arreter|supprimer|jeton|secrets <NOM>...> [--dossier <projet>] [--commit <sha>] [--lignes N]
+  python lancer.py deporter service etat|journal [--dossier <projet>]
+      (le service permanent du projet sur le serveur ; agents : etat et journal seulement : voir docs/serveur-services.md)
 """
 import sys
 from pathlib import Path
@@ -70,4 +73,13 @@ if __name__ == "__main__":
             except (AttributeError, ValueError):
                 pass
         sys.exit(serveur_tache_cli.main(sys.argv[1:]))
+    if sys.argv[1:2] == ["service"]:
+        sys.path.insert(0, str(Path(__file__).resolve().parent / "outils"))
+        import serveur_service  # noqa: E402
+        for flux in (sys.stdout, sys.stderr):
+            try:
+                flux.reconfigure(encoding="utf-8", errors="replace")
+            except (AttributeError, ValueError):
+                pass
+        sys.exit(serveur_service.main(sys.argv[2:]))
     sys.exit(serveur.main(sys.argv[1:]))

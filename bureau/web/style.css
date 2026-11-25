@@ -1539,6 +1539,12 @@ html.mobile .question-actions .bouton { min-height: 44px; }
 .serveurs-tache-tete { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
 .serveurs-tache-id { font-size: 13px; overflow-wrap: anywhere; }
 .serveurs-tache-detail { overflow-wrap: anywhere; }
+/* Zone « Services » : le service permanent des projets (ui/services.js) */
+.service-carte { border-top: 1px solid #eee7d6; padding: 8px 0; }
+.service-adresse, .service-deploiement { overflow-wrap: anywhere; }
+.service-jeton, .service-secret, .service-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 4px 0; }
+.service-secret-valeur { min-width: 0; flex: 1 1 12em; max-width: 24em; }
+.service-journal { max-height: 18em; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; }
 .serveurs-tache-actions { margin: 4px 0; }
 .serveurs-tache-actions:empty { display: none; }
 .serveurs-tache-message { margin: 4px 0; font-weight: 700; color: #7a5410; overflow-wrap: anywhere; }

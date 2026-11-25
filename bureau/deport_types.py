@@ -26,6 +26,11 @@ ROUTEES_AU_SERVEUR = ("tests",)
 # projet a choisi « le serveur construit, le poste signe »), la signature au poste par le Directeur (`lancer.py
 # signer-release`) ; `deporter` ne la lance jamais (aucun agent ne signe) : il dit la marche à suivre.
 SIGNEES_AU_POSTE = ("release-signe",)
+# Le service permanent du projet sur le serveur (docs/serveur-services.md) : régler son lieu sur « serveur » vaut accord
+# permanent pour que le moteur le déploie après chaque livraison validée. Un agent ne lit que `etat` et `journal` (par
+# `deporter service etat|journal`) ; le déploiement et la gestion sont au moteur et au Directeur.
+SERVICES_PERMANENTS = ("service",)
+_SERVICE_SEUL = "le service permanent ne tourne que sur le serveur (accord permanent pour ce projet)"
 MSG_RELEASE_SIGNE = ("« Release signé » : la release NON signée se construit au serveur, par un agent du serveur avec "
                      "`construire-apk` (réglage « Signature des APK » du projet : le serveur construit, le poste signe), "
                      "puis elle est rapatriée dans le projet (livrable déclaré) ; la signature se fait au poste, par le "
@@ -54,6 +59,7 @@ GENERIQUE = {
     "emulateur": _entree("Émulateur", consomme=["apk"], lieux=("poste", "serveur"), bientot=_PEU_FIABLE),
     "charge": _entree("Charge", consomme=["apk"]),
     "recette-emulateur": _entree("Recette sur émulateur", consomme=["apk"], lieux=("serveur",), bientot=_SERVEUR_SEUL),
+    "service": _entree("Service permanent", lieux=("serveur",), bientot=_SERVICE_SEUL),
 }
 
 # Application Android native (Gradle) : les tests se compilent depuis les sources et n'ont pas besoin de l'APK ;
@@ -74,6 +80,8 @@ ANDROID = {
     # l'APK installé sur un émulateur du serveur, piloté par un scénario (recette) ou par l'agent ; `emulateur` (les
     # tests instrumentés Gradle) reste au poste
     "recette-emulateur": _entree("Recette sur émulateur", consomme=["apk"], lieux=("serveur",), bientot=_SERVEUR_SEUL),
+    # le serveur de données d'une application (ex. FM_Stats f14) : un conteneur permanent du projet
+    "service": _entree("Service permanent", lieux=("serveur",), bientot=_SERVICE_SEUL),
 }
 
 CATALOGUES = {"application-mobile-android": ANDROID}
@@ -134,6 +142,11 @@ def racine_du_projet(dossier):
 def servie_au_serveur(nom, catalogue):
     """Vrai si `deporter` sait servir l'action `nom` sur le serveur et que ce catalogue l'y permet."""
     return nom in SERVIES_AU_SERVEUR and nom in catalogue and "serveur" in catalogue[nom]["lieux"]
+
+
+def service_permanent(nom, catalogue):
+    """Vrai pour le service permanent (`service`) quand ce catalogue l'offre au serveur."""
+    return nom in SERVICES_PERMANENTS and nom in catalogue and "serveur" in catalogue[nom]["lieux"]
 
 
 def _lire_json_sur(chemin):
@@ -219,7 +232,8 @@ def refus_accord(racine, action, bureau=None, reglages=None):
     enregistres = reglages_enregistres(racine, bureau)      # d'abord : rien n'est lu dans un dossier non enregistré
     if not enregistres:
         return MSG_NON_ENREGISTRE % (racine, BUREAU if bureau is None else bureau, action)
-    if not servie_au_serveur(action, catalogue_du_projet(racine)[1]):
+    catalogue = catalogue_du_projet(racine)[1]
+    if not (servie_au_serveur(action, catalogue) or service_permanent(action, catalogue)):
         return "« %s » n'est pas une action servie au serveur pour ce type de projet." % action
     if reglages is not None:
         enregistres = [r for r in enregistres if _norme(r) == _norme(reglages)]

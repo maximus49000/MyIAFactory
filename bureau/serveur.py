@@ -26,6 +26,7 @@ from . import fichiers_joints, releve, statuts
 from . import plateforme as modplateforme
 from . import registre
 from . import serveurs as modserveurs
+from . import services as modservices
 from . import semaines as modsemaines
 from . import sujets as modsujets
 from .usage import HistoriqueUsage
@@ -1180,6 +1181,7 @@ class Bureau(ThreadingHTTPServer):
         self.cles = None
         self.travail_plateforme = modplateforme.Travail()   # l'installation de la plateforme : une à la fois, en arrière-plan
         self.travaux_serveurs = modserveurs.Travaux()   # sonde et installation des serveurs déclarés : une à la fois
+        self.travaux_services = modservices.Travaux()   # le service permanent des projets : une action à la fois par projet
         self.ecouteurs = []
         self.distants = []    # [{"genre", "url"}]
         self.annonces = []    # ce que le terminal dit au lancement
@@ -1237,6 +1239,11 @@ class Bureau(ThreadingHTTPServer):
             except reglages.ReglagesInvalides:
                 plus["agents_abonnement_max"] = None
         return {**e, **plus}
+
+    def dossiers_des_projets(self):
+        """Les dossiers des projets enregistrés (le parent de `.factory`, sinon le dossier des réglages) : jamais un
+        chemin venu d'une requête ou d'un cache."""
+        return [factory.parent if factory.name == ".factory" else factory for _nom, factory in self.projets_et_dossiers()]
 
     def projets_et_dossiers(self):
         """`[(nom du dossier du projet, dossier de sa factory)]` : le nom que porte une tâche d'agent serveur est celui que
@@ -1787,6 +1794,10 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(200, modserveurs.lire(self.server.travaux_serveurs))
         if chemin == "/api/serveurs/taches":   # l'index local seulement : jamais de connexion, aucun secret
             return self._json(200, modserveurs.lire_taches(self.server.travaux_serveurs))
+        if chemin == "/api/services":   # le cache et le coffre du poste seulement : jamais de connexion, aucun secret
+            if self.server.distant:
+                return self._json(404, {"erreur": "Introuvable."})
+            return self._json(200, modservices.lire(self.server.travaux_services, self.server.dossiers_des_projets()))
         if chemin == "/api/serveurs/migration":   # les fichiers seulement : jamais de connexion, aucun secret
             return self._json(200, modserveurs.lire_migration())
         if chemin == "/api/serveurs/lieux":
@@ -2301,6 +2312,28 @@ class Handler(BaseHTTPRequestHandler):
             if not self.server.travail_plateforme.lancer(accord_reinstallation=corps.get("accord_reinstallation") is True):
                 return self._json(409, {"erreur": "Une installation est déjà en cours."})
             return self._json(202, {"demarre": True})
+        cible_service = modservices.route_post(chemin)
+        if cible_service is not None:   # le service permanent : depuis l'ordinateur seulement (le jeton, les secrets)
+            if (self.server.distant or self.headers.get("X-Bureau") != "1"
+                    or not self.headers.get("Content-Type", "").lower().startswith("application/json")):
+                self._vider_corps()
+                return self._json(404 if self.server.distant else 403,
+                                  {"erreur": "Introuvable." if self.server.distant else "En-têtes requis manquants."})
+            try:
+                longueur = int(self.headers.get("Content-Length", "0"))
+            except ValueError:
+                longueur = -1
+            if not 0 < longueur <= modservices.TAILLE_MAX:
+                self._vider_corps()
+                return self._json(400, {"erreur": "Corps de requête invalide."})
+            try:
+                corps = modserveurs.lire_json(self.rfile.read(longueur))   # clés en double refusées
+            except (ValueError, UnicodeDecodeError, RecursionError):
+                return self._json(400, {"erreur": "Demande illisible."})
+            if not isinstance(corps, dict):
+                return self._json(400, {"erreur": "Demande illisible."})
+            return self._json(*modservices.poster(self.server.travaux_services, *cible_service, corps,
+                                                  self.server.dossiers_des_projets()))
         cible_serveur = modserveurs.route_post(chemin)
         if cible_serveur is not None:   # déclarer, sonder, prévisualiser, installer : depuis l'ordinateur seulement
             if (self.server.distant or self.headers.get("X-Bureau") != "1"

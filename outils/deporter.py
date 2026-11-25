@@ -65,7 +65,8 @@ import github_actions  # noqa: E402
 from bureau import deport_conso  # noqa: E402
 from bureau.deport import a_attendre, lieu_effectif  # noqa: E402
 from bureau.registre import lieux_du_type  # noqa: E402
-from bureau.deport_types import (MSG_RELEASE_SIGNE, MSG_REGLEZ_SERVEUR, SERVIES_AU_SERVEUR,  # noqa: E402
+from bureau.deport_types import (MSG_RELEASE_SIGNE, MSG_REGLEZ_SERVEUR, SERVICES_PERMANENTS,  # noqa: E402
+                                 SERVIES_AU_SERVEUR,
                                  SIGNEES_AU_POSTE, catalogue_du_projet,
                                  racine_du_projet, refus_accord, refus_route, routee_au_serveur, servie_au_serveur)
 
@@ -77,7 +78,8 @@ MAX_FICHIERS_LISTES = 10
 USAGE = ("Usage : lancer.py deporter <type> [--dossier <dossier>] [--reglages <fichier>] [--sans-attendre] [--poste] "
          "[-- <commande locale>]\n"
          "        lancer.py deporter recette-emulateur [--mode scenario|pilote] [--scenario <nom>] [--apk <fichier>] "
-         "[--dossier <dossier>] [--reglages <fichier>]")
+         "[--dossier <dossier>] [--reglages <fichier>]\n"
+         "        lancer.py deporter service etat|journal [--dossier <dossier>]")
 OPTIONS_PYTHON = ["-E", "-s"]       # le Python 3.12 lancé à part : sans variables PYTHON*, sans site utilisateur
 MSG_SANS_312 = ("Python 3.12 introuvable : la recette sur émulateur passe par le lanceur de tâches du serveur, qui "
                 "l'exige. Installez Python 3.12 (python.org, ou « winget install Python.Python.3.12 »), puis relancez. "
@@ -205,8 +207,8 @@ def lieux_refuses(lieux, action, catalogue):
 def doit_passer_par_deporter(action, lieux, catalogue):
     """Vrai si l'action tourne sur GitHub, ou si elle dépend de la production d'une action d'un autre lieu (il y a
     alors une attente à faire) ; un lieu que `deporter` ne sert pas passe aussi par lui, qui le refuse."""
-    if action not in catalogue:
-        return False
+    if action not in catalogue or action in SERVICES_PERMANENTS:
+        return False      # le service permanent n'est pas une action lancée : le moteur le déploie (`deporter service`)
     if servie_au_serveur(action, catalogue):
         # au seul serveur : réglée, seul `deporter` la lance ; non réglée, elle n'est pas déportée (et `deporter`,
         # appelé quand même, la refuse)
@@ -496,6 +498,41 @@ def _serveur_tache(argv, version=None, importer=_importer_cli, trouver_python=_p
     return executer(list(python) + OPTIONS_PYTHON + [str(LANCEUR)] + list(argv))
 
 
+def _importer_service():
+    """Le service permanent côté poste (Python 3.12) : importé ici seulement."""
+    import serveur_service
+    return serveur_service
+
+
+def _service_par_defaut(argv):
+    """`lancer.py service …` (argv commence par « service ») : dans ce processus sous 3.12, sinon un Python 3.12 à part."""
+    return _serveur_tache(argv, importer=_importer_service)
+
+
+MSG_SERVICE = ("« deporter service » ne lit que l'état ou le journal du service permanent du projet : « python lancer.py "
+               "deporter service etat|journal [--dossier <projet>] ». Le déploiement est fait par le moteur après une "
+               "livraison validée ; la gestion (redémarrer, arrêter, secrets, jeton) appartient au Directeur, au bureau "
+               "(zone Services). Prépare seulement .factory/service.json (voir docs/serveur-services.md).")
+
+
+def _service(argv, service):
+    """`deporter service etat|journal [--dossier D]` : la seule porte des agents vers le service permanent."""
+    reste = list(argv[1:])
+    sous = reste.pop(0) if reste and not reste[0].startswith("--") else None
+    if sous not in ("etat", "journal"):
+        print(MSG_SERVICE, file=sys.stderr)
+        return 2
+    options = []
+    while reste:
+        o = reste.pop(0)
+        if o == "--dossier" and reste:
+            options += [o, reste.pop(0)]
+        else:
+            print("Option inconnue : %s\n%s" % (o, MSG_SERVICE), file=sys.stderr)
+            return 2
+    return (service or _service_par_defaut)(["service", sous] + options)
+
+
 def _usage_recette(opt, commande):
     """Le refus d'usage de la recette sur émulateur, ou None."""
     if opt["poste"]:
@@ -564,12 +601,15 @@ def _recette_au_serveur(opt, projet, catalogue, action, env, serveur_tache, dire
 
 def main(argv=None, executer_poste=campagne.executer, gh=github_actions, git=_git, dormir=time.sleep, dire=None,
          bureau=BUREAU, repertoire_attente=EN_COURS, artefacts=ARTEFACTS, cache_conso=None, serveur_tache=None,
-         noter=None):
+         noter=None, service=None):
     """`artefacts` : où vont les artefacts téléchargés (`<artefacts>/<commit>/<produit>`) ; `cache_conso` : le dossier
     du cache de consommation (None : celui de `bureau.deport_conso`, `~/MyIAFactory`) ; `serveur_tache` : le lanceur
     de tâches du serveur pour la recette sur émulateur (`argv -> code` ; None : `_serveur_tache`) ; `noter` : qui note
-    au journal des tests une campagne faite sur GitHub (None : `bureau.tests_mesures.noter_campagne`)."""
+    au journal des tests une campagne faite sur GitHub (None : `bureau.tests_mesures.noter_campagne`) ; `service` : la
+    commande du service permanent (`argv -> code` ; None : `lancer.py service`)."""
     argv = list(sys.argv[1:] if argv is None else argv)
+    if argv[:1] == ["service"]:      # le service permanent : etat et journal seulement (l'accord est relu par la commande)
+        return _service(argv, service)
     if dire is None:
         def dire(texte, **k):
             print(texte, flush=True)

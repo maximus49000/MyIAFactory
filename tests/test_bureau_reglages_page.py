@@ -59,7 +59,7 @@ class TestReglagesPage(AvecFichierDuBureau):
         self.assertEqual((page["genre"], page["type_disponible"]), (None, False))
         lignes = {l["id"]: l for l in page["lignes"]}
         self.assertEqual(list(lignes), ["deport.apk", "deport.tests", "deport.emulateur", "deport.charge",
-                                        "deport.recette-emulateur", "lecons_auto", "analyse_blocages",
+                                        "deport.recette-emulateur", "deport.service", "lecons_auto", "analyse_blocages",
                                         "une_session_moyenne", "livraison_sur_demande", "cloud_dossier_approuve",
                                         "livraison_github", "signature_apk", "outils_agents_serveur"])
         apk = lignes["deport.apk"]

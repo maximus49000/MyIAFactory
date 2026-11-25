@@ -399,7 +399,11 @@ CONSIGNE_FLUTTER_SERVEUR = (
     "gardé d'un appel à l'autre : fais `cd android_app` seul, puis `flutter pub get`, `flutter analyze`, `flutter test`, "
     "`flutter build apk --release` chacun seul. Lis les fichiers avec Read/Glob/Grep, pas avec `ls`/`cat`. "
     "L'environnement (JAVA_HOME, ANDROID_*, clé de debug) est déjà posé. Si le projet signe au poste, "
-    "`construire-apk` rend une release NON signée (`app-release-unsigned.apk`) : déclare-la livrable, ne la signe jamais.")
+    "`construire-apk` rend une release NON signée (`app-release-unsigned.apk`) : déclare-la livrable, ne la signe jamais. "
+    "Un APK à livrer se déclare par son chemin de sortie de build, tel quel (par exemple "
+    "`android_app/build/app/outputs/flutter-apk/app-release.apk`) : jamais une copie renommée ou numérotée sous "
+    "`Livrables/` (seuls les dossiers de sortie de build sont rapatriés ; un brief qui demande cette copie ou ce "
+    "numéro s'applique au poste, pas ici).")
 
 
 def consigne_serveur(mode, tache_id, flutter=False):

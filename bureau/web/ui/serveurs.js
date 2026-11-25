@@ -4,6 +4,7 @@
 // venu du serveur passe par textContent ; la couleur d'un lieu vient d'une classe CSS et s'écrit toujours en toutes lettres.
 
 import {el} from "./dom.js";
+import {monterZoneServices} from "./services.js";
 
 const INTERVALLE_MS = 3000;
 const INTERVALLE_REPOS_MS = 15000;   // relevé des tâches quand aucune n'est active (une nouvelle tâche apparaît quand même)
@@ -840,6 +841,7 @@ export async function monterEcranServeurs(conteneur, options = {}) {
   const [etat, lieux, migration, lues] = await Promise.all([lireServeurs(fetchFn), lireLieux(fetchFn), lireMigration(fetchFn), lireTaches(fetchFn)]);
   const ecran = ecranServeurs(etat, {...options, fetchFn, lieux, migration, taches: lues ? lues.taches : null});
   conteneur.append(ecran);
+  await monterZoneServices(conteneur, {fetchFn});   // la zone « Services » : le service permanent des projets
   ecran.planifier();   // l'écran est maintenant dans la page : une installation en cours se suit
   return ecran;
 }

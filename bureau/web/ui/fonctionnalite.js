@@ -85,9 +85,10 @@ const plein = (t) => typeof t === "string" && t.trim() !== "";
 
 // `fichiers` : les fichiers joints `{nom, type, donnees}` (images, gif, vidéos, sons, documents, zip : voir `pieces.js`).
 // `nature` « correction » (une anomalie à réparer) et `concerne` (la fonctionnalité visée) sont facultatifs.
-export function demandeNouvelle(texte, fichiers, {nature = "fonctionnalite", concerne = null} = {}) {
+export function demandeNouvelle(texte, fichiers, {nature = "fonctionnalite", concerne = null, captures = false} = {}) {
   const d = {type: "fonctionnalite", texte};
   if (fichiers && fichiers.length) d.fichiers = fichiers;
+  if (captures === true) d.captures = true;   // des captures de l'application illustrent la validation (facultatif)
   if (nature === "correction") {
     d.nature = "correction";
     if (concerne) d.concerne = concerne;
@@ -1334,6 +1335,22 @@ export function contenuFonctionnalite(ctx, contenu, f) {
     concerne.addEventListener("change", () => { ctx.nouvelle.concerne = concerne.value; });
     contenu.append(concerne);
   }
+  // Les captures de l'application pour illustrer la validation : cochée par défaut quand le serveur peut les prendre ;
+  // sinon, pour un projet à APK, une ligne grisée dit pourquoi elles sont indisponibles. Le choix survit aux rafraîchissements.
+  let captures = null;
+  if (!f && e.agir === true) {
+    if (e.captures_possibles === true) {
+      const etiquette = el("label", "correction-captures");
+      captures = el("input");
+      captures.type = "checkbox";
+      captures.checked = ctx.nouvelle.captures !== false;
+      captures.addEventListener("change", () => { ctx.nouvelle.captures = captures.checked; });
+      etiquette.append(captures, " Illustrer la validation par des captures de l'application");
+      contenu.append(etiquette);
+    } else if (typeof e.captures_raison === "string" && e.captures_raison) {
+      contenu.append(el("p", "note correction-captures-indisponibles", "Captures indisponibles : " + e.captures_raison));
+    }
+  }
 
   const vue = presentation(f, e.agir, f ? ctx.corrections.has(f.id) : false);
   const blocDiscussion = el("div", "bloc-discussion");
@@ -1373,7 +1390,7 @@ export function contenuFonctionnalite(ctx, contenu, f) {
           const joints = fichiers.map(({nom, type, donnees}) => ({nom, type, donnees}));
           if (!f) ctx.nouvelle.envoi = {avant: e, texte, fichiers};
           const r = await ctx.barre.demander(f ? demandeMessage(f.id, texte, joints)
-            : demandeNouvelle(texte, joints, {nature: correction ? "correction" : "fonctionnalite", concerne: concerne?.value}), bouton);
+            : demandeNouvelle(texte, joints, {nature: correction ? "correction" : "fonctionnalite", concerne: concerne?.value, captures: captures?.checked}), bouton);
           if (r.ok && f) ctx.envoyes.set(f.id, [...(ctx.envoyes.get(f.id) || []), {texte, fichiers}]);
           if (!r.ok && !f) ctx.nouvelle.envoi = null;
           return r;

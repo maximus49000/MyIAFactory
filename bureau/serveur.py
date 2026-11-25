@@ -466,6 +466,24 @@ class Projet:
             d["conso"] = conso
         return d
 
+    def captures(self):
+        """`(possibles, raison)` : les captures de validation exigent un projet qui produit un APK (la règle du moteur,
+        `regles._livrable_du_projet`) ET la recette sur émulateur réglée sur le serveur (accord permanent, la règle du
+        moteur). `raison` (en français) ne sert que pour un projet à APK dont l'émulateur n'est pas réglé sur le serveur ;
+        un projet sans APK n'en a pas (rien à dire). Une lecture qui échoue vaut « impossible », jamais une erreur."""
+        try:
+            from types import SimpleNamespace
+            from moteur import regles
+            racine = deport_types.racine_du_projet(str(self.chemin_reglages.parent))
+            if regles._livrable_du_projet(SimpleNamespace(dossier=Path(racine))) != "apk":
+                return False, None
+            plus = {"bureau": str(self.fichier_bureau)} if self.fichier_bureau else {}
+            if deport_types.accord_serveur(racine, "recette-emulateur", **plus):
+                return True, None
+        except Exception:
+            return False, None
+        return False, "la recette sur émulateur n'est pas réglée sur le serveur (page Réglages)."
+
     def reglages_deport(self):
         """Les réglages de déport tels que le dépôt les lit : lieux effectifs (projet puis bureau), commandes, heure."""
         regl, err = self.reglages()
@@ -574,6 +592,7 @@ class Projet:
             statuts.activite_des_agents(e.get("factory"), e.get("taches") or [], maintenant)
             if not err:
                 self._cout_en_cours(e.get("taches") or [], regl)
+            e["captures_possibles"], e["captures_raison"] = self.captures()
             e["images_ok"] = images_declarees(regl)
             e["echanges_vus"] = self.echanges_vus()      # les échanges avec le Chef masqués de la direction (« Vu »)
             if isinstance(e.get("directeur"), dict):      # une réponse à un retour : à marquer « pris en compte »

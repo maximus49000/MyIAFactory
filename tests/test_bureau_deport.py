@@ -175,6 +175,40 @@ class TestRecetteEmulateurAuBureau(AvecServeur):
         r, data = self.poster({"deport": {"lieux": {"zzz": None}}})
         self.assertEqual(r.status, 400, data)
 
+    # -- « captures possibles » : un projet à APK ET la recette sur émulateur réglée sur le serveur --
+    def etat_complet(self):
+        self.p._cache_etat = (0.0, self.p._cache_etat[1])
+        return self.json("/api/etat")
+
+    def projet_flutter(self):
+        (self.tmp / "demo" / "pubspec.yaml").write_text("name: x\ndependencies:\n  flutter:\n    sdk: flutter\n", encoding="utf-8")
+
+    def accord(self, rendu):
+        from unittest import mock
+        from bureau import deport_types
+        return mock.patch.object(deport_types, "accord_serveur", return_value=rendu)
+
+    def test_etat_captures_possibles_vrai_projet_apk_et_accord_serveur(self):
+        self.projet_flutter()
+        with self.accord(True):
+            e = self.etat_complet()
+        self.assertIs(e["captures_possibles"], True)
+        self.assertIsNone(e["captures_raison"])
+
+    def test_etat_captures_possibles_faux_sans_accord(self):
+        self.projet_flutter()
+        with self.accord(False):
+            e = self.etat_complet()
+        self.assertIs(e["captures_possibles"], False)
+        self.assertIn("émulateur", e["captures_raison"])
+        self.assertIn("serveur", e["captures_raison"])
+
+    def test_etat_captures_possibles_faux_projet_sans_apk(self):
+        with self.accord(True):
+            e = self.etat_complet()
+        self.assertIs(e["captures_possibles"], False)
+        self.assertIsNone(e["captures_raison"])
+
 
 if __name__ == "__main__":
     unittest.main()

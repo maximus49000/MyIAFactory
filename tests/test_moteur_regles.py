@@ -1,5 +1,6 @@
 """La table de règles du moteur : une ligne de la conception, un test. Appels d'IA et agents simulés."""
 import json
+import time
 import unittest
 from unittest import mock
 
@@ -2213,6 +2214,19 @@ class Validation(Base):
         self.assertEqual(d["acces"], ACCES)
         self.assertIn("Le site s'ouvre depuis le lien d'accès et répond sans erreur", d["points"])
         self.assertEqual(self.taches(etape="validation:valider")[0].get("bloquee"), None)
+
+    def test_une_fonctionnalite_terminee_dont_le_travail_reprend_est_rouverte(self):
+        # Essai réel (FM_Stats, f8) : élément laissé de côté, renvoyé par le Chef, développé : jamais de nouvelle fin.
+        self.projet_avec_validation()
+        regles.avancer(self.projet, self.etat)         # la tâche de flux de e1 existe
+        self.ok("fonctionnalite", entree={"id": "f1", "etape": "terminee", "fin": {"livrables": []}})
+        regles.avancer(self.projet, self.etat)
+        self.assertEqual(self.fonc()["etape"], "terminee")      # rien de plus récent que la fin : elle reste close
+        time.sleep(1.1)
+        (t,) = self.taches(etape="flux:dev")
+        self.ok("tache", entree={"id": t["id"], "journal": ["Le travail reprend."]})
+        regles.avancer(self.projet, self.etat)
+        self.assertEqual(self.fonc()["etape"], "serie")
 
     def test_la_maquette_du_cahier_est_de_quoi_verifier(self):
         # Essai réel (FM_Stats, f8) : la maquette HTML existait, l'étape disait « déjà faite » sans la joindre.

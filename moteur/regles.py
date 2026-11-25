@@ -2297,6 +2297,10 @@ def _refaire_avant_la_validation(projet, demande, etat, t, qui="Directeur"):
     est refaite avec le texte du Directeur (ou du Chef, `qui`), et la validation sera reposée ensuite. Tout se règle
     depuis le bureau."""
     fid, eid = t["fonctionnalite"], t["element"]
+    if (_fonc(projet, fid) or {}).get("etape") == "terminee":
+        # la série s'est close en laissant l'élément de côté (validation bloquée) : le retour du Directeur la rouvre
+        # (essai réel, FM_Stats f12, 2026-11-25 : « Relancer » répondait « l'étape à refaire n'est plus dans le workflow »)
+        lancer(projet, "fonctionnalite", {"id": fid, "etape": "serie"})
     reprendre_la_serie(projet, etat, fid)
     v = _m(etat, "elements").get(f"{fid}/{eid}")
     production = _production(projet, fid)

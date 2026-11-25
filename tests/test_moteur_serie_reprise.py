@@ -169,6 +169,33 @@ class Reprise(AvecValidation):
         _, actions = self.traiter(type="serie_arretee", decision=d["id"], verdict="relancer")
         self.assertEqual(self.serie_arretee(), [])
 
+    # --- La sentinelle : une fonctionnalité hors série ne reste jamais muette (essai réel FM_Stats f7 : rapport jeté).
+
+    def impasse_de_cadrage(self):
+        self.ok("fonctionnalite", entree={"id": "f1", "etape": "cadrage"})
+        # l'agent a « répondu » (compte rendu) mais son rapport n'a rien fait avancer : plus rien n'est attendu
+        self.ok("message", entree={"fonctionnalite": "f1", "auteur": "chef", "texte": "Rapport reçu.", "attend": False})
+
+    def test_impasse_hors_serie_est_vue_puis_dite_puis_relancee(self):
+        self.impasse_de_cadrage()
+        self.assertEqual(regles.impasses(self.projet, self.etat, delai=0), [("f1", "cadrage")])
+        ancien = regles.DELAI_IMPASSE
+        regles.DELAI_IMPASSE = 0
+        self.addCleanup(setattr, regles, "DELAI_IMPASSE", ancien)
+        regles.avancer(self.projet, self.etat)
+        (d,) = self.serie_arretee()
+        self.assertIn("ne progresse plus", d["texte"])
+        self.assertIn("cadrage", d["texte"])
+        _, actions = self.traiter(type="serie_arretee", decision=d["id"], verdict="relancer")
+        self.assertEqual(self.serie_arretee(), [])
+        self.assertTrue([t for t in self.taches(etape="cadrage") if t["colonne"] != "fait"])    # le cadrage reprend
+
+    def test_question_posee_au_directeur_n_est_pas_une_impasse(self):
+        self.impasse_de_cadrage()
+        self.ok("message", entree={"fonctionnalite": "f1", "auteur": "chef", "texte": "Quelle couleur ?",
+                                   "attend": True})
+        self.assertEqual(regles.impasses(self.projet, self.etat, delai=0), [])
+
     def test_element_qui_ne_peut_pas_repartir_est_dit_meme_si_d_autres_avancent(self):
         self.ok("file", entree={"fonctionnalite": "f1", "elements": ELEMENTS[:2]})
         self.prendre("e1", "e2")

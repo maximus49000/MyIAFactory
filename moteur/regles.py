@@ -6154,10 +6154,17 @@ def avancer(projet, etat):
             actions += _avancer_serie(projet, etat, f["id"])
         elif f["etape"] == "serie":
             actions += _avancer_serie(projet, etat, f["id"])
-    en_serie = {f["id"] for f in court["fonctionnalites"] if f["etape"] == "serie"}
+    actions += _sentinelle_des_impasses(projet, etat)
+    court = _etat(projet)
+    etapes = {f["id"]: f["etape"] for f in court["fonctionnalites"]}
+    ouvertes = {t.get("fonctionnalite") for t in court["taches"] if t["colonne"] != "fait" or t.get("active")}
     for d in court["decisions"]:
-        # essai réel : l'alerte posée juste avant la fin de la série restait affichée sur une fonctionnalité terminée
-        if d["genre"] == SERIE_ARRETEE and d.get("fonctionnalite") and d["fonctionnalite"] not in en_serie:
+        # essai réel : l'alerte posée juste avant la fin de la série restait affichée sur une fonctionnalité terminée ;
+        # l'alerte d'une fonctionnalité hors série (sentinelle) tombe quand elle reprend (une tâche ouverte) ou finit
+        fid = d.get("fonctionnalite")
+        if d["genre"] == SERIE_ARRETEE and fid and (
+                etapes.get(fid) in (None, "terminee", "deplacee")
+                or (etapes.get(fid) not in ("serie",) and fid in ouvertes)):
             lancer(projet, "decision", {"action": "lever", "id": d["id"]})
     _liberer_les_lots_orphelins(projet, etat, _etat(projet))
     livrer_si_calme(projet, etat, force=bool(etat.pop("livrer_maintenant", False)))
@@ -6433,6 +6440,56 @@ def _rapport_du_suivi(projet, etat, v, t, f):
     v["rapport_du_suivi"] = True
 
 
+DELAI_IMPASSE = 300     # secondes : une fonctionnalité sans rien qui bouge depuis si longtemps est dite au Directeur
+ETAPES_SANS_SERIE = ("cadrage", "cahier", "decoupage", "prototype", "methode")
+
+
+def _secondes_depuis(iso):
+    """Les secondes écoulées depuis une date du suivi (grande si elle est illisible : mieux vaut signaler)."""
+    try:
+        d = datetime.fromisoformat(str(iso))
+        return (datetime.now(d.tzinfo) - d).total_seconds()
+    except (TypeError, ValueError):
+        return float("inf")
+
+
+def impasses(projet, etat, delai=None):
+    """Les fonctionnalités hors série qui ne progressent plus et que personne ne voit : ni tâche ouverte (une tâche
+    bloquée se voit), ni décision, ni agent au travail, ni réponse attendue, et rien de neuf depuis `delai` secondes.
+    Rend [(fid, étape)]. Le garde-fou général : quelle qu'en soit la cause (rapport perdu, étape muette, règle
+    manquante), une demande ne reste jamais muette. Essai réel (FM_Stats, f7, 2026-11-24) : le rapport du cadrage avait
+    été jeté, la demande restait « en cadrage » deux heures sans que rien ne le dise."""
+    delai = DELAI_IMPASSE if delai is None else delai
+    court = _etat(projet)
+    ouvertes = {t.get("fonctionnalite") for t in court["taches"] if t["colonne"] != "fait" or t.get("active")}
+    portees = {d.get("fonctionnalite") or d.get("portee") for d in court["decisions"]}
+    sortie = []
+    for f in court["fonctionnalites"]:
+        fid = f["id"]
+        if f["etape"] not in ETAPES_SANS_SERIE or fid in ouvertes or fid in portees or f.get("attend_reponse"):
+            continue
+        detail = _fonc(projet, fid)
+        discussion = detail.get("discussion") or []
+        if detail.get("decisions") or _secondes_depuis(detail.get("maj")) < delai or (discussion and discussion[-1].get("attend")):
+            continue      # une question posée au Directeur attend sa réponse : ce n'est pas une impasse
+        sortie.append((fid, f["etape"]))
+    return sortie
+
+
+def _sentinelle_des_impasses(projet, etat):
+    """Dit au bureau (décision `serie_arretee`, « Relancer ») chaque fonctionnalité en impasse (voir `impasses`)."""
+    court = _etat(projet)
+    for fid, etape in impasses(projet, etat):
+        if any(d["genre"] == SERIE_ARRETEE and d.get("fonctionnalite") == fid for d in court["decisions"]):
+            continue
+        f = _fonc(projet, fid)
+        lancer(projet, "decision", {"action": "poser", "portee": "projet", "genre": SERIE_ARRETEE, "fonctionnalite": fid,
+                                    "texte": (f"« {f['nom']} » ne progresse plus : à l'étape « {etape} », aucune tâche, "
+                                              "aucune décision et aucun agent au travail. « Relancer » reprend l'étape "
+                                              "depuis le suivi.")[:2000]})
+    return []
+
+
 def _signaler_une_serie_muette(projet, etat, fid):
     """Le garde-fou : une fonctionnalité en série sans aucune tâche ouverte, ni décision, ni agent au travail ne progresse
     plus ; elle est dite au bureau de direction (décision `serie_arretee`), jamais laissée muette."""
@@ -6476,6 +6533,14 @@ def _sur_serie_arretee(projet, demande, etat):
         raise Refus(f"réponse inconnue : {demande.get('verdict')}")
     fid = d["fonctionnalite"]
     lancer(projet, "decision", {"action": "lever", "id": d["id"]})
+    etape = _fonc(projet, fid).get("etape")
+    if etape in ETAPES_SANS_SERIE:      # une impasse de la sentinelle : l'étape reprend
+        _terminer(projet, {"demande": demande["id"]}, "L'étape reprend depuis le suivi.")
+        if etape in ("cadrage", "cahier"):
+            return _repondre_cadrage(projet, etat, fid)
+        if etape == "prototype":
+            return _rejouer_le_retour(projet, etat, fid)
+        return []
     elements = _m(etat, "elements")
     for cle in [c for c, v in elements.items() if v["fid"] == fid and v["phase"] not in ("fait", "bloque")]:
         del elements[cle]

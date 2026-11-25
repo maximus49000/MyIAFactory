@@ -2227,6 +2227,38 @@ class Validation(Base):
         regles.avancer(self.projet, self.etat)
         self.assertEqual(self.fonc()["etape"], "serie")
 
+    # --- L'invariant : quels que soient les rapports (muets, « déjà fait », sans pièce), une demande n'est jamais muette.
+
+    RAPPORTS_DEGENERES = {
+        "deja_fait": {"statut": "fait", "message": {"texte": "Déjà fait, rien à modifier."}},
+        "sans_message": {"statut": "fait"},
+        "vide": {"statut": "fait", "message": {"texte": ""}},
+        "sans_champs_de_validation": {**verdict("e1"), "message": {"texte": "Ok."}},
+        "avec_chemin_fantome": {"statut": "fait", "message": {"texte": "Fait."},
+                                "fichiers": [{"chemin": "nulle/part.png", "titre": "x", "element": "e1"}]},
+    }
+
+    def silencieuses(self):
+        """Les fonctionnalités que personne ne voit : ni finies, ni tâche ouverte, ni décision, ni alerte."""
+        court = regles._etat(self.projet)
+        ouvertes = {t.get("fonctionnalite") for t in court["taches"] if t["colonne"] != "fait" or t.get("active")}
+        portees = {d.get("fonctionnalite") or d.get("portee") for d in court["decisions"]}
+        return [f["id"] for f in court["fonctionnalites"]
+                if f["etape"] not in ("terminee", "deplacee") and f["id"] not in ouvertes and f["id"] not in portees]
+
+    def test_aucun_rapport_degenere_ne_laisse_une_demande_muette(self):
+        ancien = regles.DELAI_IMPASSE
+        regles.DELAI_IMPASSE = 0
+        self.addCleanup(setattr, regles, "DELAI_IMPASSE", ancien)
+        for nom, rapport in self.RAPPORTS_DEGENERES.items():
+            with self.subTest(rapport=nom):
+                self.projet_avec_validation()
+                self.piloter(regles.avancer(self.projet, self.etat), rapports=[dict(rapport) for _ in range(12)])
+                regles.avancer(self.projet, self.etat)      # la sentinelle passe
+                self.assertEqual(self.silencieuses(), [], f"rapport « {nom} » : une demande est restée muette")
+                self.tearDown()
+                self.setUp()
+
     def test_la_maquette_du_cahier_est_de_quoi_verifier(self):
         # Essai réel (FM_Stats, f8) : la maquette HTML existait, l'étape disait « déjà faite » sans la joindre.
         self.projet_avec_validation()

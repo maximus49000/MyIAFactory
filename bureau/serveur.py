@@ -1796,8 +1796,8 @@ class Handler(BaseHTTPRequestHandler):
         if chemin == "/api/serveurs/taches":   # l'index local seulement : jamais de connexion, aucun secret
             return self._json(200, modserveurs.lire_taches(self.server.travaux_serveurs))
         if chemin == "/api/services":   # le cache et le coffre du poste seulement : jamais de connexion, aucun secret
-            if self.server.distant:
-                return self._json(404, {"erreur": "Introuvable."})
+            # Ouvert aussi sur l'écouteur distant (téléphone), sur décision du Directeur (2026-11-25) : le code d'accès et
+            # l'origine sont déjà vérifiés par `_garde_distant`.
             return self._json(200, modservices.lire(self.server.travaux_services, self.server.dossiers_des_projets()))
         if chemin == "/api/serveurs/migration":   # les fichiers seulement : jamais de connexion, aucun secret
             return self._json(200, modserveurs.lire_migration())
@@ -2314,12 +2314,12 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(409, {"erreur": "Une installation est déjà en cours."})
             return self._json(202, {"demarre": True})
         cible_service = modservices.route_post(chemin)
-        if cible_service is not None:   # le service permanent : depuis l'ordinateur seulement (le jeton, les secrets)
-            if (self.server.distant or self.headers.get("X-Bureau") != "1"
+        if cible_service is not None:   # le service permanent (le jeton, les secrets) ; ouvert aussi au téléphone sur décision
+            # du Directeur (2026-11-25) : sur l'écouteur distant, le code d'accès et l'origine du POST sont déjà vérifiés.
+            if (self.headers.get("X-Bureau") != "1"
                     or not self.headers.get("Content-Type", "").lower().startswith("application/json")):
                 self._vider_corps()
-                return self._json(404 if self.server.distant else 403,
-                                  {"erreur": "Introuvable." if self.server.distant else "En-têtes requis manquants."})
+                return self._json(403, {"erreur": "En-têtes requis manquants."})
             try:
                 longueur = int(self.headers.get("Content-Length", "0"))
             except ValueError:

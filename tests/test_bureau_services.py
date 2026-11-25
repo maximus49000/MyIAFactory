@@ -123,3 +123,30 @@ class TestZoneServices(AvecServeur):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+from tests.test_acces import AvecBureauOuvert  # noqa: E402
+
+
+class TestServicesSurLEcouteurDistant(AvecBureauOuvert):
+    """Décision du Directeur (2026-11-25) : la zone « Services » s'ouvre aussi au téléphone (écouteur distant), avec le code
+    d'accès ; sans cookie d'accès elle reste fermée."""
+
+    def entetes(self, cookie):
+        return {"Cookie": cookie, "Origin": f"http://127.0.0.1:{self.distant}", "X-Bureau": "1"}
+
+    def test_lecture_avec_le_cookie_d_acces(self):
+        cookie = self.associer()
+        r, data = self.req("GET", "/api/services", None, self.entetes(cookie))
+        self.assertEqual(r.status, 200, data)
+        self.assertIn("services", json.loads(data))
+
+    def test_sans_cookie_la_zone_reste_fermee(self):
+        r, _ = self.req("GET", "/api/services", None, {"Origin": f"http://127.0.0.1:{self.distant}", "X-Bureau": "1"})
+        self.assertNotEqual(r.status, 200)
+
+    def test_un_secret_sans_origine_valide_est_refuse(self):
+        cookie = self.associer()
+        ent = {**self.entetes(cookie), "Origin": "http://exemple.test", "Content-Type": "application/json"}
+        r, _ = self.req("POST", "/api/services/demo/secrets", json.dumps({"secrets": {"API_FOOTBALL_KEY": "x"}}), ent)
+        self.assertNotEqual(r.status, 200)

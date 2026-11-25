@@ -160,3 +160,24 @@ section 7.
 `verifier_interface.py` et ouvrez le bureau. Un projet déjà branché à la main se met au nouveau rangement (dossier
 stable, versionnement, bureau commun, agents locaux en parallèle) par `installation/outil.py reparer <dossier>`, qui
 garde ses adaptateurs (`commandes`) tels quels.
+
+## Jamais une demande muette (invariants du moteur)
+
+Règle de fond, décidée après trois pannes de même famille sur FM_Stats (24–25/11/2026 : APK jamais livré, rapport de
+cadrage jeté, maquette HTML « Rien à valider », fonctionnalité restée « terminée » après un renvoi) :
+
+1. **Une validation ne dépend pas de ce que l'agent a joint à son rapport.** Si le projet porte déjà de quoi montrer
+   (maquette du cahier, livrable déjà rangé pour l'élément, APK exigé et construit), la validation est posée
+   (`_maquette_du_cahier`). Un champ manquant dans un rapport ne lève jamais d'exception qui jette le rapport.
+2. **Une fonctionnalité terminée dont le travail reprend est rouverte** (`_travail_apres_la_fin`) : elle se referme avec
+   une nouvelle fin, annoncée au Directeur.
+3. **Un projet Flutter prêt au serveur envoie toutes ses étapes de flux au serveur**, même marquées `local` : le poste
+   ne compile pas.
+4. **La sentinelle** (`impasses`, `_sentinelle_des_impasses`, délai `DELAI_IMPASSE` = 5 min) : toute fonctionnalité hors
+   série sans tâche ouverte, sans décision, sans question en attente et sans agent au travail est dite au bureau
+   (décision `serie_arretee`, bouton « Relancer »). Quelle que soit la cause, elle ne reste pas muette. La même idée
+   vaut pour les séries (`_signaler_une_serie_muette`).
+5. **Test d'invariant** (`test_aucun_rapport_degenere_ne_laisse_une_demande_muette`) : des rapports dégénérés (« déjà
+   fait », vides, sans champs de validation, chemins fantômes) traversent tout le parcours ; aucune demande ne doit
+   rester sans fin, sans tâche, sans décision ni alerte. Une nouvelle panne de cette famille ajoute son rapport
+   dégénéré à `RAPPORTS_DEGENERES` avant d'être corrigée.

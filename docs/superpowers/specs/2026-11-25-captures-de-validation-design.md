@@ -1,6 +1,6 @@
 # Captures de validation prises sur le serveur — conception
 
-Date : 2026-11-25. Statut : **proposition, à valider par le Directeur. Rien n'est implémenté.**
+Date : 2026-11-25. Statut : **implémenté (voir le plan)**.
 
 ## 1. Intention
 
@@ -144,6 +144,12 @@ avec le Directeur avant la mise en forme), le découpage en tests, et la manièr
 7. **Une fonctionnalité.** Elle a déjà un mode opératoire exigé à la validation d'un élément « en jeu » ; l'agent de
    capture le suit. S'il ne trouve pas l'écran, il le dit (« écran introuvable : <raison> ») : le Directeur voit cette
    ligne à la place des captures, et la validation reste posée.
+
+8. **Faits finaux, différents de la proposition.** (a) Les images voyagent par la **copie de l'agent** (`/outil/captures/<nom>.png` vers
+   `<pièces>/<fid>/captures/`, commit, chemin relatif cité) puis l'**extraction par le moteur depuis la branche** rapatriée, avant la fusion
+   (`moteur/cloud.py : extraire_de_la_branche`) ; seuls les chemins d'images `.factory/pieces/<x>/…` sont acceptés. (b) L'« avant » est une **seconde tâche de capture**
+   (une émulation = un APK), sur l'APK archivé `.factory/livrables-precedents/dernier.apk` ; la phase est bornée à 2 x (20 + 15) = 70 minutes. (c) Le minuteur des
+   20 minutes vit dans la **mémoire du moteur** et repart après un redémarrage du moteur.
 
 ## 7. Risques
 

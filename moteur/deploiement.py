@@ -16,7 +16,9 @@ LIBELLE_SERVEUR = "le déploiement sur le serveur"
 LIBELLE_INSTALLATION = "l'installation de l'application"
 
 # Ce que la demande ou le cahier disent d'une mise en ligne (le Directeur écrit « déporter sur le serveur (ovh) »).
-_SERVEUR = re.compile(r"ovh|d[ée]port|d[ée]ploi|h[ée]berg|mise? en ligne|mettre en ligne", re.IGNORECASE)
+# « On livre toujours tout » : dès qu'un serveur, une API ou des pages web sont livrés, une mise en place est proposée quelque part.
+_SERVEUR = re.compile(r"serveur|backend|back-end|api|pages? web|site web|ovh|d[ée]port|d[ée]ploi|h[ée]berg|"
+                      r"mise? en ligne|mettre en ligne", re.IGNORECASE)
 _INSTALLATION = re.compile(r"install|sur (?:l'|mon |le )?(?:appareil|t[ée]l[ée]phone)", re.IGNORECASE)
 GENRES_APK = ("application-mobile-android",)
 
@@ -51,7 +53,12 @@ def ouverte_pour(fonctionnalites, fid):
 
 def demande(f, restant):
     """Le texte de la demande de correction (les 40 premiers caractères en font le nom : le titre d'abord)."""
+    cahier = f.get("cahier") or {}
+    voulu = " ".join(str(m.get("texte") or "") for m in f.get("discussion") or [] if m.get("auteur") == "utilisateur")
+    rappel = (f" Ce que le Directeur a déjà demandé (consigne d'origine, à respecter, ne la redemande pas) : « {voulu[:1500]} »"
+              + (f" En clair : {cahier['en_clair'][:600]}" if cahier.get("en_clair") else "")) if voulu else ""
     return (f"{TITRE} : {f['nom']}. Le développement de la fonctionnalité « {f['nom']} » est fini ; il reste à faire "
-            + " et ".join(restant) + ". Déploie ce qui doit l'être sur le serveur du projet, installe l'application, "
-            "vérifie que cela fonctionne en réel. Il te manque peut-être un accès (serveur, clé, appareil) ou une décision "
-            "de dépense : demande-les au Directeur avant d'agir, ne devine rien.")
+            + " et ".join(restant) + ". Propose où le mettre en place (le serveur déjà déclaré du projet en priorité, sinon "
+            "dis les options et leur coût), déploie ce qui doit l'être, installe l'application, vérifie que cela fonctionne en "
+            "réel. Il te manque peut-être un accès (serveur, clé, appareil) ou une décision "
+            "de dépense : demande-les au Directeur avant d'agir, ne devine rien." + rappel)

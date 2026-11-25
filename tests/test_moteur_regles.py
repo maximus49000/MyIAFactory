@@ -2185,6 +2185,20 @@ class Validation(Base):
         (nouvelle,) = self.decisions()
         self.assertEqual(nouvelle["doit_marcher"], DIT["doit_marcher"])
 
+    def test_retour_sur_une_validation_bloquee_d_une_serie_close_la_rouvre(self):
+        """Essai réel (FM_Stats f12) : la série s'était close en laissant l'élément de côté ; « Relancer » répondait
+        « l'étape à refaire n'est plus dans le workflow ». Le retour rouvre la série et refait l'étape."""
+        self.projet_avec_validation()
+        rien = {**verdict("e1"), **DIT, "message": {"texte": "Testé."}}
+        self.piloter(regles.avancer(self.projet, self.etat),
+                     rapports=[{"statut": "fait", "message": {"texte": "Programmé."}}, rien, rien])
+        (val,) = self.taches(etape="validation:valider")
+        self.ok("fonctionnalite", entree={"id": "f1", "etape": "terminee"})
+        self.etat["elements"].clear()
+        d, _ = self.traiter(type="retour", tache=val["id"], texte="Joins une capture de l'écran.")
+        self.assertIn("refaite", self.statut(d["id"])["reponse"])
+        self.assertEqual(self.fonc()["etape"], "serie")
+
     def test_doit_marcher_rendu_a_la_relance_pose_la_decision(self):
         self.projet_avec_validation()
         self.fichier("pieces/f1/essai.png")

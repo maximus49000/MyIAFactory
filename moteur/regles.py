@@ -138,6 +138,17 @@ GARDE_FOU_PARCOURS_COURT = ("Parcours court (pas de méthode) : le cahier ci-des
                             "arrête-toi et rends `statut: accord_requis` avec `accord.quoi` = « Passer au parcours "
                             "complet (prototype et méthode) » et la raison : le Directeur décide.")
 ETAPES_DE_FLUX = "flux:"
+# Les captures de validation (conception 2026-11-25-captures-de-validation) : avant de poser la validation d'un élément
+# dont la demande a dit « captures : oui », avec l'APK joint à jour, une tâche `captures:<étape de validation>` prend sur
+# l'émulateur du serveur les captures qui montrent ce qui a changé. Jamais bloquante : toute impossibilité pose la
+# validation sans capture, avec la raison (`sans_capture`).
+ETAPES_DE_CAPTURES = "captures:"
+CAPTURES_MAX = 8              # au plus 8 captures par validation (l'enchaînement le plus long reste lisible)
+ATTENTE_CRENEAU_S = 1200      # 20 minutes d'attente d'une place sur le serveur (file du créneau d'émulation)
+TRAVAIL_CAPTURES_S = 900      # 15 minutes de travail de l'agent de capture
+SANS_CAPTURE_MAX = 300        # la raison d'une validation sans capture : une ligne
+NON_DEMANDEE = "non demandée"
+APK_A_REFAIRE = "APK absent ou périmé"
 # Essai réel (RoadmapReborn f9, 2026-11-18) : trois éléments, chacun recevant le cahier entier. Le développeur du
 # backend a aussi codé les autres, puis son vérificateur l'a refusé faute du frontend : une correction en double et une
 # vérification de plus (≈ 1,2 €). Chaque tâche d'un élément doit savoir que d'autres existent.
@@ -227,6 +238,9 @@ class Projet:
         self.signature_apk = "aucune"        # réglage `signature_apk` : qui signe les APK construits au serveur (15e)
         self.une_session_moyenne = False     # réglage `une_session_moyenne` : code, tests et revue d'une évolution moyenne
         self.ligne_a_dire = None     # dite une seule fois au bureau, dans la réponse de la première demande traitée
+        # rien -> None (le mode pilote de l'émulateur est possible) ou la raison ; posé par le moteur à l'ouverture.
+        # None (essais, projet ouvert seul) : supposé possible (`_captures_demandees`)
+        self.pilote_possible = None
         base = self.factory.resolve().parent
         self.dossier = base.parent if base.name == ".factory" else base
 
@@ -2798,8 +2812,10 @@ def _attente(court, fid, etat):
         # Une étape du flux déjà commencée, ni active ni bloquée, ni suivie par le moteur : débloquée (à la main, une
         # session cloud inscrite) ou laissée par un moteur relancé ; elle repart aussi, sinon elle ne repartirait jamais.
         # Jamais une tâche qui attend une décision (un accord, un outil…) : elle repart à la réponse du Directeur.
-        reprise = bool(t.get("debut")) and etape.startswith(ETAPES_DE_FLUX) and t["id"] not in attendues
-        if explicite or reprise or (not t.get("debut") and (etape.startswith(ETAPES_DE_FLUX)
+        # (l'étape de capture d'une validation se lance et se reprend comme une étape du flux)
+        reprise = (bool(t.get("debut")) and etape.startswith((ETAPES_DE_FLUX, ETAPES_DE_CAPTURES))
+                   and t["id"] not in attendues)
+        if explicite or reprise or (not t.get("debut") and (etape.startswith((ETAPES_DE_FLUX, ETAPES_DE_CAPTURES))
                                                             or etape in ETAPES_DU_MOTEUR)):
             attente.append(t)
     attente.sort(key=lambda t: (t.get("etape") != "correction", t["id"]))
@@ -4051,7 +4067,7 @@ def _dernier_pas_du_dernier_element(projet, etat, t, fid, f):
         return False
     if (f or {}).get("file"):
         return False
-    en_cours = ("flux", "relecture", "correction", "validation", "attente_methode")
+    en_cours = ("flux", "relecture", "correction", "captures", "validation", "attente_methode")
     return not any(v["fid"] == fid and v["element"].get("id") != t.get("element") and v["phase"] in en_cours
                    for v in _m(etat, "elements").values())
 
@@ -4101,7 +4117,7 @@ def _revue_d_ensemble(projet, etat, v, journal):
             or not _sans_relecteur(projet) or v["pas"] != _etape_de_relecture(projet, fid)
             or wf.est_validation(production[v["pas"]]) or len(_elements_de(f)) < 2):
         return None
-    en_cours = ("flux", "relecture", "correction", "validation", "attente_methode")
+    en_cours = ("flux", "relecture", "correction", "captures", "validation", "attente_methode")
     dernier = not f.get("file") and not any(
         x["fid"] == fid and x["element"].get("id") != v["element"]["id"] and x["phase"] in en_cours
         for x in _m(etat, "elements").values())
@@ -4359,6 +4375,13 @@ def traiter_retour(projet, execution, etat):
                                                           "matiere": "", "lot": execution.lot}
     taches = depart["taches"]
     etat["en_cours"].discard(taches[0])
+    try:
+        premiere = _tache(projet, taches[0])
+    except Refus:
+        premiere = {}
+    if str(premiere.get("etape") or "").startswith(ETAPES_DE_CAPTURES):
+        # l'étape de capture d'une validation : jamais relancée ni bloquée, la validation est posée dans tous les cas
+        return _retour_de_captures(projet, etat, execution, premiere)
     r = execution.rapport
     if r is None:
         return _agent_en_echec(projet, etat, execution, depart)
@@ -5410,7 +5433,12 @@ def _attendre_le_directeur(projet, etat, v, s):
     """L'élément arrive à une étape de validation : une tâche sans agent et une décision de projet, avec le compte rendu
     et les fichiers de l'étape précédente, ses points à vérifier et son lien d'accès. Rien ne part tant que le Directeur
     n'a pas répondu. Jamais rien à valider : sans image, sans livrable téléchargeable et sans lien d'accès, la décision
-    n'est pas posée (voir `_rien_a_verifier`)."""
+    n'est pas posée (voir `_rien_a_verifier`). Avec « captures : oui » et l'APK joint à jour, l'étape de capture passe
+    d'abord (`_lancer_captures`) ; à son retour (`_conclure_captures`, phase `captures`), la décision porte `captures`
+    ou `sans_capture` (la raison), et toute impossibilité la pose sans capture."""
+    retour_de_captures = v.get("phase") == "captures"
+    if retour_de_captures:
+        v["phase"] = "flux"       # l'étape précédente refaite (rien à vérifier) repartira bien comme une étape du flux
     precedent = v.get("dernier_rapport") or {}
     nature = precedent.get("nature") if rel.nature_ok(precedent.get("nature")) else None
     apk_exige = _apk_exige(projet, v)      # une correction d'un projet à APK : validée sur l'APK, quelle que soit sa nature
@@ -5441,13 +5469,25 @@ def _attendre_le_directeur(projet, etat, v, s):
         manques.append("apk")
     elif apk_exige and "livrable" not in manques and _apk_perime(projet, precedent):
         manques.append("apk_ancien")      # construit avant la dernière modification du code : à reconstruire
-    if v.pop("rapport_du_suivi", False):
+    du_suivi = v.pop("rapport_du_suivi", False)
+    if du_suivi:
         # le rapport a été perdu pendant l'arrêt du moteur (relu dans le suivi) : la validation est posée avec ce qu'il y
         # a à vérifier, l'étape n'est refaite que s'il n'y a rien du tout
         manques = [m for m in manques if m == "rien"]
     if manques:
         return _rien_a_verifier(projet, etat, v, s, manques)
     v.pop("rien_a_verifier", None)
+    captures = None       # ce que la décision dit des captures : rien (non demandées), ou (liste, raison sans capture)
+    if retour_de_captures:
+        captures = (list(precedent.get("captures") or [])[:CAPTURES_MAX], precedent.get("sans_capture"))
+    else:
+        raison = _captures_demandees(projet, v)
+        if raison is None:
+            if du_suivi:      # la validation qui suivra la capture garde la même tolérance
+                v["rapport_du_suivi"] = True
+            return _lancer_captures(projet, etat, v, s)
+        if raison != NON_DEMANDEE:
+            captures = ([], raison)
     v["phase"] = "validation"
     element = v["element"]
     tid = lancer(projet, "tache", {"titre": f"Validation du Directeur : {element['nom']}", "fonctionnalite": v["fid"],
@@ -5476,8 +5516,176 @@ def _attendre_le_directeur(projet, etat, v, s):
         en_clair = _en_clair_de_la_fiche(projet, v["fid"])
         if en_clair:
             entree["en_clair"] = en_clair
+    if captures is not None:
+        entree["captures"] = captures[0]
+        if not captures[0]:
+            entree["sans_capture"] = _ligne(captures[1] or "aucune capture rendue")[:SANS_CAPTURE_MAX]
     lancer(projet, "decision", entree)
     return tid
+
+
+# --- Les captures de validation : l'étape qui précède la décision (conception 2026-11-25-captures-de-validation).
+
+def _ligne(texte):
+    return " ".join(str(texte or "").split())
+
+
+def _captures_demandees(projet, v):
+    """`None` si l'étape de capture doit partir avant la validation de l'élément ; sinon la raison de s'en passer :
+    « non demandée » (la demande n'a pas dit « oui » : rien ne part, coût), « APK absent ou périmé » (jamais de capture
+    d'un APK qui n'est pas celui du code), « émulateur indisponible : <raison> » (`Projet.pilote_possible`)."""
+    if (_fonc(projet, v["fid"]) or {}).get("captures") is not True:
+        return NON_DEMANDEE
+    precedent = v.get("dernier_rapport") or {}
+    if not _fichier_existe(projet, precedent, rel.est_executable) or _apk_perime(projet, precedent):
+        return APK_A_REFAIRE
+    verifier = getattr(projet, "pilote_possible", None)
+    if callable(verifier):
+        try:
+            raison = verifier()
+        except Exception as e:      # noqa: BLE001 — une lecture qui échoue : pas d'émulateur, la validation part
+            raison = str(e) or type(e).__name__
+        if raison:
+            return f"émulateur indisponible : {_ligne(raison)}"[:SANS_CAPTURE_MAX]
+    return None
+
+
+def _tache_de_captures(projet, v, s):
+    """La tâche de capture de la validation `s` en cours pour l'élément (créée après sa dernière étape du flux), ou
+    None : il n'y en a qu'une par validation posée, retrouvée après un redémarrage du moteur."""
+    for tid in reversed(v.get("taches") or []):
+        try:
+            etape = str(_tache(projet, tid).get("etape") or "")
+        except Refus:
+            continue
+        if etape.startswith(ETAPES_DE_FLUX):
+            return None
+        if etape == ETAPES_DE_CAPTURES + s["id"]:
+            return tid
+    return None
+
+
+def _lancer_captures(projet, etat, v, s):
+    """Crée la tâche de capture (étape `captures:<validation>`), confiée au métier de l'étape qui a rendu l'APK ; la
+    décision attend son retour. Une seule par validation posée : celle qui existe déjà est rendue."""
+    v["phase"] = "captures"
+    deja = _tache_de_captures(projet, v, s)
+    if deja:
+        return deja
+    production = _production(projet, v["fid"])
+    rang = next((k for k, x in enumerate(production) if x["id"] == s["id"]), len(production))
+    avant = next((production[k] for k in range(rang - 1, -1, -1) if not wf.est_validation(production[k])), None)
+    apk = next((x["chemin"] for x in (v.get("dernier_rapport") or {}).get("fichiers") or []
+                if rel.est_executable(x.get("chemin"))), None)
+    journal = [f"Captures de validation sur l'APK joint : {apk}" if apk else "Captures de validation."]
+    tid = _creer_tache(projet, f"Captures de validation : {v['element']['nom']}", v["fid"],
+                       (avant or {}).get("role") or s.get("role"), ETAPES_DE_CAPTURES + s["id"],
+                       element=v["element"]["id"], colonne=s["id"], journal=journal)
+    v["taches"].append(tid)
+    return tid
+
+
+def limites_de_la_tache(t):
+    """Les limites qu'un départ d'agent applique à la tâche, ou `{}` (les limites ordinaires) : l'étape de capture
+    attend une place sur le serveur 20 minutes au plus (`attente_max_s` de l'exécuteur serveur) et travaille 15 minutes
+    au plus (`delai_s` : la durée maximale de la tâche serveur, `RAISON_DUREE`). Au-delà, l'agent revient sans rapport
+    et la validation est posée sans capture (`_retour_de_captures`)."""
+    if str((t or {}).get("etape") or "").startswith(ETAPES_DE_CAPTURES):
+        return {"attente_max_s": ATTENTE_CRENEAU_S, "delai_s": TRAVAIL_CAPTURES_S}
+    return {}
+
+
+def _raison_sans_rapport(execution):
+    """Pourquoi l'agent de capture n'a rien rendu, en une ligne pour le Directeur."""
+    erreur = _ligne(getattr(execution, "erreur", None))
+    if getattr(execution, "echeance", False):
+        return f"hors délai : les captures n'ont pas abouti en {TRAVAIL_CAPTURES_S // 60} minutes"
+    if "Aucune place d'agent libre" in erreur:
+        return f"créneau d'émulation pris plus de {ATTENTE_CRENEAU_S // 60} minutes"
+    if getattr(execution, "arrete", False):
+        return "captures arrêtées depuis le bureau"
+    if getattr(execution, "panne", False):
+        return "service Claude indisponible pendant les captures"
+    return f"échec de l'agent de capture : {erreur or 'aucun rapport'}"
+
+
+def _retour_de_captures(projet, etat, execution, t):
+    """Le retour de l'agent de capture, quel qu'il soit : la tâche est close (jamais bloquée, jamais relancée) et la
+    validation de l'élément est posée, avec les captures ou la raison de leur absence."""
+    fid = t.get("fonctionnalite")
+    _m(etat, "liees").pop(t.get("id"), None)
+    r, raison = execution.rapport, None
+    if r is None:
+        raison = _raison_sans_rapport(execution)
+    else:
+        etat.pop("panne", None)
+        if r.get("statut") != "fait":
+            texte = _ligne((r.get("message") or {}).get("texte")) or r.get("statut")
+            raison = f"échec de l'agent de capture : {texte}"
+        else:
+            r = _chemins_du_projet(projet, r, fid)
+    if fid:
+        reprendre_la_serie(projet, etat, fid)
+    v = _m(etat, "elements").get(f"{fid}/{t.get('element')}")
+    production = _production(projet, fid) if v is not None else []
+    s = production[v["pas"]] if v is not None and v["pas"] < len(production) else None
+    if v is None or v.get("phase") != "captures" or s is None or _tache_de_captures(projet, v, s) != t.get("id"):
+        # une capture qui ne sert plus (l'élément est passé à autre chose) : close, sans suite
+        if t.get("colonne") != "fait":
+            lancer(projet, "tache", {"id": t["id"], "colonne": "fait", "active": False,
+                                     "journal": ["Captures sans suite : l'élément n'attend plus sa validation."]})
+        return _demarrer_en_attente(projet, etat, fid)
+    _conclure_captures(projet, etat, v, r if raison is None else None, raison)
+    return _demarrer_en_attente(projet, etat, fid)
+
+
+def _images_de_captures(rapport):
+    """Les images rendues par l'agent de capture (`message.images`), dans l'ordre : `[{chemin, legende}]`."""
+    sortie = []
+    for x in ((rapport or {}).get("message") or {}).get("images") or []:
+        chemin = x.get("chemin") if isinstance(x, dict) else x
+        if not (isinstance(chemin, str) and chemin.strip() and rel.est_image(chemin)):
+            continue
+        if any(c["chemin"] == chemin for c in sortie):
+            continue
+        legende = _ligne(x.get("legende")) if isinstance(x, dict) else ""
+        sortie.append({"chemin": chemin, "legende": legende[:200]})
+    return sortie
+
+
+def _conclure_captures(projet, etat, v, rapport, raison):
+    """Fusionne le retour de l'étape de capture dans le dernier rapport de l'élément — `fichiers` (l'APK et les
+    documents de l'étape d'avant gardés, les images ajoutées), `captures` (au plus 8 `{chemin, legende}`, dans l'ordre
+    rendu), `sans_capture` (la raison quand il n'y en a pas ; aucune image : « écran introuvable : … ») — ferme la tâche
+    de capture, puis pose la validation (`_attendre_le_directeur`)."""
+    production = _production(projet, v["fid"])
+    s = production[v["pas"]]
+    images = _images_de_captures(rapport)[:CAPTURES_MAX] if raison is None else []
+    if raison is None and not images:
+        texte = _ligne(((rapport or {}).get("message") or {}).get("texte"))
+        raison = (texte if texte.lower().startswith("écran introuvable")
+                  else "écran introuvable : " + (texte or "aucune capture rendue"))
+    precedent = dict(v.get("dernier_rapport") or {})
+    fichiers = list(precedent.get("fichiers") or [])
+    ajoutees = [{"chemin": c["chemin"], "titre": c["legende"] or c["chemin"].replace("\\", "/").rsplit("/", 1)[-1]}
+                for c in images if all(f.get("chemin") != c["chemin"] for f in fichiers)]
+    precedent["fichiers"] = fichiers + ajoutees[:max(0, FICHIERS_MAX - len(fichiers))]
+    precedent["captures"] = images
+    if images:
+        precedent.pop("sans_capture", None)
+    else:
+        precedent["sans_capture"] = _ligne(raison)[:SANS_CAPTURE_MAX]
+    v["dernier_rapport"] = precedent
+    tid = _tache_de_captures(projet, v, s)
+    if tid:
+        bilan = (f"{len(images)} capture(s) jointe(s) à la validation." if images
+                 else f"Validation posée sans capture : {precedent['sans_capture']}")
+        if _tache(projet, tid).get("colonne") != "fait":
+            lancer(projet, "tache", {"id": tid, "colonne": "fait", "active": False, "journal": [bilan[:500]]})
+        else:
+            lancer(projet, "tache", {"id": tid, "journal": [bilan[:500]]})
+    v["phase"] = "captures"
+    return _attendre_le_directeur(projet, etat, v, s)
 
 
 def _en_clair_de_la_fiche(projet, fid):
@@ -6112,7 +6320,7 @@ def orphelines(projet, etat):
     for t in court["taches"]:
         etape = str(t.get("etape") or "")
         if (not t.get("agent") or t["id"] in etat["en_cours"] or t["id"] in relancees
-                or not (etape.startswith(ETAPES_DE_FLUX) or etape in ETAPES_DU_MOTEUR)):
+                or not (etape.startswith((ETAPES_DE_FLUX, ETAPES_DE_CAPTURES)) or etape in ETAPES_DU_MOTEUR)):
             continue
         if fiche_cloud(court, t["agent"]) and (
                 not t["active"] or session_cloud_du_journal(_tache(projet, t["id"]).get("journal"))):
@@ -6336,7 +6544,7 @@ def _pas_de_serie(t):
     relecture, ou la correction d'un élément fini. Un retour sur une tâche (« Retour : … ») ou une demande n'en est pas un :
     il ne dit pas où en est l'élément."""
     e = str(t.get("etape") or "")
-    return (e.startswith((ETAPES_DE_FLUX, ETAPES_DE_VALIDATION)) or e in ("correction", "relecture")
+    return (e.startswith((ETAPES_DE_FLUX, ETAPES_DE_VALIDATION, ETAPES_DE_CAPTURES)) or e in ("correction", "relecture")
             or (e == "retour" and str(t.get("titre") or "").startswith(TITRE_RETOUR_ELEMENT)))
 
 
@@ -6418,7 +6626,7 @@ def _reprendre_l_element(projet, etat, f, element, taches):
             _etat_element(etat, fid, element)["phase"] = "fait"
         return None       # sinon une tâche à part, encore ouverte : il sera repris quand elle sera faite
     etapes = [str(t["etape"]).split(":", 1)[1] for t in pas
-              if str(t["etape"]).startswith((ETAPES_DE_FLUX, ETAPES_DE_VALIDATION))]
+              if str(t["etape"]).startswith((ETAPES_DE_FLUX, ETAPES_DE_VALIDATION, ETAPES_DE_CAPTURES))]
     if etapes and etapes[-1] not in rangs:
         return f"son étape « {etapes[-1]} » n'est plus dans le workflow de la fonctionnalité"
     v = _etat_element(etat, fid, element)
@@ -6437,6 +6645,16 @@ def _reprendre_l_element(projet, etat, f, element, taches):
         if not ouverte:      # faite, sa suite jamais créée : elle l'est maintenant (le rapport, relu dans le suivi)
             _rapport_du_suivi(projet, etat, v, dernier, f)
             _apres_flux(projet, etat, v)
+    elif etape.startswith(ETAPES_DE_CAPTURES):
+        # l'étape de capture d'une validation : le rapport de l'étape d'avant est relu dans le suivi ; une capture en
+        # cours est attendue (jamais une seconde), une capture close ou bloquée sans validation la pose sans capture
+        flux = next((t for t in reversed(pas) if str(t["etape"]).startswith(ETAPES_DE_FLUX)), None)
+        if flux is not None:
+            _rapport_du_suivi(projet, etat, v, flux, f)
+        v["phase"] = "captures"
+        if not ouverte or dernier.get("bloquee"):
+            _conclure_captures(projet, etat, v, None, "captures perdues pendant l'arrêt du moteur" if not ouverte
+                               else f"échec de l'agent de capture : {dernier.get('bloquee')}")
     elif etape.startswith(ETAPES_DE_VALIDATION):
         if ouverte:
             v["phase"] = "bloque" if dernier.get("bloquee") else "validation"

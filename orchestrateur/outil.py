@@ -1262,6 +1262,7 @@ def _accord_a_donner(ctx, s, e):
     return d
 
 
+CAPTURES_DE_VALIDATION_MAX = 8   # comme `moteur.regles.CAPTURES_MAX`
 PROMPT_PARTENAIRE_MAX = 4000   # le plafond général ; certains partenaires en ont un plus bas (`partenaires.etat.PROMPT_MAX`)
 MAX_REGLAGES, MAX_ETAPES_CHEZ, MAX_ELEMENTS_CHEZ = 12, 10, 12
 
@@ -1428,6 +1429,18 @@ def _validation_decidee(ctx, s, e):
         if not rel.acces_ok(e["acces"]):
             raise Refus("« acces » est {url (http ou https), description? (200 caractères au plus)}.")
         plus["acces"] = {k: v for k, v in e["acces"].items() if v is not None}
+    if e.get("captures") is not None:     # les captures de l'application prises pour la validation, dans l'ordre
+        captures = e["captures"]
+        if (not isinstance(captures, list) or len(captures) > CAPTURES_DE_VALIDATION_MAX
+                or not all(isinstance(x, dict) and isinstance(x.get("chemin"), str) and x["chemin"].strip()
+                           and isinstance(x.get("legende", ""), str) and len(x.get("legende", "")) <= 200
+                           for x in captures)):
+            raise Refus(f"« captures » est une liste de {CAPTURES_DE_VALIDATION_MAX} {{chemin, legende}} au plus "
+                        "(légende de 200 caractères au plus).")
+        plus["captures"] = [{"chemin": ctx.image_rangee(x["chemin"].strip(), fid),
+                             "legende": x.get("legende", "").strip()} for x in captures]
+    if e.get("sans_capture") is not None:     # pourquoi la validation n'a pas de capture (une ligne)
+        plus["sans_capture"] = _phrase_courte(e, "sans_capture", 300)
     return {"fonctionnalite": fid, "element": {"id": element["id"], "nom": element["nom"]}, "etape": e["etape"],
             "tache": tache, "compte_rendu": compte_rendu, **plus,
             "fichiers": [_fichier_a_valider(ctx, x, fid) for x in fichiers]}

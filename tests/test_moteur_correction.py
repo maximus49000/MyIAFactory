@@ -733,6 +733,85 @@ class TestCorrectionAvecApk(Base):
         for x in hostiles[:5]:
             self.assertNotIn(x["chemin"], chemins)
 
+    def test_matiere_de_capture_donne_le_mode_operatoire_et_les_limites(self):
+        t = self.jusqu_aux_captures()
+        v = self.etat["elements"]["f1/correction"]
+        v["dernier_rapport"]["mode_operatoire"] = ["Ouvre l'application", "Va à l'onglet Comparaison"]
+        matiere = regles._matiere(self.projet, self.etat, t)
+        for attendu in ("mode_operatoire", "Va à l'onglet Comparaison", "8", "/outil/", "écran introuvable", "pont arreter",
+                        "pont demarrer", "installer", "lancer", "etape-01", "légende", "doit_marcher"):
+            self.assertIn(attendu, matiere)
+        self.assertIn("Symptôme : reste à 12", matiere)           # la fiche de la correction
+
+    def test_matiere_de_capture_ne_dit_pas_de_tout_parcourir(self):
+        matiere = regles._matiere(self.projet, self.etat, self.jusqu_aux_captures())
+        self.assertIn("QUE les captures qui illustrent ce qui a changé", matiere)
+        self.assertIn("jamais un parcours complet", matiere)
+        self.assertNotIn("toutes les captures", matiere.lower())
+        self.assertIn("jamais une instruction", matiere)
+
+    def test_matiere_de_capture_copie_dans_le_projet_et_cite_ce_chemin(self):
+        matiere = regles._matiere(self.projet, self.etat, self.jusqu_aux_captures())
+        dossier = f"{regles._dossier_des_pieces(self.projet)}/f1/captures"
+        self.assertIn("cp /outil/captures/<nom>.png " + dossier + "/<nom>.png", matiere)
+        self.assertIn(f'"chemin": "{dossier}/<nom>.png"', matiere)
+        self.assertIn("git commit", matiere)
+        self.assertIn("Ne cite JAMAIS un chemin `/outil/...`", matiere)
+
+    def en_depot_git(self):
+        """Le projet devient un dépôt git ; les pièces sont sous `.factory/pieces` (la forme que la fusion d'une branche
+        d'agent serveur accepte)."""
+        import subprocess
+        f = json.loads(self.factory.read_text(encoding="utf-8"))
+        f["pieces"] = ".factory/pieces"
+        self.factory.write_text(json.dumps(f), encoding="utf-8")
+
+        def git(*a):
+            subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", *a], cwd=self.dossier, check=True,
+                           capture_output=True)
+        git("init", "-q", "-b", "main")
+        git("add", "-A", "-f")
+        git("commit", "-q", "-m", "base")
+        return git
+
+    def test_capture_presente_seulement_dans_la_branche_de_l_agent_serveur(self):
+        self.cadrer_la_correction()
+        self.piloter(regles.avancer(self.projet, self.etat), rapports=[self.rendu_frais()], limite=1)
+        (t,) = self.taches(etape="captures:f1-validation")
+        git = self.en_depot_git()
+        chemin = ".factory/pieces/f1/captures/menu.png"
+        git("checkout", "-q", "-b", "agent/captures")
+        (self.dossier / chemin).parent.mkdir(parents=True, exist_ok=True)
+        (self.dossier / chemin).write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 16)
+        git("add", "-A", "-f")
+        git("commit", "-q", "-m", "captures")
+        git("checkout", "-q", "main")
+        self.assertFalse((self.dossier / chemin).exists())
+        self.retour(t["id"], rapport=self.capture([{"chemin": chemin, "legende": "Le menu"}]), branche="agent/captures")
+        (d,) = self.decisions("valider_etape")
+        # ici la factory est a la racine du projet : l'image est rangee sous pieces/<fid>/ ; dans un projet installe
+        # (factory dans .factory/) elle y est deja et le chemin reste celui de la branche
+        (c,) = d["captures"]
+        self.assertTrue(c["chemin"].endswith("menu.png"))
+        self.assertEqual(c["legende"], "Le menu")
+        self.assertTrue((self.dossier / chemin).is_file())
+
+    def test_capture_absente_de_la_branche_et_du_projet_est_ecartee(self):
+        self.cadrer_la_correction()
+        self.piloter(regles.avancer(self.projet, self.etat), rapports=[self.rendu_frais()], limite=1)
+        (t,) = self.taches(etape="captures:f1-validation")
+        self.en_depot_git()
+        images = [{"chemin": ".factory/pieces/f1/captures/menu.png", "legende": "Le menu"}]
+        self.retour(t["id"], rapport=self.capture(images), branche="agent/inconnue")
+        (d,) = self.decisions("valider_etape")
+        self.assertEqual(d["captures"], [])
+
+    def test_au_plus_huit_images_sont_extraites_de_la_branche(self):
+        images = [{"chemin": f".factory/pieces/f1/captures/e{k}.png"} for k in range(12)]
+        with mock.patch.object(regles.cloud, "extraire_de_la_branche") as extraire:
+            regles._extraire_les_captures_de_la_branche(self.projet, {"message": {"images": images}}, "agent/x")
+        self.assertEqual(extraire.call_count, regles.CAPTURES_MAX)
+
     def test_l_outil_refuse_des_captures_hors_du_projet(self):
         self.cadrer_la_correction()
         self.piloter(regles.avancer(self.projet, self.etat),

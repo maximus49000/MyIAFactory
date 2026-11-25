@@ -497,6 +497,50 @@ def _piece_d_agent(parties):
             and not any(p in RESERVES_PARTOUT and p != ".factory" for p in parties[1:]))
 
 
+IMAGE_BRANCHE_MAX_OCTETS = 20 * 1024 * 1024      # ce que le bureau accepte de servir (`outil.IMAGE_RANGEE_MAX_OCTETS`)
+CHEMIN_IMAGE_BRANCHE_MAX = 500
+_SIGNATURES_IMAGE = {".png": b"\x89PNG\r\n\x1a\n", ".jpg": b"\xff\xd8\xff", ".jpeg": b"\xff\xd8\xff"}
+_BRANCHE_SURE = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_./-]{0,200}")
+
+
+def extraire_de_la_branche(dossier, branche, chemin, *, executer=None):
+    """Vrai si l'image `chemin` (relatif au dépôt, forme `.factory/pieces/<x>/…/*.png|jpg|jpeg` de `_piece_d_agent`) a été
+    extraite de la branche locale `branche` (celle d'un agent serveur, rapatriée mais pas encore fusionnée) vers
+    `dossier/<chemin>`. Rien n'est écrit, et Faux est rendu, si : le chemin n'est pas de cette forme (absolu, lecteur, `..`,
+    plus de 500 caractères, autre extension), la branche ou le fichier est absent, le fichier dépasse 20 Mo, le début du
+    contenu n'est pas celui d'un PNG ou JPEG, ou un fichier (ou un lien) existe déjà à cet endroit : jamais d'écrasement."""
+    if not isinstance(chemin, str) or not isinstance(branche, str) or not _BRANCHE_SURE.fullmatch(branche):
+        return False
+    if (not chemin or len(chemin) > CHEMIN_IMAGE_BRANCHE_MAX or "\x00" in chemin or chemin.startswith(("/", "\\"))
+            or ":" in chemin):
+        return False
+    parties = chemin.replace("\\", "/").split("/")
+    if (any(p in ("", ".", "..") or p != p.rstrip(" .") or _NOM_COURT.search(p) for p in parties)
+            or not _piece_d_agent([p.lower() for p in parties])):
+        return False
+    signature = _SIGNATURES_IMAGE.get(Path(parties[-1]).suffix.lower())
+    if signature is None:
+        return False
+    cible = Path(dossier).joinpath(*parties)
+    if os.path.lexists(cible):
+        return False
+    ref = f"refs/heads/{branche}:{'/'.join(parties)}"
+    try:
+        code, sortie = _git(executer, dossier, "cat-file", "-s", ref, delai_s=30)
+        taille = _texte(sortie)
+        if code != 0 or not taille.isdigit() or int(taille) > IMAGE_BRANCHE_MAX_OCTETS:
+            return False
+        code, octets = _git(executer, dossier, "show", ref, delai_s=60)
+        if code != 0 or not isinstance(octets, bytes) or not octets.startswith(signature):
+            return False
+        cible.parent.mkdir(parents=True, exist_ok=True)
+        with open(cible, "xb") as f:               # « x » : jamais d'écrasement, même si le fichier vient d'apparaître
+            f.write(octets)
+    except (ErreurCloud, OSError):
+        return False
+    return True
+
+
 def chemin_reserve(chemin):
     """Vrai si une branche d'agent serveur ne peut pas toucher `chemin` (chemin git, `/` ou `\\`) : sortie du dépôt
     (`..`, absolu, lecteur, `:`), dossier ou fichier réservé (casse ignorée, points et espaces finaux ignorés comme sous

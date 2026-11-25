@@ -1208,3 +1208,70 @@ class EtatHorsDuDepot(__import__("unittest").TestCase):
             self.assertTrue((d / ".factory" / nom).exists())         # gardé sur le disque
         self.assertFalse(cloud.etat_hors_du_depot(d))                # rien à refaire
         self.assertEqual(git("status", "--porcelain").stdout.decode().strip(), "")
+
+
+class ExtraireDeLaBranche(unittest.TestCase):
+    """Les images d'un agent serveur, lues dans sa branche rapatriée avant sa fusion (`cloud.extraire_de_la_branche`)."""
+    PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 16
+    BONNE = ".factory/pieces/f1/captures/menu.png"
+
+    def git(self, *args):
+        import subprocess
+        subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", *args], cwd=self.d, check=True,
+                       capture_output=True)
+
+    def setUp(self):
+        import tempfile
+        from pathlib import Path
+        self._t = tempfile.TemporaryDirectory()
+        self.addCleanup(self._t.cleanup)
+        self.d = Path(self._t.name)
+        self.git("init", "-q", "-b", "main")
+        (self.d / "a.txt").write_text("a", encoding="utf-8")
+        self.git("add", "-A")
+        self.git("commit", "-q", "-m", "base")
+        self.git("checkout", "-q", "-b", "agent/t1")
+        self.mettre(self.BONNE, self.PNG)
+        self.mettre(".factory/pieces/f1/captures/faux.png", b"pas une image")
+        self.mettre(".factory/pieces/f1/captures/gros.png", self.PNG + b"\x00" * (cloud.IMAGE_BRANCHE_MAX_OCTETS + 1))
+        self.mettre(".factory/pieces/f1/captures/photo.jpg", b"\xff\xd8\xff" + b"\x00" * 8)
+        self.mettre(".factory/reglages.png", self.PNG)
+        self.git("add", "-A", "-f")
+        self.git("commit", "-q", "-m", "captures")
+        self.git("checkout", "-q", "main")
+
+    def mettre(self, chemin, octets):
+        p = self.d / chemin
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_bytes(octets)
+
+    def extraire(self, chemin, branche="agent/t1"):
+        return cloud.extraire_de_la_branche(self.d, branche, chemin)
+
+    def test_une_image_de_la_branche_est_extraite(self):
+        self.assertFalse((self.d / self.BONNE).exists())
+        self.assertTrue(self.extraire(self.BONNE))
+        self.assertEqual((self.d / self.BONNE).read_bytes(), self.PNG)
+        self.assertTrue(self.extraire(".factory/pieces/f1/captures/photo.jpg"))
+
+    def test_les_chemins_refuses_n_ecrivent_rien(self):
+        for chemin in (".factory/pieces/f1/captures/absente.png", ".factory/pieces/../../a.png",
+                       "/etc/x.png", "C:/x.png", ".factory/reglages.png",
+                       "pieces/f1/menu.png", ".factory/pieces/f1/captures/" + "x" * 600 + ".png",
+                       ".factory/pieces/f1/notes.md", "", None):
+            self.assertFalse(self.extraire(chemin), msg=str(chemin))
+        self.assertFalse(self.extraire(self.BONNE, branche="-x"))
+        self.assertFalse(self.extraire(self.BONNE, branche="inconnue"))
+        self.assertFalse((self.d / ".factory" / "reglages.png").exists())
+        self.assertFalse((self.d / self.BONNE).exists())
+
+    def test_trop_gros_ou_fausse_signature_refuses(self):
+        self.assertFalse(self.extraire(".factory/pieces/f1/captures/gros.png"))
+        self.assertFalse(self.extraire(".factory/pieces/f1/captures/faux.png"))
+        self.assertFalse((self.d / ".factory/pieces/f1/captures/gros.png").exists())
+        self.assertFalse((self.d / ".factory/pieces/f1/captures/faux.png").exists())
+
+    def test_un_fichier_existant_n_est_jamais_ecrase(self):
+        self.mettre(self.BONNE, b"\x89PNG\r\n\x1a\nlocal")
+        self.assertFalse(self.extraire(self.BONNE))
+        self.assertEqual((self.d / self.BONNE).read_bytes(), b"\x89PNG\r\n\x1a\nlocal")

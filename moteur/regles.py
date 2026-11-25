@@ -5831,7 +5831,8 @@ def _deployer_le_service(projet, t, r):
     (`service_permanent.declencher`) ; la ligne dite va au journal de la tâche. Jamais une raison d'arrêter la livraison."""
     if not isinstance(r, dict) or r.get("statut") != "fait" or not _est_une_livraison(projet, t):
         return
-    ligne = service_permanent.declencher(projet.dossier)
+    fid = t.get("fonctionnalite")
+    ligne = service_permanent.declencher(projet.dossier, annoncer=(lambda texte: _dire(projet, fid, texte)) if fid else None)
     if ligne:
         try:
             lancer(projet, "tache", {"id": t["id"], "journal": [ligne[:500]]})

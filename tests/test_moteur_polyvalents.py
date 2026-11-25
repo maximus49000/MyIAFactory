@@ -254,6 +254,15 @@ class CorrectionAuServeur(AvecServeur):
         t = self.tache("flux:dev", fonctionnalite="f2")
         self.assertEqual(self.lieu_de(self.parties(self.demarrer())[t]), "serveur")
 
+    def test_etape_marquee_locale_d_un_projet_flutter_part_quand_meme_au_serveur(self):
+        # Essai réel FM_Stats (f8) : la livraison (étape « locale », brief « Lieu : local ») attendait « le poste local »
+        # pendant que le serveur était libre : jamais d'APK.
+        self.flutter()
+        self.lieu("livraison", "local")
+        self.brief("release", "Lieu : local\n\nBrief de la livraison.\n")
+        t = self.tache("flux:livraison")
+        self.assertEqual(self.lieu_de(self.parties(self.demarrer())[t]), "serveur")
+
     def test_correction_flutter_attend_le_serveur_plutot_que_le_poste(self):
         self.flutter()
         self.regler(serveur=1)

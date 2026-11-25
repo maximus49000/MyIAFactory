@@ -32,7 +32,7 @@ from datetime import datetime
 from pathlib import Path
 
 from installation import estimation, proposition
-from moteur import accord_outil, agents, cloud, detache, environnement, jugement, rapport
+from moteur import accord_outil, agents, cloud, detache, deploiement, environnement, jugement, rapport
 from moteur.appel import est_une_limite as appel_limite
 from moteur.jugement import ACTIONS_CONSEIL, COMMANDES_INTERDITES_AU_CONSEIL  # noqa: F401
 from bureau import fichiers_joints
@@ -6897,6 +6897,34 @@ def _liberer_les_lots_orphelins(projet, etat, court):
     return liberees
 
 
+def _attendre_le_deploiement(projet, fid, mine):
+    """Vrai tant que la fonctionnalité demande un déploiement ou une installation que personne n'a encore terminés : la fin
+    n'est pas annoncée. La première fois, le moteur dit ce qui reste et ouvre la correction « Déployer et installer » (voir
+    `moteur.deploiement`) ; ensuite il attend qu'elle soit finie. Essai réel (FM_Stats, f14, 2026-11-25) : « La série est
+    terminée » alors que rien n'était déployé ni installé."""
+    f = _fonc(projet, fid)
+    restant = deploiement.restants(f, [v["element"]["nom"] for v in mine])
+    if not restant:
+        return False
+    ouverte = deploiement.ouverte_pour(_etat(projet)["fonctionnalites"], fid)
+    if ouverte is not None:
+        return ouverte["etape"] not in deploiement.ETAPES_FINIES
+    _dire(projet, fid, "Le développement est terminé, mais " + " et ".join(restant) + " restent à faire : je ne dis pas la "
+                       "série terminée avant. J'ouvre la correction « " + deploiement.TITRE + " » ; l'agent vous "
+                       "demandera l'accès à utiliser et la dépense éventuelle.")
+    lancer(projet, "actions", {"type": "fonctionnalite", "nature": "correction", "concerne": fid,
+                               "texte": deploiement.demande(f, restant)})
+    return True
+
+
+def _en_attente_de_deploiement(projet, etat, fid):
+    """Lecture seule : la série de `fid` attend la correction de déploiement (elle n'est pas « à l'arrêt »)."""
+    noms = [v["element"]["nom"] for v in _m(etat, "elements").values() if v["fid"] == fid]
+    ouverte = deploiement.ouverte_pour(_etat(projet)["fonctionnalites"], fid)
+    return (ouverte is not None and ouverte["etape"] not in deploiement.ETAPES_FINIES
+            and bool(deploiement.restants(_fonc(projet, fid), noms)))
+
+
 def _avancer_serie(projet, etat, fid):
     """Les éléments de la série : au plus deux en cours, dans l'ordre de la file et selon leurs dépendances ; la
     fonctionnalité est terminée quand la file est vide et que tous les éléments sont faits ou laissés de côté."""
@@ -6950,6 +6978,8 @@ def _avancer_serie(projet, etat, fid):
         if (not _fonc(projet, fid)["file"] and mine and all(v["phase"] in ("fait", "bloque") for v in mine)
                 and not ouvertes and not _m(etat, "serie_perdue").get(fid)):
             bloques = [v["element"]["nom"] for v in mine if v["phase"] == "bloque"]
+            if _attendre_le_deploiement(projet, fid, mine):
+                return []
             _fin_de_fonctionnalite(projet, etat, fid, bloques)
             _dire(projet, fid, "La série est terminée." + (f" Éléments laissés de côté : {', '.join(bloques)}."
                                                            if bloques else ""))
@@ -7201,6 +7231,8 @@ def _signaler_une_serie_muette(projet, etat, fid):
         return        # une alerte d'une série finie est levée par `avancer`
     if any(d["genre"] == SERIE_ARRETEE and d.get("fonctionnalite") == fid for d in court["decisions"]):
         return        # déjà dite
+    if _en_attente_de_deploiement(projet, etat, fid):
+        return        # la série attend la correction de déploiement : rien n'est perdu
     raisons = list(_m(etat, "serie_perdue").get(fid, {}).values())
     siennes = [t for t in court["taches"] if t.get("fonctionnalite") == fid]
     # un élément qui ne peut pas repartir est dit tout de suite, même si d'autres avancent ; sinon, seulement quand

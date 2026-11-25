@@ -429,6 +429,15 @@ class TestGestion(Base):
         self.port = rep["port"]
         self.jeton = (self.racine / "fm-stats" / "jeton").read_text("utf-8").strip()
 
+    def test_la_presence_d_un_secret_se_dit_avant_le_premier_deploiement(self):
+        """Essai réel (2026-11-25) : la clé posée avant le déploiement restait « absente » au bureau."""
+        code, rep, _ = self.appeler("poser-secrets", "jamais-deploye", entree=json.dumps({"CLE_API": SECRET}).encode())
+        self.assertEqual(code, 0, rep)
+        code, rep, texte = self.appeler("etat", "jamais-deploye")
+        self.assertEqual((code, rep["etat"]), (0, "absent"))
+        self.assertEqual(rep["secrets"], {"CLE_API": True})
+        self.assertNotIn(SECRET, texte)
+
     def test_etat_sans_secret(self):
         code, rep, texte = self.appeler("etat", "fm-stats")
         self.assertEqual(code, 0, rep)

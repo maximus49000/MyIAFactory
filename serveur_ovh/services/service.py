@@ -694,7 +694,9 @@ def _deployer(service, commit, declaration, hote, simuler, uid, gid, nom, ancien
 def cmd_etat(service, hote, simuler, **_):
     etat = service.etat()
     if not etat:
-        return 0, {"statut": "ok", "etat": "absent", "detail": "Aucun service déployé pour ce projet."}
+        # Les secrets se posent avant le premier déploiement : leur présence se dit déjà (jamais la valeur).
+        return 0, {"statut": "ok", "etat": "absent", "secrets": presence_secrets(service),
+                   "detail": "Aucun service déployé pour ce projet."}
     existe, en_marche, _image = inspecter(hote, nom_conteneur(service.projet))
     port = port_du_projet(service.racine, service.projet)
     sante = None

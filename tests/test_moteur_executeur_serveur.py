@@ -686,6 +686,39 @@ class Echeance(Base):
         self.assertEqual(ex.branche, f"agent/{TACHE}")             # le travail rapatrié est gardé
         self.assertFalse(appel.est_une_panne(r.erreur))
 
+    def test_attente_finale_de_la_capture_sans_second_essai_ni_attente_de_plus(self):
+        """L'étape de capture : 20 min d'attente d'une place (une seule fois), 15 min de travail ; l'attente dépassée
+        clôt l'agent sans second essai, et la validation est posée sans capture avec la raison du créneau."""
+        from moteur import regles
+        f = self.faux()
+        abandon = "Aucune place d'agent libre après 1200 s : lancement abandonné (la tâche reste en attente)"
+        f.reponse_lancer = {"etat": "en_attente", "erreur": abandon}
+        orig, attentes = f.lancer_agent, []
+
+        def lancer(*a, **k):
+            attentes.append(k.get("attente_max_s"))
+            r = orig(*a, **k)
+            st._noter(k["dossier"], f.ident, {"etat": "en_attente", "abandonnee": True})
+            return r
+
+        def executeur(**kw):
+            return es.ExecuteurServeur(self.projet, TACHE, "seul", {"projet": "demo"}, dossier=self.dossier,
+                                       ssh=object(), dormir=self.dormir, pas_s=15, horloge=lambda: self.t,
+                                       git=faux_git_sans_branche, **kw)
+        with mock.patch.object(sa, "lancer_agent", lancer):
+            r = agents.executer_agent("D.", "M.", agent=agent_dev(), modele="sonnet", dossier_projet=self.projet,
+                                      executeur=executeur(attente_max_s=1200, attente_finale=True), delai_s=900)
+            self.assertEqual(attentes, [1200])                        # aucun second essai (pas 40 minutes d'attente)
+            self.assertEqual(f.lancements[0]["demande"]["limites"]["duree_s"], 900)
+            self.assertTrue(getattr(r, "limite", False))
+            self.assertIn("Aucune place d'agent libre", r.erreur)
+            self.assertEqual(regles._raison_sans_rapport(r), "créneau d'émulation pris plus de 20 minutes")
+            # une tâche ordinaire garde son second essai
+            f.ident = AUTRE
+            agents.executer_agent("D.", "M.", agent=agent_dev(), modele="sonnet", dossier_projet=self.projet,
+                                  executeur=executeur())
+            self.assertEqual(attentes[1:], [600, 600])
+
     def test_premiere_erreur_gardee_quand_le_nouvel_essai_est_refuse(self):
         f = self.faux(branche=f"agent/{TACHE}", flux_=b"Erreur du premier essai : tests rouges",
                       fin={"code": 1, "commits": 1, "branche": f"agent/{TACHE}", "base": BASE})

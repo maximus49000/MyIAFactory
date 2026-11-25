@@ -3433,6 +3433,13 @@ def _demarrer_en_attente(projet, etat, fid):
                     and "serveur" in dep.ordre_du_metier(fac, premiere.get("role"))
                     and any(str(par_id[i].get("etape") or "").startswith(ETAPES_DE_FLUX)
                             or par_id[i].get("etape") in ("retour", "correction") for i in lot["ids"]))
+        # l'étape de capture d'un projet à places serveur, serveur en ligne, avec un agent du serveur : au serveur
+        # seulement (le pilote y conduit l'émulateur). Sinon le choix ordinaire : le moteur, qui ne la lance jamais hors
+        # du serveur, pose alors la validation sans capture (jamais une attente sans fin)
+        captures = (str(premiere.get("etape") or "").startswith(ETAPES_DE_CAPTURES)
+                    and bool(fac.get("agents_serveur_max")) and outil.raison_serveur(fac) is None
+                    and any(a["lieu"] == "serveur" for a in court["agents"]))
+        epinglee = epinglee or captures
         if epinglee:
             # Une étape du flux (correction ou fonctionnalité) d'un projet Flutter : au serveur seulement
             # (`_corrections_au_serveur`), même si le workflow la dit « locale ». Essai réel FM_Stats (f8, 2026-11-25) :
@@ -3464,6 +3471,10 @@ def _demarrer_en_attente(projet, etat, fid):
             elif not (libre and (_polyvalent(libre) or _hors_du_lieu(libre, reserves))
                       and premiere.get("etape") != "cadrage"):
                 continue       # un spécialiste à l'ancienne, ou l'agent attitré du cadrage : la tâche l'attend
+        if agent is None and captures:      # un agent du serveur, quel que soit l'ordre des lieux du métier
+            agent = _agent_local(projet, premiere, lot["modele"], serveur_ok, lieu="serveur", sans_lieu_impose=True)
+            if agent is None:
+                continue
         if agent is None:      # (un agent polyvalent occupé : n'importe quel autre agent libre la reprend)
             agent = _choisir_agent(projet, etat, court, premiere, lot["modele"], local_ok=local_ok, cloud_ok=cloud_ok,
                                    serveur_ok=serveur_ok, epinglee=epinglee)
@@ -5602,8 +5613,30 @@ def limites_de_la_tache(t):
     return {}
 
 
+def apk_des_captures(projet, etat, tid):
+    """L'APK (chemin résolu sur le poste) joint à la validation qu'attend la tâche de capture `tid` : celui que l'agent
+    pilote installe, jamais le plus récent du dossier ; None s'il n'est pas retrouvé (rien ne part alors)."""
+    try:
+        t = _tache(projet, tid)
+        f = fa.lire(projet.factory)
+    except (Refus, fa.FactoryInvalide):
+        return None
+    v = _m(etat, "elements").get(f"{t.get('fonctionnalite')}/{t.get('element')}")
+    if v is None or v.get("phase") != "captures":
+        return None
+    for x in (v.get("dernier_rapport") or {}).get("fichiers") or []:
+        chemin = x.get("chemin")
+        if isinstance(chemin, str) and chemin.lower().endswith(".apk"):
+            p = outil.fichier_du_projet(f, projet.dossier, chemin)
+            if p is not None:
+                return str(p)
+    return None
+
+
 def _raison_sans_rapport(execution):
     """Pourquoi l'agent de capture n'a rien rendu, en une ligne pour le Directeur."""
+    if getattr(execution, "sans_capture", None):      # le moteur ne l'a pas lancé (pas de pilote possible)
+        return _ligne(execution.sans_capture)
     erreur = _ligne(getattr(execution, "erreur", None))
     if getattr(execution, "echeance", False):
         return f"hors délai : les captures n'ont pas abouti en {TRAVAIL_CAPTURES_S // 60} minutes"

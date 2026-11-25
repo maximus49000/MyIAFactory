@@ -3,6 +3,7 @@ import json
 import os
 import time
 import unittest
+from pathlib import Path
 from unittest import mock
 
 from moteur import regles
@@ -553,6 +554,49 @@ class TestCorrectionAvecApk(Base):
         (d,) = self.decisions("valider_etape")
         self.assertIn("20 minutes", d["sans_capture"])
         self.assertEqual(len(self.taches(etape="captures:f1-validation")), 1)      # pas de nouvel essai
+
+    def test_capture_non_lancee_faute_de_pilote_pose_la_validation_avec_la_raison(self):
+        """Le moteur n'a pas lancé l'agent de capture (pilote impossible au départ) : la validation est posée sans
+        capture, avec la raison qu'il donne ; aucun nouvel essai."""
+        t = self.jusqu_aux_captures()
+        self.retour(t["id"], erreur="x", sans_capture="émulateur indisponible : accord recette-emulateur absent")
+        (d,) = self.decisions("valider_etape")
+        self.assertEqual((d["captures"], d["sans_capture"]),
+                         ([], "émulateur indisponible : accord recette-emulateur absent"))
+        self.assertIn(APK, [x["chemin"] for x in d["fichiers"]])
+        self.assertEqual(len(self.taches(etape="captures:f1-validation")), 1)
+
+    def test_la_capture_part_chez_un_agent_du_serveur(self):
+        """Un projet à places serveur : l'agent de capture est un agent du serveur (le pilote y conduit l'émulateur),
+        jamais l'agent du poste qui a fait l'étape d'avant."""
+        from tests.orch_aide import FICHE_LEA
+        (self.dossier / "fiches" / "sam.md").write_text(
+            FICHE_LEA.replace("Clé : dev-1", "Clé : dev-9").replace("Prénom : Léa", "Prénom : Sam")
+            .replace("Lieu : local", "Lieu : serveur"), encoding="utf-8")
+        f = json.loads(self.factory.read_text(encoding="utf-8"))
+        f["agents_serveur_max"] = 1
+        self.factory.write_text(json.dumps(f), encoding="utf-8")
+        from orchestrateur import outil
+        with mock.patch.object(outil, "raison_serveur", return_value=None):
+            t = self.jusqu_aux_captures()
+        self.assertEqual(t["agent"], "dev-9")
+
+    def test_serveur_hors_ligne_la_capture_n_attend_pas_sans_fin(self):
+        """Serveur hors ligne : la tâche de capture n'est pas retenue pour le serveur ; elle part chez l'agent ordinaire,
+        que le moteur ne lance pas (il pose la validation sans capture, `boucle._sans_capture`)."""
+        f = json.loads(self.factory.read_text(encoding="utf-8"))
+        f["agents_serveur_max"] = 1
+        self.factory.write_text(json.dumps(f), encoding="utf-8")
+        from orchestrateur import outil
+        with mock.patch.object(outil, "raison_serveur", return_value="hors ligne"):
+            t = self.jusqu_aux_captures()
+        self.assertEqual(t["agent"], "dev-1")
+
+    def test_l_apk_des_captures_est_celui_de_la_validation(self):
+        t = self.jusqu_aux_captures()
+        self.assertEqual(Path(regles.apk_des_captures(self.projet, self.etat, t["id"])), (self.dossier / APK).resolve())
+        self.etat["elements"]["f1/correction"]["dernier_rapport"]["fichiers"] = [self.preuve()]
+        self.assertIsNone(regles.apk_des_captures(self.projet, self.etat, t["id"]))
 
     def test_les_delais_de_l_etape_de_capture(self):
         self.assertEqual((regles.ATTENTE_CRENEAU_S, regles.TRAVAIL_CAPTURES_S), (1200, 900))

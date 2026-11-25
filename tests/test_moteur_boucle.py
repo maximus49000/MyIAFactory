@@ -720,6 +720,7 @@ class FauxExecuteurServeur:
     def __init__(self, projet, tache, mode, demande_base, apk=None, **kw):
         self.projet, self.tache, self.mode, self.demande_base, self.apk = projet, tache, mode, demande_base, apk
         self.autres_noms = kw.get("autres_noms", ())
+        self.attente_max_s, self.attente_finale = kw.get("attente_max_s"), kw.get("attente_finale", False)
         self.branche, self.arrets = None, 0
         self.arret = __import__("threading").Event()
         self.livrables, self.rapports = [], []      # les lignes rendues par `rapatrier_livrables`, les rapports reçus
@@ -929,6 +930,99 @@ class Serveur(Base):
         f = json.loads(self.factory.read_text(encoding="utf-8"))
         f["agents_serveur_max"] = n
         self.factory.write_text(json.dumps(f), encoding="utf-8")
+
+    # --- L'agent de capture (conception 2026-11-25-captures-de-validation) : en pilote, sur l'APK joint, jamais seul.
+
+    APK_JOINT = "pieces/f1/joint.apk"
+
+    def partir_captures(self):
+        """La tâche de capture de l'élément e1 au départ (son élément attend ses captures avec l'APK joint) ; le
+        départ comme `partir`. Rend l'identifiant de la tâche."""
+        self.regler_places_serveur(1)
+        joint = self.dossier / self.APK_JOINT
+        joint.parent.mkdir(parents=True, exist_ok=True)
+        joint.write_bytes(b"PK\x03\x04joint")
+        self.ok("tache", entree={"id": self.tache, "active": False})       # dev-1 : une tâche à la fois
+        tid = self.ok("tache", entree={"titre": "Captures de validation : Accueil", "fonctionnalite": "f1",
+                                       "role": "dev", "colonne": "dev", "etape": "captures:valider", "element": "e1",
+                                       "agent": "dev-1", "active": True})["id"]
+        etat = self.moteur._etat(self.projet)
+        etat["repris"] = True
+        etat["elements"]["f1/e1"] = {"fid": "f1", "element": {"id": "e1", "nom": "Accueil"}, "pas": 0,
+                                     "phase": "captures", "taches": [tid],
+                                     "dernier_rapport": {"fichiers": [{"chemin": self.APK_JOINT, "titre": "APK"}]}}
+        etat["en_cours"].add(tid)
+        etat["departs"][tid] = {"agent": "dev-1", "taches": [tid], "matiere": "M.", "modele": "sonnet", "lot": None,
+                                "suite": None}
+        self.moteur._partir(self.projet, ("agent", "dev-1", [tid], "M."))
+        return tid
+
+    def retour_sans_agent(self):
+        projet, e = self.moteur.retours.get_nowait()
+        self.assertIs(projet, self.projet)
+        self.assertIsNone(e.rapport)
+        return e
+
+    def test_capture_sans_accord_serveur_ne_part_pas(self):
+        self.accord = False
+        self.regler_places_serveur(1)
+        self.assertIn("recette-emulateur", self.projet.pilote_possible())
+        tid = self.partir_captures()
+        self.assertEqual((self.executeurs, self.lances()), ([], []))      # aucun agent, ni seul ni pilote
+        e = self.retour_sans_agent()
+        self.assertEqual(e.tache, tid)
+        self.assertTrue(e.sans_capture.startswith("émulateur indisponible : "), e.sans_capture)
+        self.assertIn("recette-emulateur", e.sans_capture)
+        self.assertIn("recette-emulateur", regles._raison_sans_rapport(e))
+
+    def test_capture_serveur_sans_emulateur_image_ne_part_pas(self):
+        self.accord = True
+        self.regler_places_serveur(1)
+        self.pilote_refus = "Aucun serveur prêt pour un agent (agent, agent-abonnement, emulateur-image) (ovh : emulateur-image)."
+        self.assertIn("emulateur-image", self.projet.pilote_possible())
+        self.partir_captures()
+        self.assertEqual((self.executeurs, self.lances()), ([], []))
+        self.assertIn("emulateur-image", self.retour_sans_agent().sans_capture)
+
+    def test_capture_sans_place_serveur_n_est_pas_possible(self):
+        self.accord = True
+        self.assertIn("place d'agent serveur", self.projet.pilote_possible())
+        self.regler_places_serveur(1)
+        self.assertIsNone(self.projet.pilote_possible())
+
+    def test_capture_par_un_agent_du_poste_ne_part_pas(self):
+        self.accord = True
+        (self.dossier / "fiches" / "lea.md").write_text(
+            (self.dossier / "fiches" / "lea.md").read_text(encoding="utf-8").replace("Lieu : serveur", "Lieu : local"),
+            encoding="utf-8")
+        self.partir_captures()
+        self.assertEqual(self.lances(), [])
+        self.assertIn("émulateur indisponible", self.retour_sans_agent().sans_capture)
+
+    def test_mode_serveur_prend_l_apk_donne(self):
+        self._poser_apk()                       # le plus récent du dossier : jamais celui de la capture
+        self.accord = True
+        joint = self.dossier / self.APK_JOINT
+        joint.parent.mkdir(parents=True, exist_ok=True)
+        joint.write_bytes(b"PK")
+        self.assertEqual(self.moteur._mode_serveur(self.projet, apk=str(joint)), ("pilote", str(joint)))
+        self.assertEqual(self.moteur._mode_serveur(self.projet, apk=str(self.dossier / "absent.apk")), ("seul", None))
+        self.assertIn("APK joint introuvable", self.moteur.journal[-1])
+        self.partir_captures()
+        (ex,) = self.executeurs
+        self.assertEqual((ex.mode, Path(ex.apk)), ("pilote", joint.resolve()))
+        self.assertIn("`pont <verbe> [arguments]`", self.lances()[-1]["depart"])
+
+    def test_la_capture_porte_ses_limites_une_tache_ordinaire_non(self):
+        self.accord = True
+        self.partir()
+        ordinaire = self.executeurs[-1]
+        self.assertEqual((ordinaire.attente_max_s, ordinaire.attente_finale), (None, False))   # défaut de l'exécuteur
+        self.assertNotIn("delai_s", self.lances()[-1])
+        self.partir_captures()
+        ex = self.executeurs[-1]
+        self.assertEqual((ex.mode, ex.attente_max_s, ex.attente_finale), ("pilote", 1200, True))
+        self.assertEqual(self.lances()[-1]["delai_s"], 900)
 
     def test_places_serveur_du_projet_passees_a_l_executeur(self):
         self.regler_places_serveur(3)

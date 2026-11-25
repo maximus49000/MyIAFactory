@@ -208,8 +208,11 @@ class ExecuteurServeur:
     noter_abonnement = True          # l'instantané d'abonnement du flux est noté par `appel` (compté dans l'abonnement)
 
     def __init__(self, projet, tache, mode, demande_base, dossier=None, ssh=None, dormir=time.sleep, pas_s=15,
-                 horloge=time.monotonic, git=None, attente_max_s=600, apk=None, autres_noms=()):
+                 horloge=time.monotonic, git=None, attente_max_s=600, apk=None, autres_noms=(), attente_finale=False):
         self.projet = Path(projet)
+        # `attente_finale` : une place d'agent attendue `attente_max_s` en vain clôt l'agent (`LimiteServeur`, pas de
+        # second essai d'`agents`) : l'étape de capture n'attend jamais plus que son délai
+        self.attente_finale = attente_finale
         self.apk = apk                   # mode pilote : l'APK déposé sur le serveur (`serveur_agent.lancer_agent`)
         self.tache = tache
         # un lot : la tâche serveur active peut porter le nom d'un autre de ses identifiants (rattachée par celui-là)
@@ -469,6 +472,8 @@ class ExecuteurServeur:
             lu = st.arreter(ident, self.dossier, self.ssh)   # jamais démarrée : rien ne reste en file sur le serveur
             if lu.get("etat") != "inconnu":
                 self._noter(st, ident, {"abandon_traite": True})
+            if self.attente_finale:
+                raise LimiteServeur(erreur or "Aucune place d'agent libre sur le serveur.")
             return None, (1, (erreur or "Aucune place d'agent libre sur le serveur.").encode("utf-8")), False
         return ident, None, etat != "en_cours"
 

@@ -270,10 +270,11 @@ class CorrectionAuServeur(AvecServeur):
         etat["a_lancer"].append(t)
         self.assertEqual(self.lieu_de(self.parties(self.demarrer(etat))[t]), "serveur")
 
-    def test_fonctionnalite_ordinaire_suit_l_ordre_du_projet(self):
+    def test_fonctionnalite_flutter_part_aussi_au_serveur(self):
+        # Essai réel FM_Stats (f8) : les étapes d'une fonctionnalité Flutter partaient chez l'agent du poste.
         self.flutter()
         t = self.tache("flux:dev")
-        self.assertEqual(self.lieu_de(self.parties(self.demarrer())[t]), "local")
+        self.assertEqual(self.lieu_de(self.parties(self.demarrer())[t]), "serveur")
 
     def test_correction_hors_flutter_suit_l_ordre_du_projet(self):
         t = self.tache("flux:dev", fonctionnalite="f2")

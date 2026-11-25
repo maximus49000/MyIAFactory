@@ -474,8 +474,6 @@ export function partieParallelisme(ctx) {
   bloc.append(l.label, c.label, s.label);
   const ordres = partieOrdreDesLieux(ctx);
   bloc.append(ordres.bloc);
-  const plafond = partiePlafond(ctx);
-  if (plafond) bloc.append(plafond);
   if (r.attente) bloc.append(el("p", "avertissement", r.attente));
   for (const n of r.notes) bloc.append(el("p", "note", n));
   if (ctx.etat?.agir && ctx.barre?.demander) {
@@ -493,6 +491,12 @@ export function partieParallelisme(ctx) {
       if (!res?.ok) b.disabled = false;
     });
     bloc.append(erreur, b);
+  }
+  // Le plafond de l'abonnement a son propre bouton : après « Enregistrer », jamais entre les champs et lui (essai réel
+  // 2026-11-25 : le Directeur réglait 4 agents serveur, cliquait le premier bouton vu et n'enregistrait que le plafond).
+  const plafond = partiePlafond(ctx);
+  if (plafond) {
+    bloc.append(el("div", "carte-sous-titre", "Plafond de l'abonnement"), plafond);
   }
   const reprise = partieReprise(ctx);
   if (reprise) bloc.append(reprise);

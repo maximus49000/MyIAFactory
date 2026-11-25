@@ -304,6 +304,15 @@ class TestVerifierV4(unittest.TestCase):
         self.refus({"type": "fonctionnalite", "texte": "Bug", "nature": "correction", "concerne": "f999"})
         self.refus({"type": "fonctionnalite", "texte": "Écran", "concerne": "f5"})     # concerne : correction seulement
 
+    def test_demande_accepte_captures_booleen(self):
+        self.ok({"type": "fonctionnalite", "texte": "Bug", "nature": "correction", "captures": True})
+        self.ok({"type": "fonctionnalite", "texte": "Écran", "captures": False})
+
+    def test_demande_refuse_captures_non_booleen(self):
+        for v in ("oui", 1, None):
+            m = self.refus({"type": "fonctionnalite", "texte": "Bug", "captures": v})
+            self.assertEqual(m, "« captures » vaut vrai ou faux.")
+
     def test_question(self):
         self.ok({"type": "question", "texte": "Comment est calculé le score ?"})
         self.ok({"type": "question", "texte": "Et les bonus ?", "fil": "q1"})

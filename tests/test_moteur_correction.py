@@ -27,6 +27,14 @@ class TestCorrection(Base):
         return self.traiter(type="fonctionnalite", texte="Le score ne se remet pas à zéro", nature="correction",
                             **plus)
 
+    def test_fonctionnalite_creee_garde_captures(self):
+        self.corriger(captures=True)
+        self.assertIs(self.fonc()["captures"], True)
+
+    def test_sans_champ_captures_vaut_non(self):
+        self.corriger()
+        self.assertIs(self.fonc()["captures"], False)
+
     def decisions(self, genre=None):
         return [d for d in self.ok("etat")["decisions"] if genre is None or d["genre"] == genre]
 

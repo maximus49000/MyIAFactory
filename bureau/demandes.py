@@ -44,7 +44,7 @@ AGENTS_SERVEUR = (0, 4)
 LIEUX_D_AGENT = ("local", "serveur", "cloud")
 FACULTATIFS = {"parallelisme": ("agents_serveur_max", "ordre_lieux", "ordre_lieux_par_metier"),
                "session_cloud": ("session", "verdict"), "partenaire_regle": ("id", "texte"), "partenaire_inscrit": ("note",),
-               "faire_chez_partenaire": ("texte", "fichiers"), "challenge": ("texte", "solution"), "fonctionnalite": ("images", "fichiers", "nature", "concerne"),
+               "faire_chez_partenaire": ("texte", "fichiers"), "challenge": ("texte", "solution"), "fonctionnalite": ("images", "fichiers", "nature", "concerne", "captures"),
                "question": ("images", "fichiers", "fil", "fonctionnalite"), "message": ("images", "fichiers"),
                "cahier": ("texte",), "methode": ("texte",), "genre": ("description",), "lecon": ("etage",),
                "organisation": ("texte", "fable", "installer"), "valider_etape": ("texte", "reponses"), "accord_agent": ("texte", "regle", "choix"), "regle_projet": ("id", "texte"), "environnement": ("fonctionnalite", "outil"),
@@ -478,6 +478,8 @@ def _verifier_v4(demande, r, elements):
         nature = demande.get("nature", "fonctionnalite")
         if nature not in NATURES:
             return "« nature » vaut fonctionnalite ou correction."
+        if "captures" in demande and not isinstance(demande["captures"], bool):
+            return "« captures » vaut vrai ou faux."
         if demande.get("concerne") is not None:
             if nature != "correction":
                 return "« concerne » ne sert qu'à une correction."

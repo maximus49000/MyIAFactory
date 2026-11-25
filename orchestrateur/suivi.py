@@ -146,9 +146,10 @@ def tache(donnees, i):
     return next((t for t in donnees["taches"] if t["id"] == i), None)
 
 
-def nouvelle_fonctionnalite(donnees, nom, etape="cadrage", nature="fonctionnalite", concerne=None):
+def nouvelle_fonctionnalite(donnees, nom, etape="cadrage", nature="fonctionnalite", concerne=None,
+                         captures=False):
     f = {"id": f"f{suivant(donnees, 'f')}", "nom": nom, "etape": etape, "genre": None, "workflow": None,
-         "nature": nature, "concerne": concerne,
+         "nature": nature, "concerne": concerne, "captures": captures,
          "agent_cadrage": None, "discussion": [],
          "attend_reponse": False, "cahier": None, "methode": None, "livrable": None, "catalogue": False,
          "decisions": [], "file": [], "elements": {}, "maj": maintenant()}

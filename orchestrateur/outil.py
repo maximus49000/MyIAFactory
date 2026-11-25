@@ -581,7 +581,8 @@ def cmd_actions(ctx, e):
                 raise Refus("« nature » vaut fonctionnalite ou correction.")
             if e.get("concerne") is not None:
                 _fonc(s, e["concerne"])
-            f = su.nouvelle_fonctionnalite(s, texte(e, "texte")[:40], nature=nature, concerne=e.get("concerne"))
+            f = su.nouvelle_fonctionnalite(s, texte(e, "texte")[:40], nature=nature, concerne=e.get("concerne"),
+                                       captures=e.get("captures") is True)
             images, fichiers = _pieces_jointes(ctx, e, f["id"])
             su.ajouter_message(s, f, "utilisateur", e["texte"], images, demande["t"], fichiers)
             ranger_documents(s, f, images, agent="utilisateur", etape=f["etape"])

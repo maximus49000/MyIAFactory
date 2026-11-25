@@ -56,6 +56,42 @@ test("à vérifier : livrables téléchargeables, images légendées, autres fic
   assert.equal(tel.livrables[0].url, "http://100.64.1.2:8765/api/telecharger?fonctionnalite=f1&chemin=build%2Fjeu.apk&projet=demo");
 });
 
+const CAPS = [{chemin: "captures/v7/1.png", legende: "L'accueil"}, {chemin: "captures/v7/2.png", legende: "Le menu ouvert"},
+  {chemin: "captures/v7/3.png", legende: "La partie"}];
+
+test("ce qui a changé : les captures dans l'ordre, numérotées quand il y en a plusieurs, sans doublon dans les images", () => {
+  const d = {...D, captures: CAPS, fichiers: [...D.fichiers, ...CAPS.map((c) => ({chemin: c.chemin, titre: c.legende}))]};
+  const v = V.aVerifier(d, {projet: "demo"});
+  assert.deepEqual(v.changements.map((c) => [c.chemin, c.legende, c.numero]),
+    [["captures/v7/1.png", "L'accueil", "1/3"], ["captures/v7/2.png", "Le menu ouvert", "2/3"], ["captures/v7/3.png", "La partie", "3/3"]]);
+  assert.deepEqual(v.images.map((i) => i.chemin), ["pieces/f1/menu.png", "pieces/f1/brut.png"]);
+  assert.equal(v.sansCapture, "");
+  const seule = V.aVerifier({...D, captures: [CAPS[0]]});
+  assert.equal(seule.changements[0].numero, "");
+});
+
+test("ce qui a changé : la raison sans capture ; rien si non demandée ou si les champs manquent", () => {
+  assert.equal(V.aVerifier({...D, sans_capture: "l'émulateur est resté occupé plus de 20 minutes"}).sansCapture,
+    "l'émulateur est resté occupé plus de 20 minutes");
+  for (const d of [{...D, sans_capture: "non demandée"}, D, {...D, captures: [], sans_capture: ""}]) {
+    const v = V.aVerifier(d);
+    assert.deepEqual([v.changements, v.sansCapture], [[], ""]);
+  }
+});
+
+test("la fenêtre : « Ce qui a changé » entre « En clair » et « Ce que vous validez » ; absente sans capture ni raison", () => {
+  const d = {...D, en_clair: "Le menu était cassé.", captures: CAPS.slice(0, 2)};
+  const {boite} = rendre(d);
+  const t = boite.textContent;
+  const ordre = ["En clair", "Ce qui a changé", "1/2 · L'accueil", "2/2 · Le menu ouvert", "Ce que vous validez", "À vérifier"].map((x) => t.indexOf(x));
+  assert.ok(ordre.every((x, i) => x >= 0 && (i === 0 || x > ordre[i - 1])), JSON.stringify(ordre));
+  assert.equal(boite.tous((n) => n.tagName === "img").length, 2 + 2);
+  const sans = rendre({...D, sans_capture: "pas d'émulateur"}).boite.textContent;
+  assert.ok(sans.includes("Ce qui a changé") && sans.includes("Pas de capture : pas d'émulateur"));
+  assert.ok(!rendre(D).boite.textContent.includes("Ce qui a changé"));
+  assert.ok(!rendre({...D, sans_capture: "non demandée"}).boite.textContent.includes("Ce qui a changé"));
+});
+
 test("lien d'accès : direct sur l'ordinateur, relayé au téléphone, direct pour un site d'ailleurs", () => {
   assert.deepEqual(V.lienAcces(D, {hotePage: "127.0.0.1", projet: "demo"}),
     {url: "http://127.0.0.1:5173/jeu/?mode=essai", description: "Le jeu dans le navigateur", relaye: false,

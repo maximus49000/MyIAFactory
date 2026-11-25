@@ -221,8 +221,16 @@ export function lienAcces(d, {hotePage = "127.0.0.1", projet = projetCourant(), 
 // les livrables téléchargeables (nom, taille, date), les autres fichiers (nommés) et le lien d'accès.
 export function aVerifier(d, options = {}) {
   const images = [], sons = [], livrables = [], autres = [], documents = [];
+  // Ce qui a changé : les captures de la décision, dans l'ordre (numérotées « 1/3 » quand il y en a plusieurs) ; sans
+  // capture, la raison (rien quand elle n'a pas été demandée). Elles ne sont pas redites dans la liste des images.
+  const caps = (Array.isArray(d?.captures) ? d.captures : []).filter((c) => plein(c?.chemin) && estImage(c.chemin));
+  const changements = caps.map((c, n) => ({chemin: c.chemin, legende: plein(c.legende) ? c.legende.trim() : "",
+    numero: caps.length > 1 ? `${n + 1}/${caps.length}` : ""}));
+  const sansCapture = !changements.length && plein(d?.sans_capture) && d.sans_capture.trim().toLowerCase() !== "non demandée"
+    ? d.sans_capture.trim() : "";
+  const dejaMontrees = new Set(changements.map((c) => c.chemin));
   for (const f of Array.isArray(d?.fichiers) ? d.fichiers : []) {
-    if (!plein(f?.chemin)) continue;
+    if (!plein(f?.chemin) || dejaMontrees.has(f.chemin)) continue;
     const nom = f.chemin.split(/[\\/]/).pop();
     const titre = plein(f.titre) ? f.titre : nom;
     const projet = options.projet ?? projetCourant(), origine = options.origine || null;
@@ -241,7 +249,7 @@ export function aVerifier(d, options = {}) {
                                              options.origine || null)});
     } else autres.push({chemin: f.chemin, titre});
   }
-  return {images, sons, livrables, documents, autres, acces: lienAcces(d, options)};
+  return {changements, sansCapture, images, sons, livrables, documents, autres, acces: lienAcces(d, options)};
 }
 
 // La demande envoyée : `null` tant qu'un point n'a pas sa réponse ; sinon une réponse par point (dans l'ordre), le
@@ -303,6 +311,35 @@ export function contenuValidation(ctx, d, {fermer = () => {}, hotePage = hoteDeL
     boite.append(s0);
   }
 
+  const v = aVerifier(d, {hotePage, origine});
+
+  // 0 bis. Ce qui a changé : les captures de l'application (légendées, agrandissables), ou la raison de leur absence.
+  if (v.changements.length || v.sansCapture) {
+    const sc = section("Ce qui a changé");
+    sc.className = "val-partie val-changements";
+    if (v.changements.length) {
+      const liste = el("div", "val-captures");
+      v.changements.forEach((im, n) => {
+        const fig = el("figure", "val-capture");
+        const b = el("button", "val-vignette");
+        b.type = "button";
+        b.setAttribute("aria-label", "Agrandir : " + (im.legende || im.chemin));
+        const img = el("img", "");
+        img.src = urlImageValidation(im.chemin);
+        img.alt = im.legende || im.chemin;
+        reessayerImage(img);
+        b.append(img);
+        b.addEventListener("click", () => ouvrirVisionneuse(v.changements, n, urlImageValidation, b));
+        fig.append(b);
+        const texte = [im.numero, im.legende].filter(Boolean).join(" · ");
+        if (texte) fig.append(el("figcaption", "val-legende", texte));
+        liste.append(fig);
+      });
+      sc.append(liste);
+    } else sc.append(el("p", "val-sans-capture", `Pas de capture : ${v.sansCapture}`));
+    boite.append(sc);
+  }
+
   // 1. Ce qu'il y a à valider.
   const s1 = section("Ce que vous validez");
   for (const x of enteteValidation(d)) {
@@ -321,8 +358,7 @@ export function contenuValidation(ctx, d, {fermer = () => {}, hotePage = hoteDeL
   boite.append(s1);
 
   // 2. De quoi vérifier.
-  const v = aVerifier(d, {hotePage, origine});
-  const s2 = section("À vérifier");
+  const s2 =section("À vérifier");
   for (const l of v.livrables) {
     const ligne = el("div", "val-livrable");
     const texte = el("div", "val-livrable-texte");

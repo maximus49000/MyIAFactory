@@ -559,6 +559,26 @@ depuis le compte de l'abonnement (chemin exact non vérifié ici).
   `docker-run.log` (l'échec d'un `docker run`), `pont-hote.log` (une ligne par appel du pont hôte) et `pont-hote.out` (sa sortie d'erreur). `sortie/claude.err` (64 Ko) n'existe qu'à la fin de la tâche.
 - **Reste d'un incident** : un conteneur `tache-<id>` qui ne s'arrête pas est dit par la raison de la tâche (« à arrêter à la main (docker stop) ») ; `sudo docker ps --filter label=myiafactory.genre=agent` les liste.
 
+## Suivi en direct
+
+Pendant que l'agent travaille, la fiche de sa tâche au bureau montre ce que montre un agent local : sa dernière action, sa phase,
+sa liste de points (faits, en cours, restants), le temps passé, son coût et **l'historique de ses appels** (20 visibles, 50 gardés).
+
+- **L'entrée du conteneur** (PID 1, de confiance) publie toutes les 5 s `/sortie/direct.json` (temporaire puis renommage, 0600, 64 Ko
+  au plus) : `{"v": 1, "actions": [{"t", "texte"}] (50 au plus, la plus récente d'abord), "phase", "usage": [...], "avancement"}`.
+  Les actions sont courtes (« modifie scenes/combat.gd », « lance python ») : **jamais le contenu** d'une commande, d'un fichier ni
+  d'un message. Une action dont le texte contient le jeton, ou un de ses alignements base64, n'est pas publiée. La liste de points
+  est celle que l'agent écrit lui-même dans `/maison/avancement.json` (consigne `CONSIGNE_AVANCEMENT_SERVEUR`), relue ici : 64 Ko
+  au plus, 30 points de 160 caractères. Le fichier est retiré de `/sortie` à la fin (`nettoyer_sortie`) ; le flux brut, lui, reste
+  rapatrié à la fin seulement, après le contrôle du secret.
+- **Le poste** (`serveur_agent.lire_direct`) le lit à chaque sonde de l'exécuteur (60 s au plus, jamais d'erreur : un serveur muet
+  ou un fichier mal formé laissent la fiche telle qu'elle était) et **revalide tout** : version 1, tailles, types, phase connue.
+- **Le bureau** lit une copie locale, `agents-en-cours/<cle>.direct.json`, écrite par `ExecuteurServeur._copier_direct` et supprimée
+  à la fin de l'agent. `detache.ajouter_au_travail` la traite comme un agent local ; une copie non rafraîchie depuis 3 minutes
+  (moteur arrêté) n'est plus montrée. Dans un lot, la tâche en cours est la première ; les autres sont « à venir ».
+- **L'agent peut forger** `direct.json` (il peut écrire sous `/sortie`) : cela ne trompe que l'affichage de sa propre fiche ; un lien
+  posé à sa place est remplacé, jamais suivi.
+
 ## Limites connues
 
 - **Projets homonymes.** Le bureau retrouve le projet d'un agent par le **nom du dossier** : deux projets du bureau de même nom de dossier n'ont **aucune** marque d'arrêt posée (l'arrêt sur le serveur a lieu quand même).
@@ -567,13 +587,14 @@ depuis le compte de l'abonnement (chemin exact non vérifié ici).
 - **Installation et recrutement.** L'installation (skill d'installation) et le recrutement d'agents **ne proposent pas encore d'agents serveur** : les places serveur et l'ordre des lieux se règlent à la main (bureau ou
   `factory.json`).
 - **Pas de `.factory/recettes`.** Un agent serveur **ne peut pas livrer** `.factory/recettes` (ni rien sous `.factory`) : la branche serait gardée, non fusionnée. Les recettes se font au poste.
-- **Flux et `claude.err`** n'existent qu'à la fin de la tâche : on ne peut pas suivre l'agent en direct, seulement l'état, la durée et les journaux de l'hôte.
+- **Flux et `claude.err`** n'existent qu'à la fin de la tâche (le flux brut n'est jamais montré avant) ; le suivi en direct n'en donne qu'un résumé, voir « Suivi en direct ».
 - **Réseau ouvert** (voir « Sécurité ») et **accord permanent** de la recette sur émulateur : mêmes limites que la tranche A.
 
 ## Non vérifié sur un vrai serveur
 
 Tout ce qui précède est vérifié par des tests simulés. À prouver sur le serveur réel (voir « Essais réels ») :
 
+- Le **suivi en direct** : l'image `myiafactory/agent` doit être reconstruite sur le serveur ; une tâche réelle doit montrer, dans sa fiche, la dernière action, la liste de points et l'historique qui avancent, et aucun `direct.json` ne doit rester sous `sortie/` après sa fin.
 - **Node et Claude Code** lancés avec `--user <uid>:<gid>` **sans entrée dans `/etc/passwd`**, sur un système de fichiers racine en **lecture seule**, avec `HOME=/maison`.
 - L'acceptation d'un jeton **`setup-token`** par `CLAUDE_CODE_OAUTH_TOKEN` en mode `-p` (et le déroulé exact de `claude setup-token` dans un conteneur sans navigateur : lien, code éventuel, affichage du jeton).
 - Le **trafic sortant** du réseau `myiafactory-agents` sous les règles `ufw` du serveur (l'API de Claude passe-t-elle ?).

@@ -463,6 +463,60 @@ class TacheBloquee(tsr.AvecValidation):
         (action,) = regles.repondre_en_autonome(self.projet, self.etat)
         self.assertNotIn("faits_du_service", action[2])
 
+    # --- Étape 4 : le résultat de l'action est vérifié aux passages suivants.
+
+    def relancer(self):
+        self.bloquer()
+        self.appliquer(self.juger(), objet(verdict="relancer", texte="Refais la recette."))
+        self.traiter_la_reponse()
+        self.assertFalse(self.la(self.recette).get("bloquee"))
+
+    def test_suivi_la_tache_terminee_est_dite(self):
+        self.relancer()
+        self.ok("tache", entree={"id": self.recette, "colonne": "fait", "journal": ["Recette passée."]})
+        avant = len(self.paroles())
+        regles.repondre_en_autonome(self.projet, self.etat)
+        (parole,) = self.paroles()[avant:]
+        self.assertIn("est terminée", parole)
+        regles.repondre_en_autonome(self.projet, self.etat)
+        self.assertEqual(len(self.paroles()), avant + 1)             # une seule fois
+
+    def test_suivi_meme_cause_pas_de_nouvelle_tentative_et_le_chef_le_dit(self):
+        self.relancer()
+        self.ok("tache", entree={"id": self.recette, "bloquee": BLOQUEE})
+        avant = len(self.paroles())
+        self.assertEqual(regles.repondre_en_autonome(self.projet, self.etat), [])
+        (parole,) = self.paroles()[avant:]
+        self.assertIn("même raison", parole)
+        self.assertIn("c'est à vous de décider", parole)
+
+    def test_suivi_une_autre_cause_a_sa_tentative(self):
+        self.relancer()
+        self.ok("tache", entree={"id": self.recette, "bloquee": "Autre cause : /equipe/77 renvoie 500."})
+        avant = len(self.paroles())
+        actions = regles.repondre_en_autonome(self.projet, self.etat)
+        self.assertEqual(len(actions), 1)
+        self.assertEqual(actions[0][2]["decision"]["genre"], "tache_bloquee")
+        self.assertIn("autre raison", self.paroles()[avant:][0])
+
+    def test_trois_tentatives_au_plus_puis_le_chef_le_dit_une_fois(self):
+        self.etat["autonome_reprises"] = {("tache_bloquee", self.recette): regles.AUTONOME_MAX_REPRISES}
+        self.bloquer()
+        avant = len(self.paroles())
+        self.assertEqual(regles.repondre_en_autonome(self.projet, self.etat), [])
+        self.assertEqual(regles.repondre_en_autonome(self.projet, self.etat), [])
+        (parole,) = self.paroles()[avant:]
+        self.assertIn("trois tentatives", parole)
+
+    def test_suivi_pendant_l_attente_du_service_rien_n_est_dit(self):
+        self.avec_service([("attente", "en cours")] * 3)
+        self.bloquer()
+        self.appliquer(self.juger(), objet(verdict="redeployer"))
+        self.traiter_la_reponse()
+        avant = len(self.paroles())
+        regles.repondre_en_autonome(self.projet, self.etat)
+        self.assertEqual(len(self.paroles()), avant)
+
     # --- Cas 8 : une relance par changement de cause, jamais sans changement.
 
     def passer(self, signature):

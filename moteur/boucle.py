@@ -1715,6 +1715,12 @@ class Moteur:
         Directeur, avec la branche et l'adresse de la session. Un agent serveur : sa branche locale `agent/<tâche>`
         (rapatriée par paquet Git, `distante=False`)."""
         if getattr(e, "serveur", False):
+            etat_branche = getattr(self.cloud, "etat_de_la_branche", None)
+            if etat_branche is not None and etat_branche(str(projet.dossier), e.branche)[0] in ("absente", "vide"):
+                # une tâche qui ne modifie aucun fichier : rien à fusionner, la tâche se clôt normalement (essai réel
+                # FM_Stats a12, t284 : « la branche n'a pas pu être lue » bloquait comme un conflit)
+                regles._journal(projet, e.tache, f"Rien à fusionner : la branche {e.branche} n'a aucun commit à ajouter.")
+                return
             raison = self.cloud.fusionner(str(projet.dossier), e.branche, distante=False)
         else:
             raison = self.cloud.fusionner(str(projet.dossier), e.branche)

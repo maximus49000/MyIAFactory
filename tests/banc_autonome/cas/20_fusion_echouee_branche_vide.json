@@ -1,0 +1,115 @@
+{
+ "id": "20_fusion_echouee_branche_vide",
+ "titre": "« La branche n'a pas pu être lue avant sa fusion » : la tâche n'a modifié aucun fichier",
+ "type": "jugement",
+ "negatif": false,
+ "source": "Essai réel FM_Stats a12, t284, 2026-11-26 (23:05) ; probablement aussi t258 et t260 (« la branche n'existe pas »)",
+ "note": "Une tâche sans commit n'a pas de branche : rien à fusionner. Ne pas renvoyer au dev ni parler de conflit : constater que la branche est vide/absente (aucun commit) et relancer la tâche pour qu'elle rende ce qui manque. Le verdict compte (relancer la tâche, pas renvoyer au dev) ; le texte ne doit pas parler de conflit.",
+ "dossier": {
+  "decision": {
+   "genre": "tache_bloquee",
+   "texte": "La tâche « Diagnostic : Déployer et installer » est bloquée (conflit de fusion d'une branche cloud) : La branche agent/t284 n'a pas pu être lue avant sa fusion : elle est gardée, non fusionnée.",
+   "motif": "fusion"
+  },
+  "verdicts": [
+   "relancer",
+   "laisser"
+  ],
+  "choix": [],
+  "questions": [],
+  "tache": {
+   "id": "t284",
+   "titre": "Diagnostic : Déployer et installer",
+   "etape": "cadrage",
+   "metier": "cadrage",
+   "element": null,
+   "journal": [
+    "Rapport rendu sans cahier ni question.",
+    "Fusion de la branche agent/t284 impossible : la branche agent/t284 n'a pas pu être lue avant sa fusion : elle est gardée, non fusionnée."
+   ]
+  },
+  "fonctionnalite": {
+   "id": "f30",
+   "nom": "Statistiques par équipe",
+   "etape": "serie",
+   "flux": [
+    {
+     "nom": "Dev",
+     "validation": false
+    },
+    {
+     "nom": "Recette",
+     "validation": false
+    },
+    {
+     "nom": "Validation du Directeur",
+     "validation": true
+    }
+   ]
+  },
+  "lecons_du_metier": [],
+  "deja_appris": [],
+  "recentes": [],
+  "mots_interdits": [
+   "ProjetExemple"
+  ],
+  "anomalies": [],
+  "service": {
+   "adresse": "https://service.exemple",
+   "redeployable": false
+  },
+  "taches_dev": [
+   {
+    "id": "t280",
+    "titre": "Page de diagnostic",
+    "etape": "dev",
+    "metier": "dev",
+    "journal": [
+     "Livré."
+    ]
+   }
+  ],
+  "faits_du_service": {
+   "commit": "2b0ad4a",
+   "etat": "actif",
+   "sante_ok": true,
+   "secrets": {},
+   "pages": [
+    {
+     "chemin": "/sante",
+     "code": 200,
+     "ms": 15
+    }
+   ],
+   "journal": [],
+   "erreur": null
+  },
+  "branches_agent": [
+   {
+    "branche": "agent/t280",
+    "fusionnee": true,
+    "sujet": "Page de diagnostic"
+   }
+  ]
+ },
+ "attendu": {
+  "verdicts": [
+   "relancer"
+  ],
+  "texte_exclut": [
+   "conflit"
+  ]
+ },
+ "simule": {
+  "raison": "agent/t284 n'existe pas : la tâche n'a modifié aucun fichier, il n'y a rien à fusionner.",
+  "verdict": "relancer",
+  "texte": "La branche agent/t284 est absente parce que la tâche n'a fait aucun commit : il n'y a rien à fusionner, rien n'est bloqué par la fusion. Rends le cahier ou ta question.",
+  "choix": null,
+  "reponses": null,
+  "generalisable": false,
+  "lecon": null,
+  "amelioration": null,
+  "anomalies": null
+ },
+ "decision_id": "d20"
+}

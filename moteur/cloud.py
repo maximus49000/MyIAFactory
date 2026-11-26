@@ -442,10 +442,32 @@ def etat_hors_du_depot(dossier, executer=None):
     return bool(change or suivis)
 
 
+def etat_de_la_branche(dossier_projet, branche, *, executer=None):
+    """La branche LOCALE `branche` d'un agent serveur, avant sa fusion : `("absente", "")` (aucun commit n'a été rapatrié :
+    une tâche qui ne modifie aucun fichier n'en laisse pas), `("vide", "")` (aucun commit que HEAD n'ait déjà :
+    `git rev-list --count HEAD..branche`), `("a_fusionner", "")`, ou `("illisible", raison)` (git répond autre chose que
+    « absente » : corrompue). Lecture seule. Une réponse de comptage illisible vaut « à fusionner » (le comportement
+    d'avant)."""
+    code, sortie = _git(executer, dossier_projet, "show-ref", "--verify", "-q", f"refs/heads/{branche}", delai_s=30)
+    if code == 1:
+        return "absente", ""
+    if code != 0:
+        return "illisible", _texte(sortie)[:200] or f"git show-ref a répondu {code}"
+    code, sortie = _git(executer, dossier_projet, "rev-list", "--count", f"HEAD..refs/heads/{branche}", delai_s=30)
+    if code != 0:
+        return "illisible", _texte(sortie)[:200] or f"git rev-list a répondu {code}"
+    return ("vide", "") if _texte(sortie) == "0" else ("a_fusionner", "")
+
+
 def fusionner(dossier_projet, branche, *, executer=None, distante=True):
     with git_sur.verrou(dossier_projet):      # la fusion et son envoi d'un seul tenant, sans autre git du moteur
         if distante:
             return _fusionner(dossier_projet, branche, executer)
+        etat, raison = etat_de_la_branche(dossier_projet, branche, executer=executer)
+        if etat in ("absente", "vide"):
+            return None      # rien à fusionner : jamais un « conflit » (la tâche n'a rien commité)
+        if etat == "illisible":
+            return f"la branche {branche} est illisible ({raison}) : elle est gardée, non fusionnée."
         with tempfile.TemporaryDirectory(prefix="myiafactory-sans-crochet-") as vide:
             # agent serveur : jamais un crochet (hook) ni fsmonitor du dépôt pendant la fusion de sa branche
             options = ("-c", f"core.hooksPath={Path(vide).as_posix()}", "-c", "core.fsmonitor=false")

@@ -1,0 +1,18 @@
+{
+ "id": "14_non_validation_directeur",
+ "titre": "Une étape de validation du Directeur",
+ "type": "hors_jugement",
+ "negatif": true,
+ "source": "Essai réel FM_Stats, 2026-11-26",
+ "note": "Une validation n'arrive jamais à Claude autonome : aucun jugement n'est demandé, elle reste au Directeur.",
+ "dossier": {
+  "decision": {
+   "genre": "valider_etape",
+   "texte": "Validez l'étape Cadrage."
+  }
+ },
+ "attendu": {
+  "aucun_jugement": true
+ },
+ "simule": null
+}

@@ -1,0 +1,40 @@
+{
+ "id": "08_serie_arretee_organisation_attendue",
+ "titre": "« Série arrêtée » pendant que la proposition de workflow attend le Directeur",
+ "type": "moteur_impasse",
+ "negatif": false,
+ "source": "Essai réel FM_Stats, 2026-11-26",
+ "note": "La décision organisation (portée projet) attend la réponse du Directeur : ce n'est pas une impasse, le moteur ne doit poser aucune décision « série arrêtée ». Règle du moteur, pas un jugement : rejouée à l'identique avec le vrai jugement.",
+ "dossier": {
+  "etat_court": {
+   "taches": [],
+   "fonctionnalites": [
+    {
+     "id": "f29",
+     "etape": "cadrage",
+     "attend_reponse": false
+    }
+   ],
+   "decisions": [
+    {
+     "id": "d1",
+     "genre": "organisation",
+     "portee": "projet",
+     "organisation": {
+      "fonctionnalite": "f29",
+      "workflow": {}
+     }
+    }
+   ]
+  },
+  "detail": {
+   "maj": "2020-01-01T00:00:00+00:00",
+   "decisions": [],
+   "discussion": []
+  }
+ },
+ "attendu": {
+  "impasses": []
+ },
+ "simule": null
+}

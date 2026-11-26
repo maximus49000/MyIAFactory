@@ -1,0 +1,112 @@
+{
+ "id": "05_recette_503_index",
+ "titre": "Recette bloquée par un 503 « Index en préparation »",
+ "type": "jugement",
+ "negatif": false,
+ "source": "Essai réel FM_Stats, 2026-11-26",
+ "note": "Les index se créent en arrière-plan : attendre la santé du service puis relancer la recette ; renvoyer au dev serait faux.",
+ "dossier": {
+  "decision": {
+   "genre": "tache_bloquee",
+   "texte": "Tâche bloquée sans décision.",
+   "motif": "recette_echec"
+  },
+  "verdicts": [
+   "relancer",
+   "renvoyer",
+   "laisser"
+  ],
+  "choix": [],
+  "questions": [],
+  "tache": {
+   "id": "t21",
+   "titre": "Recette des classements",
+   "etape": "recette",
+   "metier": "testeur",
+   "element": "e1",
+   "journal": [
+    "Toutes les pages : 503 Index en préparation."
+   ]
+  },
+  "fonctionnalite": {
+   "id": "f30",
+   "nom": "Statistiques par équipe",
+   "etape": "serie",
+   "flux": [
+    {
+     "nom": "Dev",
+     "validation": false
+    },
+    {
+     "nom": "Recette",
+     "validation": false
+    },
+    {
+     "nom": "Validation du Directeur",
+     "validation": true
+    }
+   ]
+  },
+  "lecons_du_metier": [],
+  "deja_appris": [],
+  "recentes": [],
+  "mots_interdits": [
+   "ProjetExemple"
+  ],
+  "anomalies": [],
+  "service": {
+   "adresse": "https://service.exemple",
+   "redeployable": false
+  },
+  "taches_dev": [
+   {
+    "id": "t15",
+    "titre": "Classements",
+    "etape": "dev",
+    "metier": "dev",
+    "journal": [
+     "Index créés en arrière-plan au démarrage."
+    ]
+   }
+  ],
+  "faits_du_service": {
+   "commit_deploye": "f4e5d6c",
+   "commit_fusionne": "f4e5d6c",
+   "sante": "demarrage",
+   "journal_service": [
+    "Index en préparation (3/5)",
+    "GET /classements 503"
+   ]
+  },
+  "rapport_de_la_tache": {
+   "statut": "echec",
+   "message": "503 Index en préparation."
+  }
+ },
+ "attendu": {
+  "verdicts": [
+   "relancer"
+  ],
+  "texte_evoque": [
+   [
+    "santé",
+    "sante",
+    "prêt",
+    "pret",
+    "attend"
+   ]
+  ]
+ },
+ "simule": {
+  "raison": "Réponse simulée du banc.",
+  "verdict": "relancer",
+  "texte": "Les index sont créés en arrière-plan : attends que le service soit sain (plus de 503), puis refais la recette complète.",
+  "choix": null,
+  "reponses": null,
+  "generalisable": false,
+  "lecon": null,
+  "amelioration": null,
+  "anomalies": null
+ },
+ "decision_id": "d5"
+}

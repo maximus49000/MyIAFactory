@@ -1,0 +1,106 @@
+{
+ "id": "04_recette_service_sans_correctif",
+ "titre": "Recette bloquée : le service tourne sans la correction fusionnée",
+ "type": "jugement",
+ "negatif": false,
+ "source": "Essai réel FM_Stats, 2026-11-26",
+ "note": "Le service en ligne expire sur /equipe/77 : il n'a pas la correction fusionnée. Redéployer, puis relancer la recette ; pas « laisser bloquée ».",
+ "dossier": {
+  "decision": {
+   "genre": "tache_bloquee",
+   "texte": "Tâche bloquée sans décision.",
+   "motif": "recette_echec"
+  },
+  "verdicts": [
+   "relancer",
+   "renvoyer",
+   "redeployer",
+   "laisser"
+  ],
+  "choix": [],
+  "questions": [],
+  "tache": {
+   "id": "t20",
+   "titre": "Recette de la page équipe",
+   "etape": "recette",
+   "metier": "testeur",
+   "element": "e1",
+   "journal": [
+    "GET /equipe/77 : délai dépassé (30 s)."
+   ]
+  },
+  "fonctionnalite": {
+   "id": "f30",
+   "nom": "Statistiques par équipe",
+   "etape": "serie",
+   "flux": [
+    {
+     "nom": "Dev",
+     "validation": false
+    },
+    {
+     "nom": "Recette",
+     "validation": false
+    },
+    {
+     "nom": "Validation du Directeur",
+     "validation": true
+    }
+   ]
+  },
+  "lecons_du_metier": [],
+  "deja_appris": [],
+  "recentes": [],
+  "mots_interdits": [
+   "ProjetExemple"
+  ],
+  "anomalies": [],
+  "service": {
+   "adresse": "https://service.exemple",
+   "redeployable": true
+  },
+  "taches_dev": [
+   {
+    "id": "t15",
+    "titre": "Page équipe",
+    "etape": "dev",
+    "metier": "dev",
+    "journal": [
+     "Correction du délai fusionnée au commit f4e5d6c."
+    ]
+   }
+  ],
+  "faits_du_service": {
+   "commit_deploye": "0a0a0a0",
+   "commit_fusionne": "f4e5d6c",
+   "sante": "ok",
+   "pages": {
+    "/equipe/77": {
+     "code": null,
+     "duree_s": 30.0
+    }
+   }
+  },
+  "rapport_de_la_tache": {
+   "statut": "echec",
+   "message": "/equipe/77 expire."
+  }
+ },
+ "attendu": {
+  "verdicts": [
+   "redeployer"
+  ]
+ },
+ "simule": {
+  "raison": "Réponse simulée du banc.",
+  "verdict": "redeployer",
+  "texte": "Le service tourne sans la correction fusionnée : redéploie puis refais la recette sur /equipe/77.",
+  "choix": null,
+  "reponses": null,
+  "generalisable": false,
+  "lecon": null,
+  "amelioration": null,
+  "anomalies": null
+ },
+ "decision_id": "d4"
+}

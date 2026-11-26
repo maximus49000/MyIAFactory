@@ -51,6 +51,9 @@ refusée.
 `anomalies` : `null`, ou `[{"id", "etat"}]` pour les anomalies du dossier que la cause désigne : `reglee` si le défaut du
 logiciel est corrigé depuis, `vue` sinon. Un défaut du moteur lui-même (pas du projet) demande aussi une `amelioration`.
 
+Si la cause est un défaut du moteur (pas du projet), `amelioration` porte aussi `"defaut_moteur": true`, `diagnostic`, `correction`
+et `test` : le moteur en fait une fiche pour le Directeur ; il ne corrige jamais le moteur seul.
+
 Pour rendre le moteur plus performant :
 - `lecon` (attendue dès que la cause peut revenir) : `{"portee": "metier", "texte": "…"}` pour le métier de ce
   projet, ou `"genre"` pour tous les projets du même genre ; une phrase de 300 caractères au plus qui dit à l'agent

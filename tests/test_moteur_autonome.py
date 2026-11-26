@@ -517,6 +517,35 @@ class TacheBloquee(tsr.AvecValidation):
         regles.repondre_en_autonome(self.projet, self.etat)
         self.assertEqual(len(self.paroles()), avant)
 
+    # --- Étape 5 : un défaut du moteur lui-même devient une fiche, jamais un correctif appliqué seul.
+
+    def test_un_defaut_du_moteur_devient_une_fiche_dite_par_le_chef(self):
+        self.bloquer()
+        avant = len(self.paroles())
+        a = {"titre": "Index créés avant l'écoute du port", "description": "Vu sur la recette.", "defaut_moteur": True,
+             "diagnostic": "Les index bloquent le démarrage.", "correction": "Les créer en arrière-plan.",
+             "test": "Le port répond avant la fin des index."}
+        self.appliquer(self.juger(), objet(verdict="laisser", amelioration=a))
+        (fiche,) = self.ok("anomalies")["anomalies"]
+        self.assertTrue(fiche["titre"].startswith("Défaut du moteur : "))
+        for mot in ("Diagnostic", "Correction attendue", "Test à écrire"):
+            self.assertIn(mot, fiche["description"])
+        (parole,) = self.paroles()[avant:]
+        self.assertIn("défaut du moteur lui-même", parole)
+        self.assertIn("je ne le corrige pas seul", parole)
+
+    def test_defaut_du_moteur_sans_diagnostic_ni_test_est_refuse(self):
+        self.bloquer()
+        _, _, dossier, _ = self.juger()
+        a = {"titre": "Défaut", "description": "x", "defaut_moteur": True}
+        self.assertIn("diagnostic", jugement.valider("decider_autonome", objet(verdict="laisser", amelioration=a), dossier))
+
+    def test_une_amelioration_simple_reste_une_amelioration(self):
+        self.bloquer()
+        self.appliquer(self.juger(), objet(verdict="laisser", amelioration={"titre": "Idée", "description": "Un réglage."}))
+        (fiche,) = self.ok("anomalies")["anomalies"]
+        self.assertTrue(fiche["titre"].startswith("Amélioration : "))
+
     # --- Cas 8 : une relance par changement de cause, jamais sans changement.
 
     def passer(self, signature):

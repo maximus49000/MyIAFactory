@@ -8027,7 +8027,7 @@ def _dire_le_travail(projet, tid, phrase, fid=None):
             pass
 
 
-def _phrase_autonome(projet, d, demande, raison, lecon):
+def _phrase_autonome(projet, d, demande, raison, lecon, defaut=None):
     """Ce que dit le Chef d'une réponse de Claude autonome à `d` : le geste, la tâche, la raison (français simple)."""
     v, texte, titre = demande["verdict"], demande.get("texte"), ""
     if d.get("tache"):
@@ -8049,16 +8049,19 @@ def _phrase_autonome(projet, d, demande, raison, lecon):
     phrase += f" Pourquoi : {raison}"
     if lecon:
         phrase += f" J'en retiens une leçon : {lecon['texte']}"
+    if defaut:
+        phrase += (f" La cause est un défaut du moteur lui-même (« {defaut['titre']} ») : je ne le corrige pas seul, une fiche "
+                   "(diagnostic, correction, test) est prête dans les anomalies du logiciel pour le Directeur.")
     return phrase
 
 
-def _deposer_autonome(projet, etat, d, demande, raison, lecon=None):
+def _deposer_autonome(projet, etat, d, demande, raison, lecon=None, defaut=None):
     """Dépose la réponse comme une demande du bureau (traitée au même passage, journalisée avec sa raison, dite au bureau
     par le Chef : un seul message par réponse)."""
     lancer(projet, "actions", {**demande, "claude_autonome": True, "raison": raison[:600]})
     if d.get("tache"):
         _journal(projet, d["tache"], f"Claude autonome ({demande['verdict']}) : {raison}")
-    _dire_le_travail(projet, d.get("tache"), _phrase_autonome(projet, d, demande, raison, lecon), d.get("fonctionnalite"))
+    _dire_le_travail(projet, d.get("tache"), _phrase_autonome(projet, d, demande, raison, lecon, defaut), d.get("fonctionnalite"))
     recentes = etat.setdefault("autonome_recentes", [])
     recentes.append({"genre": d["genre"], "sur": str(d.get("quoi") or d.get("programme") or d.get("motif") or "")[:120],
                      "verdict": demande["verdict"], "raison": raison[:200]})
@@ -8083,7 +8086,8 @@ def _apres_decider_autonome(projet, o, ctx, etat):
         return []      # le Directeur a répondu pendant la réflexion : rien à faire
     _journal_des_lectures(projet, d, o)
     try:
-        _deposer_autonome(projet, etat, d, _demande_autonome(d, o), o["raison"], o.get("lecon"))
+        _deposer_autonome(projet, etat, d, _demande_autonome(d, o), o["raison"], o.get("lecon"),
+                          (o.get("amelioration") or {}) if (o.get("amelioration") or {}).get("defaut_moteur") is True else None)
     except Refus:
         return []      # la décision reste posée : le Directeur la voit
     if d["genre"] == GENRE_TACHE_BLOQUEE:
@@ -8102,8 +8106,12 @@ def _apres_decider_autonome(projet, o, ctx, etat):
     a = o.get("amelioration")
     if a:
         try:
-            lancer(projet, "anomalies", {"action": "ajouter", "titre": "Amélioration : " + a["titre"],
-                                         "description": a["description"], **({"tache": t["id"]} if t.get("id") else {}),
+            moteur_seul = a.get("defaut_moteur") is True      # une fiche de correction, jamais appliquée seule
+            fiche = (f"Diagnostic : {a.get('diagnostic')} Correction attendue : {a.get('correction')} Test à écrire : "
+                     f"{a.get('test')} {a['description']}")[:900] if moteur_seul else a["description"]
+            lancer(projet, "anomalies", {"action": "ajouter",
+                                         "titre": ("Défaut du moteur : " if moteur_seul else "Amélioration : ") + a["titre"],
+                                         "description": fiche, **({"tache": t["id"]} if t.get("id") else {}),
                                          **({"titre_tache": t.get("titre") or ""} if t.get("id") else {})})
         except Refus as ex:
             if t.get("id"):

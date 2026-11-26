@@ -19,6 +19,9 @@ SEPARATEURS = re.compile(r"&&|\|\||[;|&\n\r]")
 TRANSPARENTS = ("cd",)      # aller dans un dossier ne demande aucun accord : ce n'est pas le programme qui manque
 SECRET = re.compile(r"(?i)(-{0,2}[\w-]*(?:pass|pwd|secret|token|apikey|api-key|credential)[\w-]*)([=\s:]+)(\S+)")
 EXTENSIONS = (".exe", ".cmd", ".bat", ".com")
+# Les commandes uniques que la plateforme met à la disposition d'un agent SERVEUR (`serveur_ovh/agent-outils/outil-flutter.sh`,
+# une par verbe de son `case`) : elles existent, un agent serveur qui les réclame les reçoit sans rien demander au Directeur.
+COMMANDES_PLATEFORME_SERVEUR = ("analyser-flutter", "tester-flutter", "construire-apk")
 
 
 def _normal(nom):
@@ -110,9 +113,10 @@ def declares(environnement):
     return noms
 
 
-def origine(programme, environnement):
-    """Pourquoi le programme est « connu du projet » : `"déclaré du projet"`, `"de base des agents"` ou `None`. Un
-    programme désigné par son chemin n'est jamais connu : il revient au Directeur."""
+def origine(programme, environnement, lieu=None):
+    """Pourquoi le programme est « connu du projet » : `"déclaré du projet"`, `"de base des agents"`, `"commande de la
+    plateforme au serveur"` (agent du `lieu` serveur seulement) ou `None`. Un programme désigné par son chemin n'est jamais
+    connu : il revient au Directeur."""
     if fi.est_chemin(programme):
         return None
     p = _normal(programme)
@@ -121,6 +125,8 @@ def origine(programme, environnement):
     de_base, _ = fi.programmes_ouverts({"outils": None})
     if p in {_normal(x) for x in de_base}:
         return "de base des agents"
+    if lieu == "serveur" and p in COMMANDES_PLATEFORME_SERVEUR:
+        return "commande de la plateforme au serveur"
     return None
 
 

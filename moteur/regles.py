@@ -5291,6 +5291,8 @@ def _outil_refuse(projet, etat, execution, depart, r, fid):
         if dite and not commandes:
             commandes = [(dite.group(1) or dite.group(2)).strip()]
         programme, commande = accord_outil.programme_refuse(commandes, fi.outils(fiche))
+    if programme is None and lieu == "serveur" and outil.lower() in accord_outil.COMMANDES_PLATEFORME_SERVEUR:
+        programme = outil.lower()      # l'agent nomme lui-même une commande qui existe au serveur : elle lui est ouverte
     regle = fi.regle_bash(programme) if programme else None
     quoi = regle or outil
     montree = accord_outil.montrer(commande)
@@ -5312,7 +5314,7 @@ def _outil_refuse(projet, etat, execution, depart, r, fid):
         suite = _appeler_par_son_nom(projet, etat, tid, fid, cle, prenom, fiche, commandes)
         if suite is not None:
             return suite
-    origine = accord_outil.origine(programme, _factory(projet).get("environnement")) if programme else None
+    origine = accord_outil.origine(programme, _factory(projet).get("environnement"), lieu) if programme else None
     if origine and lieu in LIEUX_FICHE_DU_POSTE and not _outil_deja_ouvert(projet, tid, regle):
         lancer(projet, "fiche", {"action": "ouvrir_outil", "cle": cle, "outil": regle})
         return _reprendre_la_tache(projet, etat, tid, fid, f"{regle} est maintenant ouvert dans ta fiche : relance ta commande.",

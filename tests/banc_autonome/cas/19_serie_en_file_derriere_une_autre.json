@@ -1,0 +1,67 @@
+{
+ "id": "19_serie_en_file_derriere_une_autre",
+ "titre": "Série arrêtée qui attend exprès une autre fonctionnalité : ne pas la relancer",
+ "type": "jugement",
+ "negatif": false,
+ "source": "Essai réel FM_Stats f33 (d103 à d107), 2026-11-26 (22:48-22:57)",
+ "note": "La fonctionnalité attend volontairement f31 (en_file_derriere) ; le Chef l'a dit. Bonne réponse : laisser (rien ne la relance), jamais relancer ni créer une anomalie.",
+ "dossier": {
+  "decision": {
+   "genre": "serie_arretee",
+   "texte": "« Évolution des pages » ne progresse plus : à l'étape « serie », aucune tâche, aucune décision et aucun agent au travail.",
+   "fonctionnalite": "f33"
+  },
+  "verdicts": [
+   "relancer",
+   "laisser"
+  ],
+  "choix": [],
+  "questions": [],
+  "tache": null,
+  "fonctionnalite": {
+   "id": "f33",
+   "nom": "Évolution des pages",
+   "etape": "serie",
+   "flux": [
+    {
+     "nom": "Dev",
+     "validation": false
+    },
+    {
+     "nom": "Validation du Directeur",
+     "validation": true
+    }
+   ]
+  },
+  "lecons_du_metier": [],
+  "deja_appris": [],
+  "recentes": [],
+  "mots_interdits": [
+   "ProjetExemple"
+  ],
+  "anomalies": [],
+  "service": {
+   "adresse": "https://service.exemple"
+  },
+  "en_file_derriere": "f31",
+  "dernier_message_du_chef": "Cette fonctionnalité attend f31 : elle démarrera dès que celle-ci sera terminée, pour ne pas modifier les mêmes fichiers en parallèle."
+ },
+ "attendu": {
+  "verdicts": [
+   "laisser"
+  ],
+  "texte_evoque": []
+ },
+ "simule": {
+  "raison": "Elle attend f31 exprès : ce n'est pas une série arrêtée.",
+  "verdict": "laisser",
+  "texte": null,
+  "choix": null,
+  "reponses": null,
+  "generalisable": false,
+  "lecon": null,
+  "amelioration": null,
+  "anomalies": null
+ },
+ "decision_id": "d19"
+}

@@ -7677,6 +7677,9 @@ def _sur_serie_arretee(projet, demande, etat):
               and x["genre"] == SERIE_ARRETEE), None)
     if d is None:
         raise Refus("cette décision n'existe plus")
+    if demande.get("verdict") == LAISSER:      # Claude autonome : la série attend volontairement, rien n'est relancé
+        _terminer(projet, {"demande": demande["id"]}, "La série attend volontairement : je n'ai rien relancé.")
+        return []
     if demande.get("verdict") != RELANCER_SERIE:
         raise Refus(f"réponse inconnue : {demande.get('verdict')}")
     fid = d["fonctionnalite"]
@@ -7936,7 +7939,7 @@ CHAMPS_AUTONOME = {"accord_agent": ("quoi", "pourquoi", "partenaire", "cout", "i
                    "serie_arretee": ("fonctionnalite",), GENRE_TACHE_BLOQUEE: ("motif",)}
 VERDICTS_AUTONOMES = {"accord_agent": ("accepter", "choisir", "repondre", "refuser"),
                       "outil_agent": ("autoriser", "refuser", "relancer"),
-                      "blocage_analyse": ("suivre", "preciser"), "serie_arretee": ("relancer",),
+                      "blocage_analyse": ("suivre", "preciser"), "serie_arretee": ("relancer", "laisser"),
                       GENRE_TACHE_BLOQUEE: ("relancer", "renvoyer", "redeployer", "laisser")}
 APPRENDRE = ("accepter", "autoriser", "refuser")     # les seules réponses que le moteur peut redonner sans appel
 
@@ -8027,6 +8030,15 @@ def _dossier_autonome(projet, etat, d):
         except (Refus, ErreurMoteur):
             fonc = {"id": fid}
     decision = {"genre": d["genre"], "texte": str(d.get("texte") or "")[:1500]}
+    attente_serie = {}
+    if d["genre"] == SERIE_ARRETEE and fid:      # ce qui peut expliquer l'arrêt : elle attend peut-être une autre, exprès
+        try:
+            detail = _fonc(projet, fid)
+            paroles = [m for m in detail.get("discussion") or [] if m.get("auteur") == CHEF]
+            attente_serie = {"en_file_derriere": detail.get("en_file_derriere"),
+                             "dernier_message_du_chef": str(paroles[-1].get("texte") or "")[:400] if paroles else None}
+        except (Refus, ErreurMoteur):
+            pass
     for cle in CHAMPS_AUTONOME.get(d["genre"], ()):
         if d.get(cle) is not None:
             decision[cle] = d[cle] if not isinstance(d[cle], str) else d[cle][:1500]
@@ -8067,7 +8079,7 @@ def _dossier_autonome(projet, etat, d):
         "lecons_du_metier": _lecons_connues(projet, t) if t else [],
         "deja_appris": sorted(_appris(projet)),
         "recentes": list(etat.get("autonome_recentes") or [])[-8:],
-        "mots_interdits": mots, "outils_de_lecture": OUTILS_ENQUETE, **plus}
+        "mots_interdits": mots, "outils_de_lecture": OUTILS_ENQUETE, **attente_serie, **plus}
 
 
 def _demande_autonome(d, o):
@@ -8147,6 +8159,22 @@ def _deposer_autonome(projet, etat, d, demande, raison, lecon=None, defaut=None)
     del recentes[:-8]
 
 
+def _noter_une_anomalie(projet, etat, tid, titre_tache, titre, description):
+    """Une seule anomalie par cause : une anomalie du même titre déjà notée (et pas réglée) n'est pas recréée, un compteur
+    (`etat["anomalies_vues"]`) compte les fois où elle est revenue ; le journal de la tâche le dit. Rend vrai si elle est créée."""
+    deja = [a for a in lancer(projet, "anomalies", {"action": "lister"})["anomalies"]
+            if a["titre"] == titre[:120] and a["etat"] != "reglee"]
+    if deja:
+        vues = etat.setdefault("anomalies_vues", {})
+        vues[titre] = vues.get(titre, 1) + 1
+        if tid:
+            _journal(projet, tid, f"Anomalie déjà notée ({deja[0]['id']}), revenue {vues[titre]} fois : pas de nouvelle ligne.")
+        return False
+    lancer(projet, "anomalies", {"action": "ajouter", "titre": titre, "description": description,
+                                 **({"tache": tid, "titre_tache": titre_tache} if tid else {})})
+    return True
+
+
 def _journal_des_lectures(projet, d, o):
     """Ce que Claude a lu avant de répondre (mode enquête) : une ligne par lecture, au journal de la tâche."""
     for x in o.get("lectures") or []:
@@ -8188,10 +8216,8 @@ def _apres_decider_autonome(projet, o, ctx, etat):
             moteur_seul = a.get("defaut_moteur") is True      # une fiche de correction, jamais appliquée seule
             fiche = (f"Diagnostic : {a.get('diagnostic')} Correction attendue : {a.get('correction')} Test à écrire : "
                      f"{a.get('test')} {a['description']}")[:900] if moteur_seul else a["description"]
-            lancer(projet, "anomalies", {"action": "ajouter",
-                                         "titre": ("Défaut du moteur : " if moteur_seul else "Amélioration : ") + a["titre"],
-                                         "description": fiche, **({"tache": t["id"]} if t.get("id") else {}),
-                                         **({"titre_tache": t.get("titre") or ""} if t.get("id") else {})})
+            _noter_une_anomalie(projet, etat, t.get("id"), t.get("titre") or "",
+                                ("Défaut du moteur : " if moteur_seul else "Amélioration : ") + a["titre"], fiche)
         except Refus as ex:
             if t.get("id"):
                 _journal(projet, t["id"], f"Amélioration non notée : {ex}")
@@ -8239,7 +8265,44 @@ def _autonome_rate(projet, ctx, etat):
 
 # --- Claude autonome : une tâche bloquée sans décision posée (après l'essai automatique du Chef).
 
-MOTIFS_SANS_DECISION = tuple(m for m in MOTIFS_BLOCAGE if m not in ("validation", "fusion", "outil"))
+MOTIFS_SANS_DECISION = tuple(m for m in MOTIFS_BLOCAGE if m not in ("validation", "fusion", "outil")) + ("autre",)
+MOTIF_AUTRE = "blocage sans analyse du Chef"     # une tâche bloquée par un chemin qui n'a pas appelé `_analyser_le_blocage`
+DELAI_BLOCAGE_SANS_ANALYSE_S = 120      # le temps laissé à l'analyse du Chef (un jugement dure environ une minute)
+
+
+def _hache_de_la_cause(t):
+    return hashlib.sha1(str(t.get("bloquee")).encode()).hexdigest()[:8]
+
+
+def _blocages_orphelins(projet, etat):
+    """Toute tâche bloquée, sans décision ouverte à son sujet et que l'analyse du Chef n'a pas prise (cadrage rendu sans
+    cahier, rapport illisible… : des blocages qui ne passent pas par `_analyser_le_blocage`), est prise par Claude autonome
+    après `DELAI_BLOCAGE_SANS_ANALYSE_S` : jamais une validation, ni une installation, ni une cause déjà traitée (la même
+    cause une seule fois)."""
+    vus = etat.setdefault("autonome_bloquees_vues", {})
+    traitees = etat.setdefault("autonome_traitees", set())
+    blocages = etat.setdefault("autonome_blocages", {})
+    court = _etat(projet)
+    avec_decision = {d.get("tache") for d in court["decisions"] if d.get("genre") in (GENRE_BLOCAGE, GENRE_OUTIL, GENRE_ACCORD)}
+    ouvertes = set()
+    for x in court["taches"]:
+        if not x.get("bloquee") or x["colonne"] == "fait" or x["id"] in avec_decision \
+                or x["id"] in (etat.get("autonome_service") or {}):
+            continue
+        try:
+            t = _tache(projet, x["id"])
+        except Refus:
+            continue
+        if str(t.get("etape") or "") == ETAPE_INSTALLATION or _validation_bloquee(t):
+            continue
+        cle = (t["id"], _hache_de_la_cause(t))
+        ouvertes.add(cle)
+        if cle in traitees or any(k[0] == t["id"] for k in blocages):
+            continue
+        if time.time() - vus.setdefault(cle, time.time()) >= DELAI_BLOCAGE_SANS_ANALYSE_S:
+            blocages[(t["id"], "autre")] = ""
+    for cle in [c for c in vus if c not in ouvertes]:
+        del vus[cle]
 
 
 def _noter_blocage_sans_decision(projet, etat, t, motif, matiere):
@@ -8273,9 +8336,10 @@ def _blocages_sans_decision(projet, etat):
                     _journal(projet, tid, "Claude autonome a déjà essayé de débloquer cette tâche pour cette cause : la "
                                           "décision revient au Directeur.")
             continue
+        etat.setdefault("autonome_traitees", set()).add((tid, _hache_de_la_cause(t)))
         pseudo[i] = {"id": i, "genre": GENRE_TACHE_BLOQUEE, "tache": tid, "motif": motif,
                      "fonctionnalite": t.get("fonctionnalite"),
-                     "texte": (f"La tâche « {t.get('titre')} » est bloquée ({MOTIFS_BLOCAGE[motif]}) : {t['bloquee']} Le Chef a "
+                     "texte": (f"La tâche « {t.get('titre')} » est bloquée ({MOTIFS_BLOCAGE.get(motif, MOTIF_AUTRE)}) : {t['bloquee']} Le Chef a "
                                f"déjà fait un essai automatique, aucune décision n'est posée. {erreur}").strip()}
         rendues.append(pseudo[i])
     return rendues
@@ -8616,6 +8680,7 @@ def repondre_en_autonome(projet, etat):
     actions, appris, modifie = _suivre_le_redeploiement(projet, etat), None, False
     _suivre_les_actions(projet, etat)
     actions += _relancer_si_la_cause_a_change(projet, etat)
+    _blocages_orphelins(projet, etat)
     for d in _etat(projet)["decisions"] + _blocages_sans_decision(projet, etat):
         if d["id"] in faites or d.get("genre") not in VERDICTS_AUTONOMES:
             continue
@@ -8894,9 +8959,8 @@ def _apres_analyser_blocage(projet, o, ctx, etat):
     if voie == "logiciel":
         a = o["anomalie"]
         try:
-            lancer(projet, "anomalies", {"action": "ajouter", "tache": tid, "titre_tache": t.get("titre") or "",
-                                         "titre": a["titre"], "description": a["description"]})
-            _journal(projet, tid, f"Anomalie du logiciel notée : {a['titre']}")
+            if _noter_une_anomalie(projet, etat, tid, t.get("titre") or "", a["titre"], a["description"]):
+                _journal(projet, tid, f"Anomalie du logiciel notée : {a['titre']}")
         except Refus as ex:
             _journal(projet, tid, f"Anomalie du logiciel non notée : {ex}")
     if voie in ("directeur", "logiciel"):
@@ -8974,6 +9038,10 @@ def _sur_blocage_analyse(projet, demande, etat):
         raise Refus("ce blocage n'attend plus de réponse")
     verdict = demande.get("verdict")
     if verdict == LAISSER:
+        try:      # le Directeur a choisi : Claude autonome ne la reprend pas
+            etat.setdefault("autonome_traitees", set()).add((d["tache"], _hache_de_la_cause(_tache(projet, d["tache"]))))
+        except Refus:
+            pass
         lancer(projet, "decision", {"action": "lever", "id": d["id"]})
         _terminer(projet, {"demande": demande["id"]}, "La tâche reste bloquée.")
         return []

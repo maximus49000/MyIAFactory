@@ -813,7 +813,7 @@ def _valider_analyser_blocage(o, d):
 
 VERDICTS_AUTONOME = {"accord_agent": ("accepter", "choisir", "repondre", "refuser"),
                      "outil_agent": ("autoriser", "refuser", "relancer"),
-                     "blocage_analyse": ("suivre", "preciser"), "serie_arretee": ("relancer",),
+                     "blocage_analyse": ("suivre", "preciser"), "serie_arretee": ("relancer", "laisser"),
                      "tache_bloquee": ("relancer", "renvoyer", "redeployer", "laisser")}
 
 

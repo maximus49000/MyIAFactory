@@ -282,6 +282,39 @@ class AuTravail(Base):
         self.assertAlmostEqual(datetime.fromisoformat(t["action_t"]).timestamp(), debut + 60, delta=1)
         self.assertAlmostEqual(datetime.fromisoformat(t["vie_t"]).timestamp(), debut + 9 * 60, delta=1)
 
+    def test_historique_des_actions_du_plus_recent_au_plus_ancien(self):
+        lignes = [self.outil("Read", {"file_path": str(self.dossier / "a.py")}),
+                  self.outil("Edit", {"file_path": str(self.dossier / "scenes" / "combat.gd"), "old_string": "mot de passe"}),
+                  {"type": "assistant", "message": {"content": [{"type": "text", "text": "Je réfléchis"}]}},
+                  self.outil("Bash", {"command": "cd x && python -m pytest tests/secret.py"})]
+        h = detache.historique_des_actions(lignes, str(self.dossier))
+        self.assertEqual([x["texte"] for x in h], ["lance python", "modifie scenes/combat.gd", "lit a.py"])
+        self.assertNotIn("mot de passe", json.dumps(h))
+        self.assertNotIn("secret.py", json.dumps(h))
+        self.assertTrue(all(set(x) == {"t", "texte"} for x in h))
+
+    def test_historique_des_actions_garde_l_heure_de_la_ligne(self):
+        ligne = {**self.outil("Read", {"file_path": "a.py"}), "timestamp": "2026-11-26T10:00:00Z"}
+        h = detache.historique_des_actions([ligne, self.outil("Read", {"file_path": "b.py"})], None)
+        self.assertIsNone(h[0]["t"])
+        self.assertTrue(h[1]["t"])
+
+    def test_historique_des_actions_borne_et_vide(self):
+        self.assertEqual(detache.historique_des_actions([], None), [])
+        lignes = [self.outil("Read", {"file_path": f"f{i}.py"}) for i in range(80)]
+        h = detache.historique_des_actions(lignes, None)
+        self.assertEqual(len(h), detache.MAX_HISTORIQUE)
+        self.assertEqual(h[0]["texte"], "lit f79.py")
+        self.assertEqual(len(detache.historique_des_actions(lignes, None, limite=3)), 3)
+
+    def test_ajouter_au_travail_porte_l_historique(self):
+        self.ecrire("t1", {"tache": "t1", "agent": "dev", "pid": os.getpid(), "debut": time.time() - 60,
+                           "dossier": str(self.dossier)},
+                    [self.outil("Read", {"file_path": "a.kt"}), self.outil("Edit", {"file_path": "b.kt"})])
+        taches = [{"id": "t1"}]
+        detache.ajouter_au_travail(taches, self.factory_dir)
+        self.assertEqual([x["texte"] for x in taches[0]["travail"]["historique"]], ["modifie b.kt", "lit a.kt"])
+
     def test_rien_pour_un_agent_qui_ne_tourne_plus(self):
         self.ecrire("t1", {"tache": "t1", "agent": "dev-1", "pid": 999999999, "debut": time.time()}, [])
         taches = [{"id": "t1"}]

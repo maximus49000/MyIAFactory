@@ -204,5 +204,27 @@ class Lot(unittest.TestCase):
         self.assertIn("position 1 sur 1 dans la file (passe dès que le poste se libère)", r["etat_texte"])
 
 
+class Historique(unittest.TestCase):
+    def test_l_historique_du_travail_est_recopie(self):
+        h = [{"t": il_y_a(30), "texte": "lance python"}, {"t": None, "texte": "lit a.py"}]
+        r = avancement.pour_la_tache(tache(travail=travail(historique=h)), TACHES_PASSEES, [], True, MAINTENANT, DELAI)
+        self.assertEqual(r["historique"], h)
+
+    def test_sans_historique_la_liste_est_vide(self):
+        r = avancement.pour_la_tache(tache(travail=travail()), TACHES_PASSEES, [], True, MAINTENANT, DELAI)
+        self.assertEqual(r["historique"], [])
+
+    def test_un_element_mal_forme_est_ecarte_et_le_texte_borne(self):
+        h = [{"t": None, "texte": "x" * 500}, {"t": 5, "texte": "ok"}, {"texte": 3}, "texte", {"t": None}]
+        r = avancement.pour_la_tache(tache(travail=travail(historique=h)), TACHES_PASSEES, [], True, MAINTENANT, DELAI)
+        self.assertEqual([x["texte"] for x in r["historique"]], ["x" * avancement.TEXTE_HISTORIQUE_MAX, "ok"])
+        self.assertIsNone(r["historique"][1]["t"])
+
+    def test_l_historique_est_borne(self):
+        h = [{"t": None, "texte": f"lit f{i}.py"} for i in range(80)]
+        r = avancement.pour_la_tache(tache(travail=travail(historique=h)), TACHES_PASSEES, [], True, MAINTENANT, DELAI)
+        self.assertEqual(len(r["historique"]), avancement.MAX_HISTORIQUE)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -7747,6 +7747,8 @@ SUIVRE, PRECISER, LAISSER = "suivre", "preciser", "laisser"
 
 # --- Claude autonome : le réglage `claude_autonome` répond à la place du Directeur, sauf aux validations.
 
+GENRE_TACHE_BLOQUEE = "tache_bloquee"   # pas une décision posée : une tâche restée bloquée après l'essai du Chef
+AUTONOME_SERVICE_ATTENTE_S = 2700       # un redéploiement qui n'a pas abouti en 45 min revient au Directeur
 AUTONOME_MAX_REPRISES = 3      # une série ou une tâche qui se rebloque après trois réponses revient au Directeur
 
 
@@ -7809,10 +7811,11 @@ CHAMPS_AUTONOME = {"accord_agent": ("quoi", "pourquoi", "partenaire", "cout", "i
                                     "regle"),
                    "outil_agent": ("programme", "outil", "commande", "analyse", "recommandation", "verdict_recommande"),
                    "blocage_analyse": ("motif", "analyse", "question", "recommandation"),
-                   "serie_arretee": ("fonctionnalite",)}
+                   "serie_arretee": ("fonctionnalite",), GENRE_TACHE_BLOQUEE: ("motif",)}
 VERDICTS_AUTONOMES = {"accord_agent": ("accepter", "choisir", "repondre", "refuser"),
                       "outil_agent": ("autoriser", "refuser", "relancer"),
-                      "blocage_analyse": ("suivre", "preciser"), "serie_arretee": ("relancer",)}
+                      "blocage_analyse": ("suivre", "preciser"), "serie_arretee": ("relancer",),
+                      GENRE_TACHE_BLOQUEE: ("relancer", "renvoyer", "redeployer", "laisser")}
 APPRENDRE = ("accepter", "autoriser", "refuser")     # les seules réponses que le moteur peut redonner sans appel
 
 
@@ -7907,6 +7910,12 @@ def _dossier_autonome(projet, etat, d):
             decision[cle] = d[cle] if not isinstance(d[cle], str) else d[cle][:1500]
     verdicts = [v for v in VERDICTS_AUTONOMES[d["genre"]]
                 if not (v == "autoriser" and not d.get("programme")) and not (v == "suivre" and not (d.get("recommandation") or "").strip())]
+    plus = {}
+    if d["genre"] == GENRE_TACHE_BLOQUEE:
+        taches_dev = _taches_faites_de(projet, t)
+        service = _service_a_redeployer(projet) and (d["tache"] not in etat.setdefault("autonome_redeploye", set()))
+        verdicts = [v for v in verdicts if not (v == "renvoyer" and not taches_dev) and not (v == "redeployer" and not service)]
+        plus = {"taches_dev": taches_dev, "service": service}
     mots = [m for m in list(fac.get("mots_interdits") or []) + [fac.get("nom") or ""] if m]
     return {
         "decision": decision, "verdicts": verdicts,
@@ -7919,7 +7928,7 @@ def _dossier_autonome(projet, etat, d):
         "lecons_du_metier": _lecons_connues(projet, t) if t else [],
         "deja_appris": sorted(_appris(projet)),
         "recentes": list(etat.get("autonome_recentes") or [])[-8:],
-        "mots_interdits": mots}
+        "mots_interdits": mots, **plus}
 
 
 def _demande_autonome(d, o):
@@ -7931,6 +7940,10 @@ def _demande_autonome(d, o):
         demande["reponses"] = o["reponses"]
     if o.get("texte"):
         demande["texte"] = o["texte"]
+    if d["genre"] == GENRE_TACHE_BLOQUEE:
+        demande.update(tache=d["tache"], motif=d.get("motif"))
+        if o["verdict"] == "renvoyer":
+            demande["tache_dev"] = o["tache_dev"]
     return demande
 
 
@@ -7951,11 +7964,16 @@ def _apres_decider_autonome(projet, o, ctx, etat):
     seul la prochaine fois."""
     d = next((x for x in _etat(projet)["decisions"] if x["id"] == ctx["decision"]), None)
     if d is None:
+        d = _blocage_encore_a_debloquer(projet, etat, ctx["decision"])
+    if d is None:
         return []      # le Directeur a répondu pendant la réflexion : rien à faire
     try:
         _deposer_autonome(projet, etat, d, _demande_autonome(d, o), o["raison"])
     except Refus:
         return []      # la décision reste posée : le Directeur la voit
+    if d["genre"] == GENRE_TACHE_BLOQUEE:
+        d["repondu"] = True
+        (etat.get("autonome_blocages") or {}).pop((d["tache"], d["motif"]), None)
     t = {"id": None}
     if d.get("tache"):
         try:
@@ -7989,12 +8007,184 @@ def _autonome_rate(projet, ctx, etat):
     """Claude n'a pas pu réfléchir (deux essais sans réponse valable) : la réponse mécanique par défaut, pour que la
     suite avance quand même ; le journal le dit."""
     d = next((x for x in _etat(projet)["decisions"] if x["id"] == ctx["decision"]), None)
+    if d is None and ctx["decision"] in etat.get("autonome_pseudo", {}):
+        _journal(projet, ctx["tache"], "Claude autonome n'a pas pu réfléchir à ce blocage : la décision revient au Directeur.")
+        return []
     demande = _reponse_autonome(d) if d else None
     if demande is None:
         return []
     _deposer_autonome(projet, etat, d, demande, "Réponse par défaut : Claude n'a pas pu réfléchir à cette décision.")
     _noter_le_deblocage(projet, etat, d)
     return []
+
+
+# --- Claude autonome : une tâche bloquée sans décision posée (après l'essai automatique du Chef).
+
+MOTIFS_SANS_DECISION = tuple(m for m in MOTIFS_BLOCAGE if m not in ("validation", "fusion", "outil"))
+
+
+def _noter_blocage_sans_decision(projet, etat, t, motif, matiere):
+    """Le Chef a déjà fait son essai sur ce blocage et ne pose aucune décision : en mode autonome, Claude le prend (jamais
+    une validation du Directeur, ni une branche à fusionner, ni un outil, qui a sa décision)."""
+    if motif not in MOTIFS_SANS_DECISION or not t.get("bloquee") or not reglage_effectif(projet, "claude_autonome"):
+        return
+    etat.setdefault("autonome_blocages", {})[(t["id"], motif)] = str((matiere or {}).get("erreur") or "")[:600]
+
+
+def _blocages_sans_decision(projet, etat):
+    """Les tâches bloquées à juger, en pseudo-décisions `tache_bloquee`. Une cause déjà tentée (même tâche, même motif)
+    n'est jamais retentée : c'est dit une fois au journal, la tâche reste au Directeur."""
+    faites, rendues = etat.setdefault("autonome_faites", set()), []
+    pseudo, dit = etat.setdefault("autonome_pseudo", {}), etat.setdefault("autonome_dit", set())
+    blocages = etat.get("autonome_blocages") or {}
+    for (tid, motif), erreur in list(blocages.items()):
+        try:
+            t = _tache(projet, tid)
+        except Refus:
+            t = None
+        if t is None or t["colonne"] == "fait" or not t.get("bloquee"):
+            blocages.pop((tid, motif), None)
+            continue
+        i = f"blocage:{tid}:{motif}"
+        if i in faites:
+            if pseudo.get(i, {}).get("repondu"):       # la même cause revient : pas de boucle
+                blocages.pop((tid, motif), None)
+                if i not in dit:
+                    dit.add(i)
+                    _journal(projet, tid, "Claude autonome a déjà essayé de débloquer cette tâche pour cette cause : la "
+                                          "décision revient au Directeur.")
+            continue
+        pseudo[i] = {"id": i, "genre": GENRE_TACHE_BLOQUEE, "tache": tid, "motif": motif,
+                     "fonctionnalite": t.get("fonctionnalite"),
+                     "texte": (f"La tâche « {t.get('titre')} » est bloquée ({MOTIFS_BLOCAGE[motif]}) : {t['bloquee']} Le Chef a "
+                               f"déjà fait un essai automatique, aucune décision n'est posée. {erreur}").strip()}
+        rendues.append(pseudo[i])
+    return rendues
+
+
+def _blocage_encore_a_debloquer(projet, etat, i):
+    """La pseudo-décision `i` si sa tâche est encore bloquée (sinon rien : la réflexion arrive trop tard)."""
+    d = (etat.get("autonome_pseudo") or {}).get(i)
+    if d is None:
+        return None
+    try:
+        t = _tache(projet, d["tache"])
+    except Refus:
+        return None
+    return d if t["colonne"] != "fait" and t.get("bloquee") else None
+
+
+def _taches_faites_de(projet, t):
+    """Les tâches faites de la fonctionnalité de `t` (hors validations), de quoi renvoyer un défaut à son auteur."""
+    if not t or not t.get("fonctionnalite"):
+        return []
+    try:
+        soeurs = lancer(projet, "detail", {"fonctionnalite": t["fonctionnalite"], "taches": True})["taches"]
+    except Refus:
+        return []
+    rendues = []
+    for x in soeurs:
+        try:
+            y = _tache(projet, x["id"])
+        except Refus:
+            continue
+        if x["id"] != t["id"] and y["colonne"] == "fait" and not str(y.get("etape") or "").startswith("validation"):
+            rendues.append({"id": y["id"], "titre": y.get("titre"), "etape": y.get("etape"), "metier": y.get("role"),
+                            "journal": [str(j.get("texte") or "")[:300] for j in (y.get("journal") or [])[-3:]]})
+    return rendues[-12:]
+
+
+def _service_a_redeployer(projet):
+    """Le projet déclare un service permanent (`.factory/service.json`) que le moteur a le droit de déployer."""
+    try:
+        return service_permanent.raison_de_ne_pas_deployer(projet.dossier) is None
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _sur_tache_bloquee(projet, demande, etat):
+    """La réponse de Claude autonome à une tâche bloquée sans décision : `relancer` avec une consigne précise,
+    `renvoyer` le défaut à la tâche de dev (un retour avec diagnostic ; la tâche bloquée attend la correction),
+    `redeployer` le service avant de refaire la recette, ou `laisser` bloquée (seul le Directeur peut agir)."""
+    tid, verdict = demande["tache"], demande.get("verdict")
+    t = _tache(projet, tid)
+    if t["colonne"] == "fait" or not t.get("bloquee"):
+        raise Refus("cette tâche n'est plus bloquée")
+    fid = t.get("fonctionnalite")
+    texte = " ".join(str(demande.get("texte") or "").split())
+    if verdict == LAISSER:
+        etat.setdefault("autonome_dit", set()).add(demande.get("decision"))
+        _journal(projet, tid, "Claude autonome laisse la tâche bloquée : seul le Directeur peut agir.")
+        _terminer(projet, {"demande": demande["id"]}, "La tâche reste bloquée.")
+        return []
+    if verdict == "relancer" and texte:
+        return _sur_retour(projet, {"id": demande["id"], "tache": tid, "texte": texte}, etat)
+    if verdict == "renvoyer" and texte:
+        dev = _tache(projet, demande.get("tache_dev") or "")
+        avant = {x["id"] for x in _etat(projet)["taches"]}
+        actions = _sur_retour(projet, {"id": demande["id"], "tache": dev["id"],
+                                       "texte": "Défaut renvoyé par Claude autonome : " + texte}, etat)
+        nouvelles = [x["id"] for x in _etat(projet)["taches"] if x["id"] not in avant]
+        if not nouvelles:
+            _journal(projet, tid, f"Défaut renvoyé à la tâche {dev['id']} : {texte}")
+            return actions
+        ligne = f"Claude autonome renvoie le défaut à la tâche {dev['id']} (retour {nouvelles[0]}) : {texte}"
+        lancer(projet, "tache", {"id": tid, "depend_de": list(t.get("depend_de") or []) + nouvelles[:1], "bloquee": None,
+                                 "lot": None, "journal": [ligne[:500]]})
+        if tid not in _m(etat, "a_lancer", list):
+            etat["a_lancer"].append(tid)
+        _m(etat, "supplements")[tid] = (f"Avant ta reprise, le défaut a été renvoyé au développement (tâche {nouvelles[0]}) : "
+                                        f"{texte} Reprends ta tâche une fois la correction faite.")
+        return actions + _demarrer_en_attente(projet, etat, fid)
+    if verdict == "redeployer":
+        redeploye = etat.setdefault("autonome_redeploye", set())
+        if not _service_a_redeployer(projet) or tid in redeploye:
+            raise Refus("pas de service permanent à redéployer, ou déjà redéployé pour cette tâche")
+        commit = service_permanent._commit_du_depot(projet.dossier)
+        if commit is None:
+            raise Refus("le commit du dépôt est introuvable : le service ne peut pas être redéployé")
+        redeploye.add(tid)
+        ligne = service_permanent.declencher(projet.dossier, annoncer=(lambda x: _dire(projet, fid, x)) if fid else None)
+        etat.setdefault("autonome_service", {})[tid] = {"commit": commit, "depuis": time.time(), "texte": texte}
+        _journal(projet, tid, f"Claude autonome redéploie le service permanent avant de refaire la recette. {ligne or ''}".strip())
+        _terminer(projet, {"demande": demande["id"]}, "Le service est en cours de redéploiement ; la recette repart quand il est sain.")
+        return []
+    raise Refus(f"réponse inconnue ou sans texte : {verdict}")
+
+
+_SUR[GENRE_TACHE_BLOQUEE] = _sur_tache_bloquee
+
+
+def _suivre_le_redeploiement(projet, etat):
+    """À chaque passage : les tâches qui attendent le redéploiement du service. Le service sain (version livrée en ligne,
+    contrôle de santé passé), la tâche repart ; un échec, un retour arrière ou 45 minutes sans résultat la rendent au
+    Directeur. Rend les actions de reprise."""
+    actions = []
+    attente = etat.get("autonome_service") or {}
+    for tid, v in list(attente.items()):
+        try:
+            t = _tache(projet, tid)
+        except Refus:
+            attente.pop(tid, None)
+            continue
+        if t["colonne"] == "fait" or not t.get("bloquee"):
+            attente.pop(tid, None)
+            continue
+        try:
+            statut, detail = service_permanent.statut_du_serveur(projet.dossier, v["commit"])
+        except Exception:  # noqa: BLE001
+            continue
+        if statut == "a_jour":
+            attente.pop(tid, None)
+            actions += _reprendre_la_tache(
+                projet, etat, tid, t.get("fonctionnalite"),
+                v.get("texte") or "Le service permanent a été redéployé avec la version corrigée : refais la recette contre lui.",
+                f"Claude autonome : le service est à jour ({detail}) ; la tâche reprend.")
+        elif statut in ("echec", "sans_service") or time.time() - v["depuis"] > AUTONOME_SERVICE_ATTENTE_S:
+            attente.pop(tid, None)
+            _journal(projet, tid, "Claude autonome : le redéploiement du service n'a pas abouti "
+                                  f"({detail or statut}) : la décision revient au Directeur.")
+    return actions
 
 
 def repondre_en_autonome(projet, etat):
@@ -8010,8 +8200,8 @@ def repondre_en_autonome(projet, etat):
         return []
     faites = etat.setdefault("autonome_faites", set())
     reprises = etat.setdefault("autonome_reprises", {})
-    actions, appris, modifie = [], None, False
-    for d in _etat(projet)["decisions"]:
+    actions, appris, modifie = _suivre_le_redeploiement(projet, etat), None, False
+    for d in _etat(projet)["decisions"] + _blocages_sans_decision(projet, etat):
         if d["id"] in faites or d.get("genre") not in VERDICTS_AUTONOMES:
             continue
         cle = d.get("tache") or d.get("fonctionnalite") or d["id"]
@@ -8164,6 +8354,7 @@ def _analyser_le_blocage(projet, etat, tid, motif, matiere=None):
     if _essais_du_chef(projet, t, motif):
         _journal(projet, tid, f"Le Chef a déjà fait un essai automatique sur ce blocage ({libelle}) : la décision "
                               "revient au Directeur.")
+        _noter_blocage_sans_decision(projet, etat, t, motif, matiere)
         return []
     fac = _factory(projet)
     r = matiere.get("rapport") if isinstance(matiere.get("rapport"), dict) else None

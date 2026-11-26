@@ -39,7 +39,9 @@ Dossiers attendus (préparés par la table de règles) :
   champs de la décision : quoi, choix, questions, programme, recommandation…), `verdicts` (ceux permis), `tache` (id,
   titre, etape, metier, element, journal) ou null, `fonctionnalite` (id, nom, etape, flux [{nom, validation}]),
   `lecons_du_metier`, `deja_appris` (les réponses que le moteur donne seul), `recentes` (les dernières décisions
-  autonomes), `mots_interdits`.
+  autonomes), `mots_interdits`. Pour une tâche bloquée sans décision (`decision.genre` = `tache_bloquee`) : aussi
+  `taches_dev` ([{id, titre, etape, metier, journal}], les tâches faites de la fonctionnalité) et `service` (vrai si
+  le projet déclare un service permanent redéployable).
 
 - `repondre_question` : `projet` (nom, description), `genre`, `fonctionnalites` ([{id, nom, nature, etape, cahier}]),
   `fonctionnalite` (celle visée, cahier et éléments, ou null), `regles_projet`, `fil` (messages précédents),
@@ -777,7 +779,8 @@ def _valider_analyser_blocage(o, d):
 
 VERDICTS_AUTONOME = {"accord_agent": ("accepter", "choisir", "repondre", "refuser"),
                      "outil_agent": ("autoriser", "refuser", "relancer"),
-                     "blocage_analyse": ("suivre", "preciser"), "serie_arretee": ("relancer",)}
+                     "blocage_analyse": ("suivre", "preciser"), "serie_arretee": ("relancer",),
+                     "tache_bloquee": ("relancer", "renvoyer", "redeployer", "laisser")}
 
 
 def _valider_decider_autonome(o, d):
@@ -796,6 +799,11 @@ def _valider_decider_autonome(o, d):
         return "« texte » ne peut pas demander un autre modèle : jamais Fable."
     if verdict in ("preciser", "refuser") and not t:
         return f"« texte » est obligatoire avec le verdict {verdict} (ce que l'agent doit faire à la place)."
+    if (d.get("decision") or {}).get("genre") == "tache_bloquee":      # une tâche bloquée sans décision posée
+        if verdict in ("relancer", "renvoyer") and not t:
+            return f"« texte » est obligatoire avec le verdict {verdict} (la consigne précise, ou le diagnostic)."
+        if verdict == "renvoyer" and o.get("tache_dev") not in [x.get("id") for x in d.get("taches_dev") or []]:
+            return "« tache_dev » doit être l'une des tâches de développement du dossier (`taches_dev`)."
     if verdict == "choisir" and o.get("choix") not in (d.get("choix") or []):
         return "« choix » doit être l'un des choix proposés par l'agent (copié à l'identique)."
     if verdict == "repondre":

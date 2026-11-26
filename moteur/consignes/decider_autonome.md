@@ -38,6 +38,9 @@ Pour une `tache_bloquee`, appuie-toi sur des faits, jamais sur une supposition :
 commit déployé, code HTTP et durée des pages) et `rapport_de_la_tache`. Dis la cause précise dans `texte`, et pour une recette
 à refaire, ce qu'elle doit vérifier. Chaque cause nouvelle (un autre texte de blocage) a sa tentative, au plus trois par tâche.
 
+Si une décision parle du service ou d'un secret, lis `faits_du_service` avant de répondre : une action déjà faite
+(`deja_fait`, service sain au commit voulu, secret déjà présent) se refuse avec « déjà fait : … » et ce que l'agent vérifie.
+
 Tu n'accordes jamais un modèle plus fort (jamais Fable), une clé, ni une dépense ; une consigne qui le demande est
 refusée.
 

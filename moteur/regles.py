@@ -7959,6 +7959,12 @@ def _dossier_autonome(projet, etat, d):
     except Refus:
         nouvelles = []
     plus = {"anomalies": nouvelles, "service": {"adresse": _adresse_du_service(projet)}}
+    if d["genre"] != GENRE_TACHE_BLOQUEE and _decision_du_service(d) and _service_a_redeployer(projet):
+        # l'état réel avant de répondre (essai FM_Stats : « oui, déployer » alors que le service était déjà en ligne et sain)
+        textes = " ".join(str(d.get(c) or "") for c in ("quoi", "pourquoi", "texte", "commande"))
+        plus["faits_du_service"] = service_permanent.faits_du_service(
+            projet.dossier, ["/sante"] + MOTIF_PAGE.findall(textes), lignes=0)
+        plus["deja_fait"] = d["genre"] == GENRE_ACCORD and _service_deja_a_jour(projet)
     if d["genre"] == GENRE_TACHE_BLOQUEE:
         taches_dev = _taches_faites_de(projet, t)
         service = _service_a_redeployer(projet) and (d["tache"] not in etat.setdefault("autonome_redeploye", set()))
@@ -8213,6 +8219,26 @@ def _taches_faites_de(projet, t):
 
 MOTIF_PAGE = re.compile(r"(?<![\w.:/])(/[a-z][\w\-/]{1,60})(?![\w\-])")
 MOTIF_RAPPORT = re.compile(r"docs/[\w./\-]+\.md")
+
+
+MOTIF_SERVICE = re.compile(r"d[ée]ploi|service|secret|serveur|mise en ligne", re.IGNORECASE)
+
+
+def _decision_du_service(d):
+    """La décision (accord, outil, blocage) parle du service permanent, de son déploiement ou d'un secret."""
+    return d.get("genre") in (GENRE_ACCORD, GENRE_OUTIL, GENRE_BLOCAGE) and bool(MOTIF_SERVICE.search(
+        " ".join(str(d.get(c) or "") for c in ("quoi", "pourquoi", "texte", "programme", "commande", "analyse", "question"))))
+
+
+def _service_deja_a_jour(projet):
+    """Le service en ligne est sain et a déjà la version du dépôt : un déploiement demandé serait déjà fait."""
+    try:
+        commit = service_permanent._commit_du_depot(projet.dossier)
+        faits = service_permanent.faits_du_service(projet.dossier, lignes=0)
+        statut, _ = service_permanent.statut_du_serveur(projet.dossier, commit) if commit else ("attente", "")
+    except Exception:  # noqa: BLE001
+        return False
+    return faits.get("etat") == "actif" and faits.get("sante_ok") is True and statut == "a_jour"
 
 
 def _faits_pour(projet, t):

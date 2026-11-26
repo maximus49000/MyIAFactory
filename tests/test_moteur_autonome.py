@@ -407,6 +407,54 @@ class TacheBloquee(tsr.AvecValidation):
         self.assertNotIn("zzz", texte)
         self.assertIn("Traceback", texte)
 
+    # --- Une décision qui parle du service : l'état réel d'abord (essai FM_Stats : « oui, déployer » sur un service déjà sain).
+
+    def accord_de_deploiement(self):
+        self.ok("decision", entree={"action": "poser", "portee": "projet", "genre": "accord_agent", "agent": "chef", "texte": "Un agent demande votre accord.",
+                                    "tache": self.recette, "quoi": "Déployer le service fm-donnees et poser le secret API",
+                                    "pourquoi": "La recette exige le service en ligne."})
+        self.projet.claude_autonome = True
+
+    def faits_sains(self):
+        return {"commit": "2b0ad4a" + "0" * 33, "etat": "actif", "sante_ok": True, "secrets": {"API_FOOTBALL_KEY": True},
+                "journal": [], "pages": [{"chemin": "/sante", "code": 200, "ms": 20}], "erreur": None}
+
+    def test_un_accord_de_deploiement_recoit_les_faits_du_service(self):
+        self.accord_de_deploiement()
+        self.avec_service([("a_jour", "ok")])
+        with mock.patch.object(regles.service_permanent, "faits_du_service", return_value=self.faits_sains()) as lire:
+            (action,) = regles.repondre_en_autonome(self.projet, self.etat)
+        dossier = action[2]
+        self.assertEqual(dossier["faits_du_service"]["secrets"], {"API_FOOTBALL_KEY": True})      # des noms, jamais des valeurs
+        self.assertTrue(dossier["deja_fait"])
+        self.assertEqual(lire.call_args.kwargs["lignes"], 0)        # sans le journal : pas d'appel au serveur
+
+    def test_deja_fait_la_reponse_oui_est_refusee_et_refuser_avec_deja_fait_passe(self):
+        self.accord_de_deploiement()
+        self.avec_service([("a_jour", "ok")])
+        with mock.patch.object(regles.service_permanent, "faits_du_service", return_value=self.faits_sains()):
+            (action,) = regles.repondre_en_autonome(self.projet, self.etat)
+        dossier = action[2]
+        self.assertIn("déjà faite", jugement.valider("decider_autonome", objet(verdict="accepter"), dossier))
+        self.assertIsNone(jugement.valider("decider_autonome", objet(
+            verdict="refuser", texte="Déjà fait : le service est en ligne et sain ; vérifie les pages et rends."), dossier))
+
+    def test_service_pas_a_jour_l_accord_reste_possible(self):
+        self.accord_de_deploiement()
+        self.avec_service([("attente", "pas encore")])
+        faits = dict(self.faits_sains(), sante_ok=False)
+        with mock.patch.object(regles.service_permanent, "faits_du_service", return_value=faits):
+            (action,) = regles.repondre_en_autonome(self.projet, self.etat)
+        self.assertFalse(action[2]["deja_fait"])
+        self.assertIsNone(jugement.valider("decider_autonome", objet(verdict="accepter"), action[2]))
+
+    def test_une_decision_sans_rapport_avec_le_service_n_a_pas_de_faits(self):
+        self.ok("decision", entree={"action": "poser", "portee": "projet", "genre": "accord_agent", "agent": "chef", "texte": "Un agent demande votre accord.",
+                                    "tache": self.recette, "quoi": "Générer 5 images"})
+        self.projet.claude_autonome = True
+        (action,) = regles.repondre_en_autonome(self.projet, self.etat)
+        self.assertNotIn("faits_du_service", action[2])
+
     # --- Cas 8 : une relance par changement de cause, jamais sans changement.
 
     def passer(self, signature):

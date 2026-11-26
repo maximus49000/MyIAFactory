@@ -504,7 +504,7 @@ OUTIL_FLUTTER = "agent-outils/outil-flutter.sh"     # les commandes uniques d'un
 PONT_HOTE = "taches/pont_hote.py"          # mode pilote : le pont hôte, et l'enveloppe d'émulation qu'il lance
 EMULATION_SCRIPT = st.ENVELOPPE            # taches/lancer_emulation.sh
 FICHIERS_ENTREE = ("projet.bundle", "argv.json", "consigne.md", "message.md", "demande.json")
-FICHIERS_SORTIE = ("flux.jsonl", "fin.json", "resultat.bundle", "direct.json")
+FICHIERS_SORTIE = ("flux.jsonl", "fin.json", "resultat.bundle")
 DIRECT_MAX_OCTETS = 65536       # direct.json (le suivi en direct publié par l'entrée du conteneur) : 64 Ko au plus
 DIRECT_DELAI_S = 60             # une lecture du suivi n'attend jamais l'attente des rapatriements
 MAX_ACTIONS_DIRECT = 50
@@ -854,6 +854,62 @@ def _juger_code(nom, code, erreur, maximum):
                                 transitoire=True)
 
 
+# Le suivi en direct (sortie/direct.json) : l'agent PEUT écrire sous sortie/ pendant qu'il tourne, donc ce fichier est une donnée
+# hostile et, contrairement au flux, il est lu AVANT le contrôle du secret de fin de tâche. L'hôte y cherche donc le jeton (et ses
+# trois alignements base64, comme `motifs_jeton` de lancer_agent.sh) : trouvé -> code 6 et rien n'est rendu ; jeton illisible ou
+# lecture en échec -> code 7, rien n'est rendu non plus.
+_DIRECT = r"""# tache:direct @ID@
+set -u
+JETON="$HOME/agent-identifiants/jeton"
+r=$(cd -P -- "$HOME/taches/@ID@" 2>/dev/null && pwd -P) || exit 3
+cd -P -- "$r/sortie" 2>/dev/null && [ "$(pwd -P)" = "$r/sortie" ] || exit 3
+[ -e "./direct.json" ] || exit 3
+[ -f "./direct.json" ] && [ ! -L "./direct.json" ] || exit 5
+[ -n "$(find "./direct.json" -maxdepth 0 -type f -links 1 -size -@MAX@c 2>/dev/null)" ] || exit 5
+motifs_jeton() {
+  local t n k pre b64 debut fin
+  [ -f "$JETON" ] && [ ! -L "$JETON" ] || return 1
+  n=$(wc -l < "$JETON" 2>/dev/null) || return 1
+  n="${n//[!0-9]/}"
+  [ -n "$n" ] && [ "$n" -le 1 ] || return 1
+  t=$(head -c 1024 -- "$JETON" 2>/dev/null) || return 1
+  [ "${#t}" -ge 20 ] && [ "${#t}" -le 400 ] && [[ $t =~ ^[A-Za-z0-9._-]+$ ]] || return 1
+  printf '%s
+' "$t"
+  for k in 0 1 2; do
+    case $k in 0) pre=""; debut=0 ;; 1) pre="x"; debut=2 ;; 2) pre="xx"; debut=3 ;; esac
+    b64=$(printf '%s%s' "$pre" "$t" | base64 -w 0 2>/dev/null) || return 1
+    fin=$(( (k + ${#t}) / 3 * 4 ))
+    [ "$fin" -gt "$debut" ] || return 1
+    printf '%s
+' "${b64:debut:fin-debut}"
+  done
+}
+motifs=$(motifs_jeton) || exit 7
+tmp=$(mktemp "${TMPDIR:-/tmp}/direct.XXXXXX") || exit 7
+trap 'rm -f -- "$tmp"' EXIT
+head -c @MAX@ -- ./direct.json > "$tmp" 2>/dev/null || exit 7
+printf '%s
+' "$motifs" | grep -qF -f - -- "$tmp"; g=$?
+[ "$g" -eq 1 ] || { [ "$g" -eq 0 ] && exit 6; exit 7; }
+cat -- "$tmp"
+"""
+CODES_DIRECT_SANS_RIEN = (3, 6, 7)    # absent ; jeton trouvé ; contrôle impossible
+
+
+def _direct_octets(serveur, ssh, ident, maximum, delai):
+    """Les octets de sortie/direct.json, jeton contrôlé par l'hôte ; None s'il est absent, porte le jeton ou ne peut pas être
+    contrôlé. `RefusRecuperation` s'il est trop gros ou si l'hôte est muet."""
+    code, donnees, erreur = st._octets(serveur, ssh, "bash -s", _script(_DIRECT, ident, MAX=str(maximum + 1)).encode("utf-8"),
+                                       delai=delai)
+    if code in CODES_DIRECT_SANS_RIEN:
+        return None
+    _juger_code("direct.json", code, erreur, maximum)
+    if len(donnees) > maximum:
+        raise RefusRecuperation(f"direct.json refusé : plus de {maximum} octets reçus.")
+    return donnees
+
+
 def _fichier_sortie_vers(serveur, ssh, ident, nom, maximum, destination):
     """Comme `_fichier_sortie`, mais la sortie de ssh va DROIT dans le fichier `destination` par blocs bornés
     (`ssh.executer_vers_fichier`) : un paquet résultat de 500 Mo n'est jamais en mémoire. Taille reçue, ou None si le
@@ -944,7 +1000,10 @@ def _direct_valide(brut):
         avancement = {"points": points, "en_cours": en_cours[:TEXTE_ACTION_DIRECT]
                       if isinstance(en_cours, str) and en_cours.strip() else None}
     phase = brut.get("phase")
-    return {"actions": actions, "phase": phase if phase in PHASES_DIRECT else None, "usage": usage, "avancement": avancement}
+    age = brut.get("flux_age_s")          # l'âge du dernier octet du flux (secondes) : 0 à 7 jours, sinon ignoré
+    age = float(age) if isinstance(age, (int, float)) and not isinstance(age, bool) and 0 <= age <= 7 * 86400 else None
+    return {"actions": actions, "phase": phase if phase in PHASES_DIRECT else None, "usage": usage, "avancement": avancement,
+            "flux_age_s": age}
 
 
 def lire_direct(ident, dossier=plateforme_acces.DOSSIER, ssh=plateforme_ssh):
@@ -954,7 +1013,7 @@ def lire_direct(ident, dossier=plateforme_acces.DOSSIER, ssh=plateforme_ssh):
     try:
         st._id_valide(ident)
         serveur = st._serveur_de(ident, dossier)
-        donnees = _fichier_sortie(serveur, ssh, ident, "direct.json", DIRECT_MAX_OCTETS, delai=DIRECT_DELAI_S)
+        donnees = _direct_octets(serveur, ssh, ident, DIRECT_MAX_OCTETS, DIRECT_DELAI_S)
         return _direct_valide(json.loads(donnees.decode("utf-8"))) if donnees is not None else None
     except Exception:       # noqa: BLE001 - jamais une erreur pour un suivi
         return None

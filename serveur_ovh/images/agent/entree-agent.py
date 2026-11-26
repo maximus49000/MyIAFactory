@@ -453,6 +453,10 @@ class Borne:
         self.fd = ouvrir_sans_nom(os.path.dirname(chemin) or ".")
         self.limite, self.ecrits, self.depasse, self.coupe = limite, 0, depasse, False
         self.verrou = threading.Lock()
+        self.derniere = time.monotonic()          # le dernier octet écrit (le suivi dit l'âge du flux)
+
+    def age(self):
+        return max(0.0, time.monotonic() - self.derniere)
 
     def publier(self):
         """Recrée `chemin` (ce que l'agent y aurait mis est retiré, jamais suivi) avec les octets écrits ici."""
@@ -492,6 +496,8 @@ class Borne:
                 part = donnees[:reste]
                 ecrire_tout(self.fd, part)
                 self.ecrits += len(part)
+                if part:
+                    self.derniere = time.monotonic()
             if len(donnees) > max(reste, 0) and not self.coupe:
                 self.coupe = True
                 if self.depasse:
@@ -597,10 +603,15 @@ def _phase_du_bloc(bloc):
     return "autre"
 
 
-def resumer_flux(octets, jeton, depot=None):
+MAX_CUMUL = 20000                        # messages dont l'usage est gardé d'une publication à l'autre
+
+
+def resumer_flux(octets, jeton, depot=None, cumul=None):
     """Le résumé publiable d'un flux stream-json : `{"v": 1, "actions": [{"t", "texte"}] (≤ 50, la plus récente d'abord),
     "phase", "usage": [{modele, entree, sortie, cache_lecture, cache_ecriture}], "avancement": None}`. Les lignes illisibles ou
-    coupées sont ignorées ; une action dont le texte contient le jeton (ou un de ses alignements base64) est écartée."""
+    coupées sont ignorées ; une action dont le texte contient le jeton (ou un de ses alignements base64) est écartée. `cumul`
+    (un dict gardé d'une publication à l'autre) retient l'usage de chaque message : la consommation couvre tout le flux, pas
+    seulement la fin relue."""
     motifs = motifs_du_jeton(jeton)
     lignes = []
     for brute in octets.decode("utf-8", "replace").splitlines():
@@ -610,12 +621,16 @@ def resumer_flux(octets, jeton, depot=None):
             continue
         if isinstance(d, dict) and d.get("type") == "assistant" and isinstance(d.get("message"), dict):
             lignes.append(d)
-    actions, phase, messages = [], None, {}
+    actions, phase = [], None
+    messages = cumul if cumul is not None else {}
+    vus = set()
     for d in reversed(lignes):
         m = d["message"]
         u = m.get("usage")
-        if isinstance(u, dict) and isinstance(m.get("id"), str) and str(m.get("model", "")).startswith("claude"):
-            messages.setdefault(m["id"], (m["model"], u))
+        if (isinstance(u, dict) and isinstance(m.get("id"), str) and str(m.get("model", "")).startswith("claude")
+                and m["id"] not in vus):
+            vus.add(m["id"])
+            messages[m["id"]] = (m["model"], u)           # la valeur la plus récente du message
         contenu = m.get("content") if isinstance(m.get("content"), list) else []
         for bloc in reversed([b for b in contenu if isinstance(b, dict) and b.get("type") == "tool_use"]):
             texte = _action_du_bloc(bloc, depot)
@@ -626,6 +641,8 @@ def resumer_flux(octets, jeton, depot=None):
             if len(actions) < MAX_ACTIONS_DIRECT:
                 t = d.get("timestamp")
                 actions.append({"t": t if isinstance(t, str) and len(t) <= 40 else None, "texte": texte})
+    while len(messages) > MAX_CUMUL:
+        messages.pop(next(iter(messages)))
     par_modele = {}
     for modele, u in messages.values():
         c = par_modele.setdefault(modele, {"modele": modele, "entree": 0, "sortie": 0, "cache_lecture": 0, "cache_ecriture": 0})
@@ -661,20 +678,34 @@ def lire_avancement_agent(maison):
     return {"points": rendu, "en_cours": en_cours[:MAX_TEXTE_POINT] if isinstance(en_cours, str) and en_cours.strip() else None}
 
 
-def publier_direct(c, flux, jeton, depot):
+def _purger_le_jeton(resume, motifs):
+    """Retire de l'avancement (écrit par l'agent) tout point et toute ligne « en cours » qui porte le jeton."""
+    av = resume.get("avancement")
+    if isinstance(av, dict):
+        av["points"] = [p for p in av["points"] if not any(m in p["texte"] for m in motifs)]
+        if isinstance(av.get("en_cours"), str) and any(m in av["en_cours"] for m in motifs):
+            av["en_cours"] = None
+
+
+def publier_direct(c, flux, jeton, depot, cumul=None):
     """Écrit /sortie/direct.json (fichier temporaire puis renommage ; un lien ou un fichier posé là par l'agent est
     remplacé, jamais suivi). Ne lève jamais."""
     try:
         octets = flux.relire(DIRECT_TAIL)
         if len(octets) >= DIRECT_TAIL:                 # la première ligne est coupée : écartée
             octets = octets.split(b"\n", 1)[-1]
-        resume = resumer_flux(octets, jeton, depot)
+        resume = resumer_flux(octets, jeton, depot, cumul)
         resume["avancement"] = lire_avancement_agent(c["maison"])
+        resume["flux_age_s"] = round(flux.age(), 1)
+        motifs = motifs_du_jeton(jeton)
+        _purger_le_jeton(resume, motifs)
         donnees = json.dumps(resume, ensure_ascii=False).encode("utf-8")
         if len(donnees) > DIRECT_MAX_OCTETS:
             resume["actions"] = resume["actions"][:10]
             donnees = json.dumps(resume, ensure_ascii=False).encode("utf-8")
         if len(donnees) > DIRECT_MAX_OCTETS:
+            return
+        if any(m.encode("utf-8") in donnees for m in motifs):       # dernier garde-fou : jamais un fichier qui porte le jeton
             return
         chemin = os.path.join(c["sortie"], "direct.json")
         temporaire = chemin + ".tmp"
@@ -692,8 +723,9 @@ def publier_direct(c, flux, jeton, depot):
 def suivre_en_direct(c, flux, jeton, depot, fin):
     """Le fil de publication : `publier_direct` toutes les `pas_direct()` s jusqu'à ce que `fin` (un Event) soit levé."""
     pas = pas_direct()
+    cumul = {}
     while not fin.wait(pas):
-        publier_direct(c, flux, jeton, depot)
+        publier_direct(c, flux, jeton, depot, cumul)
 
 
 def ecrire_fin(sortie, fin):

@@ -3,6 +3,7 @@ vrai ~/MyIAFactory ni un vrai serveur."""
 import io
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tarfile
@@ -128,6 +129,16 @@ class FauxServeur:
         t["etat"] = {**t["etat"], "etat": "en_cours", "debut": iso(self.maintenant), "raison": "Conteneur démarré."}
         return 0, (json.dumps(t["etat"]) + "\n").encode(), ""
 
+    def _direct(self, args, script, entree):          # `# tache:direct <id>` : le suivi en direct, jeton contrôlé par l'hôte
+        t = self.taches[args[0]]
+        donnees = t["fichiers"].get("direct.json")
+        if donnees is None:
+            return 3, b"", ""
+        plafond = int(script.split("-size -", 1)[1].split("c", 1)[0])
+        if len(donnees) >= plafond:
+            return 5, b"", ""
+        return 0, donnees, ""
+
     def _etat(self, args, script, entree):
         t = self.taches.get(args[0])
         if not t:
@@ -139,7 +150,7 @@ class FauxServeur:
     def _fichier(self, args, script, entree):
         t = self.taches[args[0]]
         nom = args[1]
-        assert nom in ("flux.jsonl", "fin.json", "resultat.bundle", "direct.json"), nom
+        assert nom in ("flux.jsonl", "fin.json", "resultat.bundle"), nom
         donnees = t["fichiers"].get(nom)
         if donnees is None:
             return 3, b"", ""
@@ -639,7 +650,8 @@ class TestLireDirect(Base):
         self.assertEqual([a["texte"] for a in r["actions"]], ["modifie a.py", "lit b.py"])
         self.assertEqual((r["phase"], r["usage"][0]["entree"]), ("modification", 10))
         self.assertEqual(r["avancement"], {"points": [{"texte": "un", "fait": True}], "en_cours": "deux"})
-        self.assertEqual(self.srv.ops("fichier")[-1][3], sa.DIRECT_DELAI_S)       # jamais l'attente de 15 min du rapatriement
+        self.assertEqual(self.srv.ops("direct")[-1][3], sa.DIRECT_DELAI_S)        # jamais l'attente de 15 min du rapatriement
+        self.assertEqual(self.srv.ops("fichier"), [])
 
     def test_absent_trop_gros_illisible_ou_d_une_autre_version_rendent_none(self):
         self.assertIsNone(self.lire())                                              # aucun direct.json (code 3)
@@ -671,6 +683,16 @@ class TestLireDirect(Base):
         self.servir(self.valide(actions=[{"t": 5, "texte": "ok"}, {"t": "x" * 100, "texte": "ok2"}]))
         self.assertEqual([a["t"] for a in self.lire()["actions"]], [None, None])
 
+    def test_l_age_du_flux_est_garde_s_il_est_sain(self):
+        self.servir(self.valide(flux_age_s=12.5))
+        self.assertEqual(self.lire()["flux_age_s"], 12.5)
+        for mauvais in (-1, "9", True, 1e12, float("nan")):
+            with self.subTest(v=mauvais):
+                self.servir(json.dumps(self.valide(flux_age_s=mauvais)).encode("utf-8"))
+                self.assertIsNone(self.lire()["flux_age_s"])
+        self.servir(self.valide())
+        self.assertIsNone(self.lire()["flux_age_s"])
+
     def test_un_serveur_qui_leve_ou_une_tache_inconnue_rendent_none(self):
         class Muet:
             def executer_octets(self, *a, **k):
@@ -678,6 +700,57 @@ class TestLireDirect(Base):
         self.assertIsNone(sa.lire_direct(ID1, self.dossier, Muet()))
         self.assertIsNone(sa.lire_direct("t20261120-999999-zzzz", self.dossier, self.srv))
         self.assertIsNone(sa.lire_direct("pas-un-id", self.dossier, self.srv))
+
+
+@unittest.skipUnless(shutil.which("bash"), "bash absent")
+class TestDirectHote(unittest.TestCase):
+    """Le script hôte `_DIRECT`, lancé pour de vrai par bash dans un HOME jetable : le jeton n'en sort jamais."""
+    JETON = "jeton-factice-de-test-0123456789abcdef"
+
+    def setUp(self):
+        self._t = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
+        self.addCleanup(self._t.cleanup)
+        self.home = Path(self._t.name)
+        self.sortie = self.home / "taches" / ID1 / "sortie"
+        self.sortie.mkdir(parents=True)
+        (self.home / "agent-identifiants").mkdir()
+        (self.home / "agent-identifiants" / "jeton").write_text(self.JETON + "\n", newline="\n")
+
+    def lancer(self, maximum=65537):
+        script = st._script(sa._DIRECT, ID1, MAX=str(maximum))
+        return subprocess.run(["bash", "-s"], input=script.encode("utf-8"), capture_output=True, timeout=60,
+                              env={**os.environ, "HOME": self.home.as_posix()})
+
+    def test_un_fichier_propre_est_rendu(self):
+        (self.sortie / "direct.json").write_bytes(b'{"v": 1}')
+        r = self.lancer()
+        self.assertEqual((r.returncode, r.stdout), (0, b'{"v": 1}'))
+
+    def test_le_jeton_et_ses_alignements_base64_ne_sortent_pas(self):
+        import base64
+        L = len(self.JETON)                      # les motifs de lancer_agent.sh : le jeton et ses trois alignements base64
+        alignements = [base64.b64encode(b"x" * k + self.JETON.encode()).decode()[(0, 2, 3)[k]:(k + L) // 3 * 4] for k in range(3)]
+        for texte in (self.JETON, "avant " + self.JETON + " apres", *alignements):
+            with self.subTest(texte=texte[:12]):
+                (self.sortie / "direct.json").write_text(json.dumps({"v": 1, "avancement": {"en_cours": texte}}), newline="\n")
+                r = self.lancer()
+                self.assertEqual(r.returncode, 6)
+                self.assertEqual(r.stdout, b"")
+
+    def test_sans_jeton_lisible_rien_n_est_rendu(self):
+        (self.sortie / "direct.json").write_bytes(b'{"v": 1}')
+        (self.home / "agent-identifiants" / "jeton").unlink()
+        r = self.lancer()
+        self.assertEqual((r.returncode, r.stdout), (7, b""))
+
+    def test_absent_lien_et_trop_gros(self):
+        self.assertEqual(self.lancer().returncode, 3)
+        (self.home / "cible").write_bytes(b"{}")
+        os.symlink(self.home / "cible", self.sortie / "direct.json")
+        self.assertEqual(self.lancer().returncode, 5)
+        (self.sortie / "direct.json").unlink()
+        (self.sortie / "direct.json").write_bytes(b"x" * 100)
+        self.assertEqual(self.lancer(maximum=50).returncode, 5)
 
 
 class TestRecuperer(Base):

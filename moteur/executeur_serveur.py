@@ -570,11 +570,14 @@ class ExecuteurServeur:
             if direct.get("avancement") != self._direct_liste or self._direct_liste_maj is None:
                 self._direct_liste, self._direct_liste_maj = direct.get("avancement"), maintenant
             s = self.suivi_direct
+            age = direct.get("flux_age_s")      # l'âge du dernier octet du flux, dit par l'entrée : compté ici sur l'horloge du poste
+            vie = maintenant - age if isinstance(age, (int, float)) and not isinstance(age, bool) else None
             fichier = self._fichier_direct()
             fichier.parent.mkdir(parents=True, exist_ok=True)
-            detache._ecrire(fichier, {"serveur": True, "cle": s["cle"], "agent": s.get("agent"), "taches": list(s["taches"]),
+            detache._ecrire(fichier, {**direct, "serveur": True, "cle": s["cle"], "agent": s.get("agent"),
+                                      "taches": list(s["taches"]), "genre": s.get("genre") or "tache",
                                       "dossier": s.get("dossier_projet"), "debut": self._direct_debut, "maj": maintenant,
-                                      "avancement_maj": self._direct_liste_maj, **direct})
+                                      "vie": vie, "avancement_maj": self._direct_liste_maj})
         except Exception as e:      # noqa: BLE001
             print(f"suivi direct de l'agent serveur {self.tache} : {type(e).__name__}", file=sys.stderr)
 

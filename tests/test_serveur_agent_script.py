@@ -1066,6 +1066,65 @@ class TestEntreeAgent(unittest.TestCase):
         self.assertNotIn("secret", vu["texte"])
         self.assertEqual((self.racine / "maison" / "secret.txt").read_text(encoding="utf-8"), "secret\n")
 
+    def banc_direct(self):
+        e = charger_entree()
+        c = {"maison": (self.racine / "maison").as_posix(), "sortie": (self.racine / "sortie").as_posix()}
+        return e, c, e.Borne(os.path.join(c["sortie"], "flux.jsonl"), 1 << 20)
+
+    def direct_publie(self):
+        chemin = self.racine / "sortie" / "direct.json"
+        return json.loads(chemin.read_text(encoding="utf-8")) if chemin.exists() else None
+
+    @unittest.skipUnless(hasattr(os, "pread"), "POSIX seulement")
+    def test_publier_direct_ne_publie_jamais_le_jeton_dans_l_avancement(self):
+        import base64
+        e, c, flux = self.banc_direct()
+        flux.ecrire(self.ligne_outil("Read", {"file_path": "a.py"}))
+        b64 = base64.b64encode(JETON.encode()).decode()[4:-4]
+        (self.racine / "maison" / "avancement.json").write_text(json.dumps(
+            {"points": [{"texte": "ok", "fait": False}, {"texte": "voici " + JETON, "fait": True},
+                        {"texte": "b64 " + b64, "fait": False}], "en_cours": JETON}), encoding="utf-8")
+        e.publier_direct(c, flux, JETON, None)
+        brut = (self.racine / "sortie" / "direct.json").read_text(encoding="utf-8")
+        self.assertNotIn(JETON, brut)
+        self.assertNotIn(b64, brut)
+        d = json.loads(brut)
+        self.assertEqual([p["texte"] for p in d["avancement"]["points"]], ["ok"])
+        self.assertIsNone(d["avancement"]["en_cours"])
+        self.assertEqual(d["actions"][0]["texte"], "lit a.py")
+
+    @unittest.skipUnless(hasattr(os, "pread"), "POSIX seulement")
+    def test_publier_direct_refuse_tout_si_le_jeton_reste_quelque_part(self):
+        e, c, flux = self.banc_direct()
+        flux.ecrire(self.ligne_outil("Read", {"file_path": "a.py"}, modele="claude-" + JETON))
+        e.publier_direct(c, flux, JETON, None)
+        self.assertIsNone(self.direct_publie())             # rien n'est publié plutôt qu'un fichier qui porte le jeton
+
+    def test_le_usage_est_cumule_au_dela_de_la_fenetre_relue(self):
+        e = charger_entree()
+        cumul = {}
+        a = self.ligne_outil("Read", {"file_path": "a"}, ident="m1", usage={"input_tokens": 10, "output_tokens": 1})
+        b = self.ligne_outil("Read", {"file_path": "b"}, ident="m2", usage={"input_tokens": 20, "output_tokens": 2})
+        e.resumer_flux(a.encode(), JETON, None, cumul)
+        r = e.resumer_flux(b.encode(), JETON, None, cumul)          # `a` n'est plus dans la fenêtre relue
+        self.assertEqual((r["usage"][0]["entree"], r["usage"][0]["sortie"]), (30, 3))
+        c = self.ligne_outil("Read", {"file_path": "b"}, ident="m2", usage={"input_tokens": 25, "output_tokens": 2})
+        r = e.resumer_flux(c.encode(), JETON, None, cumul)          # `m2` relu avec une valeur plus récente : jamais compté deux fois
+        self.assertEqual(r["usage"][0]["entree"], 35)
+
+    @unittest.skipUnless(hasattr(os, "pread"), "POSIX seulement")
+    def test_publier_direct_dit_l_age_du_dernier_octet_du_flux(self):
+        import time
+        e, c, flux = self.banc_direct()
+        flux.ecrire(self.ligne_outil("Read", {"file_path": "a.py"}))
+        time.sleep(0.4)
+        e.publier_direct(c, flux, JETON, None)
+        age = self.direct_publie()["flux_age_s"]
+        self.assertTrue(0.3 <= age < 5, age)
+        flux.ecrire(self.ligne_outil("Read", {"file_path": "b.py"}))
+        e.publier_direct(c, flux, JETON, None)
+        self.assertLess(self.direct_publie()["flux_age_s"], 0.3)
+
     def test_drapeaux_liste_fermee(self):
         self.assertNotIn(b"\r", ENTREE.read_bytes())             # #!/usr/bin/env python3 : un \r casserait l'entrée
         self.assertTrue(ENTREE.read_bytes().startswith(b"#!/usr/bin/env python3\n"))

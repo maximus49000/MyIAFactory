@@ -251,7 +251,7 @@ def _heure_de_la_ligne(d):
         return None
     try:
         return datetime.fromisoformat(d["timestamp"].replace("Z", "+00:00")).astimezone().isoformat(timespec="seconds")
-    except ValueError:
+    except (ValueError, OSError, OverflowError):       # une heure hors du possible (an 1, an 9999) : une donnée forgée
         return None
 
 
@@ -522,8 +522,8 @@ def _ajouter_travail_serveur(f, travail, dans_le_lot, maintenant):
         brut = json.loads(f.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return
-    if not isinstance(brut, dict) or brut.get("serveur") is not True:
-        return
+    if not isinstance(brut, dict) or brut.get("serveur") is not True or brut.get("genre") == "reponse":
+        return          # une réponse aux questions n'est pas du travail sur la tâche (comme pour un agent local)
     maj, debut = brut.get("maj"), brut.get("debut")
     if not (_nombre(maj) and _nombre(debut)) or maintenant - maj > DIRECT_PERIME_S or maj - maintenant > 60 or _iso(debut) is None:
         return
@@ -540,7 +540,8 @@ def _ajouter_travail_serveur(f, travail, dans_le_lot, maintenant):
         en_cours = liste.get("en_cours")
         liste = {"points": points, "en_cours": en_cours[:120] if isinstance(en_cours, str) and en_cours.strip() else None,
                  "maj": _iso(brut["avancement_maj"] if _nombre(brut.get("avancement_maj")) else maj)}
-    vie_t = _iso(maj)
+    vie = brut.get("vie")          # l'heure du dernier octet du flux de l'agent (comptée au poste) ; absente : celle de la copie
+    vie_t = _iso(vie if _nombre(vie) and vie <= maintenant + 60 else maj)
     phase = brut.get("phase")
     info = {"depuis": _iso(debut), "agent": agent, "action": actions[0]["texte"] if actions else None,
             "action_t": ((_heure_de_la_ligne({"timestamp": actions[0]["t"]}) or vie_t) if actions else None),

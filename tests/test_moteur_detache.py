@@ -341,6 +341,32 @@ class AuTravail(Base):
         self.assertTrue(t["depuis"] and t["vie_t"])
         self.assertNotIn("travail", taches[1])
 
+    def test_un_horodatage_forge_ne_masque_pas_les_autres_agents(self):
+        for t in ("0001-01-01T00:00:00", "9999-12-31T23:59:59+00:00", "n'importe quoi"):
+            with self.subTest(t=t):
+                self.ecrire("t1", {"tache": "t1", "agent": "local", "pid": os.getpid(), "debut": time.time() - 60,
+                                   "dossier": str(self.dossier)}, [self.outil("Read", {"file_path": "a.kt"})])
+                self.direct(taches=["t9"], actions=[{"t": t, "texte": "modifie a.py"}])
+                taches = [{"id": "t1"}, {"id": "t9"}]
+                detache.ajouter_au_travail(taches, self.factory_dir)
+                self.assertEqual(taches[0]["travail"]["agent"], "local")
+                self.assertEqual(taches[1]["travail"]["action"], "modifie a.py")
+
+    def test_la_vie_d_un_agent_serveur_est_celle_de_son_flux(self):
+        from datetime import datetime
+        self.direct(vie=time.time() - 900, actions=[{"t": None, "texte": "lance python"}])
+        taches = [{"id": "t1"}]
+        detache.ajouter_au_travail(taches, self.factory_dir)
+        t = taches[0]["travail"]
+        self.assertAlmostEqual(datetime.fromisoformat(t["vie_t"]).timestamp(), time.time() - 900, delta=3)
+        self.assertEqual(t["action_t"], t["vie_t"])           # sans heure d'action : celle du dernier octet du flux
+
+    def test_une_reponse_serveur_n_est_pas_du_travail_sur_la_tache(self):
+        self.direct(genre="reponse")
+        taches = [{"id": "t1"}]
+        detache.ajouter_au_travail(taches, self.factory_dir)
+        self.assertNotIn("travail", taches[0])
+
     def test_un_suivi_serveur_perime_n_est_plus_montre(self):
         self.direct(maj_il_y_a=detache.DIRECT_PERIME_S + 220)
         taches = [{"id": "t1"}]

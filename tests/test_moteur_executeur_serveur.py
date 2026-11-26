@@ -239,8 +239,9 @@ class SuiviDirect(Base):
         self.fichier = self.agents / "dev-1.direct.json"
         self.vus = []
 
-    def executeur_suivi(self, **plus):
-        suivi = {"dossier": self.agents, "cle": "dev-1", "agent": "dev-1", "taches": [TACHE], "dossier_projet": str(self.projet)}
+    def executeur_suivi(self, genre="tache", **plus):
+        suivi = {"dossier": self.agents, "cle": "dev-1", "agent": "dev-1", "taches": [TACHE], "dossier_projet": str(self.projet),
+                 "genre": genre}
         ex = es.ExecuteurServeur(self.projet, TACHE, "seul", {"projet": "demo"}, dossier=self.dossier, ssh=object(),
                                  dormir=self.dormir, pas_s=15, horloge=lambda: self.t, git=faux_git_sans_branche,
                                  suivi_direct=suivi, **plus)
@@ -291,6 +292,28 @@ class SuiviDirect(Base):
                 self.appeler(self.executeur_suivi())
         self.assertIsNotNone(self.vus[0])
         self.assertFalse(self.fichier.exists())
+
+    def test_la_vie_de_l_agent_est_comptee_au_poste_depuis_l_age_de_son_flux(self):
+        self.faux(etats=("en_cours", "terminee"))
+        with mock.patch.object(sa, "lire_direct", return_value={**DIRECT, "flux_age_s": 120.0}):
+            self.pendant_sommeil = lambda n: self.vus.append(self.lire_fichier())
+            self.appeler(self.executeur_suivi())
+        self.assertAlmostEqual(self.vus[0]["vie"], self.vus[0]["maj"] - 120.0, delta=0.01)
+        self.assertEqual(self.vus[0]["genre"], "tache")
+
+    def test_sans_age_de_flux_la_vie_n_est_pas_inventee(self):
+        self.faux(etats=("en_cours", "terminee"))
+        with mock.patch.object(sa, "lire_direct", return_value=DIRECT):
+            self.pendant_sommeil = lambda n: self.vus.append(self.lire_fichier())
+            self.appeler(self.executeur_suivi())
+        self.assertIsNone(self.vus[0]["vie"])
+
+    def test_une_reponse_garde_son_genre_dans_le_suivi(self):
+        self.faux(etats=("en_cours", "terminee"))
+        with mock.patch.object(sa, "lire_direct", return_value=DIRECT):
+            self.pendant_sommeil = lambda n: self.vus.append(self.lire_fichier())
+            self.appeler(self.executeur_suivi(genre="reponse"))
+        self.assertEqual(self.vus[0]["genre"], "reponse")
 
     def test_l_heure_de_la_liste_ne_bouge_que_quand_la_liste_change(self):
         self.faux(etats=("en_cours", "en_cours", "en_cours", "terminee"))

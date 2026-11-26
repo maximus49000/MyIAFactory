@@ -184,6 +184,9 @@ def accorder_fable(agents, cles, jour):
     return [dict(a, modele="Fable", fable=accord) if a["cle"] in cles else dict(a) for a in agents]
 
 
+REGLE_D_OUTIL = re.compile(r"^[A-Za-z][A-Za-z0-9_]{0,63}(?:\([^()\x00-\x1f\x7f]*\))?\Z")
+
+
 def outils(fiche):
     """Les outils de l'agent : la ligne `Outils :` de sa fiche (séparée par des virgules, hors parenthèses : une règle
     comme `Bash(py:*)` reste entière), sinon `OUTILS_PAR_DEFAUT`."""
@@ -199,7 +202,10 @@ def outils(fiche):
         else:
             courant += c
     liste.append(courant.strip())
-    return [o for o in liste if o] or list(OUTILS_PAR_DEFAUT)
+    # Seules les règles d'outil (`Nom` ou `Nom(motif)`) comptent : une phrase écrite dans la ligne `Outils :` d'un brief
+    # (« Exécution des tests du serveur, requêtes HTTP… ») n'est pas un outil. Essai réel (FM_Stats t229, 2026-11-26) :
+    # passée telle quelle à `--tools`, elle faisait refuser le lancement de l'agent serveur, deux fois, sans rapport.
+    return [o for o in liste if REGLE_D_OUTIL.match(o)] or list(OUTILS_PAR_DEFAUT)
 
 
 MOTIF_PROGRAMME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}\Z")   # un nom de programme, rien d'autre

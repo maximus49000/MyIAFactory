@@ -69,3 +69,13 @@ class TestFiches(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class OutilsEnPhrases(unittest.TestCase):
+    """Une phrase dans la ligne `Outils :` n'est pas un outil : elle ne part jamais dans `--tools` (FM_Stats t229)."""
+
+    def test_le_texte_libre_est_ecarte(self):
+        from orchestrateur import fiches
+        brut = "Exécution des tests du serveur, requêtes HTTP sur les URL publiques"
+        self.assertEqual(fiches.outils({"outils": brut}), fiches.OUTILS_PAR_DEFAUT)
+        self.assertEqual(fiches.outils({"outils": "Read, Bash(py:*), requêtes HTTP"}), ["Read", "Bash(py:*)"])

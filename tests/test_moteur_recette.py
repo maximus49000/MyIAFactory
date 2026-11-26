@@ -78,6 +78,14 @@ class Recette(tsr.AvecValidation):
         self.assertIn("recette_reussie", regles.CONSIGNE_RECETTE)
         self.assertIn("recette_reussie", rapport.__doc__)
 
+    def test_la_consigne_ne_traite_pas_une_verification_impossible_en_echec(self):
+        """FM_Stats (2026-11-26) : « import réel absent du clone » rendu `recette_reussie: false` rouvrait une correction à
+        chaque tour (le dev répondait « aucun code modifié »). Le non-vérifié est dit, il n'est pas un défaut."""
+        c = regles.CONSIGNE_RECETTE
+        self.assertIn("Non vérifié", c)
+        self.assertIn("pas un défaut", c)
+        self.assertIn("service en ligne", c)
+
 
 if __name__ == "__main__":
     import unittest

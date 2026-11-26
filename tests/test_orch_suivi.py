@@ -888,7 +888,7 @@ class TestSuivi(AvecProjet):
     def test_parallelisme_ecrit_les_places_serveur_et_l_ordre_des_lieux(self):
         r = self.releve()
         self.assertEqual((r["agents_serveur_max"], r["ordre_lieux"], r["ordre_lieux_par_metier"]),
-                         (0, ["local", "serveur", "cloud"], {}))
+                         (0, ["serveur", "local", "cloud"], {}))
         entree = {"agents_locaux_max": 3, "agents_cloud_max": 1, "agents_serveur_max": 2, "ordre_lieux": ["serveur", "local"],
                   "ordre_lieux_par_metier": {" qa ": ["cloud"]}}
         self.assertEqual(self.ok("parallelisme", entree=entree),

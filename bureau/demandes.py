@@ -41,7 +41,7 @@ CHAMPS = {"bouton": ("id",), "deplacer": ("tache", "colonne"),
 AGENTS_LOCAUX = (1, 16)      # les bornes de la factory (`orchestrateur/factory.py`)
 AGENTS_CLOUD = (0, 16)
 AGENTS_SERVEUR = (0, 4)
-LIEUX_D_AGENT = ("local", "serveur", "cloud")
+LIEUX_D_AGENT = ("serveur", "local", "cloud")
 FACULTATIFS = {"parallelisme": ("agents_serveur_max", "ordre_lieux", "ordre_lieux_par_metier"),
                "session_cloud": ("session", "verdict"), "partenaire_regle": ("id", "texte"), "partenaire_inscrit": ("note",),
                "faire_chez_partenaire": ("texte", "fichiers"), "challenge": ("texte", "solution"), "fonctionnalite": ("images", "fichiers", "nature", "concerne", "captures"),

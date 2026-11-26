@@ -5186,6 +5186,11 @@ AUTORISER, REFUSER_OUTIL, RELANCER_OUTIL = "autoriser", "refuser", "relancer"
 ARRET_OUTIL = re.compile(r"a besoin de l'outil (.+?), que sa fiche ne lui ouvre pas")   # la ligne de journal de l'arrêt
 OUVERT_A = "Outil ouvert à "          # la ligne de journal d'un outil ouvert (par le moteur ou sur accord du Directeur)
 REPRISE_OUTIL = "Le moteur a repris : l'outil"
+# Les commandes qui n'existent qu'au poste : un agent serveur qui les réclame comme « outil » n'a rien à se faire ouvrir
+# (la décision au Directeur n'y changerait rien) ; il termine sans elles, le moteur déployant et lisant l'état lui-même.
+OUTILS_DU_POSTE = ("deporter", "lancer", "recette-emulateur")
+SANS_OUTIL_AU_SERVEUR = "Outil du poste, absent du serveur : "
+LIEUX_FICHE_DU_POSTE = ("local", "serveur")      # les fiches que le moteur complète seul (un agent cloud garde ses réglages)
 OUTIL_BASH_DIT = re.compile(r"^Bash\s*(?::\s*(.+)|\((?!.*:\*\)\Z)(.+)\))\Z", re.S)
 
 
@@ -5227,12 +5232,21 @@ def _outil_refuse(projet, etat, execution, depart, r, fid):
         texte += f" Commande refusée : « {montree} »."
     lancer(projet, "tache", {"id": tid, "active": False, "journal": [texte]})
     _liberer_le_lot(projet, depart)
-    if programme is None and lieu == "local" and fiche is not None and outil == "Bash":
+    if (lieu == "serveur" and fiche is not None and outil.split("(")[0].strip().lower() in OUTILS_DU_POSTE
+            and not any(j["texte"].startswith(SANS_OUTIL_AU_SERVEUR) for j in _tache(projet, tid).get("journal") or [])):
+        return _reprendre_la_tache(
+            projet, etat, tid, fid,
+            f"« {outil} » est une commande du poste : elle n'existe pas sur le serveur et aucune décision ne l'y ouvrira. "
+            "Le moteur déploie le service et lit son état lui-même. Ne la redemande pas : fais et commite tout ce que ton "
+            "clone permet (code, tests, documentation, APK si ta fiche l'ouvre), ne touche pas à `.factory/`, puis rends ton "
+            "rapport en disant ce qui reste à vérifier au poste.",
+            f"{SANS_OUTIL_AU_SERVEUR}{outil} ({prenom}) : l'agent continue sans lui.")
+    if programme is None and lieu in LIEUX_FICHE_DU_POSTE and fiche is not None and outil == "Bash":
         suite = _appeler_par_son_nom(projet, etat, tid, fid, cle, prenom, fiche, commandes)
         if suite is not None:
             return suite
     origine = accord_outil.origine(programme, _factory(projet).get("environnement")) if programme else None
-    if origine and lieu == "local" and not _outil_deja_ouvert(projet, tid, regle):
+    if origine and lieu in LIEUX_FICHE_DU_POSTE and not _outil_deja_ouvert(projet, tid, regle):
         lancer(projet, "fiche", {"action": "ouvrir_outil", "cle": cle, "outil": regle})
         return _reprendre_la_tache(projet, etat, tid, fid, f"{regle} est maintenant ouvert dans ta fiche : relance ta commande.",
                                    f"{OUVERT_A}{prenom} : {regle} (programme {origine})")

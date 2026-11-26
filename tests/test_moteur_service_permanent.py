@@ -83,6 +83,19 @@ class DeploiementAutomatique(unittest.TestCase):
         en_cours = FauxAuto(cache={"demo": {"deploiement": {"statut": "en_cours"}, "etat": {"commit": self.AUTRE}}})
         self.assertEqual(self.lancer(d, en_cours, self.COMMIT)[1], [])
 
+    def test_un_en_cours_abandonne_ne_bloque_plus_les_deploiements(self):
+        """Le moteur redémarré pendant un déploiement laisse « en_cours » : passé la durée maximale, un nouveau commit repart."""
+        from datetime import datetime, timezone
+        epoch = lambda iso: datetime.strptime(iso, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc).timestamp()
+        cache = {"demo": {"deploiement": {"statut": "en_cours", "debut": "2026-11-26T09:24:39Z", "commit": "x"},
+                          "etat": {"commit": self.AUTRE, "etat": "actif"}}}
+        d = self.projet()
+        recent = self.lancer(d, FauxAuto(cache=cache), self.COMMIT, t=epoch("2026-11-26T09:40:00Z"))
+        self.assertEqual(recent[1], [])                                            # 15 minutes : il tourne peut-être encore
+        d = self.projet()
+        perime = self.lancer(d, FauxAuto(cache=cache), self.COMMIT, t=epoch("2026-11-26T10:50:00Z"))
+        self.assertEqual(len(perime[1]), 1)                                        # 1 h 25 : abandonné
+
     def test_au_plus_une_verification_toutes_les_deux_minutes(self):
         d = self.projet()
         m = FauxAuto()

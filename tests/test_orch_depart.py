@@ -224,7 +224,7 @@ class TestDepart(unittest.TestCase):
 
 
 PLACES = {"local": 2, "serveur": 2, "cloud": 3}
-ORDRE = ["local", "serveur", "cloud"]
+ORDRE = ["local", "serveur", "cloud"]       # un ordre explicite : le poste d'abord (le défaut est serveur, local, cloud)
 
 
 class TestBasculeLieux(unittest.TestCase):
@@ -266,7 +266,7 @@ class TestBasculeLieux(unittest.TestCase):
         f = {"ordre_lieux": ORDRE, "ordre_lieux_par_metier": {"qa": ["cloud", "local"]}}
         self.assertEqual(depart.ordre_du_metier(f, "qa"), ["cloud", "local"])
         self.assertEqual(depart.ordre_du_metier(f, "dev"), ORDRE)
-        self.assertEqual(depart.ordre_du_metier({}, "dev"), ORDRE)           # défaut : local, serveur, cloud
+        self.assertEqual(depart.ordre_du_metier({}, "dev"), ["serveur", "local", "cloud"])     # défaut : le serveur d'abord
 
     def test_lieu_impose_par_l_etape_l_emporte_sur_l_ordre(self):
         liste = [fiche("dev-1", "dev"), fiche("srv-1", "dev", lieu="serveur"),
@@ -555,7 +555,7 @@ class TestDepartCommandes(AvecProjet):
         self.ok("tache", entree={"titre": "A", "colonne": "dev", "agent": "dev-1"})
         r = self.ok("agent-libre", entree={"role": "dev"})
         self.assertIsNone(r["agent"])
-        self.assertEqual(r["raison"], "local : 1/1 occupés ; serveur : hors ligne ; cloud : session à créer pour cl-1")
+        self.assertEqual(r["raison"], "serveur : hors ligne ; local : 1/1 occupés ; cloud : session à créer pour cl-1")
         self.assertEqual(r["sans_session"], "cl-1")
 
     def test_agent_libre_voit_la_session_de_la_table(self):

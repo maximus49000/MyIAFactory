@@ -137,7 +137,7 @@ class Decoupage(Base):
         self.assertEqual(apres[etat["elements"]["f1/e2"]["pas"] + 1], "dev-local")
 
     def test_la_partie_locale_recoit_sa_consigne(self):
-        """La tâche de la partie locale dit de récupérer le code, compiler, tester, capturer, sans le réécrire."""
+        """La tâche de la partie locale dit de récupérer le code, compiler, tester (sans capture : le serveur les prend), sans le réécrire."""
         self.juger(OBJET)
         [decision] = self.decisions()
         regles.traiter_demande(self.projet, self.demande("decoupage_lieux", decision=decision["id"], verdict="valider"),
@@ -153,8 +153,9 @@ class Decoupage(Base):
                 self.assertIn(lieux.CONSIGNE_PARTIE_LOCALE, journal)
             else:
                 self.assertNotIn(lieux.CONSIGNE_PARTIE_LOCALE, journal)
-        for mot in ("récupère", "compile", "teste", "capture", "réécris pas"):
+        for mot in ("récupère", "compile", "teste", "réécris pas", "Aucune capture", "serveur"):
             self.assertIn(mot, lieux.CONSIGNE_PARTIE_LOCALE)
+        self.assertNotIn("tu captures", lieux.CONSIGNE_PARTIE_LOCALE)
         self.assertLess(len(lieux.CONSIGNE_PARTIE_LOCALE), 600)
 
     def test_lieu_etape_immediat(self):

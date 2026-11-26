@@ -3,7 +3,6 @@ __pycache__/
 *.pyc
 # réglages propres à la machine et au projet observé (jamais publiés)
 *.local.json
-.factory/
 node_modules/
 
 # configuration locale de prévisualisation (chemins de la machine)
@@ -30,3 +29,15 @@ exemples/projet-neuf/equipe.json
 exemples/projet-neuf/*-historique.jsonl
 
 .durees-tests.json
+
+# MyIAFactory : fichiers propres à la machine
+.factory/equipe.json
+.factory/*-historique.jsonl
+.env
+.factory/presence.json
+.factory/*.precedent
+.factory/attente-*.json
+.factory/moteur-reveil
+.factory/agents-en-cours/
+.factory/anomalies-logiciel.jsonl
+.factory/scratch/

@@ -57,7 +57,7 @@ class TestDeportConsigne(unittest.TestCase):
             self.assertEqual(depart.deport_consigne({"service": "poste"}, catalogue), "")
             t = depart.deport_consigne({"service": "serveur"}, catalogue, dossier="D:/p")
             for mot in (".factory/service.json", 'deporter service etat --dossier "D:/p"', "deporter service journal",
-                        "jamais déployer", "Directeur seul", "SERVICE_JETON", "DONNÉE"):
+                        "jamais déployer", "Directeur seul", "SERVICE_JETON", "posés par la plateforme", "DONNÉE"):
                 self.assertIn(mot, t)
             self.assertNotIn("deporter service deployer", t)
 

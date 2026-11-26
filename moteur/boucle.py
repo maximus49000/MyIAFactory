@@ -225,6 +225,7 @@ class Moteur:
         self._installation_vue = False     # une installation était en cours ou attendue au passage d'avant
         self._ecrits = {}                  # fichier -> (contenu, heure) : un fichier inchangé n'est pas réécrit à chaque passage
         self._echecs_installation = {}
+        self._sans_factory_dit = set()      # les projets sans factory déjà signalés (une seule fois, pas à chaque tour)
         self._mesure_tour = None           # la mesure de charge du tour en cours, partagée par tous les projets
         self.mesures_de_charge = 0         # combien de vraies mesures (sous-processus) ont été faites
         self.duree_dernier_tour_s = None
@@ -264,6 +265,17 @@ class Moteur:
     def _noter(self, projet, texte):
         self.journal.append(f"{projet.nom} : {texte}")
 
+    def _sans_factory(self, projet):
+        """Vrai pour un projet déclaré au bureau (ses réglages) mais jamais installé : pas de fichier de factory, donc rien à
+        piloter. Il est passé sans erreur, et signalé une seule fois, au lieu d'une erreur à chaque tour."""
+        if Path(projet.factory).exists():
+            return False
+        cle = str(projet.factory)
+        if cle not in self._sans_factory_dit:
+            self._sans_factory_dit.add(cle)
+            self._noter(projet, f"pas de fichier de factory ({projet.factory}) : projet non installé, passé sans rien piloter.")
+        return True
+
     # --- Un passage.
 
     def tour(self):
@@ -278,6 +290,8 @@ class Moteur:
         self._sonde_des_serveurs()
         for projet in list(self.projets):
             self._traiter_les_reveils()
+            if self._sans_factory(projet):
+                continue
             try:
                 self._tour_projet(projet)
             except Exception as e:      # une erreur d'un projet n'arrête ni la boucle ni les autres projets
@@ -660,6 +674,8 @@ class Moteur:
         alors revérifié pour chaque projet (un outil qui manque encore revient dans une décision)."""
         pretes, en_cours = {}, None
         for projet in list(self.projets):
+            if self._sans_factory(projet):
+                continue
             cle, etat = str(projet.factory), self._etat(projet)
             try:
                 for t in regles.installations_pretes(projet, etat):
@@ -997,6 +1013,8 @@ class Moteur:
             else:
                 mode, apk = self._mode_serveur(projet)
             base = {"projet": projet.nom}
+            if mode == "pilote":
+                fiche = self._avec_le_pont(fiche)
             depart = (depart.rstrip() + "\n\n"       # projet Flutter (vu sur le poste) : les commandes simples
                       + dp.consigne_serveur(mode, nom, flutter=executeur_serveur._projet_flutter(projet.dossier)) + "\n")
         signature = regles.reglage_effectif(projet, "signature_apk")
@@ -1673,10 +1691,40 @@ class Moteur:
         else:
             raison = self.cloud.fusionner(str(projet.dossier), e.branche)
         if raison is None:
+            if getattr(e, "serveur", False):
+                self._dater_les_livrables_rapatries(projet, e)
             return
         self._noter(projet, f"fusion de {e.branche} : {raison}")
         self._executer(projet, regles.fusion_impossible(projet, etat, e.tache, e.agent, e.branche,
                                                         getattr(e, "adresse", None), raison))
+
+    @staticmethod
+    def _avec_le_pont(fiche):
+        """Un agent serveur en mode pilote conduit l'émulateur par `pont <verbe>` : la règle `Bash(pont:*)` s'ajoute à ses
+        outils POUR CE DÉPART (sa fiche n'est pas modifiée). Sans elle, `pont demarrer` est refusé faute d'approbation possible
+        et la validation part sans capture (essai réel FM_Stats, 2026-11-26). Le pont lui-même refuse tout verbe hors liste."""
+        regle = fi.regle_bash("pont")
+        outils = fi.outils(fiche)
+        if regle in outils:
+            return fiche
+        return {**fiche, "outils": ", ".join([*outils, regle])}
+
+    @staticmethod
+    def _dater_les_livrables_rapatries(projet, e):
+        """Un agent serveur : son APK est rapatrié (écrit au poste) AVANT la fusion de sa branche, qui réécrit ensuite les
+        fichiers de code ; sa date semblerait « plus ancienne que le code » (`regles._apk_perime`) alors qu'il a été construit
+        sur ce même code. Une fois la fusion faite, les livrables rapatriés de cette tâche prennent la date du moment : seule
+        une modification POSTÉRIEURE du code les rend périmés. Jamais une erreur."""
+        for ligne in getattr(e, "livrables", None) or []:
+            m = re.match(r"Livrable rapatrié : (.+?) \(", ligne) if isinstance(ligne, str) else None
+            if not m:
+                continue
+            try:
+                chemin = (Path(projet.dossier) / m.group(1)).resolve()
+                if Path(projet.dossier).resolve() in chemin.parents and chemin.is_file() and not chemin.is_symlink():
+                    os.utime(chemin, None)
+            except OSError:
+                continue
 
     def _retours_des_agents(self, projet, etat):
         garde = []

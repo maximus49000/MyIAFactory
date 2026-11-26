@@ -294,6 +294,32 @@ class Arret(Cadre):
         self.assertNotIn("programme", d)
         self.assertNotIn("Bash", self.outils_de_hugo())
 
+    def test_un_agent_serveur_recoit_seul_un_programme_connu_du_projet(self):
+        """Un outil qui existe et que la tâche justifie est ouvert sans intervention, au serveur comme au poste."""
+        (self.dossier / "fiches" / "srv.md").write_text(
+            "Clé : srv-1\nPrénom : Sam\nRôle : cadrage\nService : metier\nModèle : Sonnet\nLieu : serveur\n\n"
+            "Travaille.\n\n## Leçons\n", encoding="utf-8")
+        self.ok("tache", entree={"id": self.tid, "agent": "srv-1"})
+        suite = self.arret("godot -v", agent="srv-1")
+        self.assertEqual(self.decisions(), [])
+        textes = [j["texte"] for j in self.tache()["journal"]]
+        self.assertIn("Outil ouvert à Sam : Bash(godot:*) (programme déclaré du projet)", textes)
+        self.assertIn("Bash(godot:*)", fi.outils(fi.trouver(fi.lire_toutes(self.dossier / "fiches"), "srv-1")))
+
+    def test_un_agent_serveur_qui_reclame_une_commande_du_poste_continue_sans_decision(self):
+        """`deporter` n'existe qu'au poste : aucune décision ne l'ouvrirait au serveur ; une seule reprise, puis le Directeur."""
+        (self.dossier / "fiches" / "srv.md").write_text(
+            "Clé : srv-1\nPrénom : Sam\nRôle : cadrage\nService : metier\nModèle : Sonnet\nLieu : serveur\n\n"
+            "Travaille.\n\n## Leçons\n", encoding="utf-8")
+        self.ok("tache", entree={"id": self.tid, "agent": "srv-1"})
+        rapport = {"statut": "outil_refuse", "outil": "deporter", "message": {"texte": "Il me faut deporter."}}
+        self.arret(None, rapport=rapport, refus=[{"outil": "deporter"}], agent="srv-1")
+        self.assertEqual(self.decisions(), [])
+        textes = [j["texte"] for j in self.tache()["journal"]]
+        self.assertTrue(any(x.startswith("Outil du poste, absent du serveur : deporter") for x in textes), textes)
+        self.arret(None, rapport=rapport, refus=[{"outil": "deporter"}], agent="srv-1")      # le second refus revient au Directeur
+        self.assertEqual(len(self.decisions()), 1)
+
     def test_un_agent_cloud_passe_toujours_par_la_decision(self):
         (self.dossier / "fiches" / "nuage.md").write_text(
             "Clé : nuage-1\nPrénom : Noa\nRôle : cadrage\nService : metier\nModèle : Sonnet\nLieu : cloud\n"

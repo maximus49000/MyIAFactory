@@ -2232,6 +2232,40 @@ class Validation(Base):
         self.assertEqual((val["colonne"], val.get("bloquee")), ("fait", None))
         self.assertEqual(len(self.taches(etape="flux:essai")), avant)      # l'étape d'avant n'est pas refaite
 
+    def validation_bloquee_apres_un_redemarrage(self):
+        """FM_Stats f24 (2026-11-26) : le cahier validé porte la maquette, la règle retire l'étape du workflow, et le moteur
+        relancé n'a plus l'élément en mémoire (`reprendre_la_serie` ne peut pas le reconstruire)."""
+        self.projet_avec_validation()
+        rien = {**verdict("e1"), **DIT, "message": {"texte": "Testé."}}
+        self.piloter(regles.avancer(self.projet, self.etat),
+                     rapports=[{"statut": "fait", "message": {"texte": "Programmé."}}, rien, rien])
+        (val,) = self.taches(etape="validation:valider")
+        self.etat["elements"].clear()
+        self.etat.pop("serie_perdue", None)
+        patchs = (mock.patch.object(regles, "_maquette_du_cahier_validee", return_value=True),
+                  mock.patch.object(regles, "_est_etape_maquette", lambda e: "valider" in str(e.get("id"))))
+        for p in patchs:
+            p.start()
+            self.addCleanup(p.stop)
+        return val
+
+    def test_relancer_une_validation_de_maquette_couverte_par_le_cahier_sans_l_element_en_memoire(self):
+        """Le moteur relancé ne connaît plus l'élément : « Relancer » répondait « n'est plus dans le workflow » et la carte
+        restait dans « Tâches bloquées ». La validation que le cahier couvre est close, sans refaire d'étape."""
+        val = self.validation_bloquee_apres_un_redemarrage()
+        avant = len(self.taches(etape="flux:essai"))
+        d, _ = self.traiter(type="retour", tache=val["id"], texte="Relance demandée par le Directeur (même consigne).")
+        self.assertIn("déjà validée", self.statut(d["id"])["reponse"])
+        (val,) = self.taches(etape="validation:valider")
+        self.assertEqual((val["colonne"], val.get("bloquee")), ("fait", None))
+        self.assertEqual(len(self.taches(etape="flux:essai")), avant)
+
+    def test_une_etape_de_maquette_couverte_par_le_cahier_n_est_pas_une_serie_perdue(self):
+        """Au redémarrage, l'étape retirée du workflow par la maquette du cahier ne fait pas signaler une série muette."""
+        self.validation_bloquee_apres_un_redemarrage()
+        regles.reprendre_la_serie(self.projet, self.etat, "f1")
+        self.assertFalse(self.etat.get("serie_perdue", {}).get("f1"))
+
     def test_retour_sur_une_validation_bloquee_d_une_serie_close_la_rouvre(self):
         """Essai réel (FM_Stats f12) : la série s'était close en laissant l'élément de côté ; « Relancer » répondait
         « l'étape à refaire n'est plus dans le workflow ». Le retour rouvre la série et refait l'étape."""

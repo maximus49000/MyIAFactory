@@ -1469,6 +1469,8 @@ html.mobile .fichier-telecharger, html.mobile .saisie-discussion .bouton { min-h
 html.mobile .question-actions .bouton { min-height: 44px; }
 
 .avancement { margin: 8px 0; }
+.historique-liste { margin: 4px 0 4px 18px; padding: 0; font-size: 0.9em; overflow-wrap: anywhere; }
+.historique-appel { margin: 1px 0; }
 .avancement-etat { margin: 6px 0; padding: 6px 10px; border-radius: 8px; overflow-wrap: anywhere; }
 .avancement-ok { background: #e3f3e6; color: #24602f; }
 .avancement-pause { background: #fdf0d5; color: #7a5710; }

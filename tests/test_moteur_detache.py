@@ -315,6 +315,97 @@ class AuTravail(Base):
         detache.ajouter_au_travail(taches, self.factory_dir)
         self.assertEqual([x["texte"] for x in taches[0]["travail"]["historique"]], ["modifie b.kt", "lit a.kt"])
 
+    # --- un agent serveur : la copie locale de son suivi en direct (`<cle>.direct.json`, écrite par l'exécuteur serveur)
+    def direct(self, cle="dev-1", maj_il_y_a=5, **plus):
+        d = detache.dossier(self.factory_dir)
+        d.mkdir(parents=True, exist_ok=True)
+        contenu = {"serveur": True, "cle": cle, "agent": cle, "taches": ["t1"], "dossier": str(self.dossier),
+                   "debut": time.time() - 600, "maj": time.time() - maj_il_y_a, "avancement_maj": time.time() - maj_il_y_a,
+                   "actions": [{"t": "2026-11-26T10:00:00Z", "texte": "modifie a.py"}, {"t": None, "texte": "lit b.py"}],
+                   "phase": "modification",
+                   "usage": [{"modele": "claude-opus-5-5", "entree": 10, "sortie": 5, "cache_lecture": 0, "cache_ecriture": 0}],
+                   "avancement": {"points": [{"texte": "un", "fait": True}], "en_cours": "deux"}, **plus}
+        (d / f"{cle}.direct.json").write_text(json.dumps(contenu), encoding="utf-8")
+
+    def test_un_agent_serveur_recoit_le_meme_travail_qu_un_agent_local(self):
+        self.direct()
+        taches = [{"id": "t1"}, {"id": "t2"}]
+        detache.ajouter_au_travail(taches, self.factory_dir)
+        t = taches[0]["travail"]
+        self.assertEqual((t["agent"], t["action"], t["phase"], t["serveur"]), ("dev-1", "modifie a.py", "modification", True))
+        self.assertEqual([h["texte"] for h in t["historique"]], ["modifie a.py", "lit b.py"])
+        self.assertEqual(t["avancement"]["points"], [{"texte": "un", "fait": True}])
+        self.assertEqual(t["avancement"]["en_cours"], "deux")
+        self.assertTrue(t["avancement"]["maj"])
+        self.assertEqual(t["conso"][0]["entree"], 10)
+        self.assertTrue(t["depuis"] and t["vie_t"])
+        self.assertNotIn("travail", taches[1])
+
+    def test_un_horodatage_forge_ne_masque_pas_les_autres_agents(self):
+        for t in ("0001-01-01T00:00:00", "9999-12-31T23:59:59+00:00", "n'importe quoi"):
+            with self.subTest(t=t):
+                self.ecrire("t1", {"tache": "t1", "agent": "local", "pid": os.getpid(), "debut": time.time() - 60,
+                                   "dossier": str(self.dossier)}, [self.outil("Read", {"file_path": "a.kt"})])
+                self.direct(taches=["t9"], actions=[{"t": t, "texte": "modifie a.py"}])
+                taches = [{"id": "t1"}, {"id": "t9"}]
+                detache.ajouter_au_travail(taches, self.factory_dir)
+                self.assertEqual(taches[0]["travail"]["agent"], "local")
+                self.assertEqual(taches[1]["travail"]["action"], "modifie a.py")
+
+    def test_la_vie_d_un_agent_serveur_est_celle_de_son_flux(self):
+        from datetime import datetime
+        self.direct(vie=time.time() - 900, actions=[{"t": None, "texte": "lance python"}])
+        taches = [{"id": "t1"}]
+        detache.ajouter_au_travail(taches, self.factory_dir)
+        t = taches[0]["travail"]
+        self.assertAlmostEqual(datetime.fromisoformat(t["vie_t"]).timestamp(), time.time() - 900, delta=3)
+        self.assertEqual(t["action_t"], t["vie_t"])           # sans heure d'action : celle du dernier octet du flux
+
+    def test_une_reponse_serveur_n_est_pas_du_travail_sur_la_tache(self):
+        self.direct(genre="reponse")
+        taches = [{"id": "t1"}]
+        detache.ajouter_au_travail(taches, self.factory_dir)
+        self.assertNotIn("travail", taches[0])
+
+    def test_un_suivi_serveur_perime_n_est_plus_montre(self):
+        self.direct(maj_il_y_a=detache.DIRECT_PERIME_S + 220)
+        taches = [{"id": "t1"}]
+        detache.ajouter_au_travail(taches, self.factory_dir)
+        self.assertNotIn("travail", taches[0])
+
+    def test_un_suivi_serveur_mal_forme_est_ignore(self):
+        d = self.dossier_agents()
+        (d / "x.direct.json").write_text("{pas du json", encoding="utf-8")
+        (d / "y.direct.json").write_text(json.dumps({"taches": "t1", "maj": "hier", "debut": None}), encoding="utf-8")
+        (d / "z.direct.json").write_text(json.dumps([1, 2]), encoding="utf-8")
+        taches = [{"id": "t1"}]
+        detache.ajouter_au_travail(taches, self.factory_dir)
+        self.assertNotIn("travail", taches[0])
+
+    def test_un_lot_serveur_se_repartit_comme_un_lot_local(self):
+        self.direct(taches=["t1", "t2"])
+        taches = [{"id": "t1"}, {"id": "t2"}]
+        detache.ajouter_au_travail(taches, self.factory_dir)
+        self.assertEqual(taches[0]["travail"]["lot"], {"rang": 1, "total": 2})
+        self.assertEqual((taches[1]["dans_le_lot"]["etat"], taches[1]["dans_le_lot"]["courante"]), ("a_venir", "t1"))
+        self.assertNotIn("travail", taches[1])
+
+    def test_le_registre_ne_prend_pas_un_suivi_serveur_pour_un_agent(self):
+        self.direct()
+        self.assertEqual(self.registre().entrees(), [])
+        r = self.registre()
+        r.effacer("dev-1")
+        self.assertFalse((detache.dossier(self.factory_dir) / "dev-1.direct.json").exists())
+
+    def test_un_agent_local_garde_la_priorite_sur_un_suivi_serveur_de_meme_tache(self):
+        self.ecrire("t1", {"tache": "t1", "agent": "local", "pid": os.getpid(), "debut": time.time() - 60,
+                           "dossier": str(self.dossier)}, [self.outil("Read", {"file_path": "a.kt"})])
+        self.direct()
+        taches = [{"id": "t1"}]
+        detache.ajouter_au_travail(taches, self.factory_dir)
+        self.assertEqual(taches[0]["travail"]["agent"], "local")
+        self.assertNotIn("serveur", taches[0]["travail"])
+
     def test_rien_pour_un_agent_qui_ne_tourne_plus(self):
         self.ecrire("t1", {"tache": "t1", "agent": "dev-1", "pid": 999999999, "debut": time.time()}, [])
         taches = [{"id": "t1"}]

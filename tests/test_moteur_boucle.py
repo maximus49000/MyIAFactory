@@ -758,6 +758,7 @@ class FauxExecuteurServeur:
     def __init__(self, projet, tache, mode, demande_base, apk=None, **kw):
         self.projet, self.tache, self.mode, self.demande_base, self.apk = projet, tache, mode, demande_base, apk
         self.autres_noms = kw.get("autres_noms", ())
+        self.suivi_direct = kw.get("suivi_direct")
         self.attente_max_s, self.attente_finale = kw.get("attente_max_s"), kw.get("attente_finale", False)
         self.branche, self.arrets = None, 0
         self.arret = __import__("threading").Event()
@@ -849,6 +850,14 @@ class Serveur(Base):
                                                                   encoding="utf-8")
         self.partir()
         self.assertIn("personne n'approuve tes commandes", self.lances()[-1]["depart"])
+
+    def test_le_suivi_direct_est_nomme_par_la_tache_et_non_par_l_agent(self):
+        self.partir()
+        (ex,) = self.executeurs
+        s = ex.suivi_direct
+        self.assertEqual((s["cle"], s["agent"], s["taches"], s["genre"]), (self.tache, "dev-1", [self.tache], "tache"))
+        self.assertEqual(Path(s["dossier"]), detache.dossier(self.dossier))
+        self.assertEqual(s["dossier_projet"], str(self.dossier))
 
     def test_partir_serveur_utilise_l_executeur_distant(self):
         self.partir()

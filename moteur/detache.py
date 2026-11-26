@@ -251,7 +251,7 @@ def _heure_de_la_ligne(d):
         return None
     try:
         return datetime.fromisoformat(d["timestamp"].replace("Z", "+00:00")).astimezone().isoformat(timespec="seconds")
-    except ValueError:
+    except (ValueError, OSError, OverflowError):       # une heure hors du possible (an 1, an 9999) : une donnée forgée
         return None
 
 
@@ -495,6 +495,68 @@ def tache_du_lot_en_cours(ids, listes):
     return next((tid for tid in ids if not liste_finie(listes.get(tid))), ids[-1])
 
 
+SUFFIXE_DIRECT = ".direct.json"      # la copie locale du suivi en direct d'un agent serveur (`executeur_serveur`)
+DIRECT_PERIME_S = 180                 # une copie non rafraîchie depuis plus longtemps : l'agent n'est plus suivi (moteur arrêté)
+
+
+def _nombre(v):
+    return isinstance(v, (int, float)) and not isinstance(v, bool) and v == v and abs(v) != float("inf")
+
+
+def _actions_du_direct(brut):
+    sortie = []
+    for a in brut if isinstance(brut, list) else []:
+        if isinstance(a, dict) and isinstance(a.get("texte"), str) and a["texte"].strip():
+            t = a.get("t")
+            sortie.append({"t": t if isinstance(t, str) else None, "texte": a["texte"][:MAX_ACTION]})
+        if len(sortie) >= MAX_HISTORIQUE:
+            break
+    return sortie
+
+
+def _ajouter_travail_serveur(f, travail, dans_le_lot, maintenant):
+    """Un agent SERVEUR au travail : sa copie locale `<cle>.direct.json` (écrite à chaque sonde par l'exécuteur serveur)
+    devient le même `travail` qu'un agent local ; dans un lot, la tâche en cours est la première, les autres sont « à venir ».
+    Une copie illisible, mal formée ou périmée est ignorée ; une tâche déjà au travail d'un agent local n'est pas reprise."""
+    try:
+        brut = json.loads(f.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return
+    if not isinstance(brut, dict) or brut.get("serveur") is not True or brut.get("genre") == "reponse":
+        return          # une réponse aux questions n'est pas du travail sur la tâche (comme pour un agent local)
+    maj, debut = brut.get("maj"), brut.get("debut")
+    if not (_nombre(maj) and _nombre(debut)) or maintenant - maj > DIRECT_PERIME_S or maj - maintenant > 60 or _iso(debut) is None:
+        return
+    ids = [i for i in brut.get("taches") if isinstance(i, str)] if isinstance(brut.get("taches"), list) else []
+    if not ids or any(i in travail or i in dans_le_lot for i in ids):
+        return
+    actions = _actions_du_direct(brut.get("actions"))
+    agent = brut.get("agent") if isinstance(brut.get("agent"), str) else None
+    liste = brut.get("avancement") if isinstance(brut.get("avancement"), dict) else None
+    if liste is not None:
+        points = [{"texte": str(p["texte"])[:120], "fait": p.get("fait") is True}
+                  for p in (liste.get("points") if isinstance(liste.get("points"), list) else [])[:MAX_POINTS]
+                  if isinstance(p, dict) and isinstance(p.get("texte"), str)]
+        en_cours = liste.get("en_cours")
+        liste = {"points": points, "en_cours": en_cours[:120] if isinstance(en_cours, str) and en_cours.strip() else None,
+                 "maj": _iso(brut["avancement_maj"] if _nombre(brut.get("avancement_maj")) else maj)}
+    vie = brut.get("vie")          # l'heure du dernier octet du flux de l'agent (comptée au poste) ; absente : celle de la copie
+    vie_t = _iso(vie if _nombre(vie) and vie <= maintenant + 60 else maj)
+    phase = brut.get("phase")
+    info = {"depuis": _iso(debut), "agent": agent, "action": actions[0]["texte"] if actions else None,
+            "action_t": ((_heure_de_la_ligne({"timestamp": actions[0]["t"]}) or vie_t) if actions else None),
+            "vie_t": vie_t, "conso": [u for u in brut.get("usage") if isinstance(u, dict)][:4] if isinstance(brut.get("usage"), list) else [],
+            "phase": phase if phase in ("lecture", "modification", "compilation", "tests", "autre") else None,
+            "attente_deportee": None, "avancement": liste, "historique": actions, "serveur": True}
+    if len(ids) == 1:
+        travail[ids[0]] = info
+        return
+    travail[ids[0]] = {**info, "lot": {"rang": 1, "total": len(ids)}}
+    for rang, tid in enumerate(ids[1:], 2):
+        dans_le_lot[tid] = {"etat": "a_venir", "agent": agent, "courante": ids[0], "rang": rang, "total": len(ids),
+                            "avancement": None}
+
+
 def ajouter_au_travail(taches, dossier_factory, vivant=processus_vivant, attentes_tests=None, dossier_attente=None):
     """Pour le bureau : chaque tâche dont l'agent local tourne reçoit `travail` = `{depuis, agent, action, action_t,
     vie_t, conso, attente_deportee}` (`attente_deportee` : voir `attente_deportee`, `None` si l'agent n'attend pas d'exécution distante ; heures ISO ; `vie_t` : la dernière ligne écrite, signes de vie d'une commande en cours compris ;
@@ -510,7 +572,7 @@ def ajouter_au_travail(taches, dossier_factory, vivant=processus_vivant, attente
             return taches
         travail, termines, dans_le_lot = {}, {}, {}
         for f in sorted(d.glob("*.json")):
-            if f.name.endswith((".questions.json", ".avancement.json")):
+            if f.name.endswith((".questions.json", ".avancement.json", SUFFIXE_DIRECT)):
                 continue
             try:
                 etat = json.loads(f.read_text(encoding="utf-8"))
@@ -571,6 +633,8 @@ def ajouter_au_travail(taches, dossier_factory, vivant=processus_vivant, attente
                     dans_le_lot[tid] = {"etat": "faite" if faite else "a_venir", "agent": etat.get("agent"),
                                         "courante": courante, "rang": rang, "total": len(ids),
                                         "avancement": dict(a, en_cours=None) if a and faite else a}
+        for f in sorted(d.glob("*" + SUFFIXE_DIRECT)):          # les agents serveur (suivi en direct recopié)
+            _ajouter_travail_serveur(f, travail, dans_le_lot, time.time())
         for t in taches:
             if not isinstance(t, dict):
                 continue
@@ -704,7 +768,7 @@ class Registre:
             return []
         rendu = []
         for f in sorted(self.dossier.glob("*.json")):
-            if f.name.endswith((".questions.json", ".avancement.json")):
+            if f.name.endswith((".questions.json", ".avancement.json", SUFFIXE_DIRECT)):
                 continue
             cle = f.name[:-len(".json")]
             etat = self.lire_etat(cle)
@@ -730,7 +794,7 @@ class Registre:
                     self.chemin(tid, ".avancement.json").unlink()
                 except OSError:
                     pass
-        for suffixe in (".json", ".jsonl", ".err", ".entree", ".consigne.md", ".arrete", ".avancement.json"):
+        for suffixe in (".json", ".jsonl", ".err", ".entree", ".consigne.md", ".arrete", ".avancement.json", SUFFIXE_DIRECT):
             try:
                 self.chemin(cle, suffixe).unlink()
             except OSError:

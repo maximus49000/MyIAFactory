@@ -208,13 +208,20 @@ class ExecuteurServeur:
     noter_abonnement = True          # l'instantané d'abonnement du flux est noté par `appel` (compté dans l'abonnement)
 
     def __init__(self, projet, tache, mode, demande_base, dossier=None, ssh=None, dormir=time.sleep, pas_s=15,
-                 horloge=time.monotonic, git=None, attente_max_s=600, apk=None, autres_noms=(), attente_finale=False):
+                 horloge=time.monotonic, git=None, attente_max_s=600, apk=None, autres_noms=(), attente_finale=False,
+                 suivi_direct=None):
         self.projet = Path(projet)
         # `attente_finale` : une place d'agent attendue `attente_max_s` en vain clôt l'agent (`LimiteServeur`, pas de
         # second essai d'`agents`) : l'étape de capture n'attend jamais plus que son délai
         self.attente_finale = attente_finale
         self.apk = apk                   # mode pilote : l'APK déposé sur le serveur (`serveur_agent.lancer_agent`)
         self.tache = tache
+        # `suivi_direct` : `{dossier, cle, agent, taches, dossier_projet}` ; pendant le travail de l'agent, son suivi en
+        # direct (`serveur_agent.lire_direct`) est recopié dans `<dossier>/<cle>.direct.json`, que le bureau lit comme il lit un
+        # agent local (`detache.ajouter_au_travail`). Sans lui, rien n'est lu ni écrit.
+        self.suivi_direct = suivi_direct if isinstance(suivi_direct, dict) else None
+        self._epoch = time.time
+        self._direct_debut = self._direct_liste = self._direct_liste_maj = None
         # un lot : la tâche serveur active peut porter le nom d'un autre de ses identifiants (rattachée par celui-là)
         self._noms = {str(tache).lower()} | {str(n).lower() for n in autres_noms or () if isinstance(n, str)}
         self.avertissements_index = []   # écritures de l'index refusées (aussi dites sur la sortie d'erreur)
@@ -360,6 +367,7 @@ class ExecuteurServeur:
                 self._echec_precedent = None     # l'appel a fini par une exception : aucune erreur « précédente » gardée
                 raise
             finally:
+                self._retirer_direct()
                 # la demande d'arrêt valait pour cet appel (ou, faite entre deux appels, pour celui-ci) : consommée
                 self._arret, self._arret_lu = False, None
         self._echec_precedent = appel._extrait(sortie) if code != 0 else None
@@ -493,6 +501,8 @@ class ExecuteurServeur:
             maintenant = self._horloge()
             if etat in st.FINAUX:
                 return lu, None
+            if etat == "en_cours":
+                self._copier_direct(sa, ident)
             if etat == "inconnu" and not raison.startswith((RAISON_SANS_ETAT, RAISON_INJOIGNABLE)):
                 # le serveur répond mais l'état reste illisible (etat.json abîmé, lecture en échec, serveur retiré) :
                 # borné comme l'absence d'état, l'arrêt est demandé (relayé plus tard si besoin)
@@ -540,6 +550,46 @@ class ExecuteurServeur:
                 self._noter(st, ident, {"arret_demande": True})
                 raise EcheanceServeur()
             self._dormir(self.pas_s)
+
+    def _fichier_direct(self):
+        s = self.suivi_direct
+        return Path(s["dossier"]) / f"{detache._nom(s['cle'])}{detache.SUFFIXE_DIRECT}"
+
+    def _copier_direct(self, sa, ident):
+        """Recopie le suivi en direct de l'agent dans `<cle>.direct.json` (écriture atomique). Une lecture qui échoue, ou
+        n'a rien, laisse la dernière copie ; ne lève jamais (le suivi ne fait jamais échouer l'agent)."""
+        if self.suivi_direct is None:
+            return
+        try:
+            direct = sa.lire_direct(ident, self.dossier, self.ssh)
+            if not isinstance(direct, dict):
+                return
+            maintenant = self._epoch()
+            if self._direct_debut is None:
+                self._direct_debut = maintenant
+            if direct.get("avancement") != self._direct_liste or self._direct_liste_maj is None:
+                self._direct_liste, self._direct_liste_maj = direct.get("avancement"), maintenant
+            s = self.suivi_direct
+            age = direct.get("flux_age_s")      # l'âge du dernier octet du flux, dit par l'entrée : compté ici sur l'horloge du poste
+            vie = maintenant - age if isinstance(age, (int, float)) and not isinstance(age, bool) else None
+            fichier = self._fichier_direct()
+            fichier.parent.mkdir(parents=True, exist_ok=True)
+            detache._ecrire(fichier, {**direct, "serveur": True, "cle": s["cle"], "agent": s.get("agent"),
+                                      "taches": list(s["taches"]), "genre": s.get("genre") or "tache",
+                                      "dossier": s.get("dossier_projet"), "debut": self._direct_debut, "maj": maintenant,
+                                      "vie": vie, "avancement_maj": self._direct_liste_maj})
+        except Exception as e:      # noqa: BLE001
+            print(f"suivi direct de l'agent serveur {self.tache} : {type(e).__name__}", file=sys.stderr)
+
+    def _retirer_direct(self):
+        """La copie locale du suivi disparaît avec l'agent (fin, échec, arrêt ou exception)."""
+        self._direct_debut = self._direct_liste = self._direct_liste_maj = None
+        if self.suivi_direct is None:
+            return
+        try:
+            self._fichier_direct().unlink()
+        except OSError:
+            pass
 
     def _verifier_arret(self, sa, st, ident):
         """Arrêt demandé : `ArretDemande`. La tâche (si elle existe) est arrêtée ; finie, son travail est rapatrié ; serveur

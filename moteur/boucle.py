@@ -1025,6 +1025,12 @@ class Moteur:
         if places:                          # les places serveur du projet ; sans réglage, le défaut du serveur (2)
             base["places"] = places
         plus_ex = {"apk": apk} if apk else {}
+        plus_ex["suivi_direct"] = {         # le suivi en direct de l'agent, recopié là où le bureau lit les agents locaux
+            "dossier": detache.dossier(projet.factory.resolve().parent),
+            "cle": f"{tache}.reponse" if reponse is not None else tache, "agent": fiche["cle"],
+            "genre": "reponse" if reponse is not None else "tache",
+            "taches": [tache] if reponse is not None or not noms_du_lot else list(noms_du_lot),
+            "dossier_projet": str(projet.dossier)}
         if noms_du_lot and reponse is None:
             plus_ex["autres_noms"] = tuple(noms_du_lot)
         plus = {"reprendre": reprendre} if reprendre else {}

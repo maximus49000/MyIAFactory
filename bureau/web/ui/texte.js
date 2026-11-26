@@ -122,6 +122,8 @@ export function avancementEnClair(av) {
     phase: typeof av.phase === "string" ? av.phase : null, sansListe: points.length === 0,
     passe: dureeCourte(av.passe_s), cumul: dureeCourte(av.cumul_s), reste: av.reste_texte || "inconnu",
     dansLeLot: av.etat === "lot_faite" || av.etat === "lot_a_venir",
+    historique: (Array.isArray(av.historique) ? av.historique : [])
+      .filter((h) => h && typeof h.texte === "string").map((h) => ({t: typeof h.t === "string" ? h.t : null, texte: h.texte})),
   };
 }
 

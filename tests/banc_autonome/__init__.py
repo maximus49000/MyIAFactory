@@ -80,7 +80,7 @@ def rejouer(cas, juger):
         except Exception as e:  # noqa: BLE001 : un cas qui échoue ne doit pas arrêter le rejeu
             return {"id": cas["id"], "attendu": attendu, "obtenu": f"erreur : {e}", "juste": False, "defauts": [str(e)]}
         juste, defauts = noter(cas, objet)
-        return {"id": cas["id"], "attendu": attendu, "obtenu": str(objet.get("verdict")), "juste": juste, "defauts": defauts}
+        return {"id": cas["id"], "attendu": attendu, "obtenu": str(objet.get("verdict")) + (f" : {' '.join(str(objet['texte']).split())[:200]}" if objet.get("texte") else ""), "juste": juste, "defauts": defauts}
     from moteur import regles
     if cas["type"] == "hors_jugement":
         genre = cas["dossier"]["decision"]["genre"]

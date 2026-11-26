@@ -128,3 +128,29 @@ test("copie refusee (bureau en http) : le jeton s'affiche dans un champ a select
   assert.equal(champs.length, 1);
   assert.equal(champs[0].readOnly, true);
 });
+
+test("la case « Déployer automatiquement » : cochée au départ si activée, envoie actif, et revient si le bureau refuse", async () => {
+  const f = reseau({"POST /api/services/fm-stats/auto": reponse(200, {auto: true})});
+  const c = zoneServices([service({auto: false})], {fetchFn: f});
+  const [case_] = c.tous((n) => n.tagName === "input" && n.type === "checkbox");
+  assert.equal(case_.checked, false);
+  case_.checked = true;
+  await case_.auteurs.change[0]();
+  assert.deepEqual(f.appels[0].corps, {actif: true});
+  assert.match(c.textContent, /Déploiement automatique activé/);
+  assert.equal(service({auto: true}).auto, true);
+  const refuse = reseau({"POST /api/services/fm-stats/auto": reponse(400, {erreur: "non"})});
+  const c2 = zoneServices([service({auto: true})], {fetchFn: refuse});
+  const [case2] = c2.tous((n) => n.tagName === "input" && n.type === "checkbox");
+  assert.equal(case2.checked, true);
+  case2.checked = false;
+  await case2.auteurs.change[0]();
+  assert.equal(case2.checked, true);
+});
+
+test("un déploiement en cours est dit en toutes lettres (l'ancienne version répond encore)", () => {
+  const c = zoneServices([service({deploiement: {statut: "en_cours", commit: "b".repeat(40), debut: "2026-11-26T08:56:18Z"}})], {fetchFn: reseau({})});
+  assert.match(c.textContent, /Déploiement en cours depuis .* \(commit bbbbbbbbbbbb\) : l'ancienne version répond encore/);
+  const fini = zoneServices([service()], {fetchFn: reseau({})});
+  assert.ok(!fini.textContent.includes("Déploiement en cours"));
+});

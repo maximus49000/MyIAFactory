@@ -27,7 +27,7 @@ from pathlib import Path
 
 from bureau import attente, deport_types
 from bureau import reglages as reglages_bureau
-from moteur import agents, appel, cloud, detache, executeur_serveur, figes, git_sur, jugement, regles
+from moteur import agents, appel, cloud, detache, executeur_serveur, figes, git_sur, jugement, regles, service_permanent
 from orchestrateur import anonymat, connaissances
 from orchestrateur import depart as dp
 from orchestrateur import factory as fa
@@ -455,6 +455,19 @@ class Moteur:
         self._traiter_les_reveils()
         self._quota(projet)
         self._garder_les_reprises(projet, etat)
+        self._deployer_le_service_si_modifie(projet)
+
+    def _deployer_le_service_si_modifie(self, projet):
+        """La case « Déployer automatiquement à chaque modification » (zone Services) : un commit neuf du projet est
+        déployé sans demander. Jamais une raison d'arrêter le tour."""
+        try:
+            ligne = service_permanent.deployer_si_modifie(
+                projet.dossier, self.horloge(), annoncer=lambda texte: self._noter(projet, texte))
+        except Exception as e:  # noqa: BLE001
+            self._noter(projet, f"déploiement automatique impossible : {type(e).__name__}")
+            return
+        if ligne:
+            self._noter(projet, ligne)
 
     # --- Les reprises promises survivent à un redémarrage du moteur.
 

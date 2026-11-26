@@ -20,6 +20,7 @@ class FauxPoste:
         self.appels = []
         self.jeton = ""
         self.cache = {}
+        self.auto = {}
         self.lache = threading.Event()
         self.lache.set()
 
@@ -37,6 +38,13 @@ class FauxPoste:
 
     def lire_jeton(self, projet, dossier=None):
         return self.jeton
+
+    def lire_auto(self, dossier=None):
+        return dict(self.auto)
+
+    def poser_auto(self, projet, actif, dossier=None):
+        self.auto = {projet: True} if actif else {}
+        return bool(actif)
 
     def poser_secrets(self, racine, valeurs, dossier=None):
         self.appels.append(("secrets", dict(valeurs)))
@@ -113,6 +121,16 @@ class TestZoneServices(AvecServeur):
             self.assertEqual(self.poster(f"/api/services/demo/{action}", {})[0].status, 202)
             self.srv.travaux_services.attendre()
         self.assertEqual(self.poste.appels, [("deployer",), ("etat",), ("journal",), ("arreter",), ("redemarrer",)])
+
+    def test_case_deploiement_automatique(self):
+        r, data = self.poster("/api/services/demo/auto", {"actif": True})
+        self.assertEqual((r.status, json.loads(data)), (200, {"auto": True}))
+        r, data = self.req("GET", "/api/services")
+        self.assertTrue(json.loads(data)["services"][0]["auto"])
+        self.assertEqual(self.poster("/api/services/demo/auto", {"actif": "oui"})[0].status, 400)
+        self.assertEqual(self.poster("/api/services/demo/auto", {})[0].status, 400)
+        r, data = self.poster("/api/services/demo/auto", {"actif": False})
+        self.assertEqual(json.loads(data), {"auto": False})
 
     def test_jeton_pour_le_bouton_copier(self):
         self.assertEqual(self.poster("/api/services/demo/jeton", {})[0].status, 404)

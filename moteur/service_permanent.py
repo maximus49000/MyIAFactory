@@ -36,6 +36,58 @@ def raison_de_ne_pas_deployer(dossier, module=None):
     return None
 
 
+ESSAIS = {}                   # {dossier: (commit essayé, heure)} : jamais deux fois de suite le même commit en échec
+DELAI_MIN_S = 120             # au plus une vérification toutes les deux minutes par projet
+_DERNIERE = {}
+
+
+def _commit_du_depot(dossier):
+    """Le commit courant du projet (`git rev-parse HEAD`), ou None."""
+    import subprocess
+    try:
+        r = subprocess.run(["git", "-C", str(dossier), "rev-parse", "HEAD"], capture_output=True, text=True, timeout=20,
+                           creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    except (OSError, subprocess.SubprocessError):
+        return None
+    sortie = r.stdout.strip()
+    return sortie if r.returncode == 0 and len(sortie) == 40 else None
+
+
+def deployer_si_modifie(dossier, maintenant, module=None, commit_du_depot=_commit_du_depot, declencher_=None,
+                        annoncer=None):
+    """La case « Déployer automatiquement à chaque modification » : si elle est cochée pour ce projet et que son commit
+    courant n'est pas celui du serveur, le service est redéployé sans demander. Rend la ligne dite, ou None (rien à faire).
+    Un commit déjà essayé et en échec n'est pas retenté (un nouveau commit relance) ; un déploiement en cours attend."""
+    cle = str(Path(dossier).resolve())
+    if maintenant - _DERNIERE.get(cle, 0) < DELAI_MIN_S:
+        return None
+    _DERNIERE[cle] = maintenant
+    if not (Path(dossier) / ".factory" / "service.json").is_file():
+        return None
+    m = module or _module()
+    projet = m.identifiant(Path(dossier))
+    if m.lire_auto().get(projet) is not True:
+        return None
+    fil = _EN_VOL.get(cle)
+    if fil is not None and fil.is_alive():
+        return None
+    fiche = m.lire_cache().get(projet)
+    fiche = fiche if isinstance(fiche, dict) else {}
+    if isinstance(fiche.get("deploiement"), dict) and fiche["deploiement"].get("statut") == "en_cours":
+        return None
+    commit = commit_du_depot(dossier)
+    if commit is None:
+        return None
+    etat = fiche.get("etat") if isinstance(fiche.get("etat"), dict) else {}
+    if etat.get("commit") == commit and etat.get("etat") == "actif":
+        return None
+    if ESSAIS.get(cle) == commit:
+        return None
+    ESSAIS[cle] = commit
+    ligne = (declencher_ or declencher)(dossier, annoncer=annoncer)
+    return ("Déploiement automatique (case cochée) : " + ligne) if ligne else None
+
+
 def annonce(resultat):
     """Le message dit au Directeur après un déploiement : en ligne (adresse), retour arrière ou échec, avec la raison. Jamais le
     jeton ni un secret (le jeton se copie dans la zone « Services » du bureau). `resultat` : `(code, réponse)` de `deployer`."""

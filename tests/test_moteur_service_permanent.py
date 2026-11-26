@@ -27,6 +27,70 @@ class FauxModule:
         return 0, {"statut": "ok"}
 
 
+class FauxAuto(FauxModule):
+    def __init__(self, auto=True, cache=None):
+        super().__init__()
+        self.auto, self.cache = auto, cache or {}
+
+    def identifiant(self, dossier):
+        return "demo"
+
+    def lire_auto(self):
+        return {"demo": True} if self.auto else {}
+
+    def lire_cache(self):
+        return self.cache
+
+
+class DeploiementAutomatique(unittest.TestCase):
+    """La case « Déployer automatiquement à chaque modification » : un commit neuf part sans demander."""
+    COMMIT, AUTRE = "a" * 40, "b" * 40
+
+    def projet(self):
+        d = tempfile.mkdtemp()
+        (Path(d) / ".factory").mkdir()
+        (Path(d) / ".factory" / "service.json").write_text("{}", "utf-8")
+        service_permanent._DERNIERE.clear()
+        service_permanent.ESSAIS.clear()
+        return d
+
+    def lancer(self, d, m, commit, t=1000, appels=None):
+        faits = [] if appels is None else appels
+        return service_permanent.deployer_si_modifie(
+            d, t, module=m, commit_du_depot=lambda _: commit, declencher_=lambda dossier, annoncer=None: faits.append(dossier) or "lancé"), faits
+
+    def test_case_decochee_rien(self):
+        d = self.projet()
+        ligne, faits = self.lancer(d, FauxAuto(auto=False), self.COMMIT)
+        self.assertEqual((ligne, faits), (None, []))
+
+    def test_commit_neuf_deploye_puis_pas_deux_fois(self):
+        d = self.projet()
+        m = FauxAuto(cache={"demo": {"etat": {"commit": self.AUTRE, "etat": "actif"}}})
+        ligne, faits = self.lancer(d, m, self.COMMIT)
+        self.assertIn("Déploiement automatique", ligne)
+        self.assertEqual(len(faits), 1)
+        ligne, faits = self.lancer(d, m, self.COMMIT, t=1000 + 500, appels=faits)       # même commit, déjà essayé
+        self.assertEqual((ligne, len(faits)), (None, 1))
+        ligne, faits = self.lancer(d, m, self.AUTRE[::-1].replace("b", "c"), t=1000 + 1000, appels=faits)   # un nouveau commit relance
+        self.assertEqual(len(faits), 2)
+
+    def test_deja_au_commit_du_serveur_ou_en_cours_rien(self):
+        d = self.projet()
+        a_jour = FauxAuto(cache={"demo": {"etat": {"commit": self.COMMIT, "etat": "actif"}}})
+        self.assertEqual(self.lancer(d, a_jour, self.COMMIT)[1], [])
+        d = self.projet()
+        en_cours = FauxAuto(cache={"demo": {"deploiement": {"statut": "en_cours"}, "etat": {"commit": self.AUTRE}}})
+        self.assertEqual(self.lancer(d, en_cours, self.COMMIT)[1], [])
+
+    def test_au_plus_une_verification_toutes_les_deux_minutes(self):
+        d = self.projet()
+        m = FauxAuto()
+        self.assertEqual(len(self.lancer(d, m, None, t=1000)[1]), 0)                    # pas de commit lisible
+        self.assertIsNone(service_permanent.deployer_si_modifie(d, 1050, module=m, commit_du_depot=lambda _: self.COMMIT,
+                                                                declencher_=lambda *a, **k: "x"))
+
+
 class Declencher(unittest.TestCase):
     def test_sans_service_rien(self):
         with tempfile.TemporaryDirectory() as d:

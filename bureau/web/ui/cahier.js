@@ -210,6 +210,15 @@ function contenuDeLaMethode(etat, f, boite) {
     const texte = el("div", "val-livrable-texte");
     texte.append(el("strong", "", plein(d.titre) ? d.titre : nom),
                  el("span", "val-meta", [nom, tailleLisible(d.taille)].filter(Boolean).join(" · ")));
+    if (estMaquetteHtml(d.chemin)) {      // une maquette HTML s'ouvre dans l'application, elle ne se télécharge pas
+      const ouvrir = el("button", "bouton val-telecharger", "Ouvrir");
+      ouvrir.type = "button";
+      ouvrir.setAttribute("aria-label", "Ouvrir la maquette : " + (plein(d.titre) ? d.titre : nom));
+      ouvrir.addEventListener("click", () => ouvrirVisionneuse([{chemin: d.chemin, legende: plein(d.titre) ? d.titre : ""}], 0, urlImage, ouvrir));
+      ligne.append(texte, ouvrir);
+      prototype.append(ligne);
+      continue;
+    }
     const a = el("a", "bouton val-telecharger", "Télécharger");
     a.href = urlTelechargement(f.id, d.chemin, projetCourant(), origine);
     a.setAttribute("download", nom);

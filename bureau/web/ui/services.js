@@ -50,6 +50,15 @@ export async function actionService(projet, action, fetchFn = globalThis.fetch) 
   return {ok: false, message: refus(r)};
 }
 
+// La case « Déployer automatiquement à chaque modification » : {ok, auto, message}.
+export async function reglerAuto(projet, actif, fetchFn = globalThis.fetch) {
+  const r = await appeler(route(projet, "auto"), "POST", {actif}, fetchFn);
+  if (!r.ok) return {ok: false, message: refus(r)};
+  return {ok: true, auto: r.d.auto === true, message: r.d.auto === true
+    ? "Déploiement automatique activé : chaque modification du projet sera déployée sans demander."
+    : "Déploiement automatique désactivé : le déploiement se fait au bouton « Déployer maintenant »."};
+}
+
 // Envoie un secret saisi par le Directeur. La valeur n'est jamais gardée ni affichée par l'écran.
 export async function poserSecret(projet, nom, valeur, fetchFn = globalThis.fetch) {
   const r = await appeler(route(projet, "secrets"), "POST", {secrets: {[nom]: valeur}}, fetchFn);
@@ -85,6 +94,14 @@ function carte(s, options) {
   if (texte(dep.statut)) {
     c.append(el("p", "ligne-detail service-deploiement", `Dernier déploiement : ${LIBELLES_DEPLOIEMENT[dep.statut] || texte(dep.statut)}`
       + (texte(dep.commit) ? ` (commit ${texte(dep.commit).slice(0, 12)})` : "") + (texte(dep.detail) ? ` — ${texte(dep.detail)}` : "")));
+  }
+  const encours = objet(s.deploiement);      // un déploiement qui tourne : le service répond encore avec l'ancienne version
+  if (encours.statut === "en_cours" || s.occupe === true) {
+    const depuis = Date.parse(texte(encours.debut));
+    const heure = Number.isNaN(depuis) ? "" : ` depuis ${new Date(depuis).toLocaleTimeString("fr-FR", {hour: "2-digit", minute: "2-digit"})}`;
+    c.append(el("p", "reglage-message service-en-cours", `Déploiement en cours${heure}`
+      + (texte(encours.commit) ? ` (commit ${texte(encours.commit).slice(0, 12)})` : "")
+      + " : l'ancienne version répond encore, patientez quelques minutes puis actualisez l'état."));
   }
   const adresse = texte(s.adresse);
   c.append(el("p", "ligne-detail service-adresse", adresse ? `Adresse publique : ${adresse}` : "Adresse publique : pas encore déployé"));
@@ -136,6 +153,20 @@ function carte(s, options) {
     zoneSecrets.append(l);
   }
   c.append(zoneSecrets);
+
+  const auto = document.createElement("input");     // la case : cochée, tout nouveau commit du projet est déployé sans demander
+  auto.type = "checkbox";
+  auto.checked = s.auto === true;
+  auto.setAttribute("aria-label", "Déployer automatiquement à chaque modification");
+  auto.addEventListener("change", async () => {
+    const voulu = auto.checked;
+    const r = await reglerAuto(projet, voulu, fetchFn);
+    if (!r.ok) auto.checked = !voulu;                // refusé : la case revient comme avant
+    msg.textContent = r.message;
+  });
+  const etiquetteAuto = el("label", "service-auto");
+  etiquetteAuto.append(auto, el("span", "", " Déployer automatiquement à chaque modification (sans confirmation)"));
+  c.append(etiquetteAuto);
 
   const actions = el("div", "service-actions");
   for (const [action, libelle] of ACTIONS) {

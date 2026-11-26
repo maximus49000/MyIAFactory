@@ -149,6 +149,32 @@ def _oublier_jeton(projet, dossier):
         pass
 
 
+AUTO = "services-auto.json"      # {identifiant du projet: true} : la case « Déployer automatiquement » de la zone Services
+
+
+def lire_auto(dossier=plateforme_acces.DOSSIER):
+    """{projet: bool} : les projets dont le Directeur a coché le déploiement automatique à chaque modification."""
+    try:
+        brut = (Path(dossier) / AUTO).read_bytes()
+        d = json.loads(brut.decode("utf-8")) if len(brut) < 64 * 1024 else {}
+    except (OSError, ValueError, UnicodeError):
+        return {}
+    return {k: True for k, v in d.items() if isinstance(k, str) and v is True} if isinstance(d, dict) else {}
+
+
+def poser_auto(projet, actif, dossier=plateforme_acces.DOSSIER):
+    """Coche ou décoche le déploiement automatique du projet (écrit au poste, jamais au serveur)."""
+    with _VERROU_CACHE:
+        auto = lire_auto(dossier)
+        if actif:
+            auto[projet] = True
+        else:
+            auto.pop(projet, None)
+        Path(dossier).mkdir(parents=True, exist_ok=True)
+        ecrire_atomique(Path(dossier) / AUTO, json.dumps(auto, ensure_ascii=False, indent=1))
+    return bool(actif)
+
+
 def lire_cache(dossier=plateforme_acces.DOSSIER):
     try:
         brut = (Path(dossier) / CACHE).read_bytes()

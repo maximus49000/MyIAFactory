@@ -7,6 +7,7 @@
   `etat`, `journal`, `redemarrer`, `arreter`, `deployer` : lancés dans un fil (202), un seul à la fois par projet ;
   `secrets` : corps `{"secrets": {"NOM": "valeur"}}`, noms DÉCLARÉS seulement, posés au serveur dans un fil (202) : la valeur
   ne reste qu'en mémoire le temps de l'envoi, n'est jamais écrite au poste, jamais journalisée, jamais rendue ;
+  `auto` : corps `{"actif": true|false}` : la case « Déployer automatiquement à chaque modification » (200, tout de suite) ;
   `jeton` : rend le jeton du coffre du poste (200) pour le bouton « Copier », au Directeur seul.
 `<projet>` est l'identifiant calculé d'un projet ENREGISTRÉ au bureau (jamais un chemin reçu) : le dossier vient des réglages
 du bureau, pas du cache.
@@ -18,7 +19,7 @@ import time
 from pathlib import Path
 
 _OUTILS = str(Path(__file__).resolve().parent.parent / "outils")
-_ROUTE = re.compile(r"/api/services/([a-z][a-z0-9-]{1,39})/(etat|journal|redemarrer|arreter|deployer|secrets|jeton)")
+_ROUTE = re.compile(r"/api/services/([a-z][a-z0-9-]{1,39})/(etat|journal|redemarrer|arreter|deployer|secrets|jeton|auto)")
 EN_FIL = ("etat", "journal", "redemarrer", "arreter", "deployer", "secrets")
 TAILLE_MAX = 64 * 1024
 JOURNAL_MAX = 200
@@ -93,6 +94,7 @@ def lire(travaux, dossiers):
     m = travaux.module
     k = {} if travaux.dossier is None else {"dossier": travaux.dossier}
     cache = m.lire_cache(**k)
+    auto = m.lire_auto(**k)
     services = []
     for projet, dossier in sorted(_projets(dossiers, m).items()):
         fiche = cache.get(projet) if isinstance(cache.get(projet), dict) else {}
@@ -113,6 +115,7 @@ def lire(travaux, dossiers):
             "jeton_present": bool(m.lire_jeton(projet, **k)), "secrets": secrets,
             "journal": [str(l)[:500] for l in (journal.get("lignes") or [])][-JOURNAL_MAX:],
             "deploiement": fiche.get("deploiement") if isinstance(fiche.get("deploiement"), dict) else None,
+            "auto": auto.get(projet) is True,
             "action": travaux.dernier.get(projet), "occupe": travaux.en_cours(projet), "maj": fiche.get("maj")})
     return {"services": services}
 
@@ -123,6 +126,10 @@ def poster(travaux, projet, action, corps, dossiers):
     dossier = _projets(dossiers, m).get(projet)
     if dossier is None:
         return 404, {"erreur": "Aucun service déclaré pour ce projet."}
+    if action == "auto":     # la case « Déployer automatiquement » : {"actif": true|false}, écrite tout de suite (pas de fil)
+        if set(corps) != {"actif"} or not isinstance(corps.get("actif"), bool):
+            return 400, {"erreur": "Corps attendu : {\"actif\": true} ou {\"actif\": false}."}
+        return 200, {"auto": m.poser_auto(projet, corps["actif"], **k)}
     if action == "jeton":
         j = m.lire_jeton(projet, **k)
         return (200, {"jeton": j}) if j else (404, {"erreur": "Pas encore de jeton : déployez le service d'abord."})

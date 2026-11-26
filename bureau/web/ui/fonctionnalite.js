@@ -766,6 +766,13 @@ function partieLivrables(ctx, f) {
         vignette.append(lienTelecharger(f, d));
         rangee.append(vignette);
       } else {
+        if (estMaquetteHtml(d.chemin)) {      // une maquette HTML s'ouvre dans l'application : pas de « Télécharger »
+          const ouvrir = el("button", "bouton secondaire petit document-ouvrir", "Ouvrir : " + d.titre);
+          ouvrir.type = "button";
+          ouvrir.addEventListener("click", () => ouvrirVisionneuse([{chemin: d.chemin, legende: legendeDe(d) || ""}], 0, urlImage, ouvrir));
+          rangee.append(ouvrir);
+          continue;
+        }
         const a = el("a", "document-lien", d.titre);
         a.href = url(d.chemin);
         a.target = "_blank";

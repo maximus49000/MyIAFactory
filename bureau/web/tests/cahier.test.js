@@ -380,3 +380,15 @@ test("sans taille jugée : pas de bouton de parcours", () => {
     assert.equal(lien(boite, "Valider avec le parcours complet"), undefined);
   }
 });
+
+test("une maquette HTML du prototype s'ouvre dans l'application : « Ouvrir », jamais « Télécharger »", async () => {
+  globalThis.fetch = async () => ({ok: true, text: async () => "# Méthode\n"});
+  const e = etatDe([DECISION_METHODE]);
+  e.fonctionnalites[0].documents.push({chemin: "pieces/f20/maquette.html", titre: "Maquette du versement", date: "2026-11-26"});
+  const {boite} = contenuCahierMethode({etat: e, barre: {}}, {...DECISION_METHODE, fonctionnalite: "f1"});
+  await attente();
+  const ouvrir = boite.tous((n) => n.tagName === "button" && n.textContent === "Ouvrir");
+  assert.equal(ouvrir.length, 1);
+  const telechargements = boite.tous((n) => n.tagName === "a" && n.textContent === "Télécharger");
+  assert.ok(!telechargements.some((a) => /maquette\.html/.test(a.href)));
+});

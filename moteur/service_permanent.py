@@ -55,6 +55,54 @@ def _commit_du_depot(dossier):
     return sortie if r.returncode == 0 and len(sortie) == 40 else None
 
 
+def _git(dossier, *argv):
+    """`(code, sortie)` d'une commande git dans le dépôt du projet ; (1, "") si git ne répond pas."""
+    import subprocess
+    try:
+        r = subprocess.run(["git", "-C", str(dossier), "-c", "core.fsmonitor=false", *argv], capture_output=True, text=True,
+                           timeout=60, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    except (OSError, subprocess.SubprocessError):
+        return 1, ""
+    return r.returncode, r.stdout
+
+
+def statut_du_serveur(dossier, commit_livre, module=None, git=_git, maintenant=None):
+    """`(statut, détail)` : le serveur est-il à la version qu'une livraison exige ? Une livraison ne peut être déclarée
+    terminée que si le service permanent du projet contient son commit :
+    `sans_service` (pas de service, ou accord « service » non donné : rien à attendre), `a_jour` (la livraison ne touche pas
+    au service, ou le serveur en a déjà le commit), `echec` (le déploiement de ce commit a échoué ou a été refusé),
+    `attente` (à déployer ou en cours)."""
+    m = module or _module()
+    if raison_de_ne_pas_deployer(dossier, m) is not None:
+        return "sans_service", ""
+    try:
+        declaration = m.lire_declaration(dossier)
+    except ValueError:
+        return "sans_service", ""
+    maintenant = maintenant if maintenant is not None else datetime.now(timezone.utc).timestamp()
+    fiche = m.lire_cache().get(m.identifiant(Path(dossier)))
+    fiche = fiche if isinstance(fiche, dict) else {}
+    etat = fiche.get("etat") if isinstance(fiche.get("etat"), dict) else {}
+    deploiement = fiche.get("deploiement") if isinstance(fiche.get("deploiement"), dict) else {}
+    sur_le_serveur = etat.get("commit") if isinstance(etat.get("commit"), str) else ""
+    if sur_le_serveur:
+        if sur_le_serveur == commit_livre or git(dossier, "merge-base", "--is-ancestor", commit_livre, sur_le_serveur)[0] == 0:
+            en_cours = (deploiement.get("statut") == "en_cours" and not _en_cours_perime(deploiement, maintenant)
+                        and not getattr(m, "deploiement_abandonne", lambda _d: False)(deploiement))
+            return ("attente", "un déploiement est en cours") if en_cours else ("a_jour", sur_le_serveur[:12])
+        code, sortie = git(dossier, "diff", "--name-only", sur_le_serveur, commit_livre)
+        service = str(declaration.get("dockerfile") or "").rsplit("/", 1)[0] if "/" in str(declaration.get("dockerfile")) else ""
+        touche = [c for c in sortie.splitlines() if c == ".factory/service.json" or (service and c.startswith(service + "/"))
+                  or (not service and c and not c.startswith(".factory/"))]
+        if code == 0 and not touche:
+            return "a_jour", "la livraison ne touche pas au service"
+    deployes = deploiement.get("commit") if isinstance(deploiement.get("commit"), str) else ""
+    if (deploiement.get("statut") in ("echec", "retour_arriere", "refus") and deployes
+            and (deployes == commit_livre or git(dossier, "merge-base", "--is-ancestor", commit_livre, deployes)[0] == 0)):
+        return "echec", str(deploiement.get("detail") or deploiement.get("statut"))[:300]
+    return "attente", "le service n'a pas encore cette version"
+
+
 def _en_cours_perime(deploiement, maintenant):
     """Vrai si le déploiement « en cours » du cache est plus vieux que la durée maximale d'un déploiement : le poste (ou le
     moteur) s'est arrêté pendant qu'il tournait et n'a jamais pu le conclure ; il ne doit plus bloquer les suivants."""

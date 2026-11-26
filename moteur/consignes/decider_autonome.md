@@ -50,6 +50,10 @@ Une série arrêtée : lis `en_file_derriere` et `dernier_message_du_chef`. Si e
 question (`tache_bloquee`) : `relancer` avec la consigne de rendre le `cahier` OU `message.attend` avec une question, pas un
 troisième diagnostic.
 
+Un `fusion_conflit` (branche d'agent qui ne fusionne pas) : lis `fichiers_en_conflit` (les deux versions). Documentation seulement :
+`garder_depot` (fusion `-s ours`) ou `garder_branche`, selon la version la plus complète et exacte ; du code ou des tests : `renvoyer`
+avec les deux versions, jamais de résolution seule ; `laisser` dans le doute.
+
 Avant de `renvoyer` un défaut au dev, vérifie qu'il est réel : un test de recette peut se tromper (il vise une valeur qui existe
 vraiment, une page répond 200 sur un identifiant présent dans les données). Dans ce cas ne touche pas au code : `relancer` avec la
 consigne de corriger le test (viser une valeur vraiment absente) et dis pourquoi la page est juste.

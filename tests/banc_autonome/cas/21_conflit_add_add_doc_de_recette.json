@@ -1,0 +1,90 @@
+{
+ "id": "21_conflit_add_add_doc_de_recette",
+ "titre": "Conflit add/add sur un document de recette : une version fausse, une juste",
+ "type": "jugement",
+ "negatif": false,
+ "source": "Essai réel FM_Stats f31, agent/t289, 2026-11-26 (23:20-23:23)",
+ "note": "Le fichier existait déjà dans le dépôt en version plus complète et juste ; la branche en portait une avec une affirmation fausse. Documentation seulement : garder la version du dépôt (fusion ours), puis « C'est réglé, continuez ». Jamais l'inverse, jamais renvoyer au dev.",
+ "dossier": {
+  "decision": {
+   "genre": "fusion_conflit",
+   "texte": "La branche « agent/t289 » de l'agent agent-1 n'a pas pu être fusionnée : conflit de fusion add/add sur docs/recette_service_pages.md. Le Directeur doit régler le conflit, puis dire de continuer."
+  },
+  "verdicts": [
+   "garder_depot",
+   "garder_branche",
+   "renvoyer",
+   "laisser"
+  ],
+  "choix": [],
+  "questions": [],
+  "tache": {
+   "id": "t289",
+   "titre": "Recette des pages du service",
+   "etape": "dev",
+   "metier": "dev",
+   "element": null,
+   "journal": [
+    "Fusion de la branche agent/t289 impossible : conflit de fusion : add/add docs/recette_service_pages.md"
+   ]
+  },
+  "fonctionnalite": {
+   "id": "f30",
+   "nom": "Statistiques par équipe",
+   "etape": "serie",
+   "flux": [
+    {
+     "nom": "Dev",
+     "validation": false
+    },
+    {
+     "nom": "Recette",
+     "validation": false
+    },
+    {
+     "nom": "Validation du Directeur",
+     "validation": true
+    }
+   ]
+  },
+  "lecons_du_metier": [],
+  "deja_appris": [],
+  "recentes": [],
+  "mots_interdits": [
+   "ProjetExemple"
+  ],
+  "anomalies": [],
+  "service": {
+   "adresse": "https://service.exemple",
+   "redeployable": false
+  },
+  "fichiers_en_conflit": [
+   {
+    "chemin": "docs/recette_service_pages.md",
+    "genre": "doc",
+    "version_du_depot": "# Recette des pages\n\nGET /sante : 200. GET /equipe/77 : 200 (équipe présente). GET /equipe/99999999 : 404. Index prêts : /sante renvoie 200 après la préparation.",
+    "version_de_la_branche": "# Recette des pages\n\nGET /sante : 200. GET /equipe/999 : 404 (équipe inexistante). Les pages équipe répondent toujours 503."
+   }
+  ],
+  "fichiers_de_la_branche": [
+   "docs/recette_service_pages.md"
+  ]
+ },
+ "attendu": {
+  "verdicts": [
+   "garder_depot"
+  ]
+ },
+ "simule": {
+  "raison": "La version du dépôt est plus complète et exacte ; celle de la branche affirme un 503 permanent, faux.",
+  "verdict": "garder_depot",
+  "texte": null,
+  "choix": null,
+  "reponses": null,
+  "generalisable": false,
+  "lecon": null,
+  "amelioration": null,
+  "anomalies": null
+ },
+ "decision_id": "d21"
+}

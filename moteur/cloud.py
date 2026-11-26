@@ -442,6 +442,86 @@ def etat_hors_du_depot(dossier, executer=None):
     return bool(change or suivis)
 
 
+EXTENSIONS_DOCUMENTATION = (".md", ".mdx", ".txt", ".rst", ".adoc")
+
+
+def est_documentation(chemin):
+    """Un fichier de documentation (texte à lire) : jamais du code ni un test."""
+    return Path(str(chemin)).suffix.lower() in EXTENSIONS_DOCUMENTATION
+
+
+def fichiers_en_conflit(dossier_projet, branche, *, executer=None):
+    """Les fichiers qui entreraient en conflit en fusionnant la branche locale `branche` dans HEAD (`git merge-tree
+    --write-tree --name-only`, lecture seule : rien n'est écrit dans l'index ni l'arbre de travail) ; `[]` sans conflit,
+    None si git ne sait pas le dire (version ancienne, branche illisible)."""
+    sha = _commit_de(executer, dossier_projet, branche)
+    if sha is None:
+        return None
+    code, sortie = _git(executer, dossier_projet, "merge-tree", "--write-tree", "--name-only", "--no-messages", "HEAD", sha,
+                        delai_s=60)
+    if code == 0:
+        return []
+    return [x for x in _texte(sortie).splitlines()[1:] if x.strip()] if code == 1 else None
+
+
+def fichiers_changes_par_la_branche(dossier_projet, branche, *, executer=None):
+    """Les fichiers que la branche locale change par rapport à sa base commune avec HEAD, ou None."""
+    sha = _commit_de(executer, dossier_projet, branche)
+    if sha is None:
+        return None
+    code, base = _git(executer, dossier_projet, "merge-base", "HEAD", sha, delai_s=30)
+    if code != 0 or not _texte(base):
+        return None
+    code, sortie = _git(executer, dossier_projet, "diff", "--name-only", _texte(base), sha, delai_s=60)
+    return [x for x in _texte(sortie).splitlines() if x.strip()] if code == 0 else None
+
+
+def version_du_fichier(dossier_projet, ref, chemin, *, executer=None, maximum=3000):
+    """Le contenu de `chemin` à `ref` (`git show ref:chemin`), tronqué ; None s'il n'existe pas."""
+    code, sortie = _git(executer, dossier_projet, "show", f"{ref}:{chemin}", delai_s=30)
+    return _texte(sortie)[:maximum] if code == 0 else None
+
+
+STRATEGIES_BORNEES = {"depot": ("-s", "ours"), "branche": ("-X", "theirs")}
+
+
+def fusion_bornee(dossier_projet, branche, strategie, *, executer=None):
+    """Fusionne la branche locale `branche` malgré un conflit, SEULEMENT si ce qui est en jeu est de la documentation :
+    `depot` (`-s ours` : la version de HEAD l'emporte ; exige que la branche ne change que de la documentation, car tout le
+    reste de la branche serait écarté) ou `branche` (`-X theirs` : la version de la branche l'emporte sur les passages en
+    conflit ; exige que les fichiers en conflit soient de la documentation). Un commit de fusion sur la branche courante :
+    jamais de réécriture d'historique, jamais de push. Refuse si `.git/index.lock` existe. `None` si c'est fait, sinon la
+    raison (la fusion est annulée)."""
+    if strategie not in STRATEGIES_BORNEES:
+        return f"stratégie inconnue : {strategie}"
+    with git_sur.verrou(dossier_projet):
+        if (Path(dossier_projet) / ".git" / "index.lock").exists():
+            return "un autre git tient l'index (.git/index.lock) : à réessayer plus tard"
+        sha = _commit_de(executer, dossier_projet, branche)
+        if sha is None:
+            return f"la branche {branche} est illisible : pas de résolution seule"
+        if strategie == "depot":
+            en_jeu = fichiers_changes_par_la_branche(dossier_projet, branche, executer=executer)
+        else:
+            en_jeu = fichiers_en_conflit(dossier_projet, branche, executer=executer)
+        if not en_jeu or not all(est_documentation(x) for x in en_jeu):
+            return ("la branche ne touche pas que de la documentation (ou git ne sait pas le dire) : pas de résolution "
+                    "seule, le conflit est renvoyé au développement")
+        etat_hors_du_depot(dossier_projet, executer)
+        code, sortie = _git(executer, dossier_projet, "status", "--porcelain", delai_s=30)
+        if code == 0 and _texte(sortie).strip():
+            _git(executer, dossier_projet, "add", "-A")
+            _git(executer, dossier_projet, "commit", "-q", "-m", f"Factory : état local avant la fusion de {branche}")
+        code, sortie = _git(executer, dossier_projet, "merge", "--no-ff", *STRATEGIES_BORNEES[strategie], "-m",
+                            f"Factory : fusion de {branche} ({strategie} l'emporte, documentation)", sha)
+        if code != 0:
+            _git(executer, dossier_projet, "merge", "--abort")
+            return "la fusion n'a pas pu être faite : " + _texte(sortie)[:200]
+        if _git(executer, dossier_projet, "merge-base", "--is-ancestor", sha, "HEAD", delai_s=30)[0] != 0:
+            return "la branche n'est pas dans l'historique après la fusion : vérifier le dépôt"
+        return None
+
+
 def etat_de_la_branche(dossier_projet, branche, *, executer=None):
     """La branche LOCALE `branche` d'un agent serveur, avant sa fusion : `("absente", "")` (aucun commit n'a été rapatrié :
     une tâche qui ne modifie aucun fichier n'en laisse pas), `("vide", "")` (aucun commit que HEAD n'ait déjà :

@@ -50,6 +50,7 @@ AGENT_FLUTTER=1 pour un projet Flutter (SDK de l'hôte en lecture seule sur /opt
 Réservées aux tests (jamais posées par lancer_agent.sh) : AGENT_RACINE (préfixe des chemins /entree, /travail, /sortie,
 /maison, /run/identifiants/jeton ; « / » par défaut) et AGENT_CLAUDE (commande de claude, liste JSON ; ["claude"] par défaut).
 """
+import base64
 import json
 import os
 import re
@@ -471,6 +472,17 @@ class Borne:
             finally:
                 os.close(sortie)
 
+    def relire(self, maximum):
+        """Les `maximum` derniers octets écrits, lus SANS déplacer la position d'écriture (`pread`) ; vide hors POSIX."""
+        if not hasattr(os, "pread"):
+            return b""
+        with self.verrou:
+            debut = max(0, self.ecrits - maximum)
+            try:
+                return os.pread(self.fd, self.ecrits - debut, debut)
+            except OSError:
+                return b""
+
     def ecrire(self, donnees):
         if isinstance(donnees, str):
             donnees = donnees.encode("utf-8", "replace")
@@ -501,6 +513,187 @@ def pomper(source, borne):
             borne.ecrire(bloc)
     except (OSError, ValueError):
         pass
+
+
+# --- Le suivi en direct : /sortie/direct.json, publié toutes les PAS_DIRECT_S secondes tant que claude tourne. Rien de brut :
+# des actions courtes (jamais le contenu d'une commande, d'un fichier ni d'un message), la phase, la consommation et la
+# liste de points de l'agent ; une action qui porte le jeton n'est jamais publiée. Retiré à la fin (nettoyer_sortie).
+PAS_DIRECT_S = 5.0
+DIRECT_TAIL = 256 * 1024                    # la fin du flux relue à chaque publication
+DIRECT_MAX_OCTETS = 64 * 1024
+MAX_ACTIONS_DIRECT = 50
+MAX_ACTION_DIRECT = 80
+MAX_POINTS_DIRECT = 30
+MAX_TEXTE_POINT = 160
+VERBES_FICHIER = {"Edit": "modifie", "MultiEdit": "modifie", "NotebookEdit": "modifie", "Write": "écrit", "Read": "lit"}
+VERBES = {"Grep": "cherche dans les fichiers", "Glob": "cherche dans les fichiers", "WebFetch": "consulte le web",
+          "WebSearch": "consulte le web", "TodoWrite": "organise son travail", "Task": "délègue une recherche",
+          "Agent": "délègue une recherche", "Skill": "suit une méthode"}
+_TESTS = re.compile(r"\btests?\b|pytest|unittest|connectedandroidtest|\badb\b|\bemulator\b")
+_COMPILATION = ("gradle", "assemble", "compile", "build")
+
+
+def pas_direct():
+    """AGENT_DIRECT_S (essais) : l'intervalle de publication, entre 0,05 et 60 s ; sinon `PAS_DIRECT_S`."""
+    try:
+        v = float(os.environ.get("AGENT_DIRECT_S", ""))
+    except ValueError:
+        return PAS_DIRECT_S
+    return v if 0.05 <= v <= 60 else PAS_DIRECT_S
+
+
+def motifs_du_jeton(jeton):
+    """Le jeton et les morceaux de ses trois alignements en base64 qui ne dépendent que de lui (comme `motifs_jeton` de
+    lancer_agent.sh) : un texte qui en contient un ne sort jamais."""
+    motifs = [jeton]
+    for k in range(3):
+        b64 = base64.b64encode(b"A" * k + jeton.encode("ascii", "replace")).decode("ascii")
+        if len(b64) > 16:
+            motifs.append(b64[4:-4])
+    return motifs
+
+
+def _fichier_court(chemin, depot):
+    if not isinstance(chemin, str) or not chemin.strip():
+        return "un fichier"
+    p = chemin.replace("\\", "/")
+    if depot and p.startswith(depot.rstrip("/") + "/"):
+        p = p[len(depot.rstrip("/")) + 1:]
+    elif p.startswith("/"):
+        p = p.rsplit("/", 1)[-1]
+    return p if len(p) <= 60 else "…" + p[-59:]
+
+
+def _action_du_bloc(bloc, depot):
+    nom, entree = str(bloc.get("name") or ""), bloc.get("input") if isinstance(bloc.get("input"), dict) else {}
+    if nom in VERBES_FICHIER:
+        chemin = entree.get("file_path") or entree.get("notebook_path") or entree.get("path")
+        return f"{VERBES_FICHIER[nom]} {_fichier_court(chemin, depot)}"[:MAX_ACTION_DIRECT]
+    if nom in ("Bash", "PowerShell"):
+        etapes = [e.split("|", 1)[0].split() for e in re.split(r"&&|\|\||;", str(entree.get("command") or ""))]
+        utiles = [m for m in etapes if m and m[0].lower() not in ("cd", "set-location", "pushd", "export")]
+        mot = utiles[-1][0] if utiles else ""
+        mot = re.sub(r"[^\w.-]", "", mot.strip("\"'").replace("\\", "/").rsplit("/", 1)[-1])[:20]
+        return f"lance {mot}" if mot else "lance une commande"
+    if nom in VERBES:
+        return VERBES[nom]
+    outil = re.sub(r"[^\w.-]", "", nom)[:30]
+    return f"utilise {outil or 'un outil'}"
+
+
+def _phase_du_bloc(bloc):
+    nom = bloc.get("name")
+    if nom in ("Read", "Grep", "Glob"):
+        return "lecture"
+    if nom in ("Edit", "MultiEdit", "Write", "NotebookEdit"):
+        return "modification"
+    if nom in ("Bash", "PowerShell"):
+        entree = bloc.get("input") if isinstance(bloc.get("input"), dict) else {}
+        commande = str(entree.get("command") or "").lower()
+        if _TESTS.search(commande):
+            return "tests"
+        if any(m in commande for m in _COMPILATION):
+            return "compilation"
+    return "autre"
+
+
+def resumer_flux(octets, jeton, depot=None):
+    """Le résumé publiable d'un flux stream-json : `{"v": 1, "actions": [{"t", "texte"}] (≤ 50, la plus récente d'abord),
+    "phase", "usage": [{modele, entree, sortie, cache_lecture, cache_ecriture}], "avancement": None}`. Les lignes illisibles ou
+    coupées sont ignorées ; une action dont le texte contient le jeton (ou un de ses alignements base64) est écartée."""
+    motifs = motifs_du_jeton(jeton)
+    lignes = []
+    for brute in octets.decode("utf-8", "replace").splitlines():
+        try:
+            d = json.loads(brute)
+        except ValueError:
+            continue
+        if isinstance(d, dict) and d.get("type") == "assistant" and isinstance(d.get("message"), dict):
+            lignes.append(d)
+    actions, phase, messages = [], None, {}
+    for d in reversed(lignes):
+        m = d["message"]
+        u = m.get("usage")
+        if isinstance(u, dict) and isinstance(m.get("id"), str) and str(m.get("model", "")).startswith("claude"):
+            messages.setdefault(m["id"], (m["model"], u))
+        contenu = m.get("content") if isinstance(m.get("content"), list) else []
+        for bloc in reversed([b for b in contenu if isinstance(b, dict) and b.get("type") == "tool_use"]):
+            texte = _action_du_bloc(bloc, depot)
+            if any(x in texte for x in motifs):
+                continue
+            if phase is None:
+                phase = _phase_du_bloc(bloc)
+            if len(actions) < MAX_ACTIONS_DIRECT:
+                t = d.get("timestamp")
+                actions.append({"t": t if isinstance(t, str) and len(t) <= 40 else None, "texte": texte})
+    par_modele = {}
+    for modele, u in messages.values():
+        c = par_modele.setdefault(modele, {"modele": modele, "entree": 0, "sortie": 0, "cache_lecture": 0, "cache_ecriture": 0})
+        for cle, nom in (("entree", "input_tokens"), ("sortie", "output_tokens"), ("cache_lecture", "cache_read_input_tokens"),
+                         ("cache_ecriture", "cache_creation_input_tokens")):
+            v = u.get(nom)
+            c[cle] += v if isinstance(v, int) and not isinstance(v, bool) and v > 0 else 0
+    return {"v": 1, "actions": actions, "phase": phase, "usage": list(par_modele.values())[:4], "avancement": None}
+
+
+def lire_avancement_agent(maison):
+    """La liste de points que l'agent écrit lui-même (`<maison>/avancement.json`), revalidée : 64 Ko au plus, 30 points de
+    160 caractères au plus, un fichier ordinaire. `None` si elle manque, est illisible ou mal formée."""
+    try:
+        fd = os.open(os.path.join(maison, "avancement.json"), os.O_RDONLY | SANS_LIEN | getattr(os, "O_BINARY", 0))
+    except OSError:
+        return None
+    try:
+        brut = os.read(fd, DIRECT_MAX_OCTETS + 1)
+        if len(brut) > DIRECT_MAX_OCTETS:
+            return None
+        d = json.loads(brut.decode("utf-8", "replace"))
+    except (OSError, ValueError):
+        return None
+    finally:
+        os.close(fd)
+    points = d.get("points") if isinstance(d, dict) else None
+    if not isinstance(points, list):
+        return None
+    rendu = [{"texte": p["texte"][:MAX_TEXTE_POINT], "fait": p.get("fait") is True}
+             for p in points if isinstance(p, dict) and isinstance(p.get("texte"), str)][:MAX_POINTS_DIRECT]
+    en_cours = d.get("en_cours")
+    return {"points": rendu, "en_cours": en_cours[:MAX_TEXTE_POINT] if isinstance(en_cours, str) and en_cours.strip() else None}
+
+
+def publier_direct(c, flux, jeton, depot):
+    """Écrit /sortie/direct.json (fichier temporaire puis renommage ; un lien ou un fichier posé là par l'agent est
+    remplacé, jamais suivi). Ne lève jamais."""
+    try:
+        octets = flux.relire(DIRECT_TAIL)
+        if len(octets) >= DIRECT_TAIL:                 # la première ligne est coupée : écartée
+            octets = octets.split(b"\n", 1)[-1]
+        resume = resumer_flux(octets, jeton, depot)
+        resume["avancement"] = lire_avancement_agent(c["maison"])
+        donnees = json.dumps(resume, ensure_ascii=False).encode("utf-8")
+        if len(donnees) > DIRECT_MAX_OCTETS:
+            resume["actions"] = resume["actions"][:10]
+            donnees = json.dumps(resume, ensure_ascii=False).encode("utf-8")
+        if len(donnees) > DIRECT_MAX_OCTETS:
+            return
+        chemin = os.path.join(c["sortie"], "direct.json")
+        temporaire = chemin + ".tmp"
+        retirer(temporaire)
+        fd = os.open(temporaire, os.O_WRONLY | os.O_CREAT | os.O_EXCL | SANS_LIEN | getattr(os, "O_BINARY", 0), 0o600)
+        try:
+            ecrire_tout(fd, donnees)
+        finally:
+            os.close(fd)
+        os.replace(temporaire, chemin)
+    except Exception:       # noqa: BLE001 - le suivi ne fait jamais échouer l'agent
+        pass
+
+
+def suivre_en_direct(c, flux, jeton, depot, fin):
+    """Le fil de publication : `publier_direct` toutes les `pas_direct()` s jusqu'à ce que `fin` (un Event) soit levé."""
+    pas = pas_direct()
+    while not fin.wait(pas):
+        publier_direct(c, flux, jeton, depot)
 
 
 def ecrire_fin(sortie, fin):
@@ -638,6 +831,9 @@ def lancer_claude(c, options, d, jeton, depot, erreurs):
             threading.Thread(target=pomper, args=(proc.stderr, erreurs), daemon=True)]
     for f in fils:
         f.start()
+    fin_direct = threading.Event()
+    suivi = threading.Thread(target=suivre_en_direct, args=(c, flux, jeton, depot, fin_direct), daemon=True)
+    suivi.start()
     echeance = False
     limite = time.monotonic() + echeance_interne(d["duree_s"])
     while proc.poll() is None:
@@ -650,6 +846,8 @@ def lancer_claude(c, options, d, jeton, depot, erreurs):
         time.sleep(0.2)
     SIGNAL["proc"] = None
     tuer_groupe(proc)                       # les petits-enfants qui tiendraient encore les tuyaux
+    fin_direct.set()
+    suivi.join(timeout=10)
     for f in fils:
         f.join(timeout=10)
     SORTIES.append(flux)                    # publiée par `principal`, après le nettoyage de /sortie

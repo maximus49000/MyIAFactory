@@ -874,6 +874,17 @@ for nom, texte in cmd.get("planter", {}).items():   # l'agent dépose ses propre
 for ligne in cmd.get("flux", []):
     sys.stdout.write(json.dumps(ligne) + "\n")
 sys.stdout.flush()
+if cmd.get("attendre_direct"):               # l'agent lit ce que l'entrée publie de lui pendant qu'il tourne
+    chemin = os.path.join(racine, "sortie", "direct.json")
+    if cmd.get("lien_direct"):
+        os.symlink(os.path.join(racine, "maison", "secret.txt"), chemin)
+    for _ in range(200):
+        if os.path.exists(chemin) and not os.path.islink(chemin):
+            break
+        time.sleep(0.1)
+    ok = os.path.exists(chemin) and not os.path.islink(chemin)
+    with open(os.path.join(os.environ["HOME"], "direct-vu.json"), "w", encoding="utf-8") as f:
+        json.dump({"lien": os.path.islink(chemin), "texte": open(chemin, encoding="utf-8").read() if ok else None}, f)
 if cmd.get("dormir"):
     time.sleep(600)
 if cmd.get("bavard"):
@@ -962,6 +973,98 @@ class TestEntreeAgent(unittest.TestCase):
     @property
     def depot(self):
         return self.racine / "travail" / "projet"
+
+    # --- le suivi en direct : /sortie/direct.json, publié par l'entrée pendant que l'agent travaille
+    def ligne_outil(self, nom, entree, modele="claude-opus-5-5", ident="m1", usage=None, t=None):
+        d = {"type": "assistant", "message": {"id": ident, "model": modele, "usage": usage or {"input_tokens": 10, "output_tokens": 5},
+                                              "content": [{"type": "tool_use", "name": nom, "input": entree}]}}
+        if t:
+            d["timestamp"] = t
+        return json.dumps(d) + "\n"
+
+    def test_resumer_flux_actions_phase_et_usage(self):
+        e = charger_entree()
+        flux = (self.ligne_outil("Read", {"file_path": "/travail/projet/a.py"}, ident="m1", t="2026-11-26T10:00:00Z")
+                + self.ligne_outil("Edit", {"file_path": "/travail/projet/scenes/combat.gd", "old_string": "mot de passe"}, ident="m2")
+                + self.ligne_outil("Bash", {"command": "cd x && python -m pytest tests/secret.py"}, ident="m3",
+                                   usage={"input_tokens": 7, "output_tokens": 3, "cache_read_input_tokens": 2}))
+        r = e.resumer_flux(flux.encode("utf-8"), JETON, "/travail/projet")
+        self.assertEqual([a["texte"] for a in r["actions"]], ["lance python", "modifie scenes/combat.gd", "lit a.py"])
+        self.assertEqual(r["actions"][2]["t"], "2026-11-26T10:00:00Z")
+        self.assertIsNone(r["actions"][0]["t"])
+        self.assertEqual((r["v"], r["phase"]), (1, "tests"))
+        self.assertEqual(r["usage"], [{"modele": "claude-opus-5-5", "entree": 27, "sortie": 13, "cache_lecture": 2, "cache_ecriture": 0}])
+        self.assertNotIn("mot de passe", json.dumps(r))
+        self.assertNotIn("secret.py", json.dumps(r))
+
+    def test_resumer_flux_borne_les_actions_et_tolere_le_bruit(self):
+        e = charger_entree()
+        flux = "pas du json\n" + "".join(self.ligne_outil("Read", {"file_path": f"f{i}.py"}, ident=f"m{i}") for i in range(80))
+        flux += '{"type": "assistant", "message": 3}\n[1, 2]\n{"type": "assistant", "message": {"cont'      # ligne coupée
+        r = e.resumer_flux(flux.encode("utf-8"), JETON, None)
+        self.assertEqual(len(r["actions"]), 50)
+        self.assertEqual(r["actions"][0]["texte"], "lit f79.py")
+        self.assertEqual(e.resumer_flux(b"", JETON, None)["actions"], [])
+        self.assertIsNone(e.resumer_flux(b"", JETON, None)["phase"])
+
+    def test_resumer_flux_ne_publie_jamais_le_jeton(self):
+        import base64
+        e = charger_entree()
+        b64 = [base64.b64encode(b"A" * k + JETON.encode()).decode() for k in range(3)]
+        sources = [JETON, *(x[4:-4] for x in b64)]
+        flux = "".join(self.ligne_outil("Read", {"file_path": f"/travail/projet/{t}.txt"}, ident=f"m{i}")
+                       for i, t in enumerate(sources))
+        flux += self.ligne_outil("Read", {"file_path": "ok.txt"}, ident="mok")
+        r = e.resumer_flux(flux.encode("utf-8"), JETON, "/travail/projet")
+        self.assertEqual([a["texte"] for a in r["actions"]], ["lit ok.txt"])
+        for t in sources:
+            self.assertNotIn(t[:20], json.dumps(r))
+
+    def test_lire_avancement_agent_borne_et_valide(self):
+        e = charger_entree()
+        maison = self.racine / "maison"
+        chemin = maison / "avancement.json"
+        chemin.write_text(json.dumps({"points": [{"texte": "a" * 300, "fait": True}, {"texte": "b", "fait": 1}, {"texte": 3}, "x"],
+                                      "en_cours": "c" * 300}), encoding="utf-8")
+        a = e.lire_avancement_agent(maison.as_posix())
+        self.assertEqual([p["texte"] for p in a["points"]], ["a" * 160, "b"])
+        self.assertEqual([p["fait"] for p in a["points"]], [True, False])
+        self.assertEqual(a["en_cours"], "c" * 160)
+        chemin.write_text(json.dumps({"points": [{"texte": str(i), "fait": False} for i in range(100)]}), encoding="utf-8")
+        self.assertEqual(len(e.lire_avancement_agent(maison.as_posix())["points"]), 30)
+        chemin.write_text("x" * 70000, encoding="utf-8")
+        self.assertIsNone(e.lire_avancement_agent(maison.as_posix()))
+        chemin.write_text('{"points": "pas une liste"}', encoding="utf-8")
+        self.assertIsNone(e.lire_avancement_agent(maison.as_posix()))
+        chemin.unlink()
+        self.assertIsNone(e.lire_avancement_agent(maison.as_posix()))
+
+    @unittest.skipUnless(hasattr(os, "pread"), "POSIX seulement")
+    def test_direct_json_est_publie_pendant_l_execution_puis_retire(self):
+        flux = [json.loads(self.ligne_outil("Edit", {"file_path": "/travail/projet/a.py"}))]
+        self.ecrire(ARGV, {"flux": flux, "attendre_direct": True})
+        (self.racine / "maison" / "avancement.json").write_text(json.dumps({"points": [{"texte": "un", "fait": False}]}), encoding="utf-8")
+        r = self.lancer(AGENT_DIRECT_S="0.1")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        vu = json.loads((self.racine / "maison" / "direct-vu.json").read_text(encoding="utf-8"))
+        self.assertFalse(vu["lien"])
+        direct = json.loads(vu["texte"])
+        self.assertEqual(direct["actions"][0]["texte"], "modifie a.py")
+        self.assertEqual(direct["avancement"]["points"], [{"texte": "un", "fait": False}])
+        self.assertFalse(self.sortie("direct.json").exists())              # retiré à la fin
+        self.assertFalse(self.sortie("direct.json.tmp").exists())
+        self.assertIn("flux.jsonl", os.listdir(self.racine / "sortie"))    # le flux brut reste rapatrié à la fin
+
+    @unittest.skipUnless(hasattr(os, "pread"), "POSIX seulement")
+    def test_direct_json_remplace_un_lien_que_l_agent_a_pose(self):
+        (self.racine / "maison" / "secret.txt").write_text("secret\n", encoding="utf-8")
+        self.ecrire(ARGV, {"flux": [], "attendre_direct": True, "lien_direct": True})
+        r = self.lancer(AGENT_DIRECT_S="0.1")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        vu = json.loads((self.racine / "maison" / "direct-vu.json").read_text(encoding="utf-8"))
+        self.assertFalse(vu["lien"])                 # le lien a été remplacé, jamais suivi
+        self.assertNotIn("secret", vu["texte"])
+        self.assertEqual((self.racine / "maison" / "secret.txt").read_text(encoding="utf-8"), "secret\n")
 
     def test_drapeaux_liste_fermee(self):
         self.assertNotIn(b"\r", ENTREE.read_bytes())             # #!/usr/bin/env python3 : un \r casserait l'entrée

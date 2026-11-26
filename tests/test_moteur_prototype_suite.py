@@ -53,7 +53,10 @@ class PrototypeSeul(tmr.Base):
             {"statut": "fait", "message": {"texte": "La maquette HTML est prête. Convient-elle avant que je passe au "
                                                     "développement ?", "attend": True}}])
         (proto,) = self.taches(etape="prototype")
-        self.assertEqual((proto["role"], proto["element"]), ("maquettiste", "e1"))
+        # le cahier validé porte déjà la maquette (FM_Stats f24, 2026-11-26) : le workflow n'en refait pas, le prototype
+        # est tenu par le développeur
+        self.assertEqual((proto["role"], proto["element"]), ("dev", "e1"))
+        self.assertEqual(self.taches(etape="flux:maquette"), [])
         _, actions = self.traiter(type="message", fonctionnalite="f1", texte="Oui, on continue")
         self.piloter(actions, juges={"traduire_retour": {"validation": True, "consigne": None}})
         _, actions = self.traiter(type="methode", fonctionnalite="f1", verdict="valider")
@@ -62,9 +65,9 @@ class PrototypeSeul(tmr.Base):
 
         self.assertNotIn("La série est terminée.", self.textes())
         self.assertEqual(self.fonc()["etape"], "serie")
-        # la maquette et sa validation sont tenues par le prototype : l'élément repart au développement
-        (dev,) = self.taches(etape="flux:dev")
-        self.assertEqual((dev["element"], dev["role"]), ("e1", "dev"))
+        # pas de maquette au workflow : l'élément repart à la première étape que le prototype n'a pas tenue
+        (docs,) = self.taches(etape="flux:docs")      # le prototype du développeur a tenu le code et les tests
+        self.assertEqual((docs["element"], docs["role"]), ("e1", "redacteur"))
         self.assertEqual(self.taches(etape="flux:maquette"), [])
         self.assertEqual(self.etat["elements"]["f1/e1"]["phase"], "flux")
         avant = len(self.taches())

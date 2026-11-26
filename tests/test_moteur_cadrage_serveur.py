@@ -150,3 +150,20 @@ class ImpasseEtOrganisationAttendue(Base):
             self.assertEqual(regles.impasses(self.projet, regles.nouvel_etat(), delai=0), [])
             court["decisions"] = []
             self.assertEqual(regles.impasses(self.projet, regles.nouvel_etat(), delai=0), [("f1", "cadrage")])
+
+
+class ImpasseEtCorrectionEnFile(Base):
+    """Une correction qui attend la fin d'une autre du même sujet n'est pas une impasse (FM_Stats f33, 2026-11-26) :
+    chaque minute une alerte « série arrêtée », relancée à chaque fois, sans fin."""
+    locaux, cloud = 1, 0
+
+    def test_une_correction_en_file_n_est_pas_une_impasse(self):
+        self.ok("fonctionnalite", entree={"id": "f1", "etape": "cadrage"})
+        court = {"taches": [], "fonctionnalites": [{"id": "f1", "etape": "cadrage", "attend_reponse": False}],
+                 "decisions": []}
+        detail = {"maj": "2020-01-01T00:00:00+00:00", "decisions": [], "discussion": [], "en_file_derriere": "f0"}
+        with mock.patch.object(regles, "_etat", return_value=court), \
+                mock.patch.object(regles, "_fonc", return_value=detail):
+            self.assertEqual(regles.impasses(self.projet, regles.nouvel_etat(), delai=0), [])
+            detail["en_file_derriere"] = None
+            self.assertEqual(regles.impasses(self.projet, regles.nouvel_etat(), delai=0), [("f1", "cadrage")])

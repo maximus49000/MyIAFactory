@@ -467,6 +467,12 @@ def consigne_serveur(mode, tache_id, flutter=False):
         "Personne ne voit ta fenêtre et le Directeur n'est pas joignable pendant ton travail : une question ou un accord "
         "se demande dans ton rapport, en `message.questions` avec `attend: true`, puis tu t'arrêtes (tu reprendras avec "
         "la réponse).",
+        # La fin d'étape commune demande de fermer l'émulateur et le démon Gradle « pour que le poste retrouve sa mémoire » :
+        # sans objet dans un conteneur jeté, et ces outils ne sont pas ouverts (FM_Stats, 2026-11-26 : refusés à chaque
+        # recette, une décision au bureau chaque fois, malgré trois leçons validées).
+        "Ton conteneur est jeté à la fin de ta tâche : n'arrête ni démon Gradle, ni émulateur, ni serveur local, et ne "
+        "demande jamais `gradlew --stop`, `adb emu kill` ou un autre outil de nettoyage (la consigne « ferme ce que tu as "
+        "lancé » ne vaut que pour un agent du poste).",
     ]
     if mode == "pilote":
         lignes += [

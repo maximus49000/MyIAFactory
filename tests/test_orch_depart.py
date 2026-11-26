@@ -180,6 +180,15 @@ class TestDepart(unittest.TestCase):
             self.assertEqual(depart.consigne_serveur(mode, "t7"), depart.consigne_serveur(mode, "t7", flutter=False))
             self.assertNotIn("personne n'approuve", depart.consigne_serveur(mode, "t7"))
 
+    def test_consigne_serveur_ne_demande_aucun_nettoyage_du_poste(self):
+        """La fin d'étape commune dit de fermer l'émulateur et le démon Gradle pour que le poste retrouve sa mémoire : sans
+        objet dans un conteneur jeté (FM_Stats, 2026-11-26 : un outil refusé à chaque recette, malgré trois leçons)."""
+        for mode in ("seul", "pilote"):
+            c = depart.consigne_serveur(mode, "t7")
+            self.assertIn("conteneur est jeté", c)
+            self.assertIn("gradlew --stop", c)
+            self.assertIn("ne demande jamais", c)
+
     def test_consigne_serveur_demande_la_liste_d_avancement_dans_la_maison(self):
         for mode in ("seul", "pilote"):
             c = depart.consigne_serveur(mode, "t7")

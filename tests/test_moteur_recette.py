@@ -1,0 +1,84 @@
+"""Une recette qui déclare son échec ne clôt pas la tâche ni n'ouvre la livraison (essai réel FM_Stats, t237 : « Recette NON
+réussie » acceptée avec le statut `fait`, la livraison était lancée)."""
+import json
+
+from moteur import agents, rapport, regles
+from tests import test_moteur_regles as tmr
+from tests import test_moteur_serie_reprise as tsr
+
+_lu, usage = tmr._lu, tmr.usage
+
+
+class Recette(tsr.AvecValidation):
+    def setUp(self):
+        super().setUp()
+        self.projet_avec_validation(flux=tsr.FLUX, elements=0)
+        self.recette = self.ok("tache", entree={"titre": "Recette du service", "fonctionnalite": "f1", "role": "testeur",
+                                                "etape": "flux:essai", "colonne": "essai", "active": True})["id"]
+
+    def rendre(self, **plus):
+        self.etat["departs"][self.recette] = {"agent": "rel-1", "taches": [self.recette], "matiere": "", "lot": None}
+        self.etat["en_cours"].add(self.recette)
+        e = agents.Execution(self.recette, "rel-1", rapport=_lu({"statut": "fait", **plus}), usages=[usage()])
+        regles.traiter_retour(self.projet, e, self.etat)
+
+    def tache(self, tid):
+        return next(t for t in self.suivi()["taches"] if t["id"] == tid)
+
+    def corrections(self):
+        return [t for t in self.suivi()["taches"] if t["titre"].startswith("Correction : ")]
+
+    def test_recette_reussie_faux_rouvre_une_correction_sans_ouvrir_la_suite(self):
+        self.rendre(recette_reussie=False, message={"texte": "Défauts constatés : /sante muet."})
+        self.assertNotEqual(self.tache(self.recette)["colonne"], "fait")
+        (corr,) = self.corrections()
+        self.assertEqual((corr["role"], corr["etape"]), ("dev", "correction"))
+        self.assertIn("/sante muet", json.dumps(corr["journal"], ensure_ascii=False))
+        self.assertIn(corr["id"], self.tache(self.recette)["depend_de"])      # la recette attend la correction
+        self.assertEqual([t for t in self.suivi()["taches"] if t["etape"] == "flux:livraison"], [])
+
+    def test_sans_le_champ_le_texte_non_reussie_vaut_faux(self):
+        self.rendre(message={"texte": "Recette NON réussie. Défauts constatés : page vide."})
+        self.assertNotEqual(self.tache(self.recette)["colonne"], "fait")
+        self.assertEqual(len(self.corrections()), 1)
+
+    def test_le_champ_prime_sur_le_texte(self):
+        self.rendre(recette_reussie=True, message={"texte": "La recette n'était pas réussie hier, mais tout passe."})
+        self.assertEqual(self.corrections(), [])
+
+    def test_recette_reussie_ou_champ_absent_sans_mot_d_echec_comme_avant(self):
+        self.rendre(recette_reussie=True, message={"texte": "Tout passe."})
+        self.assertEqual(self.corrections(), [])
+        self.assertNotIn("Recette non réussie", json.dumps(self.tache(self.recette)["journal"], ensure_ascii=False))
+
+    def test_champ_absent_sans_mot_d_echec(self):
+        self.rendre(message={"texte": "Tout passe."})
+        self.assertEqual(self.corrections(), [])
+        self.assertNotIn("Recette non réussie", json.dumps(self.tache(self.recette)["journal"], ensure_ascii=False))
+
+    def test_un_autre_metier_n_est_pas_concerne(self):
+        autre = self.ok("tache", entree={"titre": "Dev", "fonctionnalite": "f1", "role": "dev", "etape": "flux:dev",
+                                         "colonne": "dev", "active": True})["id"]
+        self.etat["departs"][autre] = {"agent": "rel-1", "taches": [autre], "matiere": "", "lot": None}
+        e = agents.Execution(autre, "rel-1", rapport=_lu({"statut": "fait", "recette_reussie": False,
+                                                          "message": {"texte": "Recette non réussie."}}), usages=[usage()])
+        regles.traiter_retour(self.projet, e, self.etat)
+        self.assertEqual(self.corrections(), [])
+
+    def test_trois_recettes_ratees_bloquent_la_tache(self):
+        for _ in range(regles.RECETTES_RATEES_MAX):
+            self.rendre(recette_reussie=False, message={"texte": "Défaut."})
+        self.assertTrue(self.tache(self.recette).get("bloquee"))
+
+    def test_le_contrat_ecarte_une_valeur_qui_n_est_pas_vrai_faux(self):
+        self.assertNotIn("recette_reussie", _lu({"statut": "fait", "recette_reussie": "non"}))
+        self.assertIs(_lu({"statut": "fait", "recette_reussie": False})["recette_reussie"], False)
+
+    def test_la_consigne_du_testeur_demande_le_champ(self):
+        self.assertIn("recette_reussie", regles.CONSIGNE_RECETTE)
+        self.assertIn("recette_reussie", rapport.__doc__)
+
+
+if __name__ == "__main__":
+    import unittest
+    unittest.main()

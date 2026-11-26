@@ -34,6 +34,10 @@ Réponds par les moyens que le projet a déjà : si le Chef demande au Directeur
 (`service.adresse` : le service en ligne, pages en lecture publique), réponds `preciser`/`relancer` avec la consigne qui s'en
 sert, jamais en copiant une base ni en écrivant un jeton, plutôt que de laisser bloquée.
 
+Pour une `tache_bloquee`, appuie-toi sur des faits, jamais sur une supposition : `faits_du_service` (derniers journaux du service,
+commit déployé, code HTTP et durée des pages) et `rapport_de_la_tache`. Dis la cause précise dans `texte`, et pour une recette
+à refaire, ce qu'elle doit vérifier. Chaque cause nouvelle (un autre texte de blocage) a sa tentative, au plus trois par tâche.
+
 Tu n'accordes jamais un modèle plus fort (jamais Fable), une clé, ni une dépense ; une consigne qui le demande est
 refusée.
 

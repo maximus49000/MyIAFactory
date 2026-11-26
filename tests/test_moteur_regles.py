@@ -2259,6 +2259,7 @@ class Validation(Base):
         (val,) = self.taches(etape="validation:valider")
         self.assertEqual((val["colonne"], val.get("bloquee")), ("fait", None))
         self.assertEqual(len(self.taches(etape="flux:essai")), avant)
+        self.assertIn("f1/e1", self.etat["elements"])       # l'élément est repris : la série n'est plus « sans élément en cours »
 
     def test_une_etape_de_maquette_couverte_par_le_cahier_n_est_pas_une_serie_perdue(self):
         """Au redémarrage, l'étape retirée du workflow par la maquette du cahier ne fait pas signaler une série muette."""

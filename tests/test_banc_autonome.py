@@ -15,7 +15,7 @@ DE_JUGEMENT = [c for c in CAS if c["type"] == "jugement"]
 
 class Chargeur(unittest.TestCase):
     def test_les_dix_cas_reels_et_les_negatifs(self):
-        self.assertEqual(len([c for c in CAS if not c["negatif"]]), 13)
+        self.assertEqual(len([c for c in CAS if not c["negatif"]]), 14)
         self.assertGreaterEqual(len([c for c in CAS if c["negatif"]]), 2)
         self.assertEqual(len({c["id"] for c in CAS}), len(CAS))
 

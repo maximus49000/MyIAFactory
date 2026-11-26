@@ -7324,7 +7324,13 @@ def _reprendre_l_element(projet, etat, f, element, taches):
     if etapes and etapes[-1] not in rangs:
         if _est_etape_maquette({"id": etapes[-1]}) and _maquette_du_cahier_validee(projet, fid):
             # la maquette du cahier validé fait foi : la règle a retiré cette étape du workflow (FM_Stats f24, 2026-11-26),
-            # ce n'est pas une série perdue ; sa validation encore ouverte est close par le retour du Directeur
+            # ce n'est pas une série perdue ; sa validation encore ouverte est close par le retour du Directeur. Une
+            # validation déjà close : l'élément repart à la première étape qui reste (sinon la série reste « sans élément en
+            # cours » : FM_Stats f24, 2026-11-26, « Relancer la série » sans effet)
+            if pas[-1]["colonne"] == "fait":
+                v = _etat_element(etat, fid, element)
+                v.update(taches=[t["id"] for t in pas], phase="flux", pas=0)
+                _tache_de_flux(projet, etat, v, journal=["La maquette du cahier fait foi : le développement commence."])
             return None
         return f"son étape « {etapes[-1]} » n'est plus dans le workflow de la fonctionnalité"
     v = _etat_element(etat, fid, element)

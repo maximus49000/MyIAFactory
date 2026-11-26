@@ -2249,6 +2249,15 @@ class Validation(Base):
             self.addCleanup(p.stop)
         return val
 
+    def test_la_serie_relue_reprend_l_element_dont_la_validation_de_maquette_est_close(self):
+        """FM_Stats f24 : « Relancer la série » ne faisait rien, l'élément dont la validation de maquette était close restait
+        hors de la mémoire du moteur."""
+        val = self.validation_bloquee_apres_un_redemarrage()
+        self.traiter(type="retour", tache=val["id"], texte="Relance demandée par le Directeur (même consigne).")
+        self.etat["elements"].clear()
+        regles.reprendre_la_serie(self.projet, self.etat, "f1")
+        self.assertIn("f1/e1", self.etat["elements"])
+
     def test_relancer_une_validation_de_maquette_couverte_par_le_cahier_sans_l_element_en_memoire(self):
         """Le moteur relancé ne connaît plus l'élément : « Relancer » répondait « n'est plus dans le workflow » et la carte
         restait dans « Tâches bloquées ». La validation que le cahier couvre est close, sans refaire d'étape."""

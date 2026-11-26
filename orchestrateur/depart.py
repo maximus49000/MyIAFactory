@@ -447,7 +447,8 @@ CHEMIN_AVANCEMENT_SERVEUR = "/maison/avancement.json"
 CONSIGNE_AVANCEMENT_SERVEUR = (
     f"Avancement : dès le début, écris dans `{CHEMIN_AVANCEMENT_SERVEUR}` la liste de tes points, au format "
     '`{"points": [{"texte": "…", "fait": false}], "en_cours": "ce que tu fais"}`. Quand un point est fini, mets `fait` '
-    "à `true` et mets `en_cours` à jour. Une ligne par point, sans commentaire.")
+    "à `true` et mets `en_cours` à jour, AVANT de lancer la commande suivante (construction de l'APK, tests). Une ligne par "
+    "point, sans commentaire.")
 
 
 def consigne_serveur(mode, tache_id, flutter=False):

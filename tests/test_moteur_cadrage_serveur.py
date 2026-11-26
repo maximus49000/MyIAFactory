@@ -133,3 +133,20 @@ class SerieEnAttenteDeLivraison(Base):
         with mock.patch.object(regles, "_en_attente_de_deploiement", return_value=False):
             regles._signaler_une_serie_muette(self.projet, etat, "f1")
         self.assertEqual(len([d for d in self.ok("etat")["decisions"] if d["genre"] == regles.SERIE_ARRETEE]), 1)
+
+
+class ImpasseEtOrganisationAttendue(Base):
+    """Un cadrage qui attend la réponse à la proposition de workflow n'est pas une impasse (FM_Stats f29)."""
+    locaux, cloud = 1, 0
+
+    def test_la_proposition_de_workflow_attendue_n_est_pas_une_impasse(self):
+        self.ok("fonctionnalite", entree={"id": "f1", "etape": "cadrage"})
+        court = {"taches": [], "fonctionnalites": [{"id": "f1", "etape": "cadrage", "attend_reponse": False}],
+                 "decisions": [{"id": "d1", "genre": "organisation", "portee": "projet",
+                                "organisation": {"fonctionnalite": "f1", "workflow": {}}}]}
+        detail = {"maj": "2020-01-01T00:00:00+00:00", "decisions": [], "discussion": []}
+        with mock.patch.object(regles, "_etat", return_value=court), \
+                mock.patch.object(regles, "_fonc", return_value=detail):
+            self.assertEqual(regles.impasses(self.projet, regles.nouvel_etat(), delai=0), [])
+            court["decisions"] = []
+            self.assertEqual(regles.impasses(self.projet, regles.nouvel_etat(), delai=0), [("f1", "cadrage")])

@@ -763,10 +763,10 @@ class Moteur:
     # --- Les demandes.
 
     def _autonome(self, projet, etat):
-        """Réglage `claude_autonome` : les réponses de Claude aux décisions (hors validations) sont déposées avant le
-        traitement des demandes. Jamais une raison d'arrêter le tour."""
+        """Réglage `claude_autonome` : Claude réfléchit aux décisions (hors validations) ; ses réponses sont déposées avant
+        le traitement des demandes. Jamais une raison d'arrêter le tour."""
         try:
-            regles.repondre_en_autonome(projet, etat)
+            self._executer(projet, regles.repondre_en_autonome(projet, etat))
         except Exception as e:  # noqa: BLE001
             self._noter(projet, f"claude autonome : {type(e).__name__} : {e}")
 

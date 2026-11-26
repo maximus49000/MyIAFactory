@@ -35,6 +35,12 @@ Dossiers attendus (préparés par la table de règles) :
   `lecons_du_metier`, `essais_automatiques`, `metiers` (ceux du projet), `voies` (celles permises), `mots_interdits`.
   Le moteur l'appelle avec le modèle de l'orchestrateur du projet (`modele_orchestrateur`), jamais Fable.
 
+- `decider_autonome` (mode Claude autonome, voir `regles.repondre_en_autonome`) : `decision` (genre, texte, et les
+  champs de la décision : quoi, choix, questions, programme, recommandation…), `verdicts` (ceux permis), `tache` (id,
+  titre, etape, metier, element, journal) ou null, `fonctionnalite` (id, nom, etape, flux [{nom, validation}]),
+  `lecons_du_metier`, `deja_appris` (les réponses que le moteur donne seul), `recentes` (les dernières décisions
+  autonomes), `mots_interdits`.
+
 - `repondre_question` : `projet` (nom, description), `genre`, `fonctionnalites` ([{id, nom, nature, etape, cahier}]),
   `fonctionnalite` (celle visée, cahier et éléments, ou null), `regles_projet`, `fil` (messages précédents),
   `question` (texte, images), `equipe` ([{prenom, cle, role, libre, taches}]), `mots_interdits`.
@@ -60,7 +66,8 @@ from orchestrateur.outil import COMMANDES, COMMANDES_DU_BUREAU
 DOSSIER_CONSIGNES = Path(__file__).resolve().parent / "consignes"
 TYPES = {"decouper": "sonnet", "traduire_retour": "haiku", "ecrire_methode": "sonnet", "apres_refus": "haiku",
          "conseil": "haiku", "classer_genre": "haiku", "proposer_organisation": "sonnet", "definir_workflow": "sonnet",
-         "decouper_lieux": "sonnet", "analyser_blocage": "sonnet", "repondre_question": "sonnet"}
+         "decouper_lieux": "sonnet", "analyser_blocage": "sonnet", "repondre_question": "sonnet",
+         "decider_autonome": "sonnet"}
 LIBELLES = {"decouper": "découper la fonctionnalité en éléments", "traduire_retour": "comprendre votre retour",
             "ecrire_methode": "écrire la méthode", "apres_refus": "décider de la suite après un refus",
             "conseil": "choisir quoi faire de cette demande", "classer_genre": "classer le genre de cette demande",
@@ -68,6 +75,7 @@ LIBELLES = {"decouper": "découper la fonctionnalité en éléments", "traduire_
             "definir_workflow": "définir le workflow du projet",
             "decouper_lieux": "découper les étapes selon le poste",
             "analyser_blocage": "analyser le blocage de cette tâche",
+            "decider_autonome": "décider à la place du Directeur",
             "repondre_question": "répondre à votre question"}
 NATURES_SUGGESTION = ("fonctionnalite", "correction")
 LONGUEUR_REPONSE = 3500
@@ -713,6 +721,24 @@ def _valider_decouper_lieux(o, d):
     return None
 
 
+def _erreur_lecon(o, d):
+    """La leçon facultative d'une réponse : null, ou {portee, texte} (une leçon de genre est publique)."""
+    lecon = o.get("lecon")
+    if lecon is not None:
+        if not (isinstance(lecon, dict) and lecon.get("portee") in PORTEES_LECON and _ligne(lecon.get("texte"))
+                and len(lecon["texte"]) <= LECON_MAX):
+            return (f"« lecon » est null ou {{portee ({' ou '.join(PORTEES_LECON)}), texte (une phrase, {LECON_MAX} "
+                    "caractères au plus)}}.")
+        if lecon["portee"] == "genre":
+            if MOTIF_CHEMIN.search(lecon["texte"]):
+                return "Une leçon de genre est publique : ni chemin ni nom de fichier ; écris-la en termes généraux."
+            interdits = mots_trouves(lecon["texte"], d.get("mots_interdits") or [])
+            if interdits:
+                return (f"Une leçon de genre est publique : elle contient un mot propre au projet ({', '.join(interdits)}) ; "
+                        "écris-la en termes généraux.")
+    return None
+
+
 def _valider_analyser_blocage(o, d):
     """La réponse de l'analyse d'un blocage, lue avec son dossier (motif, métiers du projet, voies permises, mots
     interdits)."""
@@ -746,19 +772,50 @@ def _valider_analyser_blocage(o, d):
                 and _texte(a.get("description")) and len(a["description"]) <= CONSIGNE_BLOCAGE_MAX):
             return (f"« anomalie » est {{titre (une ligne, {TITRE_ANOMALIE_MAX} caractères au plus), description "
                     f"({CONSIGNE_BLOCAGE_MAX} au plus)}} avec la voie logiciel.")
-    lecon = o.get("lecon")
-    if lecon is not None:
-        if not (isinstance(lecon, dict) and lecon.get("portee") in PORTEES_LECON and _ligne(lecon.get("texte"))
-                and len(lecon["texte"]) <= LECON_MAX):
-            return (f"« lecon » est null ou {{portee ({' ou '.join(PORTEES_LECON)}), texte (une phrase, {LECON_MAX} "
-                    "caractères au plus)}}.")
-        if lecon["portee"] == "genre":
-            if MOTIF_CHEMIN.search(lecon["texte"]):
-                return "Une leçon de genre est publique : ni chemin ni nom de fichier ; écris-la en termes généraux."
-            interdits = mots_trouves(lecon["texte"], d.get("mots_interdits") or [])
-            if interdits:
-                return (f"Une leçon de genre est publique : elle contient un mot propre au projet ({', '.join(interdits)}) ; "
-                        "écris-la en termes généraux.")
+    return _erreur_lecon(o, d)
+
+
+VERDICTS_AUTONOME = {"accord_agent": ("accepter", "choisir", "repondre", "refuser"),
+                     "outil_agent": ("autoriser", "refuser", "relancer"),
+                     "blocage_analyse": ("suivre", "preciser"), "serie_arretee": ("relancer",)}
+
+
+def _valider_decider_autonome(o, d):
+    """La réponse de Claude à une décision du Directeur (mode autonome), lue avec son dossier : les verdicts permis
+    (`verdicts`), les choix et questions de l'agent."""
+    if not (_texte(o.get("raison")) and len(o["raison"]) <= ANALYSE_MAX):
+        return f"« raison » (pourquoi cette réponse fait avancer, 1 à 3 phrases, {ANALYSE_MAX} caractères au plus) est obligatoire."
+    permis = [v for v in d.get("verdicts") or [] if isinstance(v, str)]
+    verdict = o.get("verdict")
+    if verdict not in permis:
+        return f"« verdict » doit être l'un de : {', '.join(permis)}."
+    t = o.get("texte")
+    if t is not None and not (_texte(t) and len(t) <= CONSIGNE_BLOCAGE_MAX):
+        return f"« texte » : null, ou une consigne de {CONSIGNE_BLOCAGE_MAX} caractères au plus."
+    if t and MOTIF_FABLE.search(t):
+        return "« texte » ne peut pas demander un autre modèle : jamais Fable."
+    if verdict in ("preciser", "refuser") and not t:
+        return f"« texte » est obligatoire avec le verdict {verdict} (ce que l'agent doit faire à la place)."
+    if verdict == "choisir" and o.get("choix") not in (d.get("choix") or []):
+        return "« choix » doit être l'un des choix proposés par l'agent (copié à l'identique)."
+    if verdict == "repondre":
+        questions, r = d.get("questions") or [], o.get("reponses")
+        if not isinstance(r, list) or len(r) != len(questions):
+            return f"« reponses » : une liste de {len(questions)} réponses, une par question, dans l'ordre."
+        for k, (q, a) in enumerate(zip(questions, r), 1):
+            if (not isinstance(a, list) or not a or not all(isinstance(x, str) and x in q["choix"] for x in a)
+                    or len(set(a)) != len(a) or (len(a) > 1 and not q.get("multiple"))):
+                return f"« reponses » : la réponse {k} est une liste de choix copiés de la question {k}."
+    if o.get("generalisable") is not None and not isinstance(o["generalisable"], bool):
+        return "« generalisable » vaut true ou false."
+    erreur = _erreur_lecon(o, d)
+    if erreur:
+        return erreur
+    a = o.get("amelioration")
+    if a is not None and not (isinstance(a, dict) and _ligne(a.get("titre")) and len(a["titre"]) <= TITRE_ANOMALIE_MAX
+                              and _texte(a.get("description")) and len(a["description"]) <= CONSIGNE_BLOCAGE_MAX):
+        return (f"« amelioration » : null, ou {{titre (une ligne, {TITRE_ANOMALIE_MAX} caractères au plus), description "
+                f"({CONSIGNE_BLOCAGE_MAX} au plus)}}.")
     return None
 
 
@@ -788,4 +845,5 @@ _VALIDEURS_AVEC_DOSSIER = {"classer_genre": _valider_classer_genre,
                            "definir_workflow": _valider_definir_workflow,
                            "decouper_lieux": _valider_decouper_lieux,
                            "analyser_blocage": _valider_analyser_blocage,
-                           "repondre_question": _valider_repondre_question}
+                           "repondre_question": _valider_repondre_question,
+                           "decider_autonome": _valider_decider_autonome}

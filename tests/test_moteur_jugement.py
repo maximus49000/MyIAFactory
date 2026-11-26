@@ -150,7 +150,7 @@ class Juger(unittest.TestCase):
                                           "apres_refus": "haiku", "conseil": "haiku", "classer_genre": "haiku",
                                           "proposer_organisation": "sonnet", "definir_workflow": "sonnet",
                                           "decouper_lieux": "sonnet", "analyser_blocage": "sonnet",
-                                          "repondre_question": "sonnet"})
+                                          "repondre_question": "sonnet", "decider_autonome": "sonnet"})
         self.assertEqual(jugement.LIBELLES["definir_workflow"], "définir le workflow du projet")
         self.assertEqual((jugement.TOURS_MAX_DEFINITION, jugement.QUESTIONS_PAR_TOUR_MAX,
                           jugement.CHOIX_PAR_QUESTION_MAX), (4, 5, 6))

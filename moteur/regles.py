@@ -7520,6 +7520,10 @@ def impasses(projet, etat, delai=None):
     court = _etat(projet)
     ouvertes = {t.get("fonctionnalite") for t in court["taches"] if t["colonne"] != "fait" or t.get("active")}
     portees = {d.get("fonctionnalite") or d.get("portee") for d in court["decisions"]}
+    # la proposition de workflow (décision `organisation`, portée « projet ») attend la réponse du Directeur pour SA
+    # fonctionnalité : ce n'est pas une impasse (FM_Stats f29, 2026-11-26 : « ne progresse plus » pendant qu'elle attendait)
+    portees |= {(d.get("organisation") or {}).get("fonctionnalite") for d in court["decisions"]
+                if isinstance(d.get("organisation"), dict)}
     sortie = []
     for f in court["fonctionnalites"]:
         fid = f["id"]

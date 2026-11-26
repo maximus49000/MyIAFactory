@@ -814,7 +814,8 @@ def _valider_analyser_blocage(o, d):
 VERDICTS_AUTONOME = {"accord_agent": ("accepter", "choisir", "repondre", "refuser"),
                      "outil_agent": ("autoriser", "refuser", "relancer"),
                      "blocage_analyse": ("suivre", "preciser"), "serie_arretee": ("relancer", "laisser"),
-                     "tache_bloquee": ("relancer", "renvoyer", "redeployer", "laisser")}
+                     "tache_bloquee": ("relancer", "renvoyer", "redeployer", "laisser"),
+                     "fusion_conflit": ("garder_depot", "garder_branche", "renvoyer", "laisser")}
 
 
 def _valider_decider_autonome(o, d):
@@ -836,6 +837,8 @@ def _valider_decider_autonome(o, d):
     if d.get("deja_fait") and verdict in ("accepter", "choisir", "repondre"):
         return ("Les faits du service montrent que cette action est déjà faite (service en ligne, sain, à la version voulue) : "
                 "réponds « refuser » avec un « texte » qui dit « déjà fait : … » et ce que l'agent vérifie à la place.")
+    if (d.get("decision") or {}).get("genre") == "fusion_conflit" and verdict == "renvoyer" and not t:
+        return "« texte » est obligatoire avec le verdict renvoyer (les deux versions, la correction attendue)."
     if (d.get("decision") or {}).get("genre") == "tache_bloquee":      # une tâche bloquée sans décision posée
         if verdict in ("relancer", "renvoyer") and not t:
             return f"« texte » est obligatoire avec le verdict {verdict} (la consigne précise, ou le diagnostic)."

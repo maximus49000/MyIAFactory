@@ -7874,6 +7874,7 @@ SUIVRE, PRECISER, LAISSER = "suivre", "preciser", "laisser"
 
 # --- Claude autonome : le réglage `claude_autonome` répond à la place du Directeur, sauf aux validations.
 
+GENRE_FUSION = "fusion_conflit"         # une branche d'agent qui ne fusionne pas : la question posée dans la discussion
 GENRE_TACHE_BLOQUEE = "tache_bloquee"   # pas une décision posée : une tâche restée bloquée après l'essai du Chef
 AUTONOME_SERVICE_ATTENTE_S = 2700       # un redéploiement qui n'a pas abouti en 45 min revient au Directeur
 AUTONOME_MAX_REPRISES = 3      # une série ou une tâche qui se rebloque après trois réponses revient au Directeur
@@ -7942,7 +7943,8 @@ CHAMPS_AUTONOME = {"accord_agent": ("quoi", "pourquoi", "partenaire", "cout", "i
 VERDICTS_AUTONOMES = {"accord_agent": ("accepter", "choisir", "repondre", "refuser"),
                       "outil_agent": ("autoriser", "refuser", "relancer"),
                       "blocage_analyse": ("suivre", "preciser"), "serie_arretee": ("relancer", "laisser"),
-                      GENRE_TACHE_BLOQUEE: ("relancer", "renvoyer", "redeployer", "laisser")}
+                      GENRE_TACHE_BLOQUEE: ("relancer", "renvoyer", "redeployer", "laisser"),
+                      GENRE_FUSION: ("garder_depot", "garder_branche", "renvoyer", "laisser")}
 APPRENDRE = ("accepter", "autoriser", "refuser")     # les seules réponses que le moteur peut redonner sans appel
 
 
@@ -8052,6 +8054,11 @@ def _dossier_autonome(projet, etat, d):
     except Refus:
         nouvelles = []
     plus = {"anomalies": nouvelles, "service": {"adresse": _adresse_du_service(projet)}}
+    if d["genre"] == GENRE_FUSION:
+        fusion = _faits_de_la_fusion(projet, d)
+        verdicts = [v for v in verdicts if not (v == "garder_depot" and not fusion["depot_possible"])
+                    and not (v == "garder_branche" and not fusion["branche_possible"])]
+        plus.update(fichiers_en_conflit=fusion["fichiers"], fichiers_de_la_branche=fusion["changes"])
     if (d["genre"] != GENRE_TACHE_BLOQUEE and (_decision_du_service(d) or d["genre"] == SERIE_ARRETEE)
             and _service_a_redeployer(projet)):
         # l'état réel avant de répondre (essai FM_Stats : « oui, déployer » alors que le service était déjà en ligne et sain)
@@ -8093,6 +8100,10 @@ def _demande_autonome(d, o):
         demande["reponses"] = o["reponses"]
     if o.get("texte"):
         demande["texte"] = o["texte"]
+    if d["genre"] == GENRE_FUSION:
+        demande.update(tache=d["tache"], branche=d.get("branche"), fonctionnalite=d.get("fonctionnalite"), raison=o.get("raison"))
+        if o.get("texte"):
+            demande["texte"] = o["texte"]
     if d["genre"] == GENRE_TACHE_BLOQUEE:
         demande.update(tache=d["tache"], motif=d.get("motif"))
         if o["verdict"] == "renvoyer":
@@ -8128,7 +8139,14 @@ def _phrase_autonome(projet, d, demande, raison, lecon, defaut=None):
             titre = f" « {_tache(projet, d['tache']).get('titre')} »"
         except Refus:
             pass
-    if d["genre"] == GENRE_TACHE_BLOQUEE:
+    if d["genre"] == GENRE_FUSION:
+        phrase = {"garder_depot": f"J'ai résolu le conflit de la branche {d.get('branche')} en gardant la version du dépôt "
+                                  "(documentation seulement ; la branche est fusionnée, rien n'est poussé).",
+                  "garder_branche": f"J'ai résolu le conflit de la branche {d.get('branche')} en gardant la version de la branche "
+                                    "(documentation seulement ; rien n'est poussé).",
+                  "renvoyer": f"J'ai renvoyé le conflit de la branche {d.get('branche')} à la tâche, avec les deux versions : {texte}",
+                  "laisser": f"J'ai laissé le conflit de la branche {d.get('branche')} au Directeur."}.get(v, f"J'ai répondu {v}.")
+    elif d["genre"] == GENRE_TACHE_BLOQUEE:
         phrase = {"relancer": f"J'ai relancé la tâche{titre} avec une consigne précise : {texte}",
                   "renvoyer": f"J'ai renvoyé le défaut à l'agent de développement (tâche {demande.get('tache_dev')}) avec le "
                               f"diagnostic : {texte}",
@@ -8352,6 +8370,8 @@ def _blocage_encore_a_debloquer(projet, etat, i):
     d = (etat.get("autonome_pseudo") or {}).get(i)
     if d is None:
         return None
+    if d["genre"] == GENRE_FUSION:      # le conflit est encore à régler s'il est encore noté
+        return d if (d["tache"], d["branche"]) in (etat.get("autonome_fusions") or {}) else None
     try:
         t = _tache(projet, d["tache"])
     except Refus:
@@ -8475,6 +8495,82 @@ def _adresse_du_service(projet):
         return a if isinstance(a, str) and a.startswith(("http://", "https://")) else None
     except Exception:  # noqa: BLE001
         return None
+
+
+def _faits_de_la_fusion(projet, d):
+    """Ce que Claude lit pour juger un conflit de fusion (lecture seule) : chaque fichier en conflit avec ses deux versions
+    (celle de HEAD et celle de la branche), les fichiers que la branche change, et ce que les deux résolutions bornées
+    permettent (`cloud.fusion_bornee` : seulement de la documentation)."""
+    dossier, branche = str(projet.dossier), d.get("branche")
+    enjeu = cloud.fichiers_en_conflit(dossier, branche) if branche else None
+    changes = cloud.fichiers_changes_par_la_branche(dossier, branche) if branche else None
+    fichiers = [{"chemin": f, "genre": "doc" if cloud.est_documentation(f) else "code",
+                 "version_du_depot": service_permanent.masquer(cloud.version_du_fichier(dossier, "HEAD", f) or ""),
+                 "version_de_la_branche": service_permanent.masquer(cloud.version_du_fichier(dossier, branche, f) or "")}
+                for f in (enjeu or [])[:6]]
+    return {"fichiers": fichiers, "changes": (changes or [])[:30],
+            "depot_possible": bool(changes) and all(cloud.est_documentation(x) for x in changes),
+            "branche_possible": bool(enjeu) and all(cloud.est_documentation(x) for x in enjeu)}
+
+
+def _fusions_en_conflit(projet, etat):
+    """Les conflits de fusion d'une branche d'agent notés par `fusion_impossible` (réglage `claude_autonome`) : une
+    pseudo-décision `fusion_conflit` chacun, une seule fois par branche ; abandonnée si la branche est entre-temps fusionnée."""
+    faites, pseudo = etat.setdefault("autonome_faites", set()), etat.setdefault("autonome_pseudo", {})
+    rendues, a_fusionner = [], etat.get("autonome_fusions") or {}
+    for (tid, branche), v in list(a_fusionner.items()):
+        i = f"fusion:{tid}:{branche}"
+        if i in faites:
+            continue
+        if service_permanent._git(projet.dossier, "merge-base", "--is-ancestor", branche, "HEAD")[0] == 0:
+            a_fusionner.pop((tid, branche), None)
+            continue
+        pseudo[i] = {"id": i, "genre": GENRE_FUSION, "tache": tid, "branche": branche, "fonctionnalite": v.get("fonctionnalite"),
+                     "texte": (f"La branche « {branche} » de l'agent {v.get('agent')} n'a pas pu être fusionnée : "
+                               f"{v['raison']} Le Directeur doit régler le conflit, puis dire de continuer.")}
+        rendues.append(pseudo[i])
+    return rendues
+
+
+def _sur_fusion_conflit(projet, demande, etat):
+    """La réponse de Claude à un conflit de fusion : `garder_depot` / `garder_branche` (fusion bornée à la documentation,
+    `cloud.fusion_bornee`, jamais de push), `renvoyer` (un retour au développement avec les deux versions) ou `laisser`.
+    Une résolution faite, la réponse « C'est réglé, continuez » part dans la discussion (comme le ferait le Directeur)."""
+    tid, branche, verdict = demande["tache"], demande.get("branche"), demande.get("verdict")
+    if not branche or not re.fullmatch(r"agent/[\w.\-]+", str(branche)):
+        raise Refus("branche inconnue")
+    fid = demande.get("fonctionnalite") or _tache(projet, tid).get("fonctionnalite")
+    texte = " ".join(str(demande.get("texte") or "").split())
+    raison = " ".join(str(demande.get("raison") or "").split())
+    if verdict == LAISSER:
+        _journal(projet, tid, f"Claude autonome laisse le conflit de {branche} au Directeur.")
+        _terminer(projet, {"demande": demande["id"]}, "Le conflit reste au Directeur.")
+        return []
+    if verdict in ("garder_depot", "garder_branche"):
+        echec = cloud.fusion_bornee(str(projet.dossier), branche, "depot" if verdict == "garder_depot" else "branche")
+        if echec:
+            _journal(projet, tid, f"Claude autonome n'a pas pu résoudre le conflit de {branche} : {echec}")
+            _terminer(projet, {"demande": demande["id"]}, "Le conflit reste au Directeur : " + echec)
+            return []
+        _journal(projet, tid, f"Claude autonome a fusionné {branche} ({'la version du dépôt' if verdict == 'garder_depot' else 'la version de la branche'} "
+                              "l'emporte, documentation seulement ; rien n'est poussé).")
+        _terminer(projet, {"demande": demande["id"]}, "Le conflit est résolu.")
+        if fid:
+            lancer(projet, "actions", {"type": "message", "fonctionnalite": fid, "claude_autonome": True,
+                                       "texte": ("C'est réglé, continuez. " + raison)[:600]})
+        etat.setdefault("autonome_fusions", {}).pop((tid, branche), None)
+        return []
+    if verdict == "renvoyer" and texte:
+        actions = _sur_retour(projet, {"id": demande["id"], "tache": tid, "texte": "Conflit de fusion de " + branche + " : " + texte},
+                              etat)
+        if fid:
+            lancer(projet, "actions", {"type": "message", "fonctionnalite": fid, "claude_autonome": True,
+                                       "texte": "Laissez cette branche de côté : la tâche la refait."})
+        return actions
+    raise Refus(f"réponse inconnue ou sans texte : {verdict}")
+
+
+_SUR[GENRE_FUSION] = _sur_fusion_conflit
 
 
 def _service_a_redeployer(projet):
@@ -8683,7 +8779,7 @@ def repondre_en_autonome(projet, etat):
     _suivre_les_actions(projet, etat)
     actions += _relancer_si_la_cause_a_change(projet, etat)
     _blocages_orphelins(projet, etat)
-    for d in _etat(projet)["decisions"] + _blocages_sans_decision(projet, etat):
+    for d in _etat(projet)["decisions"] + _blocages_sans_decision(projet, etat) + _fusions_en_conflit(projet, etat):
         if d["id"] in faites or d.get("genre") not in VERDICTS_AUTONOMES:
             continue
         cle = d.get("tache") or d.get("fonctionnalite") or d["id"]
@@ -9218,6 +9314,9 @@ def fusion_impossible(projet, etat, tid, agent, branche, adresse, raison):
     Chef."""
     t = _tache(projet, tid)
     lancer(projet, "tache", {"id": tid, "journal": [f"Fusion de la branche {branche} impossible : {raison}"]})
+    if etat is not None and reglage_effectif(projet, "claude_autonome") and "conflit" in str(raison):
+        etat.setdefault("autonome_fusions", {})[(tid, branche)] = {"raison": str(raison)[:300], "agent": agent,
+                                                                  "fonctionnalite": t.get("fonctionnalite")}
     if t.get("fonctionnalite"):
         _question(projet, t["fonctionnalite"],
                   f"La branche « {branche} » de l'agent {agent} n'a pas pu être fusionnée ({raison})"

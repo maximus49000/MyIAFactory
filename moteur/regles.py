@@ -3042,6 +3042,76 @@ def _avant_une_validation(t, barrieres):
     return r is not None and r < b["premiere"]
 
 
+def _branches_non_fusionnees(projet):
+    """Les branches locales `agent/*` qui ne sont pas des ancêtres de HEAD (lecture seule) ; vide sans dépôt git."""
+    git = service_permanent._git
+    code, sortie = git(projet.dossier, "for-each-ref", "--format=%(refname:short)", "refs/heads/agent/")
+    if code != 0:
+        return []
+    return [n for n in [x.strip() for x in sortie.splitlines() if x.strip()][-12:]
+            if git(projet.dossier, "merge-base", "--is-ancestor", n, "HEAD")[0] != 0]
+
+
+BRANCHES_CACHE_S = 20      # la liste des branches agent est relue au plus toutes les 20 s
+
+
+def _branches_a_fusionner_avant_le_test(projet, etat, tache):
+    """Les branches locales `agent/<tâche>` des tâches FAITES de la même fonctionnalité qui ne sont pas des ancêtres de
+    HEAD (`git merge-base --is-ancestor`), quand `tache` est une recette/un test : le testeur clone la branche principale
+    et conclurait à tort que « le code n'est pas dans le clone » (essai réel FM_Stats f29 : agent/t252 jamais fusionnée).
+    Vide pour tout autre métier, ou sans dépôt git."""
+    if str(tache.get("role") or "").lower() not in ROLES_DE_RECETTE or etat is None:
+        return []
+    cache = _m(etat, "branches_cache")
+    if time.time() - cache.get("t", 0) > BRANCHES_CACHE_S:
+        cache.update(t=time.time(), branches=_branches_non_fusionnees(projet))
+    rendues = []
+    for b in cache.get("branches") or []:
+        try:
+            x = _tache(projet, b.split("/", 1)[1])
+        except Refus:
+            continue
+        if x["colonne"] == "fait" and x["id"] != tache["id"] and x.get("fonctionnalite") == tache.get("fonctionnalite"):
+            rendues.append(b)
+    return rendues
+
+
+def fusionner_avant_les_tests(projet, etat):
+    """Les tests qui attendent une branche non fusionnée (`_amont_pret`) : le moteur le dit (journal du test et Chef, une
+    fois par branche), tente la fusion de la branche (`cloud.fusionner`, comme pour un agent serveur) ; fusionnée, le test
+    part au départ suivant ; en échec, la fusion impossible est dite comme toute autre (question au Directeur, analyse du
+    Chef) et le test reste retenu. Une seule tentative par branche tant qu'elle n'a pas changé."""
+    actions = []
+    dites, tentees = _m(etat, "fusions_dites", set), _m(etat, "fusions_tentees", set)
+    for tid, branches in list((etat.get("fusions_a_faire") or {}).items()):
+        etat["fusions_a_faire"].pop(tid, None)
+        for branche in branches:
+            correction = branche.split("/", 1)[1]
+            if (tid, branche) not in dites:
+                dites.add((tid, branche))
+                _journal(projet, tid, f"La correction {correction} n'est pas fusionnée : le test ne part pas avant, je la fusionne d'abord.")
+                _dire_le_travail(projet, tid, f"La correction {correction} n'est pas encore fusionnée dans le code testé : "
+                                              "je ne lance pas le test avant, je la fusionne d'abord.")
+            if branche in tentees:
+                continue
+            tentees.add(branche)
+            try:
+                raison = cloud.fusionner(str(projet.dossier), branche, distante=False)
+            except Exception as e:  # noqa: BLE001 : jamais une raison d'arrêter la boucle
+                raison = f"{type(e).__name__} : {e}"
+            if raison is None:
+                _journal(projet, tid, f"La correction {correction} est fusionnée : le test peut partir.")
+                _dire_le_travail(projet, tid, f"J'ai fusionné la correction {correction} : le test peut maintenant partir.")
+                etat["branches_cache"] = {}
+            else:
+                try:
+                    agent = _tache(projet, correction).get("agent")
+                except Refus:
+                    agent = None
+                actions += fusion_impossible(projet, etat, correction, agent or "?", branche, None, raison)
+    return actions
+
+
 def _amont_pret(projet, etat, tache, court=None, barrieres=None, cache=None):
     """Vrai seulement si rien n'attend en amont de la tâche : ses dépendances (`depend_de`) sont faites ; pour une étape
     du flux d'un élément, les étapes d'avant de cet élément sont faites (une tâche bloquée ne retient rien, comme dans
@@ -3055,6 +3125,10 @@ def _amont_pret(projet, etat, tache, court=None, barrieres=None, cache=None):
         return False
     ouvertes = {t["id"] for t in court["taches"]}      # l'état court ne porte que les tâches pas encore faites
     if any(d in ouvertes and d != tache["id"] for d in tache.get("depend_de") or []):
+        return False
+    a_fusionner = _branches_a_fusionner_avant_le_test(projet, etat, tache)
+    if a_fusionner:      # un test ne part jamais sur un clone qui n'a pas le travail déjà fait : fusion d'abord
+        _m(etat, "fusions_a_faire")[tache["id"]] = a_fusionner
         return False
     fid, eid = tache.get("fonctionnalite"), tache.get("element")
     if not (str(tache.get("etape") or "").startswith(ETAPES_DE_FLUX) and fid and eid):
@@ -7180,6 +7254,7 @@ def avancer(projet, etat):
     _liberer_les_lots_orphelins(projet, etat, _etat(projet))
     livrer_si_calme(projet, etat, force=bool(etat.pop("livrer_maintenant", False)))
     _publier_les_livrables(projet)
+    actions += fusionner_avant_les_tests(projet, etat)
     actions += _demarrer_en_attente(projet, etat, None)
     if not projet.pause_globale:
         _noter_les_places_libres(projet, etat)

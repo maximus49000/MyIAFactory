@@ -2371,10 +2371,18 @@ def _refaire_avant_la_validation(projet, demande, etat, t, qui="Directeur"):
         lancer(projet, "tache", {"id": t["id"], "colonne": "fait", "active": False, "bloquee": None,
                                  "journal": ["Maquette déjà validée au cahier des charges : étape sautée."]})
         if v is None:
-            # le moteur relancé ne connaît plus l'élément : la validation est close, l'élément n'a rien à refaire (« Relancer »
-            # répondait « n'est plus dans le workflow » et la carte restait bloquée)
-            _terminer(projet, {"demande": demande["id"]}, "La maquette du cahier est déjà validée : cette validation est close.")
-            return _demarrer_en_attente(projet, etat, fid)
+            # le moteur relancé ne connaît plus l'élément (`reprendre_la_serie` ne peut pas le reconstruire : sa dernière
+            # tâche est cette validation, sans rapport) : il est recréé depuis la fonctionnalité et repart à la première étape
+            # qui reste. Clore la validation sans le reprendre laissait la série « sans élément en cours » (FM_Stats f24,
+            # 2026-11-26 : trois « Relancer la série » sans effet)
+            connu = ((lancer(projet, "detail", {"fonctionnalite": fid}).get("elements") or {}).get(eid))
+            if connu is None:
+                _terminer(projet, {"demande": demande["id"]}, "La maquette du cahier est déjà validée : cette validation est close.")
+                return _demarrer_en_attente(projet, etat, fid)
+            element = {"id": eid, **(connu if isinstance(connu, dict) else {})}
+            element.setdefault("nom", eid)
+            v = _etat_element(etat, fid, element)
+            _m(etat, "serie_perdue").setdefault(fid, {}).pop(eid, None)
         v.pop("rien_a_verifier", None)
         v.update(phase="flux", pas=0)
         _tache_de_flux(projet, etat, v, journal=["La maquette du cahier fait foi : le développement commence."])

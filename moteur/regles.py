@@ -7711,6 +7711,304 @@ JOURNAL_DE_L_ANALYSE = 12             # les dernières lignes du journal envoyé
 SUIVRE, PRECISER, LAISSER = "suivre", "preciser", "laisser"
 
 
+# --- Claude autonome : le réglage `claude_autonome` répond à la place du Directeur, sauf aux validations.
+
+AUTONOME_MAX_REPRISES = 3      # une série ou une tâche qui se rebloque après trois réponses revient au Directeur
+
+
+def _reponse_autonome(d):
+    """La demande que Claude envoie pour la décision `d`, ou None (jamais une validation, ni une décision qui dépense
+    ou change l'organisation : Fable, découpage, environnement…). Une décision sans réponse sûre reste au Directeur."""
+    genre, base = d.get("genre"), {"decision": d["id"]}
+    if genre == GENRE_ACCORD:
+        if d.get("questions"):
+            return {"type": genre, "verdict": "repondre", "reponses": [[q["choix"][0]] for q in d["questions"]], **base}
+        if d.get("choix"):
+            return {"type": genre, "verdict": "choisir", "choix": d["choix"][0], **base}
+        return {"type": genre, "verdict": "accepter", **base}
+    if genre == GENRE_OUTIL:
+        return {"type": genre, "verdict": AUTORISER if d.get("programme") else RELANCER_OUTIL, **base}
+    if genre == SERIE_ARRETEE:
+        return {"type": genre, "verdict": RELANCER_SERIE, **base}
+    if genre == GENRE_BLOCAGE and (d.get("recommandation") or "").strip():
+        return {"type": genre, "verdict": SUIVRE, **base}
+    return None
+
+
+def _lecon_du_deblocage(d):
+    """La leçon que laisse un déblocage de Claude autonome : ce qui bloquait, et la conduite qui l'évite la prochaine
+    fois (None s'il n'y a rien à retenir)."""
+    genre = d.get("genre")
+    if genre == GENRE_ACCORD and d.get("quoi"):
+        return (f"Pour « {d['quoi'][:200]} », l'accord est toujours donné (en mode autonome) : fais-le directement et "
+                "signale-le dans ton rapport, sans arrêter ta tâche pour le demander.")
+    if genre == GENRE_OUTIL and (d.get("programme") or d.get("outil")):
+        return (f"L'outil « {d.get('programme') or d.get('outil')} » est accordé à ton métier (en mode autonome) : "
+                "utilise-le directement, sans redemander l'autorisation.")
+    if genre == GENRE_BLOCAGE and (d.get("recommandation") or "").strip():
+        return (f"Blocage « {MOTIFS_BLOCAGE.get(d.get('motif'), d.get('motif') or 'inconnu')} » débloqué en suivant la "
+                f"recommandation du Chef : {' '.join(d['recommandation'].split())[:300]} Applique-la d'emblée.")
+    if genre == SERIE_ARRETEE and d.get("texte"):
+        return ("Une série s'est arrêtée faute d'étape reconnue ; elle a dû être relue depuis le suivi : "
+                f"{' '.join(d['texte'].split())[:250]} Vérifie que chaque tâche porte une étape du workflow actuel.")
+    return None
+
+
+def _noter_le_deblocage(projet, etat, d):
+    """Mémoire du mode autonome : le déblocage devient une leçon validée (métier de la tâche, ou Chef pour une série),
+    lue ensuite par les agents dans leur brief pour éviter le même blocage. Une même leçon n'est notée qu'une fois ;
+    jamais une raison d'échouer."""
+    texte = _lecon_du_deblocage(d)
+    vues = etat.setdefault("autonome_lecons", set())
+    if not texte or texte in vues:
+        return
+    vues.add(texte)
+    try:
+        t = _tache(projet, d["tache"]) if d.get("tache") else {"id": None}
+        _lecon_du_chef(projet, t, {"portee": "metier", "texte": texte}, valider=True)
+    except (Refus, ErreurMoteur, KeyError):
+        pass
+
+
+FICHIER_APPRIS = "autonome-apprises.json"      # ce que le moteur répond seul, appris des réponses de Claude (versionné)
+CHAMPS_AUTONOME = {"accord_agent": ("quoi", "pourquoi", "partenaire", "cout", "implique", "appareil", "choix", "questions",
+                                    "regle"),
+                   "outil_agent": ("programme", "outil", "commande", "analyse", "recommandation", "verdict_recommande"),
+                   "blocage_analyse": ("motif", "analyse", "question", "recommandation"),
+                   "serie_arretee": ("fonctionnalite",)}
+VERDICTS_AUTONOMES = {"accord_agent": ("accepter", "choisir", "repondre", "refuser"),
+                      "outil_agent": ("autoriser", "refuser", "relancer"),
+                      "blocage_analyse": ("suivre", "preciser"), "serie_arretee": ("relancer",)}
+APPRENDRE = ("accepter", "autoriser", "refuser")     # les seules réponses que le moteur peut redonner sans appel
+
+
+def _fichier_appris(projet):
+    return fa.lire(projet.factory)["suivi"].with_name(FICHIER_APPRIS)
+
+
+def _appris(projet):
+    try:
+        lus = json.loads(_fichier_appris(projet).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return lus if isinstance(lus, dict) else {}
+
+
+def _garder_appris(projet, appris):
+    f = _fichier_appris(projet)
+    tmp = f.with_name(f.name + ".tmp")
+    tmp.write_text(json.dumps(appris, ensure_ascii=False, indent=1, sort_keys=True) + "\n", encoding="utf-8")
+    os.replace(tmp, f)
+
+
+def _cle_apprise(d):
+    """Ce qui rend deux demandes « la même » : un accord sans choix ni questions, par ce que l'agent veut faire ; un
+    outil, par son programme. Rien d'autre ne s'apprend (un blocage ou une série dépend trop de son contexte)."""
+    genre = d.get("genre")
+    if genre == GENRE_ACCORD and d.get("quoi") and not d.get("choix") and not d.get("questions"):
+        precis = " ".join(str(d["quoi"]).lower().split())
+    elif genre == GENRE_OUTIL and d.get("programme"):
+        precis = str(d["programme"]).strip().lower()
+    else:
+        return None
+    return f"{genre}|{precis}"
+
+
+def _lecon_du_deblocage(d):
+    """La leçon que laisse un déblocage mécanique (repli : Claude n'a pas pu réfléchir) : ce qui bloquait, et la conduite
+    qui l'évite la prochaine fois (None s'il n'y a rien à retenir)."""
+    genre = d.get("genre")
+    if genre == GENRE_ACCORD and d.get("quoi"):
+        return (f"Pour « {d['quoi'][:200]} », l'accord est toujours donné (en mode autonome) : fais-le directement et "
+                "signale-le dans ton rapport, sans arrêter ta tâche pour le demander.")
+    if genre == GENRE_OUTIL and (d.get("programme") or d.get("outil")):
+        return (f"L'outil « {d.get('programme') or d.get('outil')} » est accordé à ton métier (en mode autonome) : "
+                "utilise-le directement, sans redemander l'autorisation.")
+    if genre == GENRE_BLOCAGE and (d.get("recommandation") or "").strip():
+        return (f"Blocage « {MOTIFS_BLOCAGE.get(d.get('motif'), d.get('motif') or 'inconnu')} » débloqué en suivant la "
+                f"recommandation du Chef : {' '.join(d['recommandation'].split())[:300]} Applique-la d'emblée.")
+    if genre == SERIE_ARRETEE and d.get("texte"):
+        return ("Une série s'est arrêtée faute d'étape reconnue ; elle a dû être relue depuis le suivi : "
+                f"{' '.join(d['texte'].split())[:250]} Vérifie que chaque tâche porte une étape du workflow actuel.")
+    return None
+
+
+def _noter_le_deblocage(projet, etat, d):
+    """Repli sans réflexion de Claude : le déblocage mécanique devient quand même une leçon validée (métier de la
+    tâche, ou Chef pour une série). Une même leçon n'est notée qu'une fois ; jamais une raison d'échouer."""
+    texte = _lecon_du_deblocage(d)
+    vues = etat.setdefault("autonome_lecons", set())
+    if not texte or texte in vues:
+        return
+    vues.add(texte)
+    try:
+        t = _tache(projet, d["tache"]) if d.get("tache") else {"id": None}
+        _lecon_du_chef(projet, t, {"portee": "metier", "texte": texte}, valider=True)
+    except (Refus, ErreurMoteur, KeyError):
+        pass
+
+
+def _dossier_autonome(projet, etat, d):
+    """Ce que Claude reçoit pour réfléchir à la décision `d` : la décision, la tâche, où en est la fonctionnalité
+    (et les étapes de validation qui l'attendent), ce que le métier a déjà appris et ce qui a déjà été décidé."""
+    fac = _factory(projet)
+    t = None
+    if d.get("tache"):
+        try:
+            t = _tache(projet, d["tache"])
+        except Refus:
+            t = None
+    fid = (t or {}).get("fonctionnalite") or d.get("fonctionnalite")
+    fonc = None
+    if fid:
+        try:
+            f = _fonc(projet, fid)
+            fonc = {"id": fid, "nom": f.get("nom"), "etape": f.get("etape"),
+                    "flux": [{"nom": x.get("nom"), "validation": bool(wf.est_validation(x))} for x in _production(projet, fid)]}
+        except (Refus, ErreurMoteur):
+            fonc = {"id": fid}
+    decision = {"genre": d["genre"], "texte": str(d.get("texte") or "")[:1500]}
+    for cle in CHAMPS_AUTONOME.get(d["genre"], ()):
+        if d.get(cle) is not None:
+            decision[cle] = d[cle] if not isinstance(d[cle], str) else d[cle][:1500]
+    verdicts = [v for v in VERDICTS_AUTONOMES[d["genre"]]
+                if not (v == "autoriser" and not d.get("programme")) and not (v == "suivre" and not (d.get("recommandation") or "").strip())]
+    mots = [m for m in list(fac.get("mots_interdits") or []) + [fac.get("nom") or ""] if m]
+    return {
+        "decision": decision, "verdicts": verdicts,
+        "choix": list(d.get("choix") or []), "questions": list(d.get("questions") or []),
+        "tache": None if t is None else {
+            "id": t["id"], "titre": t.get("titre"), "etape": t.get("etape"), "metier": t.get("role"),
+            "element": t.get("element"),
+            "journal": [str(j.get("texte") or "")[:300] for j in (t.get("journal") or [])[-JOURNAL_DE_L_ANALYSE:]]},
+        "fonctionnalite": fonc,
+        "lecons_du_metier": _lecons_connues(projet, t) if t else [],
+        "deja_appris": sorted(_appris(projet)),
+        "recentes": list(etat.get("autonome_recentes") or [])[-8:],
+        "mots_interdits": mots}
+
+
+def _demande_autonome(d, o):
+    """La demande du bureau que fait la réponse `o` de Claude (déjà validée) à la décision `d`."""
+    demande = {"type": d["genre"], "decision": d["id"], "verdict": o["verdict"]}
+    if o["verdict"] == "choisir":
+        demande["choix"] = o["choix"]
+    if o["verdict"] == "repondre":
+        demande["reponses"] = o["reponses"]
+    if o.get("texte"):
+        demande["texte"] = o["texte"]
+    return demande
+
+
+def _deposer_autonome(projet, etat, d, demande, raison):
+    """Dépose la réponse comme une demande du bureau (traitée au même passage, journalisée avec sa raison)."""
+    lancer(projet, "actions", {**demande, "claude_autonome": True, "raison": raison[:600]})
+    if d.get("tache"):
+        _journal(projet, d["tache"], f"Claude autonome ({demande['verdict']}) : {raison}")
+    recentes = etat.setdefault("autonome_recentes", [])
+    recentes.append({"genre": d["genre"], "sur": str(d.get("quoi") or d.get("programme") or d.get("motif") or "")[:120],
+                     "verdict": demande["verdict"], "raison": raison[:200]})
+    del recentes[:-8]
+
+
+def _apres_decider_autonome(projet, o, ctx, etat):
+    """La réponse réfléchie de Claude : déposée comme demande, puis ce qu'elle apprend au moteur — la leçon (validée),
+    l'amélioration proposée (notée pour le Directeur) et, si elle vaut à chaque fois, la réponse que le moteur donnera
+    seul la prochaine fois."""
+    d = next((x for x in _etat(projet)["decisions"] if x["id"] == ctx["decision"]), None)
+    if d is None:
+        return []      # le Directeur a répondu pendant la réflexion : rien à faire
+    try:
+        _deposer_autonome(projet, etat, d, _demande_autonome(d, o), o["raison"])
+    except Refus:
+        return []      # la décision reste posée : le Directeur la voit
+    t = {"id": None}
+    if d.get("tache"):
+        try:
+            t = _tache(projet, d["tache"])
+        except Refus:
+            pass
+    if o.get("lecon"):
+        _lecon_du_chef(projet, t, o["lecon"], valider=True)
+    a = o.get("amelioration")
+    if a:
+        try:
+            lancer(projet, "anomalies", {"action": "ajouter", "titre": "Amélioration : " + a["titre"],
+                                         "description": a["description"], **({"tache": t["id"]} if t.get("id") else {}),
+                                         **({"titre_tache": t.get("titre") or ""} if t.get("id") else {})})
+        except Refus as ex:
+            if t.get("id"):
+                _journal(projet, t["id"], f"Amélioration non notée : {ex}")
+    cle = _cle_apprise(d)
+    if cle and o.get("generalisable") is True and o["verdict"] in APPRENDRE:
+        appris = _appris(projet)
+        appris[cle] = {"verdict": o["verdict"], "texte": o.get("texte"), "raison": o["raison"],
+                       "appris_le": su.maintenant(), "emplois": 0}
+        try:
+            _garder_appris(projet, appris)
+        except OSError:
+            pass
+    return []
+
+
+def _autonome_rate(projet, ctx, etat):
+    """Claude n'a pas pu réfléchir (deux essais sans réponse valable) : la réponse mécanique par défaut, pour que la
+    suite avance quand même ; le journal le dit."""
+    d = next((x for x in _etat(projet)["decisions"] if x["id"] == ctx["decision"]), None)
+    demande = _reponse_autonome(d) if d else None
+    if demande is None:
+        return []
+    _deposer_autonome(projet, etat, d, demande, "Réponse par défaut : Claude n'a pas pu réfléchir à cette décision.")
+    _noter_le_deblocage(projet, etat, d)
+    return []
+
+
+def repondre_en_autonome(projet, etat):
+    """Réglage `claude_autonome` (relu à chaque passage) : chaque décision ouverte de genre accord d'agent, outil,
+    série arrêtée ou blocage analysé reçoit une réponse à la place du Directeur, jamais une étape de validation
+    (`valider_etape`) ni une décision qui dépense ou réorganise. Dans l'ordre : la réponse que le moteur a apprise de
+    Claude (sans appel), sinon un jugement `decider_autonome` (Claude réfléchit, puis `_apres_decider_autonome`), et
+    si ce jugement échoue, la réponse mécanique `_reponse_autonome`. Chaque réponse est une demande du bureau
+    (`demandes.jsonl`, `claude_autonome: true`, avec sa raison). Une même décision n'est tentée qu'une fois ; une série
+    ou une tâche qui revient après `AUTONOME_MAX_REPRISES` réponses est laissée au Directeur. Rend les actions
+    `juger` à exécuter."""
+    if not reglage_effectif(projet, "claude_autonome"):
+        return []
+    faites = etat.setdefault("autonome_faites", set())
+    reprises = etat.setdefault("autonome_reprises", {})
+    actions, appris, modifie = [], None, False
+    for d in _etat(projet)["decisions"]:
+        if d["id"] in faites or d.get("genre") not in VERDICTS_AUTONOMES:
+            continue
+        cle = d.get("tache") or d.get("fonctionnalite") or d["id"]
+        if reprises.get((d["genre"], cle), 0) >= AUTONOME_MAX_REPRISES:
+            continue
+        faites.add(d["id"])
+        reprises[(d["genre"], cle)] = reprises.get((d["genre"], cle), 0) + 1
+        appris = _appris(projet) if appris is None else appris
+        connue = appris.get(_cle_apprise(d) or "")
+        if connue:      # le moteur sait déjà : aucun appel
+            try:
+                demande = {"type": d["genre"], "decision": d["id"], "verdict": connue["verdict"],
+                           **({"texte": connue["texte"]} if connue.get("texte") else {})}
+                _deposer_autonome(projet, etat, d, demande, f"Réponse apprise : {connue.get('raison') or ''}".strip())
+                connue["emplois"] = int(connue.get("emplois") or 0) + 1
+                modifie = True
+            except Refus:
+                pass
+            continue
+        fac = _factory(projet)
+        suite = {"decision": d["id"], "tache": d.get("tache"), "fonctionnalite": d.get("fonctionnalite"),
+                 "modele": str(fac.get("modele_orchestrateur") or "Sonnet").lower()}
+        actions.append(a_juger("decider_autonome", _dossier_autonome(projet, etat, d), suite))
+    if modifie:
+        try:
+            _garder_appris(projet, appris)
+        except OSError:
+            pass
+    return actions
+
+
 def reglage_effectif(projet, cle):
     """La valeur effective du réglage `cle` du projet, relue : projet, puis type, puis global (fichier du bureau du
     projet, s'il en a un), puis défaut (`reglages.charger_effectif`). Des réglages du projet illisibles laissent le
@@ -7899,38 +8197,42 @@ def _lever_la_decision(projet, i):
             pass
 
 
-def _lecon_du_chef(projet, t, lecon):
+def _lecon_du_chef(projet, t, lecon, valider=False):
     """La leçon tirée du blocage, par le circuit des leçons proposées : notée « à valider » au métier de la tâche (ou à
-    la fiche de son agent), au projet (`metier`) ou au genre (`genre`) ; validée tout de suite si `lecons_auto`."""
+    la fiche de son agent), au projet (`metier`) ou au genre (`genre`) ; validée tout de suite si `lecons_auto` ou si
+    `valider` (le mode Claude autonome). Une tâche sans id (une série arrêtée) : la leçon va au Chef, rien n'est journalisé."""
     court = _etat(projet)
+    _journal_ = (lambda tid, texte: _journal(projet, tid, texte)) if t.get("id") else (lambda tid, texte: None)
     cles = {a["cle"] for a in court["agents"]}
     agent = t.get("agent") if t.get("agent") in cles else None
     if agent is None and t.get("role"):     # une validation : la leçon va au métier, par un agent polyvalent
         agent = next((a["cle"] for a in court["agents"] if _polyvalent(a)), None)
     etage = "genre" if lecon["portee"] == "genre" else "projet"
     texte = " ".join(lecon["texte"].split())
-    e = {"action": "noter", "agent": agent or CHEF, "texte": texte, "tache": t["id"], "etage_propose": etage,
+    e = {"action": "noter", "agent": agent or CHEF, "texte": texte, "etage_propose": etage,
          "roles": [t["role"]] if t.get("role") else ["tous"]}
+    if t.get("id"):
+        e["tache"] = t["id"]
     if etage == "genre":
         e["texte_general"] = texte
     try:
         i = lancer(projet, "lecon", e)["id"]
     except Refus as ex:
-        _journal(projet, t["id"], f"Leçon du Chef non notée : {ex}")
+        _journal_(t["id"], f"Leçon du Chef non notée : {ex}")
         return
-    if reglage_effectif(projet, "lecons_auto"):      # relu : une valeur posée au global ou au type agit aussi
+    if valider or reglage_effectif(projet, "lecons_auto"):      # relu : une valeur posée au global ou au type agit aussi
         try:
             r = lancer(projet, "lecon", {"action": "appliquer", "lot": [{"id": i, "verdict": "valider", "etage": etage}]})
             x = (r.get("resultats") or [{}])[0]
             if x.get("ok"):
-                _journal(projet, t["id"], f"Leçon validée : {texte}")
+                _journal_(t["id"], f"Leçon validée : {texte}")
                 return
-            _journal(projet, t["id"], f"Leçon proposée : {texte} (validation automatique refusée : {x.get('refus')})")
+            _journal_(t["id"], f"Leçon proposée : {texte} (validation automatique refusée : {x.get('refus')})")
             return
         except (Refus, ErreurMoteur) as ex:
-            _journal(projet, t["id"], f"Leçon proposée : {texte} (validation automatique impossible : {ex})")
+            _journal_(t["id"], f"Leçon proposée : {texte} (validation automatique impossible : {ex})")
             return
-    _journal(projet, t["id"], f"Leçon proposée : {texte}")
+    _journal_(t["id"], f"Leçon proposée : {texte}")
 
 
 def _apres_analyser_blocage(projet, o, ctx, etat):
@@ -8218,6 +8520,8 @@ def appliquer_jugement(projet, type_, decision, contexte, etat=None):
         fid = contexte.get("fonctionnalite")
         if type_ == "repondre_question":
             return _question_ratee(projet, contexte)
+        if type_ == "decider_autonome":      # Claude n'a pas pu réfléchir : la réponse mécanique, pour avancer
+            return _autonome_rate(projet, contexte, etat)
         if type_ == "analyser_blocage":     # la tâche reste comme avant, le journal le dit
             return _analyse_ratee(projet, contexte, decision.question)
         if type_ == "classer_genre" and fid:
@@ -8383,4 +8687,4 @@ _APRES = {"decouper": _apres_decouper, "traduire_retour": _apres_traduire_retour
           "ecrire_methode": _apres_ecrire_methode, "apres_refus": _apres_apres_refus, "conseil": _apres_conseil,
           "classer_genre": _apres_classer_genre, "proposer_organisation": _apres_proposer_organisation,
           "decouper_lieux": _apres_decouper_lieux, "analyser_blocage": _apres_analyser_blocage,
-          "repondre_question": _apres_repondre_question}
+          "repondre_question": _apres_repondre_question, "decider_autonome": _apres_decider_autonome}

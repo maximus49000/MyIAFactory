@@ -454,6 +454,7 @@ class Moteur:
         if not etat.get("repris"):
             etat["repris"] = True
             self._demarrage(projet, etat)
+        self._autonome(projet, etat)
         self._demandes(projet, etat)
         self._arreter_les_agents_serveur(projet)
         self._valider_les_lecons(projet, etat)
@@ -760,6 +761,14 @@ class Moteur:
             attente.effacer(fichier)
 
     # --- Les demandes.
+
+    def _autonome(self, projet, etat):
+        """Réglage `claude_autonome` : Claude réfléchit aux décisions (hors validations) ; ses réponses sont déposées avant
+        le traitement des demandes. Jamais une raison d'arrêter le tour."""
+        try:
+            self._executer(projet, regles.repondre_en_autonome(projet, etat))
+        except Exception as e:  # noqa: BLE001
+            self._noter(projet, f"claude autonome : {type(e).__name__} : {e}")
 
     def _demandes(self, projet, etat):
         prises = etat.setdefault("prises", set())

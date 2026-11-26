@@ -3,6 +3,7 @@ tâche repart ; sinon une décision visible au bureau de direction. Cas réel : 
 restaient inactives, sans décision au bureau, sans reprise. Aucun appel réel."""
 import json
 import os
+import re
 import time
 import unittest
 
@@ -80,6 +81,21 @@ class Programme(unittest.TestCase):
         self.assertEqual(accord_outil.origine("git", []), "de base des agents")
         self.assertIsNone(accord_outil.origine("curl", env))
         self.assertIsNone(accord_outil.origine("rm", None))
+
+    def test_une_commande_de_la_plateforme_au_serveur_est_connue_d_un_agent_serveur(self):
+        for nom in ("construire-apk", "analyser-flutter", "tester-flutter", "CONSTRUIRE-APK"):
+            self.assertEqual(accord_outil.origine(nom, [], lieu="serveur"), "commande de la plateforme au serveur", nom)
+            self.assertIsNone(accord_outil.origine(nom, []), nom)              # sans lieu serveur : elle n'existe pas
+            self.assertIsNone(accord_outil.origine(nom, [], lieu="local"), nom)
+        self.assertIsNone(accord_outil.origine("curl", [], lieu="serveur"))      # le reste ne devient pas connu pour autant
+        self.assertIsNone(accord_outil.origine("C:/x/construire-apk.exe", [], lieu="serveur"))
+
+    def test_les_commandes_de_la_plateforme_sont_celles_du_script_du_serveur(self):
+        """Une seule source : `serveur_ovh/agent-outils/outil-flutter.sh` ; la liste du moteur ne peut pas la dépasser."""
+        from pathlib import Path
+        script = (Path(__file__).resolve().parent.parent / "serveur_ovh" / "agent-outils" / "outil-flutter.sh").read_text(encoding="utf-8")
+        verbes = set(re.findall(r"^  ([a-z][a-z-]*)\)\s*$", script, re.M))
+        self.assertEqual(set(accord_outil.COMMANDES_PLATEFORME_SERVEUR), verbes)
 
     def test_la_commande_montree_est_courte_et_sans_secret(self):
         c = accord_outil.montrer("keytool -genkey -storepass hunter2 -keypass=abc\n -alias x " + "y" * 400)
@@ -305,6 +321,36 @@ class Arret(Cadre):
         textes = [j["texte"] for j in self.tache()["journal"]]
         self.assertIn("Outil ouvert à Sam : Bash(godot:*) (programme déclaré du projet)", textes)
         self.assertIn("Bash(godot:*)", fi.outils(fi.trouver(fi.lire_toutes(self.dossier / "fiches"), "srv-1")))
+
+    def agent_serveur(self):
+        (self.dossier / "fiches" / "srv.md").write_text(
+            "Clé : srv-1\nPrénom : Sam\nRôle : cadrage\nService : metier\nModèle : Sonnet\nLieu : serveur\n\n"
+            "Travaille.\n\n## Leçons\n", encoding="utf-8")
+        self.ok("tache", entree={"id": self.tid, "agent": "srv-1"})
+
+    def test_un_agent_serveur_qui_nomme_une_commande_de_la_plateforme_la_recoit_sans_decision(self):
+        """Cas réel (FM_Stats, t215) : `construire-apk` existe au serveur ; la question au Directeur le bloquait deux fois."""
+        self.agent_serveur()
+        rapport = {"statut": "outil_refuse", "outil": "construire-apk", "message": {"texte": "Il me faut construire-apk."}}
+        suite = self.arret(None, rapport=rapport, refus=[{"outil": "construire-apk"}], agent="srv-1")
+        self.assertEqual(self.decisions(), [])
+        self.assertFalse(self.tache().get("bloquee"))            # la tâche n'est pas bloquée : elle repart (place au serveur permettant)
+        self.assertIn("Bash(construire-apk:*)", fi.outils(fi.trouver(fi.lire_toutes(self.dossier / "fiches"), "srv-1")))
+        textes = [j["texte"] for j in self.tache()["journal"]]
+        self.assertIn("Outil ouvert à Sam : Bash(construire-apk:*) (programme commande de la plateforme au serveur)", textes)
+
+    def test_une_commande_de_la_plateforme_lancee_par_le_shell_est_aussi_ouverte(self):
+        self.agent_serveur()
+        suite = self.arret("cd android_app && construire-apk release", agent="srv-1")
+        self.assertEqual(self.decisions(), [])
+        self.assertFalse(self.tache().get("bloquee"))
+        self.assertIn("Bash(construire-apk:*)", fi.outils(fi.trouver(fi.lire_toutes(self.dossier / "fiches"), "srv-1")))
+
+    def test_la_meme_commande_pour_un_agent_local_revient_au_directeur(self):
+        """Elle n'existe qu'au serveur : un agent local ne la recevrait pas pour de bon."""
+        rapport = {"statut": "outil_refuse", "outil": "construire-apk", "message": {"texte": "Il me faut construire-apk."}}
+        self.arret(None, rapport=rapport, refus=[{"outil": "construire-apk"}])
+        self.assertEqual(len(self.decisions()), 1)
 
     def test_un_agent_serveur_qui_reclame_une_commande_du_poste_continue_sans_decision(self):
         """`deporter` n'existe qu'au poste : aucune décision ne l'ouvrirait au serveur ; une seule reprise, puis le Directeur."""

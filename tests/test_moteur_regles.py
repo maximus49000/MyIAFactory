@@ -2386,6 +2386,19 @@ class Validation(Base):
         (val,) = self.taches(etape="validation:valider")
         self.assertIn("sans livrable", val["bloquee"])
 
+    def test_livrable_rapatrie_compte_meme_sans_fichiers_dans_le_rapport(self):
+        """Essai réel (FM_Stats, 2026-11-26) : l'APK était rapatrié au poste mais le rapport ne le joignait pas."""
+        self.projet_avec_validation()
+        self.fichier("build/jeu.apk", b"PK" + b"\x00" * 8)
+        tid = regles._creer_tache(self.projet, "Essai : e1", "f1", "dev", "flux:essai", element="e1",
+                                  journal=["Livrable rapatrié : build/jeu.apk (68,1 Mo, abc123)"])
+        v = {"taches": [tid], "element": {"id": "e1"}}
+        rendu = regles._avec_les_livrables_rapatries(self.projet, v, {"fichiers": []})
+        self.assertEqual([f["chemin"] for f in rendu["fichiers"]], ["build/jeu.apk"])
+        absent = regles._creer_tache(self.projet, "Essai : e1", "f1", "dev", "flux:essai", element="e1",
+                                     journal=["Livrable rapatrié : build/fantome.apk (1 Mo, abc)"])
+        self.assertEqual(regles._avec_les_livrables_rapatries(self.projet, {**v, "taches": [absent]}, {}), {})
+
     def test_visuel_sans_image_relance_et_l_apk_n_est_pas_une_preuve(self):
         self.fichier("build/jeu.apk", b"PK" + b"\x00" * 8)
         sans = self.rendu("visuel", ["build/jeu.apk"])

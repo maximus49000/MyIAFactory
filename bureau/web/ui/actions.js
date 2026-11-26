@@ -356,9 +356,10 @@ export function demandeAnomalie(anomalie, etat) {
 // la consigne facultative, un texte libre).
 // `regle` (facultative) : le texte à retenir comme règle du projet (la case « Retenir comme règle du projet »).
 // Quand l'agent a proposé des choix : `verdict` « choisir » et `choix` (le texte du bouton retenu).
-export function demandeAccordAgent(decision, verdict, consigne, regle, choix) {
+export function demandeAccordAgent(decision, verdict, consigne, regle, choix, reponses) {
   const d = {type: "accord_agent", decision: decision.id, verdict};
   if (verdict === "choisir") d.choix = choix;
+  if (verdict === "repondre") d.reponses = reponses;     // une liste de choix par question, dans l'ordre
   if (typeof consigne === "string" && consigne.trim() !== "") d.texte = consigne.trim();
   if (typeof regle === "string" && regle.trim() !== "") d.regle = regle.trim();
   return d;

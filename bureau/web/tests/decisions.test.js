@@ -635,3 +635,28 @@ test("tests au serveur : le bouton d'évaluation dit que le code part au serveur
   const lecture = rendre({...ETAT, agir: false, fonctionnalites: [], decisions_projet: []}).contenu;
   assert.doesNotMatch(lecture.textContent, /Tests au serveur/);
 });
+
+const QUESTIONS = [{texte: "Confirmer le mode destructif ?", choix: ["Annuler / Supprimer et recréer", "Saisie du mot SUPPRIMER"]},
+  {texte: "Sort des données absentes du Maître ?", choix: ["Les supprimer", "Les garder"]},
+  {texte: "Aperçu avant exécution ?", choix: ["Oui", "Non"], multiple: true}];
+
+test("accord à plusieurs questions : une boîte dédiée, une réponse par question, un seul envoi quand tout est répondu", async () => {
+  const accord = {...ACCORD, appareil: undefined, questions: QUESTIONS};
+  const {contenu, demandes} = rendre({...ETAT, fonctionnalites: [], decisions_projet: [accord]});
+  assert.match(contenu.textContent, /Vos réponses \(3 questions\)/);
+  assert.match(contenu.textContent, /2\. Sort des données absentes du Maître/);
+  assert.equal(bouton(contenu, "J'accepte"), undefined);
+  const envoyer = bouton(contenu, "Envoyer mes réponses");
+  assert.equal(envoyer.disabled, true);
+  const choix = contenu.tous((n) => n.tagName === "input" && (n.type === "radio" || n.type === "checkbox"));
+  assert.equal(choix.length, 6);
+  assert.equal(choix[4].type, "checkbox");      // « multiple »
+  for (const k of [1, 2]) { choix[k].checked = true; choix[k].auteurs.change[0](); }
+  assert.equal(envoyer.disabled, true);          // la 3e question n'a pas de réponse
+  choix[4].checked = choix[5].checked = true; choix[5].auteurs.change[0]();
+  assert.equal(envoyer.disabled, false);
+  envoyer.disabled = false;
+  await envoyer.auteurs.click[0]();
+  assert.deepEqual(demandes, [{type: "accord_agent", decision: "a1", verdict: "repondre",
+    reponses: [["Saisie du mot SUPPRIMER"], ["Les supprimer"], ["Oui", "Non"]]}]);
+});

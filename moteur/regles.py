@@ -4922,6 +4922,24 @@ def _choix_de_l_agent(r):
     return []
 
 
+def _questions_de_l_agent(r):
+    """Les questions à choix du message de l'agent quand il en pose plusieurs (2 à 10, 2 à 12 choix chacune) : le bureau
+    les montre dans une boîte dédiée, une réponse par question. Moins de deux : `[]` (une seule question garde ses boutons)."""
+    brutes = [q for q in (r.get("message") or {}).get("questions") or []
+              if isinstance(q, dict) and isinstance(q.get("texte"), str) and q["texte"].strip()
+              and isinstance(q.get("choix"), list)]
+    sortie = []
+    for q in brutes[:10]:
+        choix = []
+        for c in q["choix"]:
+            if isinstance(c, str) and c.strip() and c.strip()[:120] not in choix:
+                choix.append(c.strip()[:120])
+        if len(choix) >= 2:
+            sortie.append({"texte": q["texte"].strip()[:300], "choix": choix[:12],
+                           **({"multiple": True} if q.get("multiple") is True else {})})
+    return sortie if len(sortie) >= 2 else []
+
+
 SANS_COUT = ("", "aucun", "aucune", "rien", "0", "0 €", "gratuit", "néant", "sans coût", "sans cout")
 
 
@@ -4956,8 +4974,11 @@ def _accord_demande(projet, etat, execution, depart, r, fid, t):
     if implique.strip():
         champs["implique"] = implique.strip()[:800]
     regles = rp.lire(_factory(projet))
-    choix = _choix_de_l_agent(r)
-    if choix:      # l'agent a proposé des choix : le bureau les montre comme boutons
+    questions = _questions_de_l_agent(r)
+    choix = [] if questions else _choix_de_l_agent(r)
+    if questions:      # plusieurs questions : une boîte dédiée, une réponse par question
+        champs["questions"] = questions
+    elif choix:      # l'agent a proposé des choix : le bureau les montre comme boutons
         champs["choix"] = choix
     if appareil:
         champs["appareil"] = True
@@ -5025,8 +5046,13 @@ def _sur_accord_agent(projet, demande, etat):
     if d is None:
         raise Refus("cette demande n'existe plus")
     tid, verdict = d["tache"], demande["verdict"]
-    if verdict not in ("accepter", "refuser", "choisir"):
+    if verdict not in ("accepter", "refuser", "choisir", "repondre"):
         raise Refus(f"réponse inconnue : {verdict}")
+    reponses = demande.get("reponses")
+    if verdict == "repondre":
+        erreur = rel.erreur_reponses_aux_questions(d.get("questions") or [], reponses)
+        if erreur:
+            raise Refus(erreur)
     choix = demande.get("choix")
     if verdict == "choisir" and choix not in (d.get("choix") or []):
         raise Refus("ce choix n'est pas l'un de ceux que l'agent a proposés")
@@ -5040,7 +5066,14 @@ def _sur_accord_agent(projet, demande, etat):
             f"{d.get('quoi') or ''} {choix or ''}"):
         # un agent cloud ne peut pas agir sur le poste (émulateur, adb…) : la tâche passe à un agent du poste
         lancer(projet, "tache", {"id": tid, "sur_le_poste": True, "journal": [SUR_LE_POSTE]})
-    if verdict == "choisir":     # la réponse transmise à l'agent est le choix retenu (et la consigne)
+    if verdict == "repondre":     # une réponse par question : transmises à l'agent, numérotées
+        lignes = [f"{k}. {q['texte']} → {' ; '.join(a)}" for k, (q, a) in enumerate(zip(d["questions"], reponses), 1)]
+        supplement = (f"Sur ta demande ({d['quoi']}), l'utilisateur a répondu à tes {len(lignes)} questions :" + chr(10)
+                      + chr(10).join(lignes) + (f"{chr(10)}Sa consigne : {consigne}" if consigne else ""))
+        actions = _reprendre_la_tache(projet, etat, tid, t.get("fonctionnalite"), supplement,
+                                      "Réponses de l'utilisateur : " + " | ".join(l[:160] for l in lignes)
+                                      + (f" — consigne : {consigne}" if consigne else ""))
+    elif verdict == "choisir":     # la réponse transmise à l'agent est le choix retenu (et la consigne)
         supplement = f"Sur ta demande ({d['quoi']}), l'utilisateur a choisi : « {choix} »." + (f" Sa consigne : {consigne}" if consigne else "")
         actions = _reprendre_la_tache(projet, etat, tid, t.get("fonctionnalite"), supplement,
                                       f"Choix de l'utilisateur : {choix}" + (f" — consigne : {consigne}" if consigne else ""))
@@ -5049,7 +5082,7 @@ def _sur_accord_agent(projet, demande, etat):
     lancer(projet, "decision", {"action": "lever", "id": d["id"]})
     _terminer(projet, {"demande": demande["id"]},
               f"{prenom} reprend sa tâche avec votre accord." if verdict == "accepter"
-              else f"{prenom} reprend sa tâche selon votre choix." if verdict == "choisir"
+              else f"{prenom} reprend sa tâche selon vos choix." if verdict in ("choisir", "repondre")
               else f"{prenom} reprend sa tâche sans cette action.")
     return actions
 

@@ -841,6 +841,23 @@ class TestVerifierGenreEtWorkflow(unittest.TestCase):
         self.assertEqual(demandes.nettoyer({**base, "verdict": "refuser", "texte": "t", "autre": 1}),
                          {**base, "verdict": "refuser", "texte": "t"})
 
+    def test_accord_agent_plusieurs_questions(self):
+        import copy
+        r = copy.deepcopy(R5)
+        a1 = next(d for d in r["decisions_projet"] if d["id"] == "a1")
+        a1["questions"] = [{"texte": "Mode ?", "choix": ["A", "B"]}, {"texte": "Aperçu ?", "choix": ["Oui", "Non"], "multiple": True}]
+        ok = lambda d: self.assertIsNone(demandes.verifier(d, r, frozenset(), None), d)            # noqa: E731
+        refus = lambda d: self.assertTrue(demandes.verifier(d, r, frozenset(), None), d)           # noqa: E731
+        base = {"type": "accord_agent", "decision": "a1", "verdict": "repondre"}
+        ok({**base, "reponses": [["A"], ["Oui", "Non"]]})
+        refus({**base, "reponses": [["A"]]})                                  # une réponse par question
+        refus({**base, "reponses": [["C"], ["Oui"]]})                         # un choix proposé
+        refus({**base, "reponses": [["A", "B"], ["Oui"]]})                    # un seul choix si pas « multiple »
+        refus({**base, "reponses": [[], ["Oui"]]})
+        refus({**base})
+        self.assertEqual(demandes.nettoyer({**base, "reponses": [["A"], ["Oui"]], "autre": 1}),
+                         {**base, "reponses": [["A"], ["Oui"]]})
+
     def test_valider_etape(self):
         base = {"type": "valider_etape", "decision": "v1"}
         self.ok({**base, "verdict": "valider"})

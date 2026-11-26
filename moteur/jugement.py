@@ -42,7 +42,8 @@ Dossiers attendus (préparés par la table de règles) :
   autonomes), `mots_interdits`. Pour une tâche bloquée sans décision (`decision.genre` = `tache_bloquee`) : aussi
   `taches_dev` ([{id, titre, etape, metier, journal}], les tâches faites de la fonctionnalité) et `service` (vrai si
   le projet déclare un service permanent redéployable). Tout dossier porte aussi `anomalies` (les anomalies du
-  logiciel encore « nouvelles » : id, titre, description) et `service` ({adresse} : le service en ligne du projet).
+  logiciel encore « nouvelles » : id, titre, description) et `service` ({adresse} : le service en ligne du projet) ; une décision qui parle du service ajoute
+  `faits_du_service` (état, commit, santé, noms des secrets présents, pages) et `deja_fait` (vrai : l'action est déjà faite).
 
 - `repondre_question` : `projet` (nom, description), `genre`, `fonctionnalites` ([{id, nom, nature, etape, cahier}]),
   `fonctionnalite` (celle visée, cahier et éléments, ou null), `regles_projet`, `fil` (messages précédents),
@@ -800,6 +801,9 @@ def _valider_decider_autonome(o, d):
         return "« texte » ne peut pas demander un autre modèle : jamais Fable."
     if verdict in ("preciser", "refuser") and not t:
         return f"« texte » est obligatoire avec le verdict {verdict} (ce que l'agent doit faire à la place)."
+    if d.get("deja_fait") and verdict in ("accepter", "choisir", "repondre"):
+        return ("Les faits du service montrent que cette action est déjà faite (service en ligne, sain, à la version voulue) : "
+                "réponds « refuser » avec un « texte » qui dit « déjà fait : … » et ce que l'agent vérifie à la place.")
     if (d.get("decision") or {}).get("genre") == "tache_bloquee":      # une tâche bloquée sans décision posée
         if verdict in ("relancer", "renvoyer") and not t:
             return f"« texte » est obligatoire avec le verdict {verdict} (la consigne précise, ou le diagnostic)."

@@ -191,19 +191,21 @@ def faits_du_service(dossier, chemins=(), module=None, ouvrir=None, lignes=JOURN
     être lu est dit (`erreur`)."""
     from time import perf_counter
     from urllib import error, request
-    faits = {"commit": None, "etat": None, "journal": [], "pages": [], "erreur": None}
+    faits = {"commit": None, "etat": None, "sante_ok": None, "secrets": {}, "journal": [], "pages": [], "erreur": None}
     try:
         m = module or _module()
         fiche = m.lire_cache().get(m.identifiant(Path(dossier)))
         fiche = fiche if isinstance(fiche, dict) else {}
         etat = fiche.get("etat") if isinstance(fiche.get("etat"), dict) else {}
-        faits["commit"], faits["etat"] = etat.get("commit"), etat.get("etat")
+        faits["commit"], faits["etat"], faits["sante_ok"] = etat.get("commit"), etat.get("etat"), etat.get("sante_ok")
+        presents = etat.get("secrets") if isinstance(etat.get("secrets"), dict) else {}
+        faits["secrets"] = {str(n)[:60]: v is True for n, v in presents.items()}      # les noms et leur présence, jamais une valeur
         adresse = fiche.get("adresse")
     except Exception as e:  # noqa: BLE001
         faits["erreur"] = f"service illisible ({type(e).__name__})"
         return faits
     try:
-        code, rep = m.gerer(dossier, "journal", lignes=lignes)
+        code, rep = m.gerer(dossier, "journal", lignes=lignes) if lignes else (0, {})
         faits["journal"] = [masquer(x)[:300] for x in (rep.get("lignes") or [])][-lignes:] if code == 0 else []
         if code != 0:
             faits["erreur"] = masquer(rep.get("detail") or "journal illisible")[:200]

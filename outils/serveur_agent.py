@@ -504,7 +504,13 @@ OUTIL_FLUTTER = "agent-outils/outil-flutter.sh"     # les commandes uniques d'un
 PONT_HOTE = "taches/pont_hote.py"          # mode pilote : le pont hôte, et l'enveloppe d'émulation qu'il lance
 EMULATION_SCRIPT = st.ENVELOPPE            # taches/lancer_emulation.sh
 FICHIERS_ENTREE = ("projet.bundle", "argv.json", "consigne.md", "message.md", "demande.json")
-FICHIERS_SORTIE = ("flux.jsonl", "fin.json", "resultat.bundle")
+FICHIERS_SORTIE = ("flux.jsonl", "fin.json", "resultat.bundle", "direct.json")
+DIRECT_MAX_OCTETS = 65536       # direct.json (le suivi en direct publié par l'entrée du conteneur) : 64 Ko au plus
+DIRECT_DELAI_S = 60             # une lecture du suivi n'attend jamais l'attente des rapatriements
+MAX_ACTIONS_DIRECT = 50
+TEXTE_ACTION_DIRECT = 120
+MAX_POINTS_DIRECT = 30
+PHASES_DIRECT = ("lecture", "modification", "compilation", "tests", "autre")
 CODE_TROP_GROS = 5
 
 # Préparation : le dossier de la tâche est créé par mkdir (atomique ; 73 s'il existe), l'archive extraite dans un temporaire
@@ -824,14 +830,14 @@ def _lancer_agent(demande, paquet, argv, consigne, message, apk, dossier, ssh, a
 
 # ---------------------------------------------------------------- récupérer
 
-def _fichier_sortie(serveur, ssh, ident, nom, maximum):
+def _fichier_sortie(serveur, ssh, ident, nom, maximum, delai=900):
     """Octets d'un fichier de sortie/ ; None s'il est absent ; `RefusRecuperation` s'il est trop gros, n'est pas un fichier
     ordinaire ou si le serveur est muet. Taille bornée par la taille apparente, vérifiée aussi sur ce qui est reçu."""
     if nom not in FICHIERS_SORTIE:
         raise ValueError("Fichier de sortie inconnu.")
     code, donnees, erreur = st._octets(serveur, ssh, "bash -s",
                                        _script(_FICHIER, ident, NOM=nom, MAX=str(maximum + 1)).encode("utf-8"),
-                                       delai=900)
+                                       delai=delai)
     if code == 3:
         return None
     _juger_code(nom, code, erreur, maximum)
@@ -903,6 +909,55 @@ def _lire_fin(octets, tache, base):
     if isinstance(brut.get("echeance"), bool):
         fin["echeance"] = brut["echeance"]
     return fin
+
+
+def _entier_positif(v):
+    return v if isinstance(v, int) and not isinstance(v, bool) and v > 0 else 0
+
+
+def _direct_valide(brut):
+    """Le contenu de direct.json (donnée NON FIABLE) ramené à sa forme sûre, ou None : version 1 ; au plus 50 actions
+    `{"t": heure ≤ 40 caractères | None, "texte": ≤ 120}` ; une phase connue ou None ; au plus 4 consommations à entiers
+    positifs ; une liste de points (30 au plus). Tout champ mal typé est écarté, jamais interprété."""
+    if not isinstance(brut, dict) or brut.get("v") != 1:
+        return None
+    actions = []
+    for a in brut.get("actions") if isinstance(brut.get("actions"), list) else []:
+        if isinstance(a, dict) and isinstance(a.get("texte"), str) and a["texte"].strip():
+            t = a.get("t")
+            actions.append({"t": t if isinstance(t, str) and len(t) <= 40 else None, "texte": a["texte"][:TEXTE_ACTION_DIRECT]})
+        if len(actions) >= MAX_ACTIONS_DIRECT:
+            break
+    usage = []
+    for u in brut.get("usage") if isinstance(brut.get("usage"), list) else []:
+        if isinstance(u, dict) and isinstance(u.get("modele"), str) and u["modele"].startswith("claude") and len(u["modele"]) <= 64:
+            usage.append({"modele": u["modele"], **{c: _entier_positif(u.get(c)) for c in
+                                                    ("entree", "sortie", "cache_lecture", "cache_ecriture")}})
+        if len(usage) >= 4:
+            break
+    liste = brut.get("avancement")
+    avancement = None
+    if isinstance(liste, dict) and isinstance(liste.get("points"), list):
+        points = [{"texte": p["texte"][:TEXTE_ACTION_DIRECT], "fait": p.get("fait") is True}
+                  for p in liste["points"] if isinstance(p, dict) and isinstance(p.get("texte"), str)][:MAX_POINTS_DIRECT]
+        en_cours = liste.get("en_cours")
+        avancement = {"points": points, "en_cours": en_cours[:TEXTE_ACTION_DIRECT]
+                      if isinstance(en_cours, str) and en_cours.strip() else None}
+    phase = brut.get("phase")
+    return {"actions": actions, "phase": phase if phase in PHASES_DIRECT else None, "usage": usage, "avancement": avancement}
+
+
+def lire_direct(ident, dossier=plateforme_acces.DOSSIER, ssh=plateforme_ssh):
+    """Le suivi en direct d'une tâche d'agent EN COURS (`sortie/direct.json`, publié par l'entrée du conteneur), revalidé :
+    `{"actions", "phase", "usage", "avancement"}` ou `None` si le fichier est absent, trop gros, illisible, d'une autre
+    version, ou si le serveur est muet. Ne lève jamais : le suivi n'est qu'un plus."""
+    try:
+        st._id_valide(ident)
+        serveur = st._serveur_de(ident, dossier)
+        donnees = _fichier_sortie(serveur, ssh, ident, "direct.json", DIRECT_MAX_OCTETS, delai=DIRECT_DELAI_S)
+        return _direct_valide(json.loads(donnees.decode("utf-8"))) if donnees is not None else None
+    except Exception:       # noqa: BLE001 - jamais une erreur pour un suivi
+        return None
 
 
 def recuperer(ident, projet, dossier=plateforme_acces.DOSSIER, ssh=plateforme_ssh, git=_git):

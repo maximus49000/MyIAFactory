@@ -139,7 +139,7 @@ class FauxServeur:
     def _fichier(self, args, script, entree):
         t = self.taches[args[0]]
         nom = args[1]
-        assert nom in ("flux.jsonl", "fin.json", "resultat.bundle"), nom
+        assert nom in ("flux.jsonl", "fin.json", "resultat.bundle", "direct.json"), nom
         donnees = t["fichiers"].get(nom)
         if donnees is None:
             return 3, b"", ""
@@ -609,6 +609,75 @@ class TestLancer(Base):
             st.choisir_serveur(self.dossier)
         self.assertIn("l'émulation", str(r.exception))
         self.assertEqual(st.choisir_serveur(self.dossier, ("agent",)).id, "ovh1")
+
+
+class TestLireDirect(Base):
+    """`lire_direct` : l'activité d'un agent en cours, lue sur le serveur et revalidée (donnée non fiable)."""
+
+    def setUp(self):
+        super().setUp()
+        st.Index(self.dossier).enregistrer(ID1, {"etat": "en_cours", "type": "agent", "tache": "ajout-bouton",
+                                                 "base": "0" * 40, "serveur_id": "ovh1", "projet": "demo",
+                                                 "session": None, "mode": "seul"})
+
+    def servir(self, direct):
+        brut = direct if isinstance(direct, bytes) else json.dumps(direct).encode("utf-8")
+        self.srv.tache(ID1, fichiers={"direct.json": brut})
+
+    def lire(self):
+        return sa.lire_direct(ID1, self.dossier, self.srv)
+
+    def valide(self, **plus):
+        return {"v": 1, "actions": [{"t": "2026-11-26T10:00:00Z", "texte": "modifie a.py"}, {"t": None, "texte": "lit b.py"}],
+                "phase": "modification",
+                "usage": [{"modele": "claude-opus-5-5", "entree": 10, "sortie": 5, "cache_lecture": 2, "cache_ecriture": 1}],
+                "avancement": {"points": [{"texte": "un", "fait": True}], "en_cours": "deux"}, **plus}
+
+    def test_un_direct_valide_est_rendu(self):
+        self.servir(self.valide())
+        r = self.lire()
+        self.assertEqual([a["texte"] for a in r["actions"]], ["modifie a.py", "lit b.py"])
+        self.assertEqual((r["phase"], r["usage"][0]["entree"]), ("modification", 10))
+        self.assertEqual(r["avancement"], {"points": [{"texte": "un", "fait": True}], "en_cours": "deux"})
+        self.assertEqual(self.srv.ops("fichier")[-1][3], sa.DIRECT_DELAI_S)       # jamais l'attente de 15 min du rapatriement
+
+    def test_absent_trop_gros_illisible_ou_d_une_autre_version_rendent_none(self):
+        self.assertIsNone(self.lire())                                              # aucun direct.json (code 3)
+        self.servir(b"x" * (sa.DIRECT_MAX_OCTETS + 10))
+        self.assertIsNone(self.lire())
+        self.servir(b"{pas du json")
+        self.assertIsNone(self.lire())
+        self.servir(self.valide(v=2))
+        self.assertIsNone(self.lire())
+        self.servir([1, 2, 3])
+        self.assertIsNone(self.lire())
+
+    def test_les_bornes_et_les_champs_mal_formes(self):
+        actions = [{"t": None, "texte": f"lit f{i}.py"} for i in range(60)]
+        actions += [{"t": 5, "texte": "t mal typé"}, {"texte": 3}, "texte", {"t": "x" * 100, "texte": "t trop long"}]
+        actions[0]["texte"] = "x" * 500
+        points = [{"texte": str(i), "fait": 1} for i in range(40)]
+        self.servir(self.valide(actions=actions, phase="danse", avancement={"points": points, "en_cours": "e" * 500},
+                                usage=[{"modele": "claude-x", "entree": -3, "sortie": True, "cache_lecture": "9"}] * 6))
+        r = self.lire()
+        self.assertEqual(len(r["actions"]), sa.MAX_ACTIONS_DIRECT)
+        self.assertEqual(len(r["actions"][0]["texte"]), 120)
+        self.assertIsNone(r["phase"])
+        self.assertEqual(len(r["usage"]), 4)
+        self.assertEqual(r["usage"][0], {"modele": "claude-x", "entree": 0, "sortie": 0, "cache_lecture": 0, "cache_ecriture": 0})
+        self.assertEqual(len(r["avancement"]["points"]), 30)
+        self.assertFalse(r["avancement"]["points"][0]["fait"])                       # « fait » n'est vrai que pour True
+        self.assertEqual(len(r["avancement"]["en_cours"]), 120)
+        self.servir(self.valide(actions=[{"t": 5, "texte": "ok"}, {"t": "x" * 100, "texte": "ok2"}]))
+        self.assertEqual([a["t"] for a in self.lire()["actions"]], [None, None])
+
+    def test_un_serveur_qui_leve_ou_une_tache_inconnue_rendent_none(self):
+        class Muet:
+            def executer_octets(self, *a, **k):
+                raise OSError("réseau coupé")
+        self.assertIsNone(sa.lire_direct(ID1, self.dossier, Muet()))
+        self.assertIsNone(sa.lire_direct("t20261120-999999-zzzz", self.dossier, self.srv))
+        self.assertIsNone(sa.lire_direct("pas-un-id", self.dossier, self.srv))
 
 
 class TestRecuperer(Base):

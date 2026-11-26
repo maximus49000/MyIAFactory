@@ -8342,6 +8342,9 @@ def _sur_tache_bloquee(projet, demande, etat):
         raise Refus("cette tâche n'est plus bloquée")
     fid = t.get("fonctionnalite")
     texte = " ".join(str(demande.get("texte") or "").split())
+    if verdict in ("relancer", "renvoyer", "redeployer"):      # le résultat sera vérifié aux passages suivants
+        etat.setdefault("autonome_suivi", {})[tid] = {"cause": str(t["bloquee"]), "verdict": verdict, "motif": demande.get("motif"),
+                                                      "depuis": time.time()}
     if verdict == LAISSER:
         etat.setdefault("autonome_dit", set()).add(demande.get("decision"))
         _journal(projet, tid, "Claude autonome laisse la tâche bloquée : seul le Directeur peut agir.")
@@ -8437,6 +8440,40 @@ def _relancer_si_la_cause_a_change(projet, etat):
     return []
 
 
+AUTONOME_SUIVI_MAX_S = 86400      # un suivi sans issue au bout d'un jour est abandonné
+
+
+def _suivre_les_actions(projet, etat):
+    """Boucle de suivi : le résultat d'une action de Claude autonome (relance, retour au dev, redéploiement) est vérifié aux
+    passages suivants. Tâche faite : le Chef le dit. Rebloquée pour la même cause : le Chef le dit au Directeur, pas de
+    nouvelle tentative. Rebloquée pour une autre cause : une nouvelle tentative (au plus `AUTONOME_MAX_REPRISES` par tâche,
+    une par cause). Tâche en cours ou en attente du service : rien."""
+    suivi = etat.get("autonome_suivi") or {}
+    for tid, v in list(suivi.items()):
+        try:
+            t = _tache(projet, tid)
+        except Refus:
+            suivi.pop(tid, None)
+            continue
+        titre = f"« {t.get('titre')} »"
+        if t["colonne"] == "fait":
+            suivi.pop(tid)
+            _dire_le_travail(projet, tid, f"La tâche {titre} est terminée : mon action ({v['verdict']}) a levé le blocage.")
+        elif t.get("bloquee") and tid not in (etat.get("autonome_service") or {}):
+            suivi.pop(tid)
+            if " ".join(str(t["bloquee"]).split()) == " ".join(v["cause"].split()):
+                _journal(projet, tid, "Claude autonome : la tâche reste bloquée pour la même cause après mon action.")
+                _dire_le_travail(projet, tid, f"La tâche {titre} est toujours bloquée pour la même raison après mon action "
+                                              f"({v['verdict']}) : je ne la retente pas, c'est à vous de décider.")
+            else:
+                _dire_le_travail(projet, tid, f"La tâche {titre} s'est bloquée pour une autre raison : {t['bloquee'][:200]} "
+                                              "Je tente une autre action.")
+                if v.get("motif") in MOTIFS_SANS_DECISION:
+                    etat.setdefault("autonome_blocages", {})[(tid, v["motif"])] = ""
+        elif time.time() - v["depuis"] > AUTONOME_SUIVI_MAX_S:
+            suivi.pop(tid)
+
+
 def _suivre_le_redeploiement(projet, etat):
     """À chaque passage : les tâches qui attendent le redéploiement du service. Le service sain (version livrée en ligne,
     contrôle de santé passé), la tâche repart ; un échec, un retour arrière ou 45 minutes sans résultat la rendent au
@@ -8490,12 +8527,18 @@ def repondre_en_autonome(projet, etat):
     faites = etat.setdefault("autonome_faites", set())
     reprises = etat.setdefault("autonome_reprises", {})
     actions, appris, modifie = _suivre_le_redeploiement(projet, etat), None, False
+    _suivre_les_actions(projet, etat)
     actions += _relancer_si_la_cause_a_change(projet, etat)
     for d in _etat(projet)["decisions"] + _blocages_sans_decision(projet, etat):
         if d["id"] in faites or d.get("genre") not in VERDICTS_AUTONOMES:
             continue
         cle = d.get("tache") or d.get("fonctionnalite") or d["id"]
         if reprises.get((d["genre"], cle), 0) >= AUTONOME_MAX_REPRISES:
+            if d["genre"] == GENRE_TACHE_BLOQUEE and d["id"] not in etat.setdefault("autonome_dit", set()):
+                etat["autonome_dit"].add(d["id"])
+                _journal(projet, d["tache"], "Claude autonome : trois tentatives faites, la décision revient au Directeur.")
+                _dire_le_travail(projet, d["tache"], "J'ai déjà fait trois tentatives sur cette tâche sans la débloquer : "
+                                                     "je m'arrête, c'est à vous de décider.")
             continue
         faites.add(d["id"])
         reprises[(d["genre"], cle)] = reprises.get((d["genre"], cle), 0) + 1

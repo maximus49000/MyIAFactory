@@ -10,7 +10,7 @@ from .statuts import TRES_ANCIEN, lire_date
 
 ACTION_RECENTE_S = 120      # une action réelle depuis moins de 2 min : l'agent avance
 TERMINE_NON_LU_S = 120      # un agent terminé dont le moteur n'a pas lu le résultat depuis plus de 2 min : dit
-LISTE_PERIMEE_S = 600       # la liste de l'agent n'a pas bougé depuis 10 min alors qu'il agit
+LISTE_PERIMEE_S = 180       # la liste de l'agent n'a pas bougé depuis 3 min alors qu'il agit (une commande longue comprise)
 ATTENTE_LONGUE_S = 1800     # une exécution distante attendue depuis plus de 30 min : anormalement longue
 NOMS_ATTENDUS = {"apk": "l'APK"}
 NOMS_LIEUX = {"github": "GitHub"}
@@ -147,15 +147,16 @@ def pour_la_tache(tache, taches, executions, moteur_vivant, maintenant, delai_ar
             return rendre("sans_action", f"sans action depuis {_minutes(passe)} min, {arret}")
         return rendre("demarre", "démarre")
     action, vie = _secondes(travail.get("action_t"), maintenant), _secondes(travail.get("vie_t"), maintenant)
+    maj = _secondes(liste.get("maj"), maintenant) if liste else None
+    # La liste est écrite par l'agent seul : si elle n'a pas bougé alors qu'il agit (essai réel FM_Stats, 2026-11-26 : le
+    # premier point restait non coché pendant la construction de l'APK), le dire, quel que soit l'état de la tâche.
+    perimee = (f" · liste non mise à jour depuis {_minutes(maj)} min"
+               if points and maj is not None and maj >= LISTE_PERIMEE_S else "")
     if action is not None and action <= ACTION_RECENTE_S:
-        texte = "avance"
-        maj = _secondes(liste.get("maj"), maintenant) if liste else None
-        if points and maj is not None and maj >= LISTE_PERIMEE_S:
-            texte += f" · liste non mise à jour depuis {_minutes(maj)} min"
-        return rendre("avance", texte)
+        return rendre("avance", "avance" + perimee)
     if action is not None and vie is not None and vie <= ACTION_RECENTE_S:
-        return rendre("commande_longue", f"commande longue en cours depuis {_minutes(action)} min ({arret})")
-    return rendre("sans_action", f"sans action depuis {_minutes(action or vie or 0)} min, {arret}")
+        return rendre("commande_longue", f"commande longue en cours depuis {_minutes(action)} min ({arret})" + perimee)
+    return rendre("sans_action", f"sans action depuis {_minutes(action or vie or 0)} min, {arret}" + perimee)
 
 
 def _titre(taches, tid):

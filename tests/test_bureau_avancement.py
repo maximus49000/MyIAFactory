@@ -87,6 +87,12 @@ class Etats(unittest.TestCase):
         self.assertEqual(r["reste"]["min_s"] % 60, 0)
         self.assertEqual(r["reste"]["max_s"] % 60, 0)
 
+    def test_liste_non_mise_a_jour_pendant_une_commande_longue(self):
+        av = {"points": [{"texte": "a", "fait": False}], "en_cours": "a", "maj": il_y_a(360)}
+        r = calculer(tache(travail=travail(action_s=300, vie_s=5, avancement=av)))
+        self.assertEqual(r["etat"], "commande_longue")
+        self.assertIn("liste non mise à jour depuis 6 min", r["etat_texte"])
+
     def test_liste_non_mise_a_jour(self):
         av = {"points": [{"texte": "a", "fait": False}], "en_cours": "a", "maj": il_y_a(600)}
         r = calculer(tache(travail=travail(action_s=20, avancement=av)))

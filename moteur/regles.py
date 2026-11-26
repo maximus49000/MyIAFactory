@@ -112,7 +112,8 @@ APK_A_JOUR_AVANT_LES_TESTS = ("Avant tout test qui exécute l'application (émul
 CONSIGNE_AVANCEMENT = ("Avancement : dès le début, écris dans `{chemin}` la liste de tes points, au format "
                        '`{{"points": [{{"texte": "…", "fait": false}}], "en_cours": "ce que tu fais"}}` (pour une correction : '
                        "un point par défaut du refus). Quand un point est fini, mets `fait` à `true` et mets `en_cours` à "
-                       "jour. Une ligne par point, sans commentaire.")
+                       "jour, AVANT de lancer la commande suivante (construction de l'APK, tests). Une ligne par point, sans "
+                       "commentaire.")
 TESTS_CIBLES = ("Tests : lance seulement les tests touchés par ton élément (ses fichiers de test), par le lanceur du "
                 "poste. Pas la suite complète : elle passe une fois, à la dernière étape du dernier élément de la "
                 "fonctionnalité.")

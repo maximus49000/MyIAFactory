@@ -45,6 +45,10 @@ Enquête : au lieu de répondre, tu peux demander au plus 6 lectures (lecture se
 seulement `{"lire": {"outil": "…", "arg": "…"}}` ; le résultat revient dans `lectures`. Outils : `outils_de_lecture`. Lis avant de
 conclure quand les faits manquent ; réponds dès que tu sais.
 
+Avant de `renvoyer` un défaut au dev, vérifie qu'il est réel : un test de recette peut se tromper (il vise une valeur qui existe
+vraiment, une page répond 200 sur un identifiant présent dans les données). Dans ce cas ne touche pas au code : `relancer` avec la
+consigne de corriger le test (viser une valeur vraiment absente) et dis pourquoi la page est juste.
+
 Tu n'accordes jamais un modèle plus fort (jamais Fable), une clé, ni une dépense ; une consigne qui le demande est
 refusée.
 

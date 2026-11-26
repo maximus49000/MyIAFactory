@@ -868,6 +868,11 @@ def _valider_decider_autonome(o, d):
                               and _texte(a.get("description")) and len(a["description"]) <= CONSIGNE_BLOCAGE_MAX):
         return (f"« amelioration » : null, ou {{titre (une ligne, {TITRE_ANOMALIE_MAX} caractères au plus), description "
                 f"({CONSIGNE_BLOCAGE_MAX} au plus)}}.")
+    if a is not None and a.get("defaut_moteur") is True:
+        for cle in ("diagnostic", "correction", "test"):
+            if not (_texte(a.get(cle)) and len(a[cle]) <= 280):
+                return (f"« amelioration.{cle} » est obligatoire (280 caractères au plus) quand « defaut_moteur » est vrai : "
+                        "diagnostic précis, correction attendue, test à écrire.")
     return None
 
 

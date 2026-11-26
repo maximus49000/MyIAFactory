@@ -225,6 +225,84 @@ class Argv(unittest.TestCase):
                 self.assertEqual(ea.valider_argv(distant), distant[1:])
 
 
+DIRECT = {"actions": [{"t": "2026-11-26T10:00:00Z", "texte": "modifie a.py"}], "phase": "modification",
+          "usage": [{"modele": "claude-sonnet-5-5", "entree": 10, "sortie": 5, "cache_lecture": 0, "cache_ecriture": 0}],
+          "avancement": {"points": [{"texte": "un", "fait": False}], "en_cours": "un"}}
+
+
+class SuiviDirect(Base):
+    """Pendant que l'agent serveur travaille, l'exécuteur recopie son suivi en direct dans `<cle>.direct.json`."""
+
+    def setUp(self):
+        super().setUp()
+        self.agents = self.tmp / "agents-en-cours"
+        self.fichier = self.agents / "dev-1.direct.json"
+        self.vus = []
+
+    def executeur_suivi(self, **plus):
+        suivi = {"dossier": self.agents, "cle": "dev-1", "agent": "dev-1", "taches": [TACHE], "dossier_projet": str(self.projet)}
+        ex = es.ExecuteurServeur(self.projet, TACHE, "seul", {"projet": "demo"}, dossier=self.dossier, ssh=object(),
+                                 dormir=self.dormir, pas_s=15, horloge=lambda: self.t, git=faux_git_sans_branche,
+                                 suivi_direct=suivi, **plus)
+        ex._epoch = lambda: 5000.0 + self.t
+        return ex
+
+    def lire_fichier(self):
+        return json.loads(self.fichier.read_text(encoding="utf-8")) if self.fichier.exists() else None
+
+    def appeler(self, ex):
+        return appel.appeler("c", "m", "sonnet", executer=ex, outils=OUTILS, dossier_travail=str(self.projet), delai_s=2400)
+
+    def test_le_suivi_apparait_pendant_le_travail_puis_disparait(self):
+        self.faux(etats=("en_cours", "en_cours", "terminee"))
+        with mock.patch.object(sa, "lire_direct", return_value=DIRECT) as lire:
+            self.pendant_sommeil = lambda n: self.vus.append(self.lire_fichier())
+            self.appeler(self.executeur_suivi())
+        self.assertGreaterEqual(len(self.vus), 2)
+        vu = self.vus[0]
+        self.assertEqual((vu["serveur"], vu["cle"], vu["agent"], vu["taches"]), (True, "dev-1", "dev-1", [TACHE]))
+        self.assertEqual(vu["actions"][0]["texte"], "modifie a.py")
+        self.assertEqual(vu["avancement"]["points"], [{"texte": "un", "fait": False}])
+        self.assertEqual(vu["dossier"], str(self.projet))
+        self.assertGreater(vu["maj"], vu["debut"] - 1)
+        self.assertEqual(lire.call_args[0][0], ID2)
+        self.assertFalse(self.fichier.exists())                         # retiré à la fin (succès)
+
+    def test_une_lecture_en_echec_garde_le_dernier_suivi(self):
+        self.faux(etats=("en_cours", "en_cours", "en_cours", "terminee"))
+        with mock.patch.object(sa, "lire_direct", side_effect=[DIRECT, None, RuntimeError("boum")]):
+            self.pendant_sommeil = lambda n: self.vus.append(self.lire_fichier())
+            self.appeler(self.executeur_suivi())                         # ne lève jamais
+        self.assertEqual(self.vus[0]["actions"], self.vus[1]["actions"])
+        self.assertIsNotNone(self.vus[1])
+
+    def test_sans_suivi_direct_rien_n_est_ecrit(self):
+        self.faux(etats=("en_cours", "terminee"))
+        with mock.patch.object(sa, "lire_direct") as lire:
+            self.appeler(self.executeur())
+        lire.assert_not_called()
+        self.assertFalse(self.agents.exists())
+
+    def test_le_suivi_est_retire_aussi_a_l_echec_de_l_agent(self):
+        self.faux(etats=("en_cours", "echouee"), statut="erreur", raison="boum")
+        with mock.patch.object(sa, "lire_direct", return_value=DIRECT):
+            self.pendant_sommeil = lambda n: self.vus.append(self.lire_fichier())
+            with self.assertRaises(appel.ErreurAppel):
+                self.appeler(self.executeur_suivi())
+        self.assertIsNotNone(self.vus[0])
+        self.assertFalse(self.fichier.exists())
+
+    def test_l_heure_de_la_liste_ne_bouge_que_quand_la_liste_change(self):
+        self.faux(etats=("en_cours", "en_cours", "en_cours", "terminee"))
+        b = {**DIRECT, "avancement": {"points": [{"texte": "un", "fait": True}], "en_cours": "deux"}}
+        with mock.patch.object(sa, "lire_direct", side_effect=[DIRECT, DIRECT, b]):
+            self.pendant_sommeil = lambda n: self.vus.append(self.lire_fichier())
+            self.appeler(self.executeur_suivi())
+        self.assertEqual(self.vus[0]["avancement_maj"], self.vus[1]["avancement_maj"])
+        self.assertGreater(self.vus[2]["avancement_maj"], self.vus[1]["avancement_maj"])
+        self.assertGreater(self.vus[2]["maj"], self.vus[1]["maj"])
+
+
 class Appel(Base):
     def test_appeler_avec_l_executeur_rend_rapport_et_usages(self):
         f = self.faux(branche=f"agent/{TACHE}",

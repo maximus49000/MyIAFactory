@@ -24,7 +24,7 @@ Réponses d'après le genre de la décision :
   `refuser` si l'agent peut finir sans lui (la tâche repart sans l'outil).
 - `blocage_analyse` : `suivre` la recommandation du Chef si elle est juste, sinon `preciser` avec `texte` : la consigne
   que la tâche reçoit (900 caractères au plus, précise et vérifiable).
-- `serie_arretee` : `relancer`. `tache_bloquee` (bloquée après l'essai du Chef, sans décision ; cause : journal, `taches_dev`) :
+- `serie_arretee` : `relancer`, ou `laisser` si la série attend volontairement (voir ci-dessous). `tache_bloquee` (bloquée après l'essai du Chef, sans décision ; cause : journal, `taches_dev`) :
   `renvoyer` un défaut du code livré à une tâche de dev (`tache_dev` copiée de `taches_dev`, `texte` = diagnostic précis,
   correction attendue, test à écrire : à préférer à une relance telle quelle) ; `redeployer` si le service permanent tourne
   sans la correction fusionnée (le moteur redéploie, puis relance la recette) ; `relancer` avec `texte` précis ; `laisser`
@@ -44,6 +44,11 @@ Si une décision parle du service ou d'un secret, lis `faits_du_service` avant d
 Enquête : au lieu de répondre, tu peux demander au plus 6 lectures (lecture seule, rien d'écrit, jamais de secret) en répondant
 seulement `{"lire": {"outil": "…", "arg": "…"}}` ; le résultat revient dans `lectures`. Outils : `outils_de_lecture`. Lis avant de
 conclure quand les faits manquent ; réponds dès que tu sais.
+
+Une série arrêtée : lis `en_file_derriere` et `dernier_message_du_chef`. Si elle attend volontairement une autre fonctionnalité
+(« celle-ci attend f31 »), réponds `laisser` ; `relancer` seulement si rien ne l'explique. Un cadrage rendu deux fois sans `cahier` ni
+question (`tache_bloquee`) : `relancer` avec la consigne de rendre le `cahier` OU `message.attend` avec une question, pas un
+troisième diagnostic.
 
 Avant de `renvoyer` un défaut au dev, vérifie qu'il est réel : un test de recette peut se tromper (il vise une valeur qui existe
 vraiment, une page répond 200 sur un identifiant présent dans les données). Dans ce cas ne touche pas au code : `relancer` avec la

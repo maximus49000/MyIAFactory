@@ -99,7 +99,7 @@ class Boucle(tsr.AvecValidation):
         _, type_, dossier, suite = action
         self.assertEqual((type_, suite["decision"]), ("decider_autonome", d["id"]))
         self.assertEqual(dossier["decision"]["genre"], "serie_arretee")
-        self.assertEqual(dossier["verdicts"], ["relancer"])
+        self.assertEqual(dossier["verdicts"], ["relancer", "laisser"])
         self.assertTrue(any(x["validation"] for x in dossier["fonctionnalite"]["flux"]))       # le but : la validation
         self.assertEqual(regles.repondre_en_autonome(self.projet, self.etat), [])        # une seule tentative
 
@@ -545,6 +545,106 @@ class TacheBloquee(tsr.AvecValidation):
         self.appliquer(self.juger(), objet(verdict="laisser", amelioration={"titre": "Idée", "description": "Un réglage."}))
         (fiche,) = self.ok("anomalies")["anomalies"]
         self.assertTrue(fiche["titre"].startswith("Amélioration : "))
+
+    # --- Une tâche bloquée par un chemin qui ne passe pas par l'analyse du Chef est prise aussi (FM_Stats t279).
+
+    CADRAGE = "L'agent a rendu deux fois son cadrage sans le cahier des charges ni question : rien ne peut suivre."
+
+    def bloquer_sans_analyse(self, texte=CADRAGE, tid=None):
+        tid = tid or self.recette
+        self.ok("tache", entree={"id": tid, "bloquee": texte})
+        self.projet.claude_autonome = True
+        return tid
+
+    def vieillir(self):
+        for k in list(self.etat.get("autonome_bloquees_vues", {})):
+            self.etat["autonome_bloquees_vues"][k] -= regles.DELAI_BLOCAGE_SANS_ANALYSE_S + 1
+
+    def test_orphelin_pas_avant_le_delai_de_l_analyse_du_chef(self):
+        self.bloquer_sans_analyse()
+        self.assertEqual(regles.repondre_en_autonome(self.projet, self.etat), [])
+        self.vieillir()
+        (action,) = regles.repondre_en_autonome(self.projet, self.etat)
+        self.assertEqual(action[2]["decision"]["genre"], "tache_bloquee")
+        self.assertIn("cahier", action[2]["decision"]["texte"])
+
+    def test_orphelin_une_meme_cause_une_seule_fois(self):
+        self.bloquer_sans_analyse()
+        regles.repondre_en_autonome(self.projet, self.etat)
+        self.vieillir()
+        self.appliquer(self.juger(), objet(verdict="relancer", texte="Rends le cahier OU une question, pas un troisième diagnostic."))
+        self.traiter_la_reponse()
+        self.bloquer_sans_analyse()                                  # rebloquée pour la même cause
+        regles.repondre_en_autonome(self.projet, self.etat)
+        self.vieillir()
+        self.assertEqual(regles.repondre_en_autonome(self.projet, self.etat), [])
+
+    def test_orphelin_jamais_avec_une_decision_ouverte_ni_une_validation_ni_sans_le_reglage(self):
+        self.ok("decision", entree={"action": "poser", "portee": "projet", "genre": "accord_agent", "agent": "chef",
+                                    "texte": "Un agent demande votre accord.", "tache": self.recette, "quoi": "Générer 5 images"})
+        self.bloquer_sans_analyse()
+        regles.repondre_en_autonome(self.projet, self.etat)
+        self.vieillir()
+        actions = regles.repondre_en_autonome(self.projet, self.etat)
+        self.assertEqual([a for a in actions if a[2]["decision"]["genre"] == "tache_bloquee"], [])   # l'accord seul, répondu
+        etat2 = regles.nouvel_etat()
+        self.projet.claude_autonome = False
+        self.assertEqual(regles.repondre_en_autonome(self.projet, etat2), [])
+        self.assertEqual(etat2.get("autonome_bloquees_vues"), None)
+
+    def test_le_laisser_bloquee_du_directeur_est_respecte(self):
+        self.projet.claude_autonome = True
+        self.ok("tache", entree={"id": self.recette, "bloquee": BLOQUEE})
+        self.ok("decision", entree={"action": "poser", "portee": "projet", "genre": "blocage_analyse", "tache": self.recette,
+                                    "texte": "Bloquée.", "analyse": "x", "question": "q ?", "recommandation": "r",
+                                    "motif": "echec"})
+        d = next(x for x in self.ok("etat")["decisions"] if x["genre"] == "blocage_analyse")
+        self.traiter(type="blocage_analyse", decision=d["id"], verdict="laisser")
+        regles.repondre_en_autonome(self.projet, self.etat)
+        self.vieillir()
+        self.assertEqual(regles.repondre_en_autonome(self.projet, self.etat), [])
+
+    # --- Une série qui attend volontairement une autre n'est pas relancée ; une anomalie par cause.
+
+    def serie_en_file(self):
+        chemin = self.dossier / "suivi.json"
+        donnees = json.loads(chemin.read_text(encoding="utf-8"))
+        next(f for f in donnees["fonctionnalites"] if f["id"] == "f1")["en_file_derriere"] = "f9"
+        chemin.write_text(json.dumps(donnees, ensure_ascii=False), encoding="utf-8")
+        self.ok("message", entree={"fonctionnalite": "f1", "auteur": "chef",
+                                   "texte": "Cette fonctionnalité attend f9 : elle démarrera dès que celle-ci sera terminée."})
+        self.ok("decision", entree={"action": "poser", "portee": "projet", "genre": "serie_arretee", "fonctionnalite": "f1",
+                                    "texte": "« f1 » ne progresse plus."})
+        self.projet.claude_autonome = True
+
+    def test_la_serie_arretee_recoit_ce_qu_elle_attend(self):
+        self.serie_en_file()
+        (action,) = regles.repondre_en_autonome(self.projet, self.etat)
+        dossier = action[2]
+        self.assertEqual(dossier["en_file_derriere"], "f9")
+        self.assertIn("attend f9", dossier["dernier_message_du_chef"])
+        self.assertEqual(sorted(dossier["verdicts"]), ["laisser", "relancer"])
+
+    def test_laisser_une_serie_n_est_pas_la_relancer_et_le_chef_le_dit(self):
+        self.serie_en_file()
+        action = self.juger()
+        avant = len(self.paroles())
+        self.appliquer(action, objet(verdict="laisser", raison="Elle attend f9 exprès."))
+        (demande,) = [x for x in self.demande_en_attente() if x["type"] == "serie_arretee"]
+        self.assertEqual(demande["verdict"], "laisser")
+        regles.traiter_demande(self.projet, demande, self.etat)
+        self.assertEqual(len([d for d in self.ok("etat")["decisions"] if d["genre"] == "serie_arretee"]), 1)   # rien de levé
+        (parole,) = self.paroles()[avant:]
+        self.assertIn("Elle attend f9 exprès", parole)
+
+    def test_une_seule_anomalie_par_cause_avec_un_compteur(self):
+        self.bloquer()
+        a = {"titre": "Fausse alerte de série", "description": "La série attend une autre."}
+        for _ in range(3):
+            regles._noter_une_anomalie(self.projet, self.etat, self.recette, "Recette", "Amélioration : " + a["titre"], a["description"])
+        self.assertEqual(len(self.ok("anomalies")["anomalies"]), 1)
+        self.assertEqual(self.etat["anomalies_vues"]["Amélioration : " + a["titre"]], 3)
+        self.assertTrue(any("revenue 3 fois" in str(j["texte"]) for j in self.la(self.recette)["journal"]))
 
     # --- Cas 8 : une relance par changement de cause, jamais sans changement.
 

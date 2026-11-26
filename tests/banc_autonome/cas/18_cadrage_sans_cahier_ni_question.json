@@ -1,0 +1,105 @@
+{
+ "id": "18_cadrage_sans_cahier_ni_question",
+ "titre": "Cadrage rendu deux fois sans cahier ni question (service sain) : relancer avec la consigne de rendre l'un ou l'autre",
+ "type": "jugement",
+ "negatif": false,
+ "source": "Essai réel FM_Stats f31 t279, 2026-11-26 (22:48)",
+ "note": "Blocage qui ne passe pas par l'analyse du Chef. Bonne réponse : retour au même agent avec la consigne de rendre un `cahier` OU `message.attend` avec une question, pas un troisième diagnostic ; le service est sain, ce n'est pas une affaire de service.",
+ "dossier": {
+  "decision": {
+   "genre": "tache_bloquee",
+   "texte": "La tâche « Diagnostic : Déployer et installer » est bloquée (blocage sans analyse du Chef) : L'agent a rendu deux fois son cadrage sans le cahier des charges (champ cahier du rapport) ni question : rien ne peut suivre. Relancez la tâche ou faites-lui un retour.",
+   "motif": "autre"
+  },
+  "verdicts": [
+   "relancer",
+   "laisser"
+  ],
+  "choix": [],
+  "questions": [],
+  "tache": {
+   "id": "t279",
+   "titre": "Diagnostic : Déployer et installer",
+   "etape": "cadrage",
+   "metier": "cadrage",
+   "element": null,
+   "journal": [
+    "Diagnostic fait : le service est sain (commit 2b0ad4a, /sante 200).",
+    "Rapport rendu sans cahier ni question.",
+    "Rapport rendu sans cahier ni question."
+   ]
+  },
+  "fonctionnalite": {
+   "id": "f30",
+   "nom": "Statistiques par équipe",
+   "etape": "serie",
+   "flux": [
+    {
+     "nom": "Dev",
+     "validation": false
+    },
+    {
+     "nom": "Recette",
+     "validation": false
+    },
+    {
+     "nom": "Validation du Directeur",
+     "validation": true
+    }
+   ]
+  },
+  "lecons_du_metier": [],
+  "deja_appris": [],
+  "recentes": [],
+  "mots_interdits": [
+   "ProjetExemple"
+  ],
+  "anomalies": [],
+  "service": {
+   "adresse": "https://service.exemple",
+   "redeployable": false
+  },
+  "taches_dev": [],
+  "faits_du_service": {
+   "commit": "2b0ad4a",
+   "etat": "actif",
+   "sante_ok": true,
+   "secrets": {},
+   "pages": [
+    {
+     "chemin": "/sante",
+     "code": 200,
+     "ms": 15
+    }
+   ],
+   "journal": [],
+   "erreur": null
+  }
+ },
+ "attendu": {
+  "verdicts": [
+   "relancer"
+  ],
+  "texte_evoque": [
+   [
+    "cahier"
+   ],
+   [
+    "question",
+    "attend"
+   ]
+  ]
+ },
+ "simule": {
+  "raison": "Deux rapports sans cahier ni question : un troisième diagnostic ne mènera nulle part.",
+  "verdict": "relancer",
+  "texte": "Le service est sain, le diagnostic est fait : n'en rends pas un troisième. Rends maintenant le `cahier` des charges, ou `message.attend` avec ta question au Directeur.",
+  "choix": null,
+  "reponses": null,
+  "generalisable": false,
+  "lecon": null,
+  "amelioration": null,
+  "anomalies": null
+ },
+ "decision_id": "d18"
+}

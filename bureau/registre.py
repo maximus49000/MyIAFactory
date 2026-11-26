@@ -57,7 +57,7 @@ REGISTRE = (
           "Cochée, Claude répond à votre place à tout ce qui n'est pas une étape de validation du Directeur : accord "
           "demandé par un agent (choix proposé, sinon accepté), outil à ouvrir (autorisé), série arrêtée (relancée), "
           "blocage analysé par le Chef (recommandation suivie). Il s'arrête aux étapes de validation du workflow, que "
-          "vous seul accordez, et à la livraison finale. Chaque réponse est journalisée comme une demande du bureau. "
+          "vous seul accordez, et à la livraison finale. Chaque réponse est journalisée comme une demande du bureau et retenue comme leçon validée, pour éviter le même blocage. "
           "Décochée : comme avant.", False),
     _case("analyse_blocages", "Analyse intelligente des blocages",
           "Cochée, le Chef analyse chaque tâche bloquée par un échec d'agent : il la relance avec une consigne, "

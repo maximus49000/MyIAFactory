@@ -7735,10 +7735,45 @@ def _reponse_autonome(d):
     return None
 
 
+def _lecon_du_deblocage(d):
+    """La leçon que laisse un déblocage de Claude autonome : ce qui bloquait, et la conduite qui l'évite la prochaine
+    fois (None s'il n'y a rien à retenir)."""
+    genre = d.get("genre")
+    if genre == GENRE_ACCORD and d.get("quoi"):
+        return (f"Pour « {d['quoi'][:200]} », l'accord est toujours donné (en mode autonome) : fais-le directement et "
+                "signale-le dans ton rapport, sans arrêter ta tâche pour le demander.")
+    if genre == GENRE_OUTIL and (d.get("programme") or d.get("outil")):
+        return (f"L'outil « {d.get('programme') or d.get('outil')} » est accordé à ton métier (en mode autonome) : "
+                "utilise-le directement, sans redemander l'autorisation.")
+    if genre == GENRE_BLOCAGE and (d.get("recommandation") or "").strip():
+        return (f"Blocage « {MOTIFS_BLOCAGE.get(d.get('motif'), d.get('motif') or 'inconnu')} » débloqué en suivant la "
+                f"recommandation du Chef : {' '.join(d['recommandation'].split())[:300]} Applique-la d'emblée.")
+    if genre == SERIE_ARRETEE and d.get("texte"):
+        return ("Une série s'est arrêtée faute d'étape reconnue ; elle a dû être relue depuis le suivi : "
+                f"{' '.join(d['texte'].split())[:250]} Vérifie que chaque tâche porte une étape du workflow actuel.")
+    return None
+
+
+def _noter_le_deblocage(projet, etat, d):
+    """Mémoire du mode autonome : le déblocage devient une leçon validée (métier de la tâche, ou Chef pour une série),
+    lue ensuite par les agents dans leur brief pour éviter le même blocage. Une même leçon n'est notée qu'une fois ;
+    jamais une raison d'échouer."""
+    texte = _lecon_du_deblocage(d)
+    vues = etat.setdefault("autonome_lecons", set())
+    if not texte or texte in vues:
+        return
+    vues.add(texte)
+    try:
+        t = _tache(projet, d["tache"]) if d.get("tache") else {"id": None}
+        _lecon_du_chef(projet, t, {"portee": "metier", "texte": texte}, valider=True)
+    except (Refus, ErreurMoteur, KeyError):
+        pass
+
+
 def repondre_en_autonome(projet, etat):
     """Réglage `claude_autonome` (relu à chaque passage) : chaque décision ouverte que `_reponse_autonome` sait trancher
     reçoit sa réponse, déposée comme une demande du bureau (traitée au même passage, journalisée dans
-    `demandes.jsonl` avec la mention « claude_autonome »). Les étapes de validation (`valider_etape`) ne sont jamais
+    `demandes.jsonl` avec la mention « claude_autonome », et retenue comme leçon validée : `_noter_le_deblocage`). Les étapes de validation (`valider_etape`) ne sont jamais
     touchées. Une même décision n'est tentée qu'une fois ; une série ou une tâche qui revient après
     `AUTONOME_MAX_REPRISES` réponses est laissée au Directeur. Rend le nombre de réponses déposées."""
     if not reglage_effectif(projet, "claude_autonome"):
@@ -7761,7 +7796,8 @@ def repondre_en_autonome(projet, etat):
             lancer(projet, "actions", {**demande, "claude_autonome": True})
             n += 1
         except Refus:
-            pass      # la décision reste posée : le Directeur la voit
+            continue      # la décision reste posée : le Directeur la voit
+        _noter_le_deblocage(projet, etat, d)
     return n
 
 
@@ -7953,38 +7989,42 @@ def _lever_la_decision(projet, i):
             pass
 
 
-def _lecon_du_chef(projet, t, lecon):
+def _lecon_du_chef(projet, t, lecon, valider=False):
     """La leçon tirée du blocage, par le circuit des leçons proposées : notée « à valider » au métier de la tâche (ou à
-    la fiche de son agent), au projet (`metier`) ou au genre (`genre`) ; validée tout de suite si `lecons_auto`."""
+    la fiche de son agent), au projet (`metier`) ou au genre (`genre`) ; validée tout de suite si `lecons_auto` ou si
+    `valider` (le mode Claude autonome). Une tâche sans id (une série arrêtée) : la leçon va au Chef, rien n'est journalisé."""
     court = _etat(projet)
+    _journal_ = (lambda tid, texte: _journal(projet, tid, texte)) if t.get("id") else (lambda tid, texte: None)
     cles = {a["cle"] for a in court["agents"]}
     agent = t.get("agent") if t.get("agent") in cles else None
     if agent is None and t.get("role"):     # une validation : la leçon va au métier, par un agent polyvalent
         agent = next((a["cle"] for a in court["agents"] if _polyvalent(a)), None)
     etage = "genre" if lecon["portee"] == "genre" else "projet"
     texte = " ".join(lecon["texte"].split())
-    e = {"action": "noter", "agent": agent or CHEF, "texte": texte, "tache": t["id"], "etage_propose": etage,
+    e = {"action": "noter", "agent": agent or CHEF, "texte": texte, "etage_propose": etage,
          "roles": [t["role"]] if t.get("role") else ["tous"]}
+    if t.get("id"):
+        e["tache"] = t["id"]
     if etage == "genre":
         e["texte_general"] = texte
     try:
         i = lancer(projet, "lecon", e)["id"]
     except Refus as ex:
-        _journal(projet, t["id"], f"Leçon du Chef non notée : {ex}")
+        _journal_(t["id"], f"Leçon du Chef non notée : {ex}")
         return
-    if reglage_effectif(projet, "lecons_auto"):      # relu : une valeur posée au global ou au type agit aussi
+    if valider or reglage_effectif(projet, "lecons_auto"):      # relu : une valeur posée au global ou au type agit aussi
         try:
             r = lancer(projet, "lecon", {"action": "appliquer", "lot": [{"id": i, "verdict": "valider", "etage": etage}]})
             x = (r.get("resultats") or [{}])[0]
             if x.get("ok"):
-                _journal(projet, t["id"], f"Leçon validée : {texte}")
+                _journal_(t["id"], f"Leçon validée : {texte}")
                 return
-            _journal(projet, t["id"], f"Leçon proposée : {texte} (validation automatique refusée : {x.get('refus')})")
+            _journal_(t["id"], f"Leçon proposée : {texte} (validation automatique refusée : {x.get('refus')})")
             return
         except (Refus, ErreurMoteur) as ex:
-            _journal(projet, t["id"], f"Leçon proposée : {texte} (validation automatique impossible : {ex})")
+            _journal_(t["id"], f"Leçon proposée : {texte} (validation automatique impossible : {ex})")
             return
-    _journal(projet, t["id"], f"Leçon proposée : {texte}")
+    _journal_(t["id"], f"Leçon proposée : {texte}")
 
 
 def _apres_analyser_blocage(projet, o, ctx, etat):

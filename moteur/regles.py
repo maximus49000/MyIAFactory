@@ -2364,12 +2364,17 @@ def _refaire_avant_la_validation(projet, demande, etat, t, qui="Directeur"):
     rang = next((k for k, s in enumerate(production) if ETAPES_DE_VALIDATION + s["id"] == t["etape"]), None)
     avant = None if rang is None else next((k for k in range(rang - 1, -1, -1)
                                             if not wf.est_validation(production[k])), None)
-    if (v is not None and rang is None and _maquette_du_cahier_validee(projet, fid)
+    if (rang is None and _maquette_du_cahier_validee(projet, fid)
             and _est_etape_maquette({"id": str(t["etape"])[len(ETAPES_DE_VALIDATION):]})):
         # validation d'une maquette que le cahier validé couvre déjà (FM_Stats f24, 2026-11-26) : rien à refaire ni à
         # faire valider, l'élément reprend à la première étape qui reste
         lancer(projet, "tache", {"id": t["id"], "colonne": "fait", "active": False, "bloquee": None,
                                  "journal": ["Maquette déjà validée au cahier des charges : étape sautée."]})
+        if v is None:
+            # le moteur relancé ne connaît plus l'élément : la validation est close, l'élément n'a rien à refaire (« Relancer »
+            # répondait « n'est plus dans le workflow » et la carte restait bloquée)
+            _terminer(projet, {"demande": demande["id"]}, "La maquette du cahier est déjà validée : cette validation est close.")
+            return _demarrer_en_attente(projet, etat, fid)
         v.pop("rien_a_verifier", None)
         v.update(phase="flux", pas=0)
         _tache_de_flux(projet, etat, v, journal=["La maquette du cahier fait foi : le développement commence."])
@@ -7307,6 +7312,10 @@ def _reprendre_l_element(projet, etat, f, element, taches):
     etapes = [str(t["etape"]).split(":", 1)[1] for t in pas
               if str(t["etape"]).startswith((ETAPES_DE_FLUX, ETAPES_DE_VALIDATION, ETAPES_DE_CAPTURES))]
     if etapes and etapes[-1] not in rangs:
+        if _est_etape_maquette({"id": etapes[-1]}) and _maquette_du_cahier_validee(projet, fid):
+            # la maquette du cahier validé fait foi : la règle a retiré cette étape du workflow (FM_Stats f24, 2026-11-26),
+            # ce n'est pas une série perdue ; sa validation encore ouverte est close par le retour du Directeur
+            return None
         return f"son étape « {etapes[-1]} » n'est plus dans le workflow de la fonctionnalité"
     v = _etat_element(etat, fid, element)
     v.update(taches=[t["id"] for t in pas], pas=rangs[etapes[-1]] if etapes else 0)

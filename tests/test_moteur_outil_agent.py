@@ -223,13 +223,17 @@ class Arret(Cadre):
         self.assertEqual(self.statut(demande["id"])["statut"], "traitée")
         self.assertIn("Bash(curl:*)", self.statut(demande["id"])["reponse"])
 
-    def test_refuser_bloque_la_tache_avec_la_raison(self):
+    def test_refuser_ne_bloque_pas_la_tache_elle_repart_sans_l_outil(self):
+        """FM_Stats (2026-11-26) : un refus laissait la tâche dans « Tâches bloquées » ; elle repart sans l'outil, dit à l'agent
+        de ne plus le redemander, et la raison reste au journal."""
         self.arret("curl x")
         d, = self.decisions()
         demande, suite = self.traiter(type="outil_agent", decision=d["id"], verdict="refuser")
-        self.assertEqual(suite, [])
+        self.assertEqual([x[0] for x in suite], ["agent"])
+        self.assertIn("ne le redemande pas", suite[0][3])
         self.assertNotIn("Bash(curl:*)", self.outils_de_hugo())
-        self.assertIn("refusé", self.tache()["bloquee"])
+        self.assertFalse(self.tache().get("bloquee"))
+        self.assertTrue(any("refusé" in j["texte"] for j in self.tache()["journal"]))
         self.assertEqual(self.decisions(), [])
 
     def test_autre_outil_que_le_shell_demande_la_main_du_directeur(self):

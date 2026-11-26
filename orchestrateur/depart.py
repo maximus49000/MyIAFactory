@@ -29,7 +29,7 @@ def monter(modele, fable=False):
     return ECHELLE[min(ECHELLE.index(modele) + 1, len(ECHELLE) - 1)]
 
 
-LIEUX_DE_TACHE = ("local", "serveur", "cloud")     # les lieux où une tâche d'agent peut partir
+LIEUX_DE_TACHE = ("serveur", "local", "cloud")     # les lieux où une tâche d'agent peut partir, le serveur d'abord
 ORDRE_PAR_DEFAUT = list(LIEUX_DE_TACHE)
 
 
@@ -64,7 +64,7 @@ def _etat_du_lieu(lieu, places, occupes, hors_ligne):
 
 def ordre_du_metier(factory, role):
     """L'ordre des lieux d'un métier : celui que le projet règle pour lui (`ordre_lieux_par_metier`), sinon celui du projet
-    (`ordre_lieux`), sinon local, serveur, cloud."""
+    (`ordre_lieux`), sinon serveur, local, cloud (le serveur travaille en priorité)."""
     par_metier = factory.get("ordre_lieux_par_metier") or {}
     return list(par_metier.get(role) or factory.get("ordre_lieux") or ORDRE_PAR_DEFAUT)
 
@@ -292,7 +292,10 @@ def _service_consigne(options):
         "**préparer**, jamais déployer. Tu tiens à jour `.factory/service.json` (`nom`, `dockerfile` ou `image` épinglée "
         "@sha256, `port_interne` 1024-65535, `sante` « /sante », `donnees` « /data », `variables` et `secrets` : des NOMS "
         "seulement) et le service lui-même : il répond 200 sur /sante sans jeton, exige `Authorization: Bearer <jeton>` "
-        "partout ailleurs (le jeton est dans la variable SERVICE_JETON), tourne sans root, n'écrit que sous /data et /tmp.",
+        "partout ailleurs (le jeton est dans la variable SERVICE_JETON), tourne sans root, n'écrit que sous /data et /tmp. "
+        "SERVICE_JETON, SERVICE_PORT et SERVICE_DONNEES sont posés par la plateforme : ne les déclare jamais dans "
+        "`variables` ni `secrets` (les noms en SERVICE_ sont refusés), et ne modifie jamais `.factory/` : un secret manquant "
+        "se demande au Directeur, par son NOM.",
         "Le moteur le déploie lui-même après la livraison validée (santé contrôlée, retour arrière automatique). Tu lis "
         f"seulement l'état et le journal : `{lancer} etat{options}` et `{lancer} journal{options}`.",
         "Les secrets (clés d'API…) sont saisis par le Directeur seul, dans la zone Services du bureau : demande-lui de les "
@@ -447,7 +450,9 @@ def consigne_serveur(mode, tache_id, flutter=False):
         "## Tu travailles sur le serveur",
         f"Tu travailles dans un clone du projet, sur la branche `agent/{tache_id}`. Quand ton travail est fait (et avant de "
         "rendre ton rapport), commite-le sur cette branche (`git add`, puis `git commit`) : seuls tes commits reviennent "
-        "au poste. Rien n'est poussé et tu n'as aucun accès à GitHub : ne pousse pas, ne change pas de branche.",
+        "au poste. Rien n'est poussé et tu n'as aucun accès à GitHub : ne pousse pas, ne change pas de branche. Les "
+        "commandes du poste (le déport et le lanceur de tests) n'existent pas ici : ne les réclame pas comme outil ; "
+        "le moteur déploie et vérifie lui-même, et ce qui reste à vérifier au poste se dit dans ton rapport.",
         "Personne ne voit ta fenêtre et le Directeur n'est pas joignable pendant ton travail : une question ou un accord "
         "se demande dans ton rapport, en `message.questions` avec `attend: true`, puis tu t'arrêtes (tu reprendras avec "
         "la réponse).",

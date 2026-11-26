@@ -56,7 +56,7 @@ class TestReglages(unittest.TestCase):
         # les défauts : aucune place serveur, local puis serveur puis cloud, aucun ordre par métier
         f = factory.lire(self.factory_avec())
         self.assertEqual((f["agents_serveur_max"], f["ordre_lieux"], f["ordre_lieux_par_metier"]),
-                         (0, ["local", "serveur", "cloud"], {}))
+                         (0, ["serveur", "local", "cloud"], {}))
         for v in (0, 1, 4):
             self.assertEqual(factory.lire(self.factory_avec(agents_serveur_max=v))["agents_serveur_max"], v)
         for v in (-1, 5, "2", True, 1.5, None):

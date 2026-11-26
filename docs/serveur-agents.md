@@ -282,7 +282,7 @@ du bureau (onglet de facturation) ou dans `.factory/factory.json` du projet :
 | `agents_locaux_max` | 1 à 16 | (réglage existant) |
 | `agents_cloud_max` | 0 à 16 | (réglage existant) |
 | **`agents_serveur_max`** | **0 à 4** : agents simultanés au serveur pour ce projet | **0** : le serveur ne sert à rien tant qu'on ne l'a pas réglé |
-| **`ordre_lieux`** | liste sans doublon d'au moins un lieu parmi `local`, `serveur`, `cloud` ; un lieu retiré n'est jamais utilisé | **`["local", "serveur", "cloud"]`** |
+| **`ordre_lieux`** | liste sans doublon d'au moins un lieu parmi `local`, `serveur`, `cloud` ; un lieu retiré n'est jamais utilisé | **`["serveur", "local", "cloud"]`** (le serveur d'abord ; sans place serveur réglée, il est sauté) |
 | **`ordre_lieux_par_metier`** | `{rôle: ordre}` : l'ordre d'un métier l'emporte sur celui du projet (« réglable par type de tâche ») | vide |
 | **`agents_abonnement_max`** | **1 à 32**, ou absent (aucun plafond) ; dans le fichier du **bureau** (`~/MyIAFactory/bureau.json`), pas dans le projet | absent |
 

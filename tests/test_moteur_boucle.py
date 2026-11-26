@@ -73,6 +73,41 @@ class Passage(Base):
         self.assertIn("pid", p)
         self.assertEqual(self.moteur.journal, [])
 
+    def test_un_projet_sans_factory_est_passe_sans_erreur_et_dit_une_fois(self):
+        """Un projet déclaré au bureau pour ses réglages seulement (jamais installé) ne produit pas d'erreur à chaque tour."""
+        sans = regles.Projet(self.dossier / "absent" / "factory.json", feu_vert=lambda: True)
+        moteur = self.fabriquer([self.projet, sans])
+        for _ in range(3):
+            moteur.tour()
+        textes = [j for j in moteur.journal if "factory" in j]
+        self.assertEqual(len(textes), 1, moteur.journal)
+        self.assertIn("projet non installé", textes[0])
+        self.assertFalse([j for j in moteur.journal if "erreur au passage" in j or "installations :" in j], moteur.journal)
+
+    def test_l_apk_d_un_agent_serveur_prend_la_date_de_la_fusion(self):
+        """Rapatrié avant la fusion, l'APK paraîtrait plus ancien que le code que la fusion réécrit : daté après la fusion."""
+        import os
+        import time
+        from types import SimpleNamespace
+        apk = self.dossier.parent / "build" / "app.apk"
+        apk.parent.mkdir(parents=True, exist_ok=True)
+        apk.write_bytes(b"apk")
+        vieux = time.time() - 3600
+        os.utime(apk, (vieux, vieux))
+        projet = SimpleNamespace(dossier=self.dossier.parent)
+        e = SimpleNamespace(livrables=["Livrable rapatrié : build/app.apk (1 o, abcdef)", "Livrable non rapatrié : x : refusé",
+                                       "Livrable rapatrié : ../hors/projet.apk (1 o, ab)"])
+        boucle.Moteur._dater_les_livrables_rapatries(projet, e)
+        self.assertGreater(apk.stat().st_mtime, time.time() - 60)
+
+    def test_un_agent_pilote_recoit_le_pont_pour_ce_depart_sans_changer_sa_fiche(self):
+        """Sans `Bash(pont:*)`, `pont demarrer` est refusé et la validation part sans capture."""
+        fiche = {"cle": "srv-1", "outils": "Read, Bash(git:*)"}
+        pilote = boucle.Moteur._avec_le_pont(fiche)
+        self.assertEqual(pilote["outils"], "Read, Bash(git:*), Bash(pont:*)")
+        self.assertEqual(fiche["outils"], "Read, Bash(git:*)")
+        self.assertIs(boucle.Moteur._avec_le_pont(pilote), pilote)       # déjà ouvert : rien à ajouter
+
     def test_premier_passage_propose_le_genre_d_un_projet_cree_au_bureau(self):
         f = json.loads(self.factory.read_text(encoding="utf-8"))
         self.factory.write_text(json.dumps({**f, "genre": None, "description": "Un site d'une page pour un café."}),

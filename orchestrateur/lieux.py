@@ -27,9 +27,9 @@ _HORS_COMPARAISON = ("nom", "lieu", "regroupement")      # ce qu'une proposition
 # Ce que la partie locale d'une étape découpée dit à son agent (au journal de sa tâche, en tête) : le code est déjà écrit.
 CONSIGNE_PARTIE_LOCALE = (
     "Partie locale d'une étape découpée : le code est déjà écrit par l'étape précédente et fusionné dans le dépôt. "
-    "Tu ne le réécris pas : tu récupères le dépôt à jour, tu compiles, tu testes (au premier plan, sur le poste), tu "
-    "captures ce qu'il faut montrer et tu rends ce que la validation suivante attend (captures, apk, mode opératoire). "
-    "Ne corrige que ce qui empêche de compiler ou de tester, et dis-le.")
+    "Tu ne le réécris pas : tu récupères le dépôt à jour, tu compiles, tu testes (au premier plan, sur le poste) et tu "
+    "rends ce que la validation suivante attend (apk, mode opératoire). Aucune capture d'écran ici : l'agent pilote du "
+    "serveur les prend à partir de l'apk. Ne corrige que ce qui empêche de compiler ou de tester, et dis-le.")
 
 
 def est_partie_locale(flux, etape):

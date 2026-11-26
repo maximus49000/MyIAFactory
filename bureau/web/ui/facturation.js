@@ -313,7 +313,7 @@ export function demandeParallelisme(locaux, cloud, plus = {}) {
 
 // L'ordre des lieux : les valeurs des trois rangs (vides ignorées). Refuse un lieu inconnu ou répété ; `facultatif` (un métier) :
 // aucun lieu veut dire « comme le projet » (`ordre: null`). Rend {ordre} ou {erreur}.
-export const LIEUX_ORDRE = ["local", "serveur", "cloud"];
+export const LIEUX_ORDRE = ["serveur", "local", "cloud"];
 export const LIBELLES_LIEUX_ORDRE = {local: "poste (local)", serveur: "serveur", cloud: "cloud"};
 export function ordreDeLieux(valeurs, facultatif = false) {
   if (!Array.isArray(valeurs)) return {erreur: "L'ordre des lieux est illisible."};

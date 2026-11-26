@@ -8,6 +8,7 @@ déploiements simultanés. Le résultat (ok, retour arrière, échec) est écrit
 montre (zone Services) ; aucune valeur secrète ne passe ici.
 """
 import sys
+from datetime import datetime, timezone
 import threading
 from pathlib import Path
 
@@ -38,6 +39,7 @@ def raison_de_ne_pas_deployer(dossier, module=None):
 
 ESSAIS = {}                   # {dossier: (commit essayé, heure)} : jamais deux fois de suite le même commit en échec
 DELAI_MIN_S = 120             # au plus une vérification toutes les deux minutes par projet
+EN_COURS_PERIME_S = 3300      # un « en cours » plus vieux que la durée maximale d'un déploiement (envoi 600 s + 2400 s) est abandonné
 _DERNIERE = {}
 
 
@@ -51,6 +53,16 @@ def _commit_du_depot(dossier):
         return None
     sortie = r.stdout.strip()
     return sortie if r.returncode == 0 and len(sortie) == 40 else None
+
+
+def _en_cours_perime(deploiement, maintenant):
+    """Vrai si le déploiement « en cours » du cache est plus vieux que la durée maximale d'un déploiement : le poste (ou le
+    moteur) s'est arrêté pendant qu'il tournait et n'a jamais pu le conclure ; il ne doit plus bloquer les suivants."""
+    try:
+        debut = datetime.strptime(str(deploiement.get("debut")), "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+    except ValueError:
+        return False
+    return maintenant - debut.timestamp() > EN_COURS_PERIME_S
 
 
 def deployer_si_modifie(dossier, maintenant, module=None, commit_du_depot=_commit_du_depot, declencher_=None,
@@ -73,7 +85,8 @@ def deployer_si_modifie(dossier, maintenant, module=None, commit_du_depot=_commi
         return None
     fiche = m.lire_cache().get(projet)
     fiche = fiche if isinstance(fiche, dict) else {}
-    if isinstance(fiche.get("deploiement"), dict) and fiche["deploiement"].get("statut") == "en_cours":
+    if (isinstance(fiche.get("deploiement"), dict) and fiche["deploiement"].get("statut") == "en_cours"
+            and not _en_cours_perime(fiche["deploiement"], maintenant)):
         return None
     commit = commit_du_depot(dossier)
     if commit is None:

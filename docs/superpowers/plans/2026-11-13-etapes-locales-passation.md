@@ -52,7 +52,7 @@ changement de branche ; pousser à la fin de la phase. Aucune donnée de projet 
   son étape par identifiant (`v["pas"]` recalculé : il finit sa partie code puis enchaîne sur `<id>-local`), puis départ
   de ce qui peut partir ; `refuser` → levée, rien ne change. Demande `lieu_etape` `{etape, lieu}` → `lancer lieux regler`
   tout de suite, sans décision ni coût. La tâche d'une partie locale porte `CONSIGNE_PARTIE_LOCALE` en tête de son journal
-  (récupérer, compiler, tester au premier plan, capturer, rendre ce que la validation attend, ne pas réécrire le code).
+  (récupérer, compiler, tester au premier plan, rendre ce que la validation attend, ne pas réécrire le code).
 - **Consignes du chef** : `definir_workflow` et `proposer_organisation` rendent `lieu` par étape et découpent une étape
   mixte (`<id>` « … : code » `indifférent`, puis `<id>-local` `local`). Longueurs tenues : `proposer_organisation`
   56 lignes / 5519 caractères (limites 56 / 5600), `definir_workflow` 47 / 5208.

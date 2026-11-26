@@ -1,5 +1,6 @@
 """Un test (recette) ne part jamais sur un clone qui n'a pas le travail déjà fait : la branche agent/<tâche> d'une tâche
 faite de la même fonctionnalité est fusionnée d'abord (essai réel FM_Stats f29 : le testeur concluait « code absent »)."""
+import shutil
 import subprocess
 from unittest import mock
 
@@ -75,3 +76,18 @@ class FusionAvantTest(tsr.AvecValidation):
         self.git("merge", "--no-ff", "-q", "-m", "fusion", f"agent/{self.dev}")
         self.etat["branches_cache"] = {}
         self.assertTrue(regles._amont_pret(self.projet, self.etat, self.la(self.recette)))
+
+    # --- Une consigne qui cite une branche absente le dit à l'agent (FM_Stats a14 : agent/t289 jamais rapatriée).
+
+    def test_la_consigne_dit_qu_une_branche_citee_n_existe_pas(self):
+        texte = regles._avec_les_branches_verifiees(self.projet, "Reprends le travail de agent/t999 puis celui de agent/" + self.dev)
+        self.assertIn("agent/t999 n'existe pas", texte)
+        self.assertNotIn(f"agent/{self.dev} n'existe pas", texte)
+
+    def test_branches_toutes_presentes_ou_aucune_citee_le_texte_est_intact(self):
+        self.assertEqual(regles._avec_les_branches_verifiees(self.projet, f"Fusionne agent/{self.dev}."), f"Fusionne agent/{self.dev}.")
+        self.assertEqual(regles._avec_les_branches_verifiees(self.projet, "Rien à citer."), "Rien à citer.")
+
+    def test_sans_depot_git_le_texte_est_intact(self):
+        shutil.rmtree(self.projet.dossier / ".git", ignore_errors=True)
+        self.assertEqual(regles._avec_les_branches_verifiees(self.projet, "Voir agent/t1."), "Voir agent/t1.")

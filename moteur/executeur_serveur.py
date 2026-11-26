@@ -50,6 +50,7 @@ ECHEANCE = "durée maximale de l'agent serveur atteinte"
 LIMITE = "agent serveur arrêté par une limite du serveur"     # toute autre limite (disque, sortie, travail trop gros)
 MARGE_SUIVI_S = 120                 # le suivi attend delai_s + 120 s (le veilleur du serveur conclut avant)
 ACTIFS = ("en_attente", "en_cours")
+GRACE_FANTOME_S = 60               # une exécution dont l'arrêt est voulu et qui répond encore : attendue ce temps au plus
 MOTIF_SESSION = re.compile(DRAPEAUX["--resume"], re.ASCII)
 MOTIF_BASE = re.compile(r"[0-9a-f]{40}", re.ASCII)
 RAISON_DUREE = "Durée maximale"     # raison du veilleur à l'échéance de duree_s (serveur_ovh/taches/lancer_agent.sh)
@@ -306,6 +307,43 @@ class ExecuteurServeur:
             trouve = i
         return trouve
 
+    def _liberer_les_fantomes(self, sa, st):
+        """Avant tout lancement : une exécution de la même tâche dont l'arrêt est voulu (`arret_demande`) mais que l'index garde
+        active (`_active` ne la suit plus) fait refuser le lancement par `serveur_agent._doublon` (« une tâche d'agent … est
+        déjà en cours ») : la relance d'une tâche échouait deux fois, comptée comme un échec de l'agent, puis la tâche se
+        bloquait (essai réel FM_Stats t292, anomalies a14-a16 : exécution restée « en cours » après un accord refusé). Chacune
+        est sondée : finale, l'index le sait ; plus de trace sur le serveur, elle est close « échouée » ; encore vivante et
+        l'arrêt est redemandé et attendu `GRACE_FANTOME_S` au plus. Une exécution dont l'arrêt n'est pas voulu, ou d'un autre genre
+        (une réponse aux questions), n'est jamais touchée. Rend les identifiants libérés."""
+        suivie, liberees = self._active(st), []
+        for i, f in self._fiches(st):
+            if (i == suivie or not self._de_la_tache(f) or f.get("etat") not in ACTIFS or f.get("abandonnee") is True
+                    or f.get("arret_demande") is not True):
+                continue      # seules comptent les exécutions de CETTE tâche dont l'arrêt est voulu (une réponse n'est jamais touchée)
+            arret_voulu = True
+            fin_attente, arret_fait = self._horloge() + GRACE_FANTOME_S, False
+            while True:
+                lu = st.etat(i, self.dossier, self.ssh)
+                etat, raison = lu.get("etat"), str(lu.get("raison") or "")
+                if etat in st.FINAUX:
+                    self._noter(st, i, {"etat": etat, "statut": lu.get("statut"), "arret_relaye": True})
+                    liberees.append(i)
+                    break
+                if etat == "inconnu" and (self._rien_sur_le_serveur(st, lu) or raison.startswith(RAISON_SANS_ETAT)):
+                    self._noter(st, i, {"etat": "echouee", "statut": "erreur", "fin": st._maintenant_iso(), "arret_relaye": True,
+                                        "raison": "Exécution close avant la relance : le serveur n'en a plus de trace."})
+                    liberees.append(i)
+                    break
+                if etat != "en_cours" or not arret_voulu:
+                    break          # vivante sans arrêt voulu, ou serveur muet : rien n'est touché
+                if not arret_fait:
+                    st.arreter(i, self.dossier, self.ssh)
+                    arret_fait = True
+                elif self._horloge() >= fin_attente:
+                    break
+                self._dormir(self.pas_s)
+        return liberees
+
     def _relayer_arrets(self, sa, st):
         """Arrêts demandés quand le serveur ne répondait pas : redemandés, une fois réussis notés `arret_relaye`. Rien sur
         le serveur (lancement perdu) : acquis aussi (jamais un ssh à chaque appel pour toujours). Une tâche de ce genre
@@ -383,6 +421,7 @@ class ExecuteurServeur:
         consigne = Path(chemin_consigne).read_bytes()
         delai = max(1, int(delai_s))
         self._relayer_arrets(sa, st)
+        self._liberer_les_fantomes(sa, st)
         self._verifier_arret(sa, st, None)
         attente = self._rapatriement_en_attente(st)
         if attente is not None and attente[1].get("etat") == "arretee":

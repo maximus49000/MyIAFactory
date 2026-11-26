@@ -2337,7 +2337,8 @@ def confier_le_retour(projet, etat, demande_id, t, texte, termine=True):
     demande est déjà close (retour transmis à l'agent, qui a fini sans le reprendre)."""
     nouvelle = _creer_tache(projet, "Retour : " + t["titre"], t.get("fonctionnalite"),
                             t.get("role") or _role_production(projet, t.get("fonctionnalite")), "retour",
-                            element=t.get("element"), journal=["Retour de l'utilisateur : " + texte])
+                            element=t.get("element"),
+                            journal=["Retour de l'utilisateur : " + _avec_les_branches_verifiees(projet, texte)])
     if termine:
         _terminer(projet, {"demande": demande_id}, "J'ai confié votre retour à un agent.")
     suivre_demande(projet, demande_id, "confie", f"Confié à la tâche {nouvelle} : suivez-la au tableau.", tache=nouvelle)
@@ -5529,8 +5530,30 @@ def _appeler_par_son_nom(projet, etat, tid, fid, cle, prenom, fiche, commandes):
         f"{PAR_SON_NOM}{texte} ({prenom})")
 
 
+MOTIF_BRANCHE_CITEE = re.compile(r"\bagent/[\w\-]+(?:\.[\w\-]+)*")
+
+
+def _avec_les_branches_verifiees(projet, texte):
+    """Une consigne qui cite une branche `agent/<tâche>` absente du clone du projet le dit à l'agent (essai réel FM_Stats a14 :
+    la correction citait agent/t289, jamais rapatriée) : il ne la cherche pas et refait le travail. Rien n'est ajouté sans
+    dépôt git lisible, ou si toutes les branches citées existent."""
+    cites = list(dict.fromkeys(MOTIF_BRANCHE_CITEE.findall(str(texte))))
+    if not cites:
+        return texte
+    git = service_permanent._git
+    code, racine = git(projet.dossier, "rev-parse", "--show-toplevel")
+    if code != 0 or Path(racine.strip()).resolve() != Path(projet.dossier).resolve():
+        return texte      # pas le dépôt du projet lui-même : rien à vérifier
+    absentes = [b for b in cites[:6] if git(projet.dossier, "rev-parse", "--verify", "-q", f"refs/heads/{b}")[0] != 0]
+    if not absentes:
+        return texte
+    return (f"{texte} Attention : {', '.join(absentes)} n'existe pas dans le clone du projet (aucun commit n'en a été rapatrié) : "
+            "ne la cherche pas, refais le travail depuis la branche principale.")
+
+
 def _reprendre_la_tache(projet, etat, tid, fid, supplement, journal):
     """La même tâche repart avec le même agent : débloquée, sortie de son lot, remise dans les départs à faire."""
+    supplement = _avec_les_branches_verifiees(projet, supplement)
     lancer(projet, "tache", {"id": tid, "bloquee": None, "lot": None, "journal": [journal]})
     for d in _etat(projet)["decisions"]:
         if d.get("genre") == GENRE_BLOCAGE and d.get("tache") == tid:
@@ -9085,6 +9108,7 @@ def _correction_du_chef(projet, etat, t, ctx, consigne, metier):
     """Une tâche de correction (le métier choisi par le Chef) ; la tâche bloquée en dépend et repart quand elle est faite.
     Pour une branche cloud qui ne fusionne pas, la correction règle le conflit (la tâche, déjà faite, n'attend rien)."""
     tid, fid = t["id"], t.get("fonctionnalite")
+    consigne = _avec_les_branches_verifiees(projet, consigne)
     if ctx["motif"] == "fusion":
         consigne = f"La branche « {ctx.get('branche')} » ne fusionne pas dans la branche principale : {consigne}"
     corr = _creer_tache(projet, f"Correction : {t['titre']}"[:120], fid, metier, "correction",

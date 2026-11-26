@@ -75,6 +75,8 @@ class FauxServeurAgent:
             return Path(fichier), "main", BASE
         return b"PAQUET-GIT", "main", BASE
 
+    doublon = False        # le refus de `serveur_agent._doublon` : un autre lancement actif du même nom
+
     def lancer_agent(self, demande, paquet, argv, consigne, message, apk=None, dossier=None, ssh=None,
                      attente_max_s=600, dormir=None, projet=None, git=None):
         if isinstance(paquet, Path):
@@ -83,6 +85,11 @@ class FauxServeurAgent:
                                 "message": message, "dossier": dossier, "projet": projet, "apk": apk})
         if self.refus_lancer is not None:
             raise self.refus_lancer
+        if self.doublon:
+            from types import SimpleNamespace
+            message = sa._doublon(dossier, SimpleNamespace(projet=demande["projet"], tache=demande["tache"], id=self.ident))
+            if message:
+                raise st.RefusLancement(message)
         st.Index(dossier).enregistrer(self.ident, {
             "type": "agent", "etat": "en_cours", "serveur_id": "ovh1", "mode": demande["mode"],
             "projet": demande["projet"], "tache": demande["tache"], "genre": demande.get("genre", "tache"),
@@ -875,6 +882,53 @@ class VagueFinale(Base):
         appel.appeler("c", "m", "sonnet", executer=ex, outils=OUTILS, delai_s=600)
         self.assertEqual(f.recuperations[0], (ID1, self.projet))
         self.assertEqual(len(f.lancements), 1)                     # jamais le résultat de cet appel
+
+    # --- Une exécution « en cours » qui n'en est plus une ne bloque plus la relance (FM_Stats t292, a14-a16).
+
+    def test_un_fantome_sans_trace_sur_le_serveur_est_clos_puis_la_relance_part(self):
+        f = self.faux()
+        f.doublon = True
+        f.etats = ["sans_etat", "terminee"]
+        self.fiche(ID1, arret_demande=True, arret_relaye=True)      # arrêt voulu (accord refusé), jamais constaté
+        f.ident = AUTRE
+        r = appel.appeler("c", "m", "sonnet", executer=self.executeur(), outils=OUTILS, delai_s=600)
+        self.assertEqual(r.texte, "fini")
+        self.assertEqual(len(f.lancements), 1)
+        fiche = st.Index(self.dossier).lire()[ID1]
+        self.assertEqual((fiche["etat"], fiche["statut"]), ("echouee", "erreur"))
+        self.assertIn("n'en a plus de trace", fiche["raison"])
+
+    def test_une_execution_finie_sur_le_serveur_est_liberee_puis_la_relance_part(self):
+        f = self.faux(etats=("terminee",))
+        f.doublon = True
+        self.fiche(ID1, arret_demande=True, arret_relaye=True)
+        f.ident = AUTRE
+        r = appel.appeler("c", "m", "sonnet", executer=self.executeur(), outils=OUTILS, delai_s=600)
+        self.assertEqual(r.texte, "fini")
+        self.assertEqual(st.Index(self.dossier).lire()[ID1]["etat"], "terminee")
+
+    def test_une_reponse_aux_questions_n_est_jamais_touchee_par_la_liberation(self):
+        f = self.faux(etats=("en_cours",))
+        f.doublon = True
+        self.fiche(ID1, genre="reponse", arret_demande=True, arret_relaye=True)
+        f.ident = AUTRE
+        with self.assertRaises(appel.ErreurAppel) as e:
+            appel.appeler("c", "m", "sonnet", executer=self.executeur(), outils=OUTILS, delai_s=600)
+        self.assertIn("déjà en cours", e.exception.raison)
+        self.assertEqual(f.arrets, [])
+        self.assertNotIn(ID1, f.sondes)
+
+    def test_un_arret_voulu_encore_vivant_est_redemande_et_attendu_puis_libere(self):
+        f = self.faux()
+        f.doublon = True
+        f.etats = ["en_cours", "en_cours", "arretee", "terminee"]
+        f.reponses_arret = ["en_cours"]
+        self.fiche(ID1, arret_demande=True, arret_relaye=True)
+        f.ident = AUTRE
+        r = appel.appeler("c", "m", "sonnet", executer=self.executeur(), outils=OUTILS, delai_s=600)
+        self.assertEqual(r.texte, "fini")
+        self.assertIn(ID1, f.arrets)
+        self.assertEqual(st.Index(self.dossier).lire()[ID1]["etat"], "arretee")
 
     def test_etat_illisible_persistant_borne(self):
         f = self.faux(etats=("illisible",))

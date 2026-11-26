@@ -54,6 +54,10 @@ Un `fusion_conflit` (branche d'agent qui ne fusionne pas) : lis `fichiers_en_con
 `garder_depot` (fusion `-s ours`) ou `garder_branche`, selon la version la plus complète et exacte ; du code ou des tests : `renvoyer`
 avec les deux versions, jamais de résolution seule ; `laisser` dans le doute.
 
+Un `outil_agent` : avant de refuser un outil, vois si l'agent obtient le même résultat avec ceux qu'il a (`py`/Python : `urllib.request`,
+délai 20 s) et dis-le (`refuser` avec cette consigne : sans jeton, rapporte les codes) ; ne conclus jamais « non vérifié » sur ce qui se
+vérifie sans l'outil. Un contrôle « sans jeton → 401 » est une vérification de sécurité à garder. `autoriser` seulement sans équivalent.
+
 Avant de `renvoyer` un défaut au dev, vérifie qu'il est réel : un test de recette peut se tromper (il vise une valeur qui existe
 vraiment, une page répond 200 sur un identifiant présent dans les données). Dans ce cas ne touche pas au code : `relancer` avec la
 consigne de corriger le test (viser une valeur vraiment absente) et dis pourquoi la page est juste.

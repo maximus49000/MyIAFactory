@@ -335,6 +335,18 @@ def poser_secrets(racine, valeurs, dossier=plateforme_acces.DOSSIER, ssh=platefo
     return code, rep
 
 
+def deploiement_abandonne(deploiement):
+    """Vrai si un déploiement « en cours » du cache n'a plus de processus pour le mener (le moteur ou le bureau qui l'avait
+    lancé a été relancé : essai réel FM_Stats, 2026-11-26, « en cours » resté affiché 20 minutes sans rien qui tourne)."""
+    if not isinstance(deploiement, dict) or deploiement.get("statut") != "en_cours":
+        return False
+    pid = deploiement.get("pid")
+    if not isinstance(pid, int):
+        return False
+    from moteur.verrou import pid_vivant
+    return not pid_vivant(pid)
+
+
 @_garder
 def deployer(racine, commit=None, dossier=plateforme_acces.DOSSIER, ssh=plateforme_ssh, bureau=None, git=None):
     """Déploie le service du projet au commit donné (HEAD par défaut) : dépôt du script, sources, variables, puis
@@ -347,7 +359,7 @@ def deployer(racine, commit=None, dossier=plateforme_acces.DOSSIER, ssh=platefor
     sources = _sources(racine, commit, git)
     masques = _masques(projet, dossier)
     _noter(dossier, projet, {"dossier": str(racine), "deploiement": {"commit": commit, "debut": _maintenant_iso(),
-                                                                      "statut": "en_cours"}}, masques)
+                                                                      "statut": "en_cours", "pid": os.getpid()}}, masques)
     erreur = _deposer(serveur, ssh)
     if erreur:
         _noter(dossier, projet, {"deploiement": {"commit": commit, "statut": "echec", "detail": erreur}}, masques)

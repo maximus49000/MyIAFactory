@@ -201,39 +201,73 @@ VERBES = {"Grep": "cherche dans les fichiers", "Glob": "cherche dans les fichier
           "Agent": "délègue une recherche", "Skill": "suit une méthode"}
 
 
+def _action_du_bloc(bloc, dossier_projet):
+    """L'action courte d'un bloc du flux (« modifie scenes/combat.gd », « lance python », « rédige »), `None` si le bloc
+    n'en est pas une. Jamais le contenu d'une commande, d'un fichier ou d'un message."""
+    if bloc.get("type") == "tool_use":
+        nom, entree = str(bloc.get("name") or ""), bloc.get("input") or {}
+        if nom in VERBES_FICHIER:
+            chemin = entree.get("file_path") or entree.get("notebook_path") or entree.get("path")
+            return f"{VERBES_FICHIER[nom]} {_fichier_court(chemin, dossier_projet)}"[:MAX_ACTION]
+        if nom in ("Bash", "PowerShell"):
+            # le programme qui tourne : le dernier d'une chaîne « a && b && c », avant tout « | tail » de mise
+            # en forme, jamais le « cd dossier && » du début (essais réels : « lance cd », « lance ls » pour
+            # « cd … && ls … && grep … && python tests »)
+            etapes = [e.split("|", 1)[0].split() for e in re.split(r"&&|\|\||;", str(entree.get("command") or ""))]
+            utiles = [m for m in etapes if m and m[0].lower() not in ("cd", "set-location", "pushd", "export")]
+            mot = utiles[-1][0] if utiles else ""
+            mot = re.sub(r"[^\w.-]", "", Path(mot.strip("\"'").replace("\\", "/")).name)[:20]
+            return f"lance {mot}" if mot else "lance une commande"
+        if nom in VERBES:
+            return VERBES[nom]
+        outil = re.sub(r"[^\w.-]", "", nom)[:30]
+        return f"utilise {outil or 'un outil'}"
+    if bloc.get("type") == "text":
+        return "rédige"
+    return None
+
+
+def _blocs_assistant(d):
+    contenu = (d.get("message") or {}).get("content") if d.get("type") == "assistant" else None
+    return [b for b in contenu if isinstance(b, dict)] if isinstance(contenu, list) else []
+
+
 def derniere_action(lignes, dossier_projet):
     """La dernière action de l'agent dans son flux, dite courte : « modifie scenes/combat.gd », « lance python »,
     « rédige ». Jamais le contenu d'une commande, d'un fichier ou d'un message. `None` s'il n'a encore rien fait."""
     for d in reversed(lignes):
-        if d.get("type") != "assistant":
-            continue
-        contenu = (d.get("message") or {}).get("content")
-        if not isinstance(contenu, list):
-            continue
-        for bloc in reversed(contenu):
-            if not isinstance(bloc, dict):
-                continue
-            if bloc.get("type") == "tool_use":
-                nom, entree = str(bloc.get("name") or ""), bloc.get("input") or {}
-                if nom in VERBES_FICHIER:
-                    chemin = entree.get("file_path") or entree.get("notebook_path") or entree.get("path")
-                    return f"{VERBES_FICHIER[nom]} {_fichier_court(chemin, dossier_projet)}"[:MAX_ACTION]
-                if nom in ("Bash", "PowerShell"):
-                    # le programme qui tourne : le dernier d'une chaîne « a && b && c », avant tout « | tail » de mise
-                    # en forme, jamais le « cd dossier && » du début (essais réels : « lance cd », « lance ls » pour
-                    # « cd … && ls … && grep … && python tests »)
-                    etapes = [e.split("|", 1)[0].split() for e in re.split(r"&&|\|\||;", str(entree.get("command") or ""))]
-                    utiles = [m for m in etapes if m and m[0].lower() not in ("cd", "set-location", "pushd", "export")]
-                    mot = utiles[-1][0] if utiles else ""
-                    mot = re.sub(r"[^\w.-]", "", Path(mot.strip("\"'").replace("\\", "/")).name)[:20]
-                    return f"lance {mot}" if mot else "lance une commande"
-                if nom in VERBES:
-                    return VERBES[nom]
-                outil = re.sub(r"[^\w.-]", "", nom)[:30]
-                return f"utilise {outil or 'un outil'}"
-            if bloc.get("type") == "text":
-                return "rédige"
+        for bloc in reversed(_blocs_assistant(d)):
+            action = _action_du_bloc(bloc, dossier_projet)
+            if action is not None:
+                return action
     return None
+
+
+MAX_HISTORIQUE = 50
+
+
+def _heure_de_la_ligne(d):
+    if not isinstance(d.get("timestamp"), str):
+        return None
+    try:
+        return datetime.fromisoformat(d["timestamp"].replace("Z", "+00:00")).astimezone().isoformat(timespec="seconds")
+    except ValueError:
+        return None
+
+
+def historique_des_actions(lignes, dossier_projet, limite=MAX_HISTORIQUE):
+    """Les appels d'outils de l'agent, du plus récent au plus ancien : `[{"t": heure ISO de la ligne | None, "texte":
+    action courte}]`, `limite` au plus. Les mêmes textes courts que `derniere_action` (jamais le contenu d'une commande,
+    d'un fichier ni d'un message) ; un message de texte n'est pas un appel."""
+    rendu = []
+    for d in reversed(lignes):
+        for bloc in reversed(_blocs_assistant(d)):
+            if bloc.get("type") != "tool_use":
+                continue
+            rendu.append({"t": _heure_de_la_ligne(d), "texte": _action_du_bloc(bloc, dossier_projet)})
+            if len(rendu) >= limite:
+                return rendu
+    return rendu
 
 
 def lire_avancement(chemin):
@@ -512,6 +546,7 @@ def ajouter_au_travail(taches, dossier_factory, vivant=processus_vivant, attente
                 continue
             info = {"depuis": _iso(debut), "agent": etat.get("agent"), "action": action, "action_t": action_t,
                     "vie_t": vie_t, "conso": conso_en_cours(flux), "phase": phase_du_flux(lignes),
+                    "historique": historique_des_actions(lignes, etat.get("dossier")),
                     "attente_deportee": attente_deportee(dossier_attente or ATTENTE, datetime.now().astimezone(),
                                                          cwd=etat.get("dossier"), agent=etat.get("cle")),
                     "avancement": lire_avancement(f.with_suffix(".avancement.json"))}
@@ -583,11 +618,23 @@ def questions(dossier_factory, tache):
     return [x["texte"] for x in _questions_et_demandes(dossier_factory, tache)]
 
 
-def ajouter_question(dossier_factory, tache, texte, demande=None):
+def ajouter_question(dossier_factory, tache, texte, demande=None, retour=False):
+    """Une question ou un retour de l'utilisateur pour l'agent au travail ; `retour` : c'est une consigne de travail (le
+    bouton « Faire un retour »), pas une question : si l'agent finit sans la reprendre, elle devient une tâche « Retour »."""
     chemin = _chemin_questions(dossier_factory, tache)
     _preparer(chemin.parent)
     _ecrire(chemin, _questions_et_demandes(dossier_factory, tache)
-            + [{"texte": str(texte), **({"demande": demande} if demande else {})}])
+            + [{"texte": str(texte), **({"demande": demande} if demande else {}), **({"retour": True} if retour else {})}])
+
+
+def retours_en_attente(dossier_factory, tache):
+    """`{demande: texte}` : les retours (consignes de travail) en attente pour la tâche, sans les retirer du fichier."""
+    try:
+        q = json.loads(_chemin_questions(dossier_factory, tache).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return {x["demande"]: x["texte"] for x in q if isinstance(x, dict) and x.get("retour") is True
+            and isinstance(x.get("demande"), str) and isinstance(x.get("texte"), str)}
 
 
 def prendre_questions_et_demandes(dossier_factory, tache):

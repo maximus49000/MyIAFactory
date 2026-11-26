@@ -607,7 +607,8 @@ def _transmettre_a_l_agent(projet, demande, fid, tid, agent):
     if joints:      # tu peux les lire : chemin, type, taille de chacun
         texte += (" Fichiers joints (à lire si utile) :\n" + "\n".join(fichiers_joints.lignes_pour_agent(joints)) + "\n"
                   + fichiers_joints.CONSIGNE_LECTURE)
-    detache.ajouter_question(projet.factory.parent, tid, texte or "(message sans texte)", demande=demande["id"])
+    detache.ajouter_question(projet.factory.parent, tid, texte or "(message sans texte)", demande=demande["id"],
+                             retour=demande.get("type") == "retour")
     prenom = prenom_de(projet, agent)
     dit = texte_question_transmise(prenom)
     _dire(projet, fid, dit)
@@ -2306,12 +2307,18 @@ def _sur_retour(projet, demande, etat):
         return _reprendre_la_tache(projet, etat, t["id"], fid,
                                    "Consigne de l'utilisateur pour la reprise de cette tâche : " + demande["texte"],
                                    "Reprise sur votre retour : " + texte)
+    return confier_le_retour(projet, etat, demande["id"], t, demande["texte"])
+
+
+def confier_le_retour(projet, etat, demande_id, t, texte, termine=True):
+    """Le retour de l'utilisateur sur la tâche `t` devient une tâche « Retour » confiée à un agent. `termine` faux : la
+    demande est déjà close (retour transmis à l'agent, qui a fini sans le reprendre)."""
     nouvelle = _creer_tache(projet, "Retour : " + t["titre"], t.get("fonctionnalite"),
                             t.get("role") or _role_production(projet, t.get("fonctionnalite")), "retour",
-                            element=t.get("element"), journal=["Retour de l'utilisateur : " + demande["texte"]])
-    _terminer(projet, {"demande": demande["id"]}, "J'ai confié votre retour à un agent.")
-    suivre_demande(projet, demande["id"], "confie", f"Confié à la tâche {nouvelle} : suivez-la au tableau.",
-                   tache=nouvelle)
+                            element=t.get("element"), journal=["Retour de l'utilisateur : " + texte])
+    if termine:
+        _terminer(projet, {"demande": demande_id}, "J'ai confié votre retour à un agent.")
+    suivre_demande(projet, demande_id, "confie", f"Confié à la tâche {nouvelle} : suivez-la au tableau.", tache=nouvelle)
     return _demarrer_en_attente(projet, etat, t.get("fonctionnalite"))
 
 
@@ -5582,6 +5589,30 @@ def _tache_de_flux(projet, etat, v, journal=None):
     return tid
 
 
+def _avec_les_livrables_rapatries(projet, v, precedent):
+    """Un agent serveur dont le rapport ne joint pas son livrable, alors que le moteur l'a rapatrié au poste (« Livrable
+    rapatrié : <chemin> (… » au journal de sa tâche) : le livrable existe, la validation ne dépend pas de ce que l'agent
+    a écrit dans `fichiers` (essai réel, FM_Stats, 2026-11-26 : cinq reprises « sans livrable à essayer » alors que l'APK
+    était au poste)."""
+    fichiers = [x for x in precedent.get("fichiers") or [] if isinstance(x, dict)]
+    if any(rel.est_executable(x.get("chemin")) for x in fichiers):
+        return precedent
+    flux = [t for t in v.get("taches") or [] if str(_tache(projet, t).get("etape") or "").startswith(ETAPES_DE_FLUX)]
+    if not flux:
+        return precedent
+    ajoutes = []
+    for ligne in lancer(projet, "detail", {"tache": flux[-1]}).get("journal") or []:
+        m = re.match(r"Livrable rapatrié : (.+?) \(", str(ligne.get("texte") if isinstance(ligne, dict) else ligne))
+        if m and rel.est_executable(m.group(1)) and m.group(1) not in [x["chemin"] for x in ajoutes]:
+            try:
+                existe = _fichier_existe(projet, {"fichiers": [{"chemin": m.group(1)}]}, rel.est_executable)
+            except (OSError, ValueError):
+                existe = False
+            if existe:
+                ajoutes.append({"chemin": m.group(1), "livrable": True, "element": v["element"]["id"]})
+    return {**precedent, "fichiers": fichiers + ajoutes} if ajoutes else precedent
+
+
 def _attendre_le_directeur(projet, etat, v, s):
     """L'élément arrive à une étape de validation : une tâche sans agent et une décision de projet, avec le compte rendu
     et les fichiers de l'étape précédente, ses points à vérifier et son lien d'accès. Rien ne part tant que le Directeur
@@ -5598,6 +5629,7 @@ def _attendre_le_directeur(projet, etat, v, s):
     if nature in ("visuel", "son", "mecanique") and not apk_exige:   # jamais l'apk pour juger un visuel, un son…
         precedent = {**precedent, "fichiers": [x for x in precedent.get("fichiers") or []
                                                if not rel.est_executable(x.get("chemin"))]}
+    precedent = _avec_les_livrables_rapatries(projet, v, precedent)
     if not rel.texte_dit_ok(precedent.get("doit_marcher"), rel.MAX_DOIT_MARCHER):
         # Après un renvoi, ce qui doit marcher est connu : les points que le Directeur a demandé de revoir (essai réel :
         # l'agent, jugeant la correction déjà faite ailleurs, ne le disait pas, deux fois, et la validation restait bloquée).

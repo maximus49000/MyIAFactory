@@ -576,8 +576,14 @@ sa liste de points (faits, en cours, restants), le temps passé, son coût et **
 - **Le bureau** lit une copie locale, `agents-en-cours/<cle>.direct.json`, écrite par `ExecuteurServeur._copier_direct` et supprimée
   à la fin de l'agent. `detache.ajouter_au_travail` la traite comme un agent local ; une copie non rafraîchie depuis 3 minutes
   (moteur arrêté) n'est plus montrée. Dans un lot, la tâche en cours est la première ; les autres sont « à venir ».
-- **L'agent peut forger** `direct.json` (il peut écrire sous `/sortie`) : cela ne trompe que l'affichage de sa propre fiche ; un lien
-  posé à sa place est remplacé, jamais suivi.
+- **L'agent peut forger** `direct.json` et `/maison/avancement.json` (il peut écrire sous `/sortie` et `/maison`) : ce fichier est lu
+  **avant** le contrôle du secret de fin de tâche, donc il est traité comme hostile. L'entrée retire de ce qu'elle publie tout
+  texte portant le jeton (ou un alignement base64), points d'avancement compris, et ne publie rien si le jeton reste quelque part ;
+  l'**hôte** relit le fichier par un script dédié (`serveur_agent._DIRECT`) qui y cherche le jeton avant de le rendre (code 6 :
+  trouvé ; 7 : contrôle impossible : rien n'est rendu). Un lien posé à la place du fichier est remplacé, jamais suivi.
+  Limite connue : un jeton coupé en morceaux sur plusieurs champs n'est pas détecté (comme pour le flux).
+- **Âge du flux.** L'entrée publie `flux_age_s` (secondes depuis le dernier octet du flux) ; l'exécuteur le compte sur l'horloge du
+  poste : un agent figé n'est plus montré « à l'instant ». La consommation (`usage`) est cumulée sur tout le flux, pas seulement la fin relue.
 
 ## Limites connues
 

@@ -1,0 +1,86 @@
+{
+ "id": "22_execution_deja_en_cours_apres_accord_refuse",
+ "titre": "« Une tâche d'agent t292 est déjà en cours » après un accord refusé : libérer l'exécution puis relancer",
+ "type": "jugement",
+ "negatif": false,
+ "source": "Essai réel FM_Stats t292, anomalies a14-a16, 2026-11-26 (23:24-23:28)",
+ "note": "Défaut du moteur (exécution restée « en cours » après un accord refusé). Le Chef recommande de libérer l'exécution fantôme puis de relancer ; Claude autonome a répondu suivre, et c'est juste.",
+ "dossier": {
+  "decision": {
+   "genre": "blocage_analyse",
+   "motif": "echec",
+   "texte": "La tâche « Vérification : Déployer » est bloquée (l'agent n'a pas pu finir). Faut-il arrêter l'exécution fantôme ?",
+   "analyse": "La relance échoue (code 1 : « Une tâche d'agent « t292 » est déjà en cours pour ce projet : attendez sa fin ou choisissez un autre nom ») : l'exécution précédente est restée enregistrée en cours après l'accord refusé.",
+   "question": "Arrêter l'exécution fantôme puis relancer la tâche ?",
+   "recommandation": "Libérer l'exécution détachée de t292 (elle n'a plus de processus), puis relancer la tâche."
+  },
+  "verdicts": [
+   "suivre",
+   "preciser"
+  ],
+  "choix": [],
+  "questions": [],
+  "tache": {
+   "id": "t292",
+   "titre": "Vérification : Déployer",
+   "etape": "dev",
+   "metier": "testeur",
+   "element": null,
+   "journal": [
+    "Accord refusé : pas de déploiement.",
+    "Relance : Une tâche d'agent « t292 » est déjà en cours pour ce projet.",
+    "Relance : Une tâche d'agent « t292 » est déjà en cours pour ce projet."
+   ]
+  },
+  "fonctionnalite": {
+   "id": "f30",
+   "nom": "Statistiques par équipe",
+   "etape": "serie",
+   "flux": [
+    {
+     "nom": "Dev",
+     "validation": false
+    },
+    {
+     "nom": "Recette",
+     "validation": false
+    },
+    {
+     "nom": "Validation du Directeur",
+     "validation": true
+    }
+   ]
+  },
+  "lecons_du_metier": [],
+  "deja_appris": [],
+  "recentes": [],
+  "mots_interdits": [
+   "ProjetExemple"
+  ],
+  "anomalies": [],
+  "service": {
+   "adresse": "https://service.exemple"
+  }
+ },
+ "attendu": {
+  "verdicts": [
+   "suivre",
+   "preciser"
+  ]
+ },
+ "simule": {
+  "raison": "L'exécution fantôme bloque la relance : la libérer puis relancer est la bonne suite.",
+  "verdict": "suivre",
+  "texte": null,
+  "choix": null,
+  "reponses": null,
+  "generalisable": false,
+  "lecon": null,
+  "amelioration": {
+   "titre": "Libérer l'exécution d'un accord refusé",
+   "description": "Une exécution restée en cours après un refus bloque la relance."
+  },
+  "anomalies": null
+ },
+ "decision_id": "d22"
+}

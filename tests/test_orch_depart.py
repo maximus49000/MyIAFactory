@@ -180,6 +180,13 @@ class TestDepart(unittest.TestCase):
             self.assertEqual(depart.consigne_serveur(mode, "t7"), depart.consigne_serveur(mode, "t7", flutter=False))
             self.assertNotIn("personne n'approuve", depart.consigne_serveur(mode, "t7"))
 
+    def test_consigne_serveur_demande_la_liste_d_avancement_dans_la_maison(self):
+        for mode in ("seul", "pilote"):
+            c = depart.consigne_serveur(mode, "t7")
+            self.assertEqual(c.count("/maison/avancement.json"), 1)
+            self.assertIn('"points"', c)
+            self.assertIn('"en_cours"', c)
+
     def test_consigne_serveur_seul_et_pilote(self):
         seul, pilote = depart.consigne_serveur("seul", "t7"), depart.consigne_serveur("pilote", "t7")
         for c in (seul, pilote):

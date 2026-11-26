@@ -2345,6 +2345,17 @@ def _refaire_avant_la_validation(projet, demande, etat, t, qui="Directeur"):
     if v is None or avant is None:
         raise Refus("l'étape à refaire avant cette validation n'est plus dans le workflow")
     texte = " ".join(str(demande["texte"]).split())
+    if _seul_le_livrable_manquait(projet, v, t, texte):
+        # la validation n'était bloquée que faute de livrable, et le moteur le retrouve (rapatrié au poste) : elle est
+        # reposée aussitôt, sans refaire l'étape d'avant (un tour d'agent pour rien)
+        lancer(projet, "tache", {"id": t["id"], "colonne": "fait", "active": False, "bloquee": None,
+                                 "journal": ["Livrable retrouvé au poste : validation reposée sans refaire l'étape."]})
+        v.pop("rien_a_verifier", None)
+        v.update(phase="flux", pas=rang)
+        v["dernier_rapport"] = _avec_les_livrables_rapatries(projet, v, v.get("dernier_rapport") or {})
+        _terminer(projet, {"demande": demande["id"]}, "Le livrable est retrouvé : la validation est reposée.")
+        _attendre_le_directeur(projet, etat, v, production[rang])
+        return _demarrer_en_attente(projet, etat, fid)
     lancer(projet, "tache", {"id": t["id"], "colonne": "fait", "active": False, "bloquee": None,
                              "journal": [f"Renvoyé : {texte}"]})
     v.pop("rien_a_verifier", None)
@@ -2356,6 +2367,21 @@ def _refaire_avant_la_validation(projet, demande, etat, t, qui="Directeur"):
     _terminer(projet, {"demande": demande["id"]}, "L'étape précédente est refaite avec votre retour ; la validation "
                                                   "sera reposée ensuite.")
     return _demarrer_en_attente(projet, etat, fid)
+
+
+TEXTE_DE_RELANCE = "Relance demandée par le Directeur (même consigne)."
+
+
+def _seul_le_livrable_manquait(projet, v, t, texte):
+    """Vrai si la validation bloquée ne l'était que faute de livrable, que le retour est la simple relance (aucune
+    consigne nouvelle) et que le moteur retrouve maintenant un livrable rapatrié pour cet élément."""
+    raison = str(t.get("bloquee") or "")
+    if texte != TEXTE_DE_RELANCE or "sans livrable à essayer" not in raison:
+        return False
+    if any(m in raison for m in ("sans mode opératoire", "sans consigne", "Rien à valider", "sans l'APK", "plus ancien")):
+        return False
+    precedent = v.get("dernier_rapport") or {}
+    return any(rel.est_executable(x.get("chemin")) for x in _avec_les_livrables_rapatries(projet, v, precedent).get("fichiers") or [])
 
 
 def _sur_retour_element(projet, demande, etat):
@@ -5598,10 +5624,9 @@ def _avec_les_livrables_rapatries(projet, v, precedent):
     if any(rel.est_executable(x.get("chemin")) for x in fichiers):
         return precedent
     flux = [t for t in v.get("taches") or [] if str(_tache(projet, t).get("etape") or "").startswith(ETAPES_DE_FLUX)]
-    if not flux:
-        return precedent
     ajoutes = []
-    for ligne in lancer(projet, "detail", {"tache": flux[-1]}).get("journal") or []:
+    lignes = [ligne for t in reversed(flux) for ligne in reversed(lancer(projet, "detail", {"tache": t}).get("journal") or [])]
+    for ligne in lignes:
         m = re.match(r"Livrable rapatrié : (.+?) \(", str(ligne.get("texte") if isinstance(ligne, dict) else ligne))
         if m and rel.est_executable(m.group(1)) and m.group(1) not in [x["chemin"] for x in ajoutes]:
             try:
@@ -5610,6 +5635,7 @@ def _avec_les_livrables_rapatries(projet, v, precedent):
                 existe = False
             if existe:
                 ajoutes.append({"chemin": m.group(1), "livrable": True, "element": v["element"]["id"]})
+                break           # le plus récent suffit : le livrable rapatrié le plus récent de l'élément
     return {**precedent, "fichiers": fichiers + ajoutes} if ajoutes else precedent
 
 
@@ -6777,7 +6803,62 @@ def livrer_si_calme(projet, etat, force=False):
     return True
 
 
+SERVEUR_ESSAI_S = 600            # une livraison qui attend le serveur relance son déploiement toutes les dix minutes au plus
+
+
+def _attend_le_serveur(projet, etat, v):
+    """Vrai si l'élément ne peut pas être déclaré fait : sa livraison change le service permanent du projet, et le serveur
+    n'a pas encore cette version (règle du Directeur, 2026-11-26 : une livraison qui exige une mise à jour du serveur n'est
+    terminée que quand le serveur est à jour). L'élément reste en phase « serveur » ; `attendre_le_serveur` le conclut."""
+    if v.get("serveur_ok"):
+        return False
+    commit = v.get("serveur_commit") or service_permanent._commit_du_depot(projet.dossier)
+    if commit is None:
+        return False
+    try:
+        statut, detail = service_permanent.statut_du_serveur(projet.dossier, commit)
+    except Exception:  # noqa: BLE001 : jamais une raison d'arrêter une livraison
+        return False
+    if statut in ("sans_service", "a_jour"):
+        return False
+    if v.get("phase") != "serveur":
+        v.update(phase="serveur", serveur_commit=commit, serveur_depuis=time.time())
+        _dire(projet, v["fid"], f"« {v['element']['nom']} » est livré, mais il n'est pas terminé : le serveur doit d'abord "
+                                f"être mis à jour avec cette version ({detail}). Je le déploie et je conclus dès qu'il répond.")
+    return True
+
+
+def attendre_le_serveur(projet, etat):
+    """À chaque tour : les éléments livrés qui attendent le serveur. Le serveur à jour, l'élément est déclaré fait ; un
+    déploiement échoué est dit une fois (la carte Services montre le détail) ; sinon le déploiement est relancé toutes les
+    dix minutes. Rend les actions qui suivent (aucune en général)."""
+    actions = []
+    for v in list(_m(etat, "elements").values()):
+        if v.get("phase") != "serveur":
+            continue
+        commit = v.get("serveur_commit")
+        try:
+            statut, detail = service_permanent.statut_du_serveur(projet.dossier, commit)
+        except Exception:  # noqa: BLE001
+            continue
+        if statut in ("sans_service", "a_jour"):
+            v["serveur_ok"] = True
+            _dire(projet, v["fid"], f"Le serveur est à jour ({detail}) : « {v['element']['nom']} » est terminé.")
+            actions += _element_fait(projet, etat, v)
+        elif statut == "echec":
+            if not v.get("serveur_echec_dit"):
+                v["serveur_echec_dit"] = True
+                _dire(projet, v["fid"], f"« {v['element']['nom']} » reste à terminer : la mise à jour du serveur a échoué "
+                                        f"({detail}). Voir la zone « Services » ; je réessaie.")
+        if statut in ("attente", "echec") and time.time() - v.get("serveur_essai", v.get("serveur_depuis", 0)) > SERVEUR_ESSAI_S:
+            v["serveur_essai"] = time.time()
+            service_permanent.declencher(projet.dossier)
+    return actions
+
+
 def _element_fait(projet, etat, v):
+    if _attend_le_serveur(projet, etat, v):
+        return []
     v["phase"] = "fait"
     for cle in v.pop("lot_livraison", None) or []:       # les éléments livrés avec lui
         autre = _m(etat, "elements").get(cle)

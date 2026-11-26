@@ -214,3 +214,58 @@ class FinDeLivraison(tmr.Base):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class StatutDuServeur(unittest.TestCase):
+    """Une livraison n'est terminée que si le serveur a sa version (règle du Directeur, 2026-11-26)."""
+    LIVRE, ANCIEN = "a" * 40, "b" * 40
+
+    class Module(FauxAuto):
+        def a_un_service(self, dossier):
+            return True
+
+        def lire_declaration(self, dossier):
+            return {"dockerfile": "serveur/Dockerfile"}
+
+    def module(self, etat_serveur=None, deploiement=None):
+        fiche = {}
+        if etat_serveur is not None:
+            fiche["etat"] = etat_serveur
+        if deploiement is not None:
+            fiche["deploiement"] = deploiement
+        return self.Module(cache={"demo": fiche})
+
+    def statut(self, m, git, refus=None):
+        with mock.patch.object(service_permanent, "raison_de_ne_pas_deployer", lambda d, mod=None: refus):
+            return service_permanent.statut_du_serveur("d", self.LIVRE, module=m, git=git, maintenant=1795000000)
+
+    def test_sans_service_ou_sans_accord_rien_a_attendre(self):
+        m = self.module()
+        self.assertEqual(self.statut(m, None, refus="")[0], "sans_service")
+        self.assertEqual(self.statut(m, None, refus="accord non donné")[0], "sans_service")
+
+    def test_le_serveur_a_deja_le_commit(self):
+        m = self.module({"commit": self.LIVRE, "etat": "actif"})
+        self.assertEqual(self.statut(m, lambda *a: (0, ""))[0], "a_jour")
+
+    def test_une_livraison_qui_ne_touche_pas_au_service_n_attend_pas(self):
+        m = self.module({"commit": self.ANCIEN, "etat": "actif"})
+        git = lambda d, *a: (1, "") if a[0] == "merge-base" else (0, "android_app/lib/x.dart\n.factory/suivi.json\n")
+        self.assertEqual(self.statut(m, git)[0], "a_jour")
+
+    def test_une_livraison_qui_touche_au_service_attend_le_serveur(self):
+        m = self.module({"commit": self.ANCIEN, "etat": "actif"})
+        git = lambda d, *a: (1, "") if a[0] == "merge-base" else (0, "serveur/base.py\n")
+        self.assertEqual(self.statut(m, git)[0], "attente")
+
+    def test_deploiement_en_cours_du_bon_commit_attend(self):
+        m = self.module({"commit": self.LIVRE, "etat": "actif"},
+                        {"statut": "en_cours", "commit": self.LIVRE, "debut": "2026-11-26T11:13:48Z"})
+        self.assertEqual(self.statut(m, lambda *a: (0, ""))[0], "attente")
+
+    def test_deploiement_echoue_du_bon_commit_est_dit(self):
+        m = self.module({"commit": self.ANCIEN, "etat": "actif"}, {"statut": "echec", "commit": self.LIVRE, "detail": "build"})
+        git = lambda d, *a: (0, "serveur/base.py\n") if a[0] == "diff" else (1, "")
+        statut, detail = self.statut(m, git)
+        self.assertEqual((statut, detail), ("echec", "build"))
+

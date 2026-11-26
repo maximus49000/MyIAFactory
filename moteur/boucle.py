@@ -470,6 +470,7 @@ class Moteur:
         self._quota(projet)
         self._garder_les_reprises(projet, etat)
         self._deployer_le_service_si_modifie(projet)
+        self._executer(projet, regles.attendre_le_serveur(projet, etat))
 
     def _deployer_le_service_si_modifie(self, projet):
         """La case « Déployer automatiquement à chaque modification » (zone Services) : un commit neuf du projet est

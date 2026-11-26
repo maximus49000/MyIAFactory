@@ -2399,6 +2399,35 @@ class Validation(Base):
                                      journal=["Livrable rapatrié : build/fantome.apk (1 Mo, abc)"])
         self.assertEqual(regles._avec_les_livrables_rapatries(self.projet, {**v, "taches": [absent]}, {}), {})
 
+    def test_une_livraison_n_est_terminee_que_quand_le_serveur_est_a_jour(self):
+        """Règle du Directeur (2026-11-26) : une livraison qui exige une mise à jour du serveur attend le serveur."""
+        self.projet_avec_validation()
+        v = {"fid": "f1", "element": {"id": "e1", "nom": "Élément 1"}, "phase": "flux", "pas": 0, "taches": []}
+        etat = {"elements": {"f1/e1": v}}
+        statut = ["attente", "le service n'a pas encore cette version"]
+        with mock.patch.object(regles.service_permanent, "_commit_du_depot", lambda d: "c" * 40),                 mock.patch.object(regles.service_permanent, "statut_du_serveur", lambda *a, **k: tuple(statut)),                 mock.patch.object(regles.service_permanent, "declencher", lambda *a, **k: None):
+            regles._element_fait(self.projet, etat, v)
+            self.assertEqual(v["phase"], "serveur")                 # livré, pas terminé
+            regles.attendre_le_serveur(self.projet, etat)
+            self.assertEqual(v["phase"], "serveur")                 # le serveur n'est toujours pas à jour
+            statut[:] = ["a_jour", "cccccccccccc"]
+            regles.attendre_le_serveur(self.projet, etat)
+            self.assertEqual(v["phase"], "fait")                    # le serveur a la version : terminé
+
+    def test_la_relance_repose_la_validation_quand_seul_le_livrable_manquait(self):
+        self.projet_avec_validation()
+        self.fichier("build/jeu.apk", b"PK" + b"\x00" * 8)
+        tid = regles._creer_tache(self.projet, "Essai : e1", "f1", "dev", "flux:essai", element="e1",
+                                  journal=["Livrable rapatrié : build/jeu.apk (68,1 Mo, abc123)"])
+        v = {"taches": [tid], "element": {"id": "e1"}, "dernier_rapport": {}}
+        bloquee = {"bloquee": "Validation incomplète : l'étape précédente est restée sans livrable à essayer (deux fois)."}
+        self.assertTrue(regles._seul_le_livrable_manquait(self.projet, v, bloquee, regles.TEXTE_DE_RELANCE))
+        self.assertFalse(regles._seul_le_livrable_manquait(self.projet, v, bloquee, "Autre consigne"))      # une vraie consigne refait l'étape
+        autre = {"bloquee": bloquee["bloquee"] + " Validation en jeu sans mode opératoire (deux fois)."}
+        self.assertFalse(regles._seul_le_livrable_manquait(self.projet, v, autre, regles.TEXTE_DE_RELANCE))
+        sans = {**v, "taches": []}
+        self.assertFalse(regles._seul_le_livrable_manquait(self.projet, sans, bloquee, regles.TEXTE_DE_RELANCE))
+
     def test_visuel_sans_image_relance_et_l_apk_n_est_pas_une_preuve(self):
         self.fichier("build/jeu.apk", b"PK" + b"\x00" * 8)
         sans = self.rendu("visuel", ["build/jeu.apk"])

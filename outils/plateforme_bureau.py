@@ -202,7 +202,7 @@ def _ecrire_rdp(dossier, port):
     return chemin
 
 
-def ouvrir(dossier, popen=subprocess.Popen, lancer_rdp=subprocess.run, port_libre=_port_libre,
+def ouvrir(dossier, popen=plateforme_ssh._popen, lancer_rdp=subprocess.run, port_libre=_port_libre,
            attendre_port=_attendre_port, ssh_options=plateforme_ssh._options):
     """Ouvre la session graphique : tunnel SSH (127.0.0.1 seulement) puis Bureau à distance de Windows. Code 0/1/2."""
     import plateforme    # import tardif : plateforme importe ce module

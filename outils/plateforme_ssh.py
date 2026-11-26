@@ -18,6 +18,20 @@ CHANGEMENT_CLE = "HOST IDENTIFICATION HAS CHANGED"   # message d'OpenSSH quand l
 CLE_CHANGEE = "empreinte_changee"   # valeur de retour de `attendre_ssh` : abandon parce que l'empreinte du serveur a changé
 
 
+def _drapeaux():
+    """Le moteur et le bureau tournent sans console : sous Windows, un `ssh` lancé sans ce drapeau ouvre une fenêtre noire
+    à chaque appel."""
+    return {"creationflags": subprocess.CREATE_NO_WINDOW} if hasattr(subprocess, "CREATE_NO_WINDOW") else {}
+
+
+def _run(*args, **kw):
+    return subprocess.run(*args, **_drapeaux(), **kw)
+
+
+def _popen(*args, **kw):
+    return subprocess.Popen(*args, **_drapeaux(), **kw)
+
+
 class ErreurSsh(Exception):
     """Le client OpenSSH est introuvable ou un utilitaire SSH n'a pas répondu à temps."""
 
@@ -56,7 +70,7 @@ def _lancer_court(runner, args, delai):
         raise ErreurSsh(f"« {args[0]} » n'a pas répondu en {delai} s.") from None
 
 
-def generer_cle(dossier, runner=subprocess.run, nom=NOM_CLE):
+def generer_cle(dossier, runner=_run, nom=NOM_CLE):
     """Renvoie (chemin privé, clé publique) ; crée la clé ed25519 sans phrase de passe si elle n'existe pas.
 
     Une clé existante n'est jamais régénérée ni écrasée. `nom` : nom du fichier de la clé privée (une clé par serveur).
@@ -78,7 +92,7 @@ def generer_cle(dossier, runner=subprocess.run, nom=NOM_CLE):
     return prive, publique.read_text(encoding="utf-8").strip()
 
 
-def executer(hote, commande, cle, stdin=None, delai=60, runner=subprocess.run):
+def executer(hote, commande, cle, stdin=None, delai=60, runner=_run):
     """Exécute `commande` sur l'hôte ; renvoie (code, sortie, erreur). Un dépassement de délai donne un code 124."""
     _verifier_hote(hote)
     args = ["ssh", *_options(cle), "-o", f"ConnectTimeout={max(1, min(int(delai), 30))}", "--", hote, commande]
@@ -106,7 +120,7 @@ def _lancer_octets(runner, args, delai, entree=None):
                         "(Paramètres > Applications > Fonctionnalités facultatives > Client OpenSSH).") from None
 
 
-def executer_octets(hote, commande, cle, entree=None, delai=60, runner=subprocess.run, _plus=()):
+def executer_octets(hote, commande, cle, entree=None, delai=60, runner=_run, _plus=()):
     """Comme `executer`, mais entrée et sortie standard restent des octets ; renvoie (code, sortie octets, erreur texte).
 
     Un dépassement de délai donne le code 124.
@@ -121,7 +135,7 @@ def executer_octets(hote, commande, cle, entree=None, delai=60, runner=subproces
     return r.returncode, sortie, _texte(r.stderr)
 
 
-def executer_vers_fichier(hote, commande, cle, destination, maximum, entree=None, delai=60, popen=subprocess.Popen):
+def executer_vers_fichier(hote, commande, cle, destination, maximum, entree=None, delai=60, popen=_popen):
     """Exécute `commande` et écrit sa sortie standard DROIT dans le fichier `destination`, par blocs de 1 Mo (un fichier de
     500 Mo n'est jamais en mémoire) ; renvoie (code, taille écrite, erreur texte). Plus de `maximum` octets : ssh est tué,
     code 99 (le serveur ne peut pas remplir le disque du poste). Délai dépassé : code 124. Erreur gardée sur 64 Ko au plus.
@@ -425,7 +439,7 @@ def _arreter(p, ecrivain):
 
 
 def executer_en_flux(hote, commande, cle, premiere_ligne, sortie, sur_attente=None, delai_connexion=30,
-                     popen=subprocess.Popen, sortie_erreur=None, delai_total=None, delai_silence=None):
+                     popen=_popen, sortie_erreur=None, delai_total=None, delai_silence=None):
     """Une session ssh qui lance `commande` (l'enveloppe `lancer_tests.sh`, construite de valeurs validées par
     l'appelant) : `premiere_ligne` (la commande JSON) est écrite sur l'entrée standard, terminée par `\\n`, puis l'entrée
     reste OUVERTE jusqu'à la fin de la sortie standard : c'est la laisse (fermée = le serveur tue le conteneur).
@@ -549,14 +563,14 @@ def executer_en_flux(hote, commande, cle, premiere_ligne, sortie, sur_attente=No
             "code_ssh": code_ssh, "raison": raison, "refus": refus}
 
 
-def executer_octets_silencieux(hote, commande, cle, entree=None, delai=60, runner=subprocess.run):
+def executer_octets_silencieux(hote, commande, cle, entree=None, delai=60, runner=_run):
     """`executer_octets` avec `-o LogLevel=ERROR` : ni bannière de sshd ni avertissement de première connexion (niveau
     INFO) sur la sortie d'erreur, qui ne porte plus que les messages du serveur et les vraies erreurs. Réservé aux appels
     qui jugent la sortie d'erreur (dépôt de l'enveloppe des tâches) ; les autres appels gardent les options communes."""
     return executer_octets(hote, commande, cle, entree=entree, delai=delai, runner=runner, _plus=("-o", "LogLevel=ERROR"))
 
 
-def attendre_ssh(hote, cle, delai_total, pas=10, runner=subprocess.run, dormir=time.sleep):
+def attendre_ssh(hote, cle, delai_total, pas=10, runner=_run, dormir=time.sleep):
     """Réessaie une commande triviale jusqu'au succès.
 
     Renvoie True au succès, False une fois `delai_total` secondes écoulées, ou `CLE_CHANGEE` dès qu'OpenSSH refuse parce que
@@ -578,7 +592,7 @@ def attendre_ssh(hote, cle, delai_total, pas=10, runner=subprocess.run, dormir=t
             return False
 
 
-def oublier_hote(hote, accord, runner=subprocess.run):
+def oublier_hote(hote, accord, runner=_run):
     """Retire l'hôte de known_hosts (`ssh-keygen -R`) ; exige un accord strictement booléen."""
     if accord is not True:
         raise ErreurAccord("Oublier l'empreinte de l'hôte exige l'accord explicite de l'utilisateur.")

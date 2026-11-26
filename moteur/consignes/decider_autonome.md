@@ -45,6 +45,10 @@ Enquête : au lieu de répondre, tu peux demander au plus 6 lectures (lecture se
 seulement `{"lire": {"outil": "…", "arg": "…"}}` ; le résultat revient dans `lectures`. Outils : `outils_de_lecture`. Lis avant de
 conclure quand les faits manquent ; réponds dès que tu sais.
 
+Lis `branches_agent` : une branche `agent/<tâche>` non fusionnée (`fusionnee` faux) contient du travail qui n'est pas dans le clone. Si
+le blocage dit que le code manque, ne fais jamais réécrire : `renvoyer` à la tâche de dev (ou `relancer`) avec « fusionne la branche
+existante agent/… » puis refais la recette. Un conflit de fusion se règle à la fusion, pas par un second développement en parallèle.
+
 Avant de `renvoyer` un défaut au dev, vérifie qu'il est réel : un test de recette peut se tromper (il vise une valeur qui existe
 vraiment, une page répond 200 sur un identifiant présent dans les données). Dans ce cas ne touche pas au code : `relancer` avec la
 consigne de corriger le test (viser une valeur vraiment absente) et dis pourquoi la page est juste.

@@ -1,0 +1,126 @@
+{
+ "id": "16_pas_dans_le_clone_branche_existante",
+ "titre": "« Le code n'est pas dans le clone » alors que la branche agent/t252 existe, non fusionnée",
+ "type": "jugement",
+ "negatif": false,
+ "source": "Essai réel FM_Stats f29, 2026-11-26 (21:30-21:36)",
+ "note": "Des tâches de dev tournaient en parallèle sur les mêmes fichiers ; la branche de t252 n'était pas fusionnée et le testeur a conclu que le code manquait. Bonne réponse : fusionner la branche existante (la renvoyer au dev ou relancer avec cette consigne), jamais réécrire.",
+ "dossier": {
+  "decision": {
+   "genre": "tache_bloquee",
+   "texte": "Tâche bloquée sans décision.",
+   "motif": "echec"
+  },
+  "verdicts": [
+   "relancer",
+   "renvoyer",
+   "laisser"
+  ],
+  "choix": [],
+  "questions": [],
+  "tache": {
+   "id": "t256",
+   "titre": "Recette du catalogue",
+   "etape": "recette",
+   "metier": "testeur",
+   "element": "e2",
+   "journal": [
+    "Recette NON réussie : le code du catalogue (serveur/catalogue.py, route /catalogue) n'est pas dans le clone.",
+    "Analyse du Chef (l'agent n'a pas pu finir) : le code semble absent du clone."
+   ]
+  },
+  "fonctionnalite": {
+   "id": "f29",
+   "nom": "Catalogue des compétitions",
+   "etape": "serie",
+   "flux": [
+    {
+     "nom": "Dev",
+     "validation": false
+    },
+    {
+     "nom": "Recette",
+     "validation": false
+    },
+    {
+     "nom": "Validation du Directeur",
+     "validation": true
+    }
+   ]
+  },
+  "lecons_du_metier": [],
+  "deja_appris": [],
+  "recentes": [],
+  "mots_interdits": [
+   "ProjetExemple"
+  ],
+  "anomalies": [],
+  "service": {
+   "adresse": "https://service.exemple",
+   "redeployable": false
+  },
+  "taches_dev": [
+   {
+    "id": "t252",
+    "titre": "Catalogue : modèle et route",
+    "etape": "dev",
+    "metier": "dev",
+    "journal": [
+     "Livré sur la branche agent/t252 : serveur/catalogue.py, serveur/app.py, tests."
+    ]
+   },
+   {
+    "id": "t254",
+    "titre": "Catalogue : filtres",
+    "etape": "dev",
+    "metier": "dev",
+    "journal": [
+     "Livré sur la branche agent/t254."
+    ]
+   }
+  ],
+  "branches_agent": [
+   {
+    "branche": "agent/t252",
+    "fusionnee": false,
+    "sujet": "Catalogue : modèle et route /catalogue"
+   },
+   {
+    "branche": "agent/t254",
+    "fusionnee": true,
+    "sujet": "Catalogue : filtres"
+   }
+  ]
+ },
+ "attendu": {
+  "verdicts": [
+   "renvoyer",
+   "relancer"
+  ],
+  "tache_dev": "t252",
+  "texte_evoque": [
+   [
+    "fusion",
+    "fusionne",
+    "merge"
+   ],
+   [
+    "agent/t252",
+    "t252"
+   ]
+  ]
+ },
+ "simule": {
+  "raison": "La branche agent/t252 existe mais n'est pas fusionnée : le code n'est pas perdu.",
+  "verdict": "renvoyer",
+  "tache_dev": "t252",
+  "texte": "Le code existe : il est sur la branche agent/t252, non fusionnée dans le clone testé. Fusionne agent/t252 (résous le conflit avec agent/t254 déjà fusionnée), lance les tests de serveur/tests/test_catalogue.py, puis la recette repart. Ne refais pas le développement.",
+  "choix": null,
+  "reponses": null,
+  "generalisable": false,
+  "lecon": null,
+  "amelioration": null,
+  "anomalies": null
+ },
+ "decision_id": "d16"
+}

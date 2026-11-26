@@ -7992,7 +7992,7 @@ def _dossier_autonome(projet, etat, d):
         "lecons_du_metier": _lecons_connues(projet, t) if t else [],
         "deja_appris": sorted(_appris(projet)),
         "recentes": list(etat.get("autonome_recentes") or [])[-8:],
-        "mots_interdits": mots, "outils_de_lecture": OUTILS_ENQUETE, **plus}
+        "mots_interdits": mots, "outils_de_lecture": OUTILS_ENQUETE, "branches_agent": branches_agent(projet), **plus}
 
 
 def _demande_autonome(d, o):
@@ -8301,6 +8301,23 @@ def lecteur_autonome(projet):
             return r["texte"] if r else "aucun rapport docs/… cité par cette tâche"
         return f"outil inconnu (permis : {', '.join(OUTILS_ENQUETE)})"
     return lecteur
+
+
+def branches_agent(projet):
+    """Les branches locales `agent/<tâche>` du dépôt du projet et si chacune est fusionnée dans HEAD (`git merge-base
+    --is-ancestor`), les non fusionnées d'abord : le fait qui dit si le code d'une tâche est « dans le clone » (essai réel
+    FM_Stats f29 : un testeur concluait que le code manquait alors que agent/t252 existait, jamais fusionnée). Lecture seule,
+    12 branches au plus ; vide si git ne répond pas."""
+    git = service_permanent._git
+    code, sortie = git(projet.dossier, "for-each-ref", "--format=%(refname:short)", "refs/heads/agent/")
+    if code != 0:
+        return []
+    rendues = []
+    for nom in [x.strip() for x in sortie.splitlines() if x.strip()][-12:]:
+        fusionnee = git(projet.dossier, "merge-base", "--is-ancestor", nom, "HEAD")[0] == 0
+        sujet = git(projet.dossier, "log", "-1", "--format=%s", nom)[1].strip()[:120]
+        rendues.append({"branche": nom, "fusionnee": fusionnee, "sujet": sujet})
+    return sorted(rendues, key=lambda b: b["fusionnee"])
 
 
 def _faits_pour(projet, t):
@@ -8714,6 +8731,7 @@ def _analyser_le_blocage(projet, etat, tid, motif, matiere=None):
         "erreur": str(matiere["erreur"])[:600] if matiere.get("erreur") else None,
         "decision": matiere.get("outil_refuse"),
         "lecons_du_metier": _lecons_connues(projet, t),
+        "branches_agent": branches_agent(projet),
         "essais_automatiques": 0,
         "metiers": _metiers_du_blocage(projet, fac, t),
         # une validation se refait par l'étape d'avant (pas de correction à part) ; une branche fusionnée est faite

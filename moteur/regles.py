@@ -378,12 +378,33 @@ def _production(projet, fid=None):
     part : la programmation rend le verdict."""
     flux = _flux(projet, fid)
     production = [s for s in flux if s.get("role") != ROLE_RELECTURE] or flux
+    if _maquette_du_cahier_validee(projet, fid):
+        # essai réel (FM_Stats f24, 2026-11-26) : le cadrage rend la maquette, l'utilisateur la valide au cahier, puis
+        # l'élément repassait par l'étape « Maquette » du workflow : une seconde maquette, une seconde validation
+        production = [s for s in production if not _est_etape_maquette(s)] or production
     if _en_une_session(projet, fid):
         services = {s["id"]: s["nom"] for s in _factory(projet)["services"]}
         sans_qualite = [s for s in production if wf.est_validation(s) or not _est_de_qualite(s, services)]
         if len(sans_qualite) > 1:
             production = sans_qualite
     return production
+
+
+def _est_etape_maquette(etape):
+    """Une étape du workflow qui refait la maquette (ou la fait valider) : « maquette » dans son id ou son nom."""
+    return "maquette" in f"{etape.get('id', '')} {etape.get('nom', '')}".lower()
+
+
+def _maquette_du_cahier_validee(projet, fid):
+    """Le cahier de la fonctionnalité, validé par l'utilisateur, porte déjà une maquette : elle fait foi, aucune étape
+    du workflow n'en refait une."""
+    if not fid:
+        return False
+    try:
+        cahier = _fonc(projet, fid).get("cahier") or {}
+    except Refus:
+        return False
+    return bool(cahier.get("valide_le") and cahier.get("maquette"))
 
 
 def _en_une_session(projet, fid):
@@ -5379,11 +5400,15 @@ def _sur_outil_agent(projet, demande, etat):
                                       f"{REPRISE_OUTIL} {d['outil']} est ouvert dans la fiche, sur demande du Directeur : nouvel essai.")
         reponse = f"La tâche de {prenom} repart."
     elif verdict == REFUSER_OUTIL:
+        # un refus ne laisse pas la tâche bloquée (essai réel FM_Stats, 2026-11-26 : refus du rendu d'image, la maquette HTML
+        # restait « Tâches bloquées » jusqu'à un « Relancer ») : elle repart sans l'outil, qui ne doit plus être redemandé
         raison = f"L'outil {d['outil']} a été refusé à {prenom} par le Directeur."
-        _bloquer_taches(projet, [tid], raison)
-        if fid:
-            _dire(projet, fid, f"La tâche « {t['titre']} » est bloquée : {raison}")
-        actions, reponse = [], raison
+        actions = _reprendre_la_tache(
+            projet, etat, tid, fid,
+            f"L'outil {d['outil']} t'est refusé par le Directeur : ne le redemande pas. Termine sans lui : livre ce que tu "
+            "peux et dis dans ton rapport ce qui reste non fait à cause de ce refus.",
+            f"{raison} La tâche repart sans cet outil.")
+        reponse = f"{raison} La tâche de {prenom} repart sans lui."
     else:
         raise Refus(f"réponse inconnue : {verdict}")
     lancer(projet, "decision", {"action": "lever", "id": d["id"]})

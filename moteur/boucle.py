@@ -837,7 +837,8 @@ class Moteur:
                               "fonctionnalite": suite.get("fonctionnalite"), "depuis": time.time()})
         try:
             decision = jugement.juger(type_, dossier, couche=projet.couche, appeler=self.appeler,
-                                      modele=suite.get("modele"))
+                                      modele=suite.get("modele"),
+                                      lecteur=regles.lecteur_autonome(projet) if type_ in jugement.TYPES_ENQUETE else None)
         finally:
             attente.effacer(chef)
         etape = ETAPE_QUESTIONS if type_ == "repondre_question" else ETAPE_ORCHESTRATION

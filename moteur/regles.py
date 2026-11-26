@@ -7988,7 +7988,7 @@ def _dossier_autonome(projet, etat, d):
         "lecons_du_metier": _lecons_connues(projet, t) if t else [],
         "deja_appris": sorted(_appris(projet)),
         "recentes": list(etat.get("autonome_recentes") or [])[-8:],
-        "mots_interdits": mots, **plus}
+        "mots_interdits": mots, "outils_de_lecture": OUTILS_ENQUETE, **plus}
 
 
 def _demande_autonome(d, o):
@@ -8065,6 +8065,13 @@ def _deposer_autonome(projet, etat, d, demande, raison, lecon=None):
     del recentes[:-8]
 
 
+def _journal_des_lectures(projet, d, o):
+    """Ce que Claude a lu avant de répondre (mode enquête) : une ligne par lecture, au journal de la tâche."""
+    for x in o.get("lectures") or []:
+        if d.get("tache"):
+            _journal(projet, d["tache"], f"Claude autonome a lu ({x['outil']} {x['arg']}) : {' '.join(x['resultat'].split())[:200]}")
+
+
 def _apres_decider_autonome(projet, o, ctx, etat):
     """La réponse réfléchie de Claude : déposée comme demande, puis ce qu'elle apprend au moteur — la leçon (validée),
     l'amélioration proposée (notée pour le Directeur) et, si elle vaut à chaque fois, la réponse que le moteur donnera
@@ -8074,6 +8081,7 @@ def _apres_decider_autonome(projet, o, ctx, etat):
         d = _blocage_encore_a_debloquer(projet, etat, ctx["decision"])
     if d is None:
         return []      # le Directeur a répondu pendant la réflexion : rien à faire
+    _journal_des_lectures(projet, d, o)
     try:
         _deposer_autonome(projet, etat, d, _demande_autonome(d, o), o["raison"], o.get("lecon"))
     except Refus:
@@ -8240,6 +8248,47 @@ def _service_deja_a_jour(projet):
     except Exception:  # noqa: BLE001
         return False
     return faits.get("etat") == "actif" and faits.get("sante_ok") is True and statut == "a_jour"
+
+
+OUTILS_ENQUETE = {
+    "fichier": "lire un fichier du dépôt du projet (chemin relatif ; jamais .env, clé, jeton ni secret)",
+    "page": "interroger une page publique du service (GET sans jeton, chemin « /… ») : code et durée",
+    "journal": "les dernières lignes du journal du service (secrets masqués)",
+    "commits": "les derniers commits du dépôt",
+    "rapport": "le rapport docs/… cité par une tâche (arg : l'id de la tâche)"}
+MOTIF_FICHIER_SECRET = re.compile(r"(?i)(^|[\\/])(\.env[^\\/]*|id_rsa[^\\/]*|[^\\/]*\.(pem|key|p12|pfx|jks|keystore)|"
+                                  r"[^\\/]*(secret|token|jeton|credential|mot_de_passe|password)[^\\/]*|\.git)([\\/]|$)")
+
+
+def lecteur_autonome(projet):
+    """Les outils du mode enquête de Claude autonome, en LECTURE SEULE et bornés (`OUTILS_ENQUETE`) : `lecteur(outil, arg)`
+    rend un texte (jamais d'exception hors `ErreurMoteur`), secrets masqués. Rien n'est écrit, aucun jeton lu ; hors du
+    réglage `claude_autonome`, tout est refusé."""
+    def lecteur(outil, arg):
+        if not reglage_effectif(projet, "claude_autonome"):
+            return "refusé : mode autonome désactivé"
+        racine = Path(projet.dossier).resolve()
+        arg = str(arg or "").strip()
+        if outil == "fichier":
+            if not arg or Path(arg).is_absolute() or ".." in Path(arg).parts or MOTIF_FICHIER_SECRET.search(arg):
+                return "refusé : chemin non permis (relatif au dépôt, ni secret ni .env)"
+            f = (racine / arg).resolve()
+            if racine not in f.parents or not f.is_file():
+                return "introuvable dans le dépôt"
+            return service_permanent.masquer(f.read_text(encoding="utf-8", errors="replace")[:3000])
+        if outil == "page":
+            faits = service_permanent.faits_du_service(projet.dossier, [arg] if arg.startswith("/") else [], lignes=0)
+            return json.dumps(faits["pages"] or "refusé : un chemin « /… » est attendu", ensure_ascii=False)
+        if outil == "journal":
+            return "\n".join(service_permanent.faits_du_service(projet.dossier, lignes=40)["journal"]) or "journal vide"
+        if outil == "commits":
+            code, sortie = service_permanent._git(projet.dossier, "log", "-n", "10", "--oneline")
+            return sortie if code == 0 else "git illisible"
+        if outil == "rapport":
+            r = _rapport_de_la_tache(projet, _tache(projet, arg))
+            return r["texte"] if r else "aucun rapport docs/… cité par cette tâche"
+        return f"outil inconnu (permis : {', '.join(OUTILS_ENQUETE)})"
+    return lecteur
 
 
 def _faits_pour(projet, t):

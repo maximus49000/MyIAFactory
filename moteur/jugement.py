@@ -58,6 +58,7 @@ proposer.
 """
 import json
 import re
+import time
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -142,29 +143,60 @@ def _texte_du_dossier(dossier):
     return json.dumps(dossier, ensure_ascii=False, indent=1)
 
 
-def juger(type_, dossier, *, couche, appeler=appel.appeler, modele=None):
-    """Un jugement : au plus deux appels ; rend une `Decision`."""
+LECTURES_MAX, LECTURES_DELAI_S, LECTURE_MAX = 6, 300, 3000      # le mode enquête : appels, durée, taille d'un résultat
+TYPES_ENQUETE = ("decider_autonome",)
+
+
+def _une_lecture(lecteur, demande):
+    """Une lecture demandée par Claude (`{"outil", "arg"}`), faite par `lecteur` (en lecture seule) ; jamais d'exception."""
+    d = demande if isinstance(demande, dict) else {}
+    outil, arg = str(d.get("outil") or "")[:40], str(d.get("arg") or "")[:300]
+    try:
+        resultat = str(lecteur(outil, arg))[:LECTURE_MAX]
+    except Exception as e:  # noqa: BLE001
+        resultat = f"lecture impossible : {type(e).__name__}"
+    return {"outil": outil, "arg": arg, "resultat": resultat}
+
+
+def juger(type_, dossier, *, couche, appeler=appel.appeler, modele=None, lecteur=None):
+    """Un jugement : au plus deux appels ; rend une `Decision`. Mode enquête (`lecteur`, seulement `TYPES_ENQUETE`) : Claude
+    peut répondre `{"lire": {"outil", "arg"}}` au lieu de sa réponse ; la lecture (au plus `LECTURES_MAX`, `LECTURES_DELAI_S`
+    secondes) lui revient dans `lectures`, sans compter comme un essai ; les lectures faites sont rendues dans `objet["lectures"]`."""
     if type_ not in TYPES:
         raise ValueError(f"Type de jugement inconnu : {type_}")
     m = modele or TYPES[type_]
     if "fable" in str(m).lower():
         raise appel.ErreurAppel("Le moteur ne choisit jamais Fable.")
     texte_consigne = consigne(type_)
-    usages, erreur = [], None
-    for essai in range(2):
-        envoye = dossier if erreur is None else {**dossier, CLE_ERREUR: erreur}
+    usages, erreur, lectures, debut, essai = [], None, [], time.monotonic(), 0
+    while essai < 2:
+        envoye = dict(dossier)
+        if lectures:
+            envoye["lectures"] = lectures
+        if erreur is not None:
+            envoye[CLE_ERREUR] = erreur
         try:
             r = appeler(texte_consigne, _texte_du_dossier(envoye), m, couche=couche)
         except appel.ErreurAppel as e:
             usages += e.usages
             erreur = f"L'appel a échoué : {e.raison}"
+            essai += 1
             continue
         usages += r.usages
         objet = extraire_json(r.texte)
+        if lecteur is not None and type_ in TYPES_ENQUETE and isinstance(objet, dict) and "lire" in objet:
+            if len(lectures) < LECTURES_MAX and time.monotonic() - debut < LECTURES_DELAI_S:
+                lectures.append(_une_lecture(lecteur, objet["lire"]))
+                erreur = None
+                continue
+            erreur = "Plus de lecture permise : réponds maintenant avec ce que tu as lu."
+            essai += 1
+            continue
+        essai += 1
         erreur = ("Ta réponse ne contient pas d'objet JSON lisible." if objet is None
                   else valider(type_, objet, dossier))
         if erreur is None:
-            return Decision(objet=objet, usages=usages)
+            return Decision(objet={**objet, "lectures": lectures} if lectures else objet, usages=usages)
     return Decision(usages=usages, question=(
         f"Je n'ai pas réussi à {LIBELLES[type_]} : deux essais sans réponse utilisable (dernière erreur : {erreur}). "
         "Pouvez-vous préciser ce qu'il faut faire, ou relancer ?"))

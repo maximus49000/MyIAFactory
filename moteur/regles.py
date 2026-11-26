@@ -2680,6 +2680,22 @@ _SUR = {"fonctionnalite": _sur_fonctionnalite, "parallelisme": _sur_parallelisme
 
 # --- Le cadrage et le prototype.
 
+def _agent_libre_du_cadrage(projet, role):
+    """L'agent libre qui cadre, cherché aux lieux du projet **dans leur ordre** (`_ordre_des_lieux`), comme tout départ
+    (`_choisir_agent`), et non au poste seulement. Essai réel (FM_Stats, 2026-11-26, f26) : tous les agents du projet
+    étaient au serveur, le moteur n'en cherchait qu'au poste, n'en trouvait aucun et réessayait sans fin, sans rien dire :
+    la demande restait bloquée à l'étape « cadrage ». Un projet sans place serveur ni ordre réglé garde le poste seul.
+    Le cloud ne cadre jamais (sa session est celle des tâches)."""
+    ordre = _ordre_des_lieux(_factory(projet), role) or ["local"]
+    for lieu in ordre:
+        if lieu not in ("local", "serveur"):
+            continue
+        cle = lancer(projet, "agent-libre", {"role": role, "lieu": lieu})["agent"]
+        if cle:
+            return cle
+    return None
+
+
 def _repondre_cadrage(projet, etat, fid, consigne=None):
     """Prépare la réponse de l'agent de cadrage (sa tâche, persistante) et la lance si l'agent est libre."""
     if _en_parcours(projet, etat, fid):
@@ -2688,7 +2704,7 @@ def _repondre_cadrage(projet, etat, fid, consigne=None):
     court = _etat(projet)
     agent = f.get("agent_cadrage")
     if agent is None:
-        agent = lancer(projet, "agent-libre", {"role": _role_cadrage(projet, fid), "lieu": "local"})["agent"]
+        agent = _agent_libre_du_cadrage(projet, _role_cadrage(projet, fid))
         if agent is None:
             return []     # `avancer` réessaie tant que la fonctionnalité attend une réponse
         lancer(projet, "fonctionnalite", {"id": fid, "agent_cadrage": agent})

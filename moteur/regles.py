@@ -7711,6 +7711,60 @@ JOURNAL_DE_L_ANALYSE = 12             # les dernières lignes du journal envoyé
 SUIVRE, PRECISER, LAISSER = "suivre", "preciser", "laisser"
 
 
+# --- Claude autonome : le réglage `claude_autonome` répond à la place du Directeur, sauf aux validations.
+
+AUTONOME_MAX_REPRISES = 3      # une série ou une tâche qui se rebloque après trois réponses revient au Directeur
+
+
+def _reponse_autonome(d):
+    """La demande que Claude envoie pour la décision `d`, ou None (jamais une validation, ni une décision qui dépense
+    ou change l'organisation : Fable, découpage, environnement…). Une décision sans réponse sûre reste au Directeur."""
+    genre, base = d.get("genre"), {"decision": d["id"]}
+    if genre == GENRE_ACCORD:
+        if d.get("questions"):
+            return {"type": genre, "verdict": "repondre", "reponses": [[q["choix"][0]] for q in d["questions"]], **base}
+        if d.get("choix"):
+            return {"type": genre, "verdict": "choisir", "choix": d["choix"][0], **base}
+        return {"type": genre, "verdict": "accepter", **base}
+    if genre == GENRE_OUTIL:
+        return {"type": genre, "verdict": AUTORISER if d.get("programme") else RELANCER_OUTIL, **base}
+    if genre == SERIE_ARRETEE:
+        return {"type": genre, "verdict": RELANCER_SERIE, **base}
+    if genre == GENRE_BLOCAGE and (d.get("recommandation") or "").strip():
+        return {"type": genre, "verdict": SUIVRE, **base}
+    return None
+
+
+def repondre_en_autonome(projet, etat):
+    """Réglage `claude_autonome` (relu à chaque passage) : chaque décision ouverte que `_reponse_autonome` sait trancher
+    reçoit sa réponse, déposée comme une demande du bureau (traitée au même passage, journalisée dans
+    `demandes.jsonl` avec la mention « claude_autonome »). Les étapes de validation (`valider_etape`) ne sont jamais
+    touchées. Une même décision n'est tentée qu'une fois ; une série ou une tâche qui revient après
+    `AUTONOME_MAX_REPRISES` réponses est laissée au Directeur. Rend le nombre de réponses déposées."""
+    if not reglage_effectif(projet, "claude_autonome"):
+        return 0
+    faites = etat.setdefault("autonome_faites", set())
+    reprises = etat.setdefault("autonome_reprises", {})
+    n = 0
+    for d in _etat(projet)["decisions"]:
+        if d["id"] in faites or d.get("genre") == GENRE_VALIDATION:
+            continue
+        demande = _reponse_autonome(d)
+        if demande is None:
+            continue
+        cle = d.get("tache") or d.get("fonctionnalite") or d["id"]
+        if reprises.get((d["genre"], cle), 0) >= AUTONOME_MAX_REPRISES:
+            continue
+        faites.add(d["id"])
+        reprises[(d["genre"], cle)] = reprises.get((d["genre"], cle), 0) + 1
+        try:
+            lancer(projet, "actions", {**demande, "claude_autonome": True})
+            n += 1
+        except Refus:
+            pass      # la décision reste posée : le Directeur la voit
+    return n
+
+
 def reglage_effectif(projet, cle):
     """La valeur effective du réglage `cle` du projet, relue : projet, puis type, puis global (fichier du bureau du
     projet, s'il en a un), puis défaut (`reglages.charger_effectif`). Des réglages du projet illisibles laissent le

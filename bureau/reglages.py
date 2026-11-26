@@ -23,6 +23,8 @@ DEFAUTS = {"port": 8770, "charge_max": 75, "fraicheur_min": 30, "releve": {}, "p
            "cloud_dossier_approuve": False,
            # Vrai quand le Directeur laisse le moteur valider lui-même les leçons proposées, au niveau qu'elles proposent.
            "lecons_auto": False,
+           # Vrai : Claude répond lui-même aux décisions du Directeur, sauf aux étapes de validation du workflow.
+           "claude_autonome": False,
            # Vrai (par défaut) : le Chef analyse chaque blocage d'une tâche avant le Directeur (« Analyse intelligente
            # des blocages ») ; faux, le moteur fait comme avant, sans aucun appel de ce jugement.
            "analyse_blocages": True,
@@ -174,6 +176,8 @@ def _verifier_moteur(r):
         raise ReglagesInvalides("Réglages : « cloud_dossier_approuve » doit valoir true ou false.")
     if type(r.get("lecons_auto")) is not bool:
         raise ReglagesInvalides("Réglages : « lecons_auto » doit valoir true ou false.")
+    if type(r.get("claude_autonome")) is not bool:
+        raise ReglagesInvalides("Réglages : « claude_autonome » doit valoir true ou false.")
     if type(r.get("analyse_blocages")) is not bool:
         raise ReglagesInvalides("Réglages : « analyse_blocages » doit valoir true ou false.")
     if type(r.get("livraison_sur_demande")) is not bool:
@@ -400,6 +404,13 @@ def fixer_lecons_auto(chemin, valeur):
     if type(valeur) is not bool:
         raise ValueError("« lecons_auto » doit valoir true ou false.")
     return _ecrire_cle(chemin, "lecons_auto", valeur)
+
+
+def fixer_claude_autonome(chemin, valeur):
+    """Note si Claude répond lui-même aux décisions du Directeur, sauf aux validations (vrai ou faux, rien d'autre)."""
+    if type(valeur) is not bool:
+        raise ValueError("« claude_autonome » doit valoir true ou false.")
+    return _ecrire_cle(chemin, "claude_autonome", valeur)
 
 
 def fixer_deport(chemin, deport, catalogue=None):

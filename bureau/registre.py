@@ -53,6 +53,12 @@ REGISTRE = (
     _case("lecons_auto", "Valider les leçons automatiquement",
           "Cochée, chaque leçon proposée est validée d'elle-même au niveau proposé (projet, genre ou skill). Les "
           "leçons genre et skill vont au partage des connaissances (s'il est activé).", False),
+    _case("claude_autonome", "Claude autonome",
+          "Cochée, Claude répond à votre place à tout ce qui n'est pas une étape de validation du Directeur : accord "
+          "demandé par un agent (choix proposé, sinon accepté), outil à ouvrir (autorisé), série arrêtée (relancée), "
+          "blocage analysé par le Chef (recommandation suivie). Il s'arrête aux étapes de validation du workflow, que "
+          "vous seul accordez, et à la livraison finale. Chaque réponse est journalisée comme une demande du bureau. "
+          "Décochée : comme avant.", False),
     _case("analyse_blocages", "Analyse intelligente des blocages",
           "Cochée, le Chef analyse chaque tâche bloquée par un échec d'agent : il la relance avec une consigne, "
           "confie une correction, ou vous pose la question avec sa recommandation, et en tire une leçon. Il n'ouvre "

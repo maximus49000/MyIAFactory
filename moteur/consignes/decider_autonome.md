@@ -24,7 +24,11 @@ Réponses d'après le genre de la décision :
   `refuser` si l'agent peut finir sans lui (la tâche repart sans l'outil).
 - `blocage_analyse` : `suivre` la recommandation du Chef si elle est juste, sinon `preciser` avec `texte` : la consigne
   que la tâche reçoit (900 caractères au plus, précise et vérifiable).
-- `serie_arretee` : `relancer`.
+- `serie_arretee` : `relancer`. `tache_bloquee` (bloquée après l'essai du Chef, sans décision ; cause : journal, `taches_dev`) :
+  `renvoyer` un défaut du code livré à une tâche de dev (`tache_dev` copiée de `taches_dev`, `texte` = diagnostic précis,
+  correction attendue, test à écrire : à préférer à une relance telle quelle) ; `redeployer` si le service permanent tourne
+  sans la correction fusionnée (le moteur redéploie, puis relance la recette) ; `relancer` avec `texte` précis ; `laisser`
+  si seul le Directeur peut agir (argent, clé, appareil). Une même cause n'est tentée qu'une fois.
 
 Tu n'accordes jamais un modèle plus fort (jamais Fable), une clé, ni une dépense ; une consigne qui le demande est
 refusée.

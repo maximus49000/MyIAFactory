@@ -2,6 +2,7 @@
 des améliorations et des réponses qu'il donnera seul ensuite."""
 import json
 import unittest
+from unittest import mock
 
 from moteur import jugement, regles
 from tests import test_moteur_regles as tmr
@@ -135,6 +136,176 @@ class Boucle(tsr.AvecValidation):
         self.etat["autonome_reprises"] = {("serie_arretee", "f1"): regles.AUTONOME_MAX_REPRISES}
         self.assertEqual(regles.repondre_en_autonome(self.projet, self.etat), [])
         self.assertEqual(len(self.serie_arretee()), 1)
+
+
+CHEF = ("Analyse du Chef (l'agent n'a pas pu finir) : cause probable.", "Retour du Chef : refais la recette.")
+BLOQUEE = "Le service en ligne n'a pas le correctif."
+
+
+class TacheBloquee(tsr.AvecValidation):
+    """Une tâche restée bloquée sans décision, après l'essai automatique du Chef : Claude autonome la prend."""
+
+    def setUp(self):
+        super().setUp()
+        self.projet_avec_validation(flux=tsr.FLUX, elements=0)
+        self.dev = self.ok("tache", entree={"titre": "Index et /sante", "fonctionnalite": "f1", "role": "dev",
+                                            "etape": "flux:dev", "colonne": "dev", "active": False})["id"]
+        self.ok("tache", entree={"id": self.dev, "colonne": "fait", "journal": ["Livré."]})
+        self.recette = self.ok("tache", entree={
+            "titre": "Recette du service", "fonctionnalite": "f1", "role": "testeur", "etape": "flux:essai",
+            "colonne": "dev", "active": False, "bloquee": BLOQUEE, "journal": list(CHEF)})["id"]
+        self.etat = regles.nouvel_etat()
+
+    def bloquer(self, activer=True):
+        self.projet.claude_autonome, self.projet.analyse_blocages = activer, True
+        self.assertEqual(regles._analyser_le_blocage(self.projet, self.etat, self.recette, "echec"), [])
+
+    def juger(self):
+        (action,) = regles.repondre_en_autonome(self.projet, self.etat)
+        return action
+
+    def appliquer(self, action, o=None, question=None):
+        _, type_, _, suite = action
+        decision = jugement.Decision(question=question) if question else jugement.Decision(objet=o)
+        return regles.appliquer_jugement(self.projet, type_, decision, suite, self.etat)
+
+    def traiter_la_reponse(self):
+        (demande,) = [x for x in self.demande_en_attente() if x["type"] == "tache_bloquee"]
+        self.assertTrue(demande["claude_autonome"])
+        return demande, regles.traiter_demande(self.projet, demande, self.etat)
+
+    def la(self, tid):
+        return next(t for t in self.suivi()["taches"] if t["id"] == tid)
+
+    # --- Cas 1 : la tâche bloquée sans décision.
+
+    def test_reglage_decoche_rien_n_est_fait(self):
+        self.bloquer(activer=False)
+        self.assertEqual(regles.repondre_en_autonome(self.projet, self.etat), [])
+
+    def test_claude_recoit_le_dossier_de_la_tache_bloquee(self):
+        self.bloquer()
+        _, type_, dossier, _ = self.juger()
+        self.assertEqual((type_, dossier["decision"]["genre"], dossier["tache"]["id"]),
+                         ("decider_autonome", "tache_bloquee", self.recette))
+        self.assertEqual([x["id"] for x in dossier["taches_dev"]], [self.dev])
+        self.assertEqual(sorted(dossier["verdicts"]), ["laisser", "relancer", "renvoyer"])    # pas de service déclaré
+        self.assertEqual(regles.repondre_en_autonome(self.projet, self.etat), [])      # une seule tentative
+
+    def test_relancer_reprend_la_tache_avec_une_consigne_et_garde_la_raison(self):
+        self.bloquer()
+        self.appliquer(self.juger(), objet(verdict="relancer", texte="Refais la recette quand /sante répond.",
+                                           raison="Le service est prêt, la recette peut être refaite."))
+        demande, _ = self.traiter_la_reponse()
+        self.assertIn("recette peut être refaite", demande["raison"])
+        self.assertFalse(self.la(self.recette).get("bloquee"))
+        self.assertTrue(any("Reprise sur votre retour" in str(j.get("texte")) for j in self.la(self.recette)["journal"]))
+
+    def test_relancer_sans_texte_est_refuse(self):
+        self.bloquer()
+        _, _, dossier, _ = self.juger()
+        self.assertIn("texte", jugement.valider("decider_autonome", objet(verdict="relancer"), dossier))
+
+    def test_laisser_garde_la_tache_bloquee(self):
+        self.bloquer()
+        self.appliquer(self.juger(), objet(verdict="laisser", raison="Il faut une clé que seul le Directeur a."))
+        self.traiter_la_reponse()
+        self.assertTrue(self.la(self.recette)["bloquee"])
+
+    def test_une_meme_cause_n_est_tentee_qu_une_fois(self):
+        self.bloquer()
+        self.appliquer(self.juger(), objet(verdict="relancer", texte="Refais la recette."))
+        self.traiter_la_reponse()
+        self.ok("tache", entree={"id": self.recette, "bloquee": BLOQUEE})
+        self.assertEqual(regles._analyser_le_blocage(self.projet, self.etat, self.recette, "echec"), [])
+        self.assertEqual(regles.repondre_en_autonome(self.projet, self.etat), [])
+        self.assertTrue(any("déjà essayé" in str(j.get("texte")) for j in self.la(self.recette)["journal"]))
+
+    def test_jamais_une_validation_du_directeur(self):
+        self.projet.claude_autonome = self.projet.analyse_blocages = True
+        regles._analyser_le_blocage(self.projet, self.etat, self.recette, "validation")
+        self.assertEqual(regles.repondre_en_autonome(self.projet, self.etat), [])
+
+    def test_si_claude_ne_peut_pas_reflechir_la_tache_reste_au_directeur(self):
+        self.bloquer()
+        self.appliquer(self.juger(), question="Deux essais sans réponse utilisable.")
+        self.assertEqual([x for x in self.demande_en_attente() if x["type"] == "tache_bloquee"], [])
+        self.assertTrue(self.la(self.recette)["bloquee"])
+        self.assertTrue(any("revient au Directeur" in str(j.get("texte")) for j in self.la(self.recette)["journal"]))
+
+    def test_la_lecon_de_la_reponse_est_retenue(self):
+        self.bloquer()
+        self.appliquer(self.juger(), objet(verdict="relancer", texte="Refais la recette.",
+                                           lecon={"portee": "metier", "texte": "Vérifie /sante avant la recette."}))
+        (lecon,) = self.suivi()["lecons"]
+        self.assertEqual((lecon["texte"], lecon["etat"]), ("Vérifie /sante avant la recette.", "validée"))
+
+    # --- Cas 2 : le défaut du code livré est renvoyé au dev, avec diagnostic.
+
+    def test_renvoyer_le_defaut_au_dev_cree_un_retour_et_la_recette_l_attend(self):
+        self.bloquer()
+        diag = "Les index sont créés avant l'écoute du port : /sante reste muet. Écris un test d'abord."
+        self.appliquer(self.juger(), objet(verdict="renvoyer", tache_dev=self.dev, texte=diag))
+        self.traiter_la_reponse()
+        (retour,) = [t for t in self.suivi()["taches"] if t["titre"].startswith("Retour : ")]
+        self.assertIn("/sante reste muet", json.dumps(retour["journal"], ensure_ascii=False))
+        self.assertEqual(retour["role"], "dev")
+        recette = self.la(self.recette)
+        self.assertFalse(recette.get("bloquee"))
+        self.assertIn(retour["id"], recette["depend_de"])
+
+    def test_renvoyer_exige_une_tache_de_dev_connue(self):
+        self.bloquer()
+        _, _, dossier, _ = self.juger()
+        self.assertIn("tache_dev", jugement.valider("decider_autonome",
+                                                    objet(verdict="renvoyer", texte="X.", tache_dev="t999"), dossier))
+        self.assertIsNone(jugement.valider("decider_autonome",
+                                           objet(verdict="renvoyer", texte="X.", tache_dev=self.dev), dossier))
+
+    # --- Cas 3 : le service tourne sans la correction : redéploiement, puis la recette repart une fois sain.
+
+    def avec_service(self, statuts):
+        s = regles.service_permanent
+        patchs = [mock.patch.object(s, "raison_de_ne_pas_deployer", return_value=None),
+                  mock.patch.object(s, "_commit_du_depot", return_value="a" * 40),
+                  mock.patch.object(s, "declencher", return_value="Service permanent : lancé."),
+                  mock.patch.object(s, "statut_du_serveur", side_effect=statuts)]
+        mocks = [p.start() for p in patchs]
+        for p in patchs:
+            self.addCleanup(p.stop)
+        return mocks[2]
+
+    def test_sans_service_le_redeploiement_n_est_pas_propose(self):
+        with mock.patch.object(regles.service_permanent, "raison_de_ne_pas_deployer", return_value=""):
+            self.bloquer()
+            _, _, dossier, _ = self.juger()
+        self.assertNotIn("redeployer", dossier["verdicts"])
+
+    def test_redeployer_le_service_puis_relancer_la_recette_une_fois_sain(self):
+        declencher = self.avec_service([("attente", "en cours"), ("a_jour", "version livrée en ligne")])
+        self.bloquer()
+        action = self.juger()
+        self.assertIn("redeployer", action[2]["verdicts"])
+        self.appliquer(action, objet(verdict="redeployer", texte="Refais la recette contre le service à jour.",
+                                     raison="Le service tourne sans le correctif fusionné."))
+        self.traiter_la_reponse()
+        declencher.assert_called_once()
+        self.assertTrue(self.la(self.recette)["bloquee"])          # pas relancée avant que le service soit sain
+        self.assertEqual(regles.repondre_en_autonome(self.projet, self.etat), [])     # « attente » : on patiente
+        self.assertTrue(self.la(self.recette)["bloquee"])
+        regles.repondre_en_autonome(self.projet, self.etat)          # « a_jour » : la recette repart
+        self.assertFalse(self.la(self.recette).get("bloquee"))
+        self.assertTrue(any("le service est à jour" in str(j.get("texte")) for j in self.la(self.recette)["journal"]))
+        declencher.assert_called_once()                              # un seul redéploiement
+
+    def test_un_redeploiement_en_echec_revient_au_directeur(self):
+        self.avec_service([("echec", "retour arrière : /sante muet")])
+        self.bloquer()
+        self.appliquer(self.juger(), objet(verdict="redeployer"))
+        self.traiter_la_reponse()
+        regles.repondre_en_autonome(self.projet, self.etat)
+        self.assertTrue(self.la(self.recette)["bloquee"])
+        self.assertTrue(any("revient au Directeur" in str(j.get("texte")) for j in self.la(self.recette)["journal"]))
 
 
 class Apprentissage(tmr.Arrets):

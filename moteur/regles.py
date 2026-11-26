@@ -7609,6 +7609,8 @@ def impasses(projet, etat, delai=None):
         if f["etape"] not in ETAPES_SANS_SERIE or fid in ouvertes or fid in portees or f.get("attend_reponse"):
             continue
         detail = _fonc(projet, fid)
+        if detail.get("en_file_derriere"):
+            continue      # une correction qui attend la fin d'une autre du même sujet : elle attend exprès (FM_Stats f33)
         discussion = detail.get("discussion") or []
         if detail.get("decisions") or _secondes_depuis(detail.get("maj")) < delai or (discussion and discussion[-1].get("attend")):
             continue      # une question posée au Directeur attend sa réponse : ce n'est pas une impasse

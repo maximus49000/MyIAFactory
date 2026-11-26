@@ -12,7 +12,7 @@ const objet = (v) => (v && typeof v === "object" && !Array.isArray(v) ? v : {});
 
 export const LIBELLES_ETATS = {actif: "actif", arrete: "arrêté", echec: "en échec", absent: "jamais déployé", supprime: "supprimé",
   inconnu: "état inconnu (actualisez)"};
-export const LIBELLES_DEPLOIEMENT = {ok: "réussi", retour_arriere: "refusé, ancienne version remise", echec: "échoué",
+export const LIBELLES_DEPLOIEMENT = {ok: "réussi", retour_arriere: "refusé, ancienne version remise", echec: "échoué", interrompu: "interrompu (le moteur a été relancé), le prochain déploiement le reprendra",
   en_cours: "en cours", occupe: "déjà en cours", refus: "refusé"};
 const ACTIONS = [["etat", "Actualiser l'état"], ["journal", "Lire le journal"], ["redemarrer", "Redémarrer"], ["arreter", "Arrêter"],
   ["deployer", "Déployer maintenant"]];

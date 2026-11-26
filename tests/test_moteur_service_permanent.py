@@ -59,6 +59,22 @@ class DeploiementAutomatique(unittest.TestCase):
         return service_permanent.deployer_si_modifie(
             d, t, module=m, commit_du_depot=lambda _: commit, declencher_=lambda dossier, annoncer=None: faits.append(dossier) or "lancé"), faits
 
+    def test_en_cours_dont_le_processus_est_mort_est_repris(self):
+        d = self.projet()
+        m = FauxAuto(cache={"demo": {"etat": {"commit": self.AUTRE, "etat": "actif"},
+                                     "deploiement": {"statut": "en_cours", "debut": "2026-11-26T11:13:48Z", "pid": 4242}}})
+        m.deploiement_abandonne = lambda dep: dep.get("pid") == 4242       # plus aucun processus de ce numéro
+        ligne, faits = self.lancer(d, m, self.COMMIT, t=1795000000)
+        self.assertEqual(len(faits), 1)
+
+    def test_en_cours_dont_le_processus_tourne_est_attendu(self):
+        d = self.projet()
+        m = FauxAuto(cache={"demo": {"etat": {"commit": self.AUTRE, "etat": "actif"},
+                                     "deploiement": {"statut": "en_cours", "debut": "2026-11-26T11:13:48Z", "pid": 4242}}})
+        m.deploiement_abandonne = lambda dep: False
+        ligne, faits = self.lancer(d, m, self.COMMIT, t=1795000000)
+        self.assertEqual((ligne, faits), (None, []))
+
     def test_case_decochee_rien(self):
         d = self.projet()
         ligne, faits = self.lancer(d, FauxAuto(auto=False), self.COMMIT)

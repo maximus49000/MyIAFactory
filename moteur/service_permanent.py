@@ -7,6 +7,7 @@ projet, dans un fil : la boucle ne l'attend jamais. Un seul fil par projet ; le 
 déploiements simultanés. Le résultat (ok, retour arrière, échec) est écrit dans le cache `services.json` que le bureau
 montre (zone Services) ; aucune valeur secrète ne passe ici.
 """
+import re
 import sys
 from datetime import datetime, timezone
 import threading
@@ -171,6 +172,55 @@ def sante_repond(dossier, module=None, ouvrir=None):
     except (OSError, ValueError):
         return False, "injoignable"
     return code == 200, f"HTTP {code}"
+
+
+PAGES_MAX, JOURNAL_FAITS = 4, 60
+MOTIF_SECRET = re.compile(r"(?i)\b(jeton|token|secret|password|mot de passe|bearer|authorization|cle|key)\b(\s*[:=]\s*|\s+)\S+")
+
+
+def masquer(texte):
+    """Un texte lu au service, sans valeur secrète apparente (`jeton: …`, `Bearer …`)."""
+    texte = re.sub(r"(?i)\bbearer\s+\S+", "Bearer ***", str(texte))
+    return MOTIF_SECRET.sub(lambda m: f"{m.group(1)}{m.group(2)}***", texte)
+
+
+def faits_du_service(dossier, chemins=(), module=None, ouvrir=None, lignes=JOURNAL_FAITS):
+    """Les faits lus sur le service réel, en lecture seule : le commit déployé et l'état (cache), les dernières lignes du
+    journal du service (`gerer(.., "journal")`, secrets masqués) et, pour chaque page publique demandée, le code HTTP et la
+    durée (GET sans jeton, au plus `PAGES_MAX`, jamais hors de l'adresse du service). Jamais d'exception : ce qui n'a pas pu
+    être lu est dit (`erreur`)."""
+    from time import perf_counter
+    from urllib import error, request
+    faits = {"commit": None, "etat": None, "journal": [], "pages": [], "erreur": None}
+    try:
+        m = module or _module()
+        fiche = m.lire_cache().get(m.identifiant(Path(dossier)))
+        fiche = fiche if isinstance(fiche, dict) else {}
+        etat = fiche.get("etat") if isinstance(fiche.get("etat"), dict) else {}
+        faits["commit"], faits["etat"] = etat.get("commit"), etat.get("etat")
+        adresse = fiche.get("adresse")
+    except Exception as e:  # noqa: BLE001
+        faits["erreur"] = f"service illisible ({type(e).__name__})"
+        return faits
+    try:
+        code, rep = m.gerer(dossier, "journal", lignes=lignes)
+        faits["journal"] = [masquer(x)[:300] for x in (rep.get("lignes") or [])][-lignes:] if code == 0 else []
+        if code != 0:
+            faits["erreur"] = masquer(rep.get("detail") or "journal illisible")[:200]
+    except Exception as e:  # noqa: BLE001
+        faits["erreur"] = f"journal illisible ({type(e).__name__})"
+    if isinstance(adresse, str) and adresse.startswith(("http://", "https://")):
+        for chemin in list(dict.fromkeys(c for c in chemins if isinstance(c, str) and c.startswith("/")))[:PAGES_MAX]:
+            debut, code = perf_counter(), None
+            try:
+                with (ouvrir or request.urlopen)(adresse.rstrip("/") + chemin, timeout=15) as r:
+                    code = getattr(r, "status", 200)
+            except error.HTTPError as e:
+                code = e.code
+            except (OSError, ValueError):
+                code = None
+            faits["pages"].append({"chemin": chemin, "code": code, "ms": round((perf_counter() - debut) * 1000)})
+    return faits
 
 
 def annonce(resultat):

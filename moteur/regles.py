@@ -4473,6 +4473,8 @@ def _matiere(projet, etat, t):
             parties.append("Fichiers de ton élément : " + ", ".join(fichiers) + " (si tu dois en toucher un autre, "
                            "dis-le dans ton message).")
         production = _production(projet, fid)
+        if str(t.get("role") or "").lower() in ROLES_DE_RECETTE:
+            parties.append(CONSIGNE_RECETTE)
         rang = next((k for k, x in enumerate(production) if etape == ETAPES_DE_FLUX + x["id"]), None)
         if rang is not None and len(production) > 1 and rang == len(production) - 1 and _sans_relecteur(projet):
             parties.append(AVANT_DE_LIVRER)          # la dernière étape du flux : ne livre pas un défaut connu
@@ -4572,6 +4574,41 @@ def _chemins_du_projet(projet, r, fid=None):
     return r
 
 
+ROLES_DE_RECETTE = ("testeur", "recette")
+RECETTES_RATEES_MAX = 3          # au-delà, la recette est bloquée comme un échec : le Chef analyse, le Directeur tranche
+CONSIGNE_RECETTE = ("Tu fais la recette : ajoute à ton rapport `\"recette_reussie\": true` si tout ce que tu devais vérifier "
+                    "passe, `false` au moindre défaut constaté (liste-les dans `message.texte`, chacun précis). Une recette "
+                    "non réussie rouvre une correction : n'écris jamais « fait » sans ce champ à `false` quand elle échoue.")
+MOTIF_RECETTE_RATEE = re.compile(r"recette\s+(?:n['’]a\s+pas|non|pas)\s+r[ée]ussi", re.IGNORECASE)
+TITRE_RECETTE_RATEE = "Recette non réussie"
+
+
+def _recette_ratee(t, r):
+    """Vrai si le rapport `fait` d'une tâche de recette déclare un échec : `recette_reussie` faux ; sans ce champ (repli),
+    un texte qui conclut « recette non réussie »."""
+    if str(t.get("role") or "").lower() not in ROLES_DE_RECETTE or r.get("statut") != "fait":
+        return False
+    if isinstance(r.get("recette_reussie"), bool):
+        return not r["recette_reussie"]
+    return bool(MOTIF_RECETTE_RATEE.search(str((r.get("message") or {}).get("texte") or "")))
+
+
+def _rouvrir_la_recette(projet, etat, t, r, reponse):
+    """La recette déclare un échec : la tâche n'est pas faite (l'étape suivante, la livraison, ne s'ouvre pas) ; une
+    correction au développement reçoit les défauts, la recette l'attend puis repart. Au-delà de `RECETTES_RATEES_MAX`
+    échecs, la tâche est bloquée comme un échec de l'agent."""
+    tid, fid = t["id"], t.get("fonctionnalite")
+    points = [str(p) for v in r.get("verdicts") or [] for p in v.get("points") or []]
+    defauts = " ".join(" ".join([reponse] + points).split())[:600]
+    ratees = sum(1 for j in t.get("journal") or [] if str(j.get("texte") or "").startswith(TITRE_RECETTE_RATEE))
+    _journal(projet, tid, f"{TITRE_RECETTE_RATEE} : {defauts}")
+    if ratees + 1 >= RECETTES_RATEES_MAX:
+        _bloquer_taches(projet, [tid], f"La recette a échoué {ratees + 1} fois : {defauts[:200]}")
+        return _analyser_le_blocage(projet, etat, tid, "echec", {"rapport": r})
+    return _correction_du_chef(projet, etat, _tache(projet, tid), {"motif": "recette"},
+                               f"La recette a échoué, corrige ces défauts : {defauts}", _role_production(projet, fid))
+
+
 def traiter_retour(projet, execution, etat):
     """Applique le rapport d'un agent terminé (ou sa panne). Rend les actions qui restent."""
     depart = _m(etat, "departs").get(execution.tache) or {"agent": execution.agent, "taches": [execution.tache],
@@ -4610,6 +4647,8 @@ def traiter_retour(projet, execution, etat):
         return (_apres_echec_d_installation(projet, etat, taches, "L'installation a échoué : " + reponse[:200])
                 + _analyser_le_blocage(projet, etat, taches[0], "echec", {"rapport": r}))
     t0 = _tache(projet, taches[0])
+    if len(taches) == 1 and _recette_ratee(t0, r):
+        return _rouvrir_la_recette(projet, etat, t0, r, reponse)
     message_refuse = None
     if isinstance(r.get("cahier"), dict) and r["cahier"].get("partenaires"):
         try:      # les partenaires décidés au cadrage : connus, connecté pour « direct », inscrit pour « inscrit »
@@ -7921,6 +7960,11 @@ def _dossier_autonome(projet, etat, d):
         service = _service_a_redeployer(projet) and (d["tache"] not in etat.setdefault("autonome_redeploye", set()))
         verdicts = [v for v in verdicts if not (v == "renvoyer" and not taches_dev) and not (v == "redeployer" and not service)]
         plus.update(taches_dev=taches_dev, service={"adresse": _adresse_du_service(projet), "redeployable": service})
+        if service and t is not None:
+            plus["faits_du_service"] = _faits_pour(projet, t)
+        rapport = _rapport_de_la_tache(projet, t) if t is not None else None
+        if rapport:
+            plus["rapport_de_la_tache"] = rapport
     mots = [m for m in list(fac.get("mots_interdits") or []) + [fac.get("nom") or ""] if m]
     return {
         "decision": decision, "verdicts": verdicts,
@@ -8114,7 +8158,7 @@ def _blocages_sans_decision(projet, etat):
         if t is None or t["colonne"] == "fait" or not t.get("bloquee"):
             blocages.pop((tid, motif), None)
             continue
-        i = f"blocage:{tid}:{motif}"
+        i = f"blocage:{tid}:{motif}:{hashlib.sha1(str(t['bloquee']).encode()).hexdigest()[:8]}"      # la cause = le texte du blocage
         if i in faites:
             if pseudo.get(i, {}).get("repondu"):       # la même cause revient : pas de boucle
                 blocages.pop((tid, motif), None)
@@ -8161,6 +8205,32 @@ def _taches_faites_de(projet, t):
             rendues.append({"id": y["id"], "titre": y.get("titre"), "etape": y.get("etape"), "metier": y.get("role"),
                             "journal": [str(j.get("texte") or "")[:300] for j in (y.get("journal") or [])[-3:]]})
     return rendues[-12:]
+
+
+MOTIF_PAGE = re.compile(r"(?<![\w.:/])(/[a-z][\w\-/]{1,60})(?![\w\-])")
+MOTIF_RAPPORT = re.compile(r"docs/[\w./\-]+\.md")
+
+
+def _faits_pour(projet, t):
+    """Les faits du service réel pour la tâche bloquée `t` (lecture seule) : voir `service_permanent.faits_du_service`.
+    Les pages sont celles que le journal de la tâche cite (« /sante » toujours)."""
+    textes = " ".join(str(j.get("texte") or "") for j in (t.get("journal") or [])[-JOURNAL_DE_L_ANALYSE:])
+    chemins = ["/sante"] + [c for c in MOTIF_PAGE.findall(textes) if not c.startswith(("/app", "/work", "/usr", "/home"))]
+    return service_permanent.faits_du_service(projet.dossier, chemins)
+
+
+def _rapport_de_la_tache(projet, t):
+    """Le début du rapport `docs/….md` que le journal de la tâche cite (dans le dossier du projet seulement, secrets masqués)."""
+    textes = " ".join(str(j.get("texte") or "") for j in (t.get("journal") or []))
+    racine = Path(projet.dossier).resolve()
+    for chemin in MOTIF_RAPPORT.findall(textes):
+        f = (racine / chemin).resolve()
+        if racine in f.parents and f.is_file():
+            try:
+                return {"chemin": chemin, "texte": service_permanent.masquer(f.read_text(encoding="utf-8", errors="replace")[:3000])}
+            except OSError:
+                return None
+    return None
 
 
 def _adresse_du_service(projet):

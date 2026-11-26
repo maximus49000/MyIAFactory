@@ -221,6 +221,14 @@ class TacheBloquee(tsr.AvecValidation):
         self.assertEqual(regles.repondre_en_autonome(self.projet, self.etat), [])
         self.assertTrue(any("déjà essayé" in str(j.get("texte")) for j in self.la(self.recette)["journal"]))
 
+    def test_une_cause_nouvelle_a_sa_propre_tentative(self):
+        self.bloquer()
+        self.appliquer(self.juger(), objet(verdict="relancer", texte="Refais la recette."))
+        self.traiter_la_reponse()
+        self.ok("tache", entree={"id": self.recette, "bloquee": "Autre cause : la page /equipe/77 est vide."})
+        self.assertEqual(regles._analyser_le_blocage(self.projet, self.etat, self.recette, "echec"), [])
+        self.assertEqual(len(regles.repondre_en_autonome(self.projet, self.etat)), 1)
+
     def test_jamais_une_validation_du_directeur(self):
         self.projet.claude_autonome = self.projet.analyse_blocages = True
         regles._analyser_le_blocage(self.projet, self.etat, self.recette, "validation")
@@ -358,6 +366,46 @@ class TacheBloquee(tsr.AvecValidation):
             _, _, dossier, _ = self.juger()
         self.assertEqual(dossier["service"]["adresse"], "https://service.test")
         self.assertEqual(dossier["anomalies"], [])
+
+    # --- Les faits lus sur le service réel et le rapport de la tâche, dans le dossier de Claude (lecture seule).
+
+    def test_le_dossier_porte_les_faits_du_service_et_le_rapport_de_la_tache(self):
+        faits = {"commit": "b" * 40, "etat": "actif", "journal": ["FileNotFoundError: /app/docs/style.json"],
+                 "pages": [{"chemin": "/sante", "code": 503, "ms": 12}], "erreur": None}
+        (self.projet.dossier / "docs").mkdir(exist_ok=True)
+        (self.projet.dossier / "docs" / "recette.md").write_text("Défaut : jeton: abc123 visible.", encoding="utf-8")
+        self.ok("tache", entree={"id": self.recette, "journal": ["Rapport dans docs/recette.md, page /equipe/77."]})
+        self.avec_service([("attente", "")])
+        with mock.patch.object(regles.service_permanent, "faits_du_service", return_value=faits) as lire:
+            self.bloquer()
+            _, _, dossier, _ = self.juger()
+        self.assertEqual(dossier["faits_du_service"], faits)
+        self.assertIn("/sante", lire.call_args[0][1])
+        self.assertIn("/equipe/77", lire.call_args[0][1])
+        self.assertEqual(dossier["rapport_de_la_tache"]["chemin"], "docs/recette.md")
+        self.assertNotIn("abc123", dossier["rapport_de_la_tache"]["texte"])      # jamais un secret lu
+
+    def test_faits_du_service_en_lecture_seule_secrets_masques(self):
+        class Reponse:
+            status = 200
+            def __enter__(self): return self
+            def __exit__(self, *a): return False
+        m = mock.Mock()
+        m.lire_cache.return_value = {"p": {"adresse": "https://service.test", "etat": {"commit": "c" * 40, "etat": "actif"}}}
+        m.identifiant.return_value = "p"
+        m.gerer.return_value = (0, {"lignes": ["Traceback...", "Authorization: Bearer abc123", "jeton: zzz"]})
+        vus = []
+        faits = regles.service_permanent.faits_du_service(
+            self.dossier, ["/sante", "/equipe/77", "http://autre.test/x"], module=m,
+            ouvrir=lambda url, timeout: vus.append(url) or Reponse())
+        self.assertEqual(m.gerer.call_args[0][1], "journal")                   # jamais redémarrer ni autre commande
+        self.assertEqual(faits["commit"], "c" * 40)
+        self.assertEqual([(x["chemin"], x["code"]) for x in faits["pages"]], [("/sante", 200), ("/equipe/77", 200)])
+        self.assertEqual(vus, ["https://service.test/sante", "https://service.test/equipe/77"])
+        texte = " ".join(faits["journal"])
+        self.assertNotIn("abc123", texte)
+        self.assertNotIn("zzz", texte)
+        self.assertIn("Traceback", texte)
 
     # --- Cas 8 : une relance par changement de cause, jamais sans changement.
 

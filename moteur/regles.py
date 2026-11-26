@@ -3586,9 +3586,11 @@ def _demarrer_en_attente(projet, etat, fid):
             libre = next((a for a in court["agents"] if a["cle"] == voulu), {})
             if libre.get("libre", False) and ok.get(libre.get("lieu"), local_ok):
                 agent = voulu
-            elif not (libre and (_polyvalent(libre) or _hors_du_lieu(libre, reserves))
-                      and premiere.get("etape") != "cadrage"):
-                continue       # un spécialiste à l'ancienne, ou l'agent attitré du cadrage : la tâche l'attend
+            elif not (libre and (_polyvalent(libre) or _hors_du_lieu(libre, reserves))):
+                continue       # un spécialiste à l'ancienne : la tâche l'attend
+            # Un agent polyvalent pris reprend aussi son cadrage à un autre agent libre : la discussion est dans le suivi,
+            # pas dans l'agent. Essai réel (FM_Stats, 2026-11-26) : deux cadrages épinglés à Hugo, « aucun agent libre »
+            # alors que cinq autres agents du serveur étaient libres.
         if agent is None and captures:      # un agent du serveur, quel que soit l'ordre des lieux du métier
             # sans modèle demandé : tout agent du serveur convient, `_modele_de_depart` la ramène à son plafond
             agent = _agent_local(projet, premiere, None, serveur_ok, lieu="serveur", sans_lieu_impose=True)
@@ -5643,13 +5645,39 @@ def _livrer_par_l_outil(projet, etat, v, s):
     return _element_fait(projet, etat, v)
 
 
+SUITES_DU_PROTOTYPE = 3     # tours de plus qu'un prototype sans « méthode prête » ni question reçoit avant d'être dit au Directeur
+MARQUE_SUITE_PROTOTYPE = "Suite du prototype"
+
+
 def _suite_prototype(projet, etat, t, r):
+    fid = t["fonctionnalite"]
+    f = _fonc(projet, fid)
     if r.get("methode_prete"):
-        f = _fonc(projet, t["fonctionnalite"])
         if not _a_decision(f, "valider_methode"):
             _poser(projet, f["id"], "valider_methode", "La méthode vous semble-t-elle prête ? La valider pour passer à "
                                                        "la série, ou continuer la mise au point.")
-    return []
+        return []
+    discussion = f.get("discussion") or []
+    message = r.get("message") if isinstance(r.get("message"), dict) else {}
+    if (f.get("attend_reponse") or f.get("decisions") or message.get("attend")
+            or (discussion and discussion[-1].get("attend"))):
+        return []       # une question ou une décision attend l'utilisateur : rien à relancer
+    return _continuer_le_prototype(projet, etat, fid)
+
+
+def _continuer_le_prototype(projet, etat, fid):
+    """Le prototype rendu ne dit pas « méthode prête » et ne pose aucune question : le travail continue, il ne s'arrête
+    pas en silence. Essai réel (FM_Stats f27, 2026-11-26) : « 25 pages restent à brancher » et la série restait là, sans
+    tâche ni décision, jusqu'au message « ne progresse plus ». Après quelques tours, c'est dit au Directeur."""
+    detail = lancer(projet, "detail", {"fonctionnalite": fid, "taches": True})
+    tours = len([x for x in detail.get("taches") or [] if str(x.get("etape")) == "prototype"])
+    if tours > SUITES_DU_PROTOTYPE:
+        _poser(projet, fid, "valider_methode", "Le prototype a eu plusieurs tours sans être déclaré prêt : le valider "
+                                               "tel quel, ou dire ce qui reste à faire.")
+        return []
+    return _retoucher_prototype(projet, etat, fid, f"{MARQUE_SUITE_PROTOTYPE} : ton dernier rapport ne disait pas "
+                                "« méthode prête » et ne posait aucune question. Termine ce qui reste (tes propres "
+                                "notes de fin), puis rends `\"methode_prete\": true`, ou pose une question au Directeur.")
 
 
 # --- La série : éléments, flux, relecture croisée.
@@ -7492,6 +7520,12 @@ def _signaler_une_serie_muette(projet, etat, fid):
     if _en_attente_de_deploiement(projet, etat, fid):
         return        # la série attend la correction de déploiement : rien n'est perdu
     raisons = list(_m(etat, "serie_perdue").get(fid, {}).values())
+    if not raisons and any(v["fid"] == fid and v["phase"] in (A_LIVRER, DANS_UN_LOT)
+                           for v in _m(etat, "elements").values()):
+        # Les éléments sont prêts : ils attendent la livraison groupée (un seul livrable pour le produit, quand plus rien
+        # n'est en cours, `livrer_si_calme`), dite au bureau par `attente_livraison`. Essai réel (FM_Stats f28, 2026-11-26) :
+        # « ne progresse plus » alors que la série était finie et attendait la fin des tests d'une autre fonctionnalité.
+        return
     siennes = [t for t in court["taches"] if t.get("fonctionnalite") == fid]
     # un élément qui ne peut pas repartir est dit tout de suite, même si d'autres avancent ; sinon, seulement quand
     # plus rien ne bouge (ni tâche ouverte, ni décision, ni agent au travail)
@@ -7530,8 +7564,8 @@ def _sur_serie_arretee(projet, demande, etat):
         _terminer(projet, {"demande": demande["id"]}, "L'étape reprend depuis le suivi.")
         if etape in ("cadrage", "cahier"):
             return _repondre_cadrage(projet, etat, fid)
-        if etape == "prototype":
-            return _rejouer_le_retour(projet, etat, fid)
+        if etape == "prototype":      # le dernier mot de l'utilisateur rejoué, sinon le prototype reprend là où il s'est arrêté
+            return _rejouer_le_retour(projet, etat, fid) or _continuer_le_prototype(projet, etat, fid)
         return []
     elements = _m(etat, "elements")
     for cle in [c for c, v in elements.items() if v["fid"] == fid and v["phase"] not in ("fait", "bloque")]:

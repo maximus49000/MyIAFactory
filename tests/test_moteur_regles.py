@@ -284,7 +284,8 @@ class Demandes(Base):
     def test_decoupage_ecrit_file_et_prototype(self):
         self.cahier_a_valider()
         d, actions = self.traiter(type="cahier", fonctionnalite="f1", verdict="valider")
-        suite = self.piloter(actions, juges={"decouper": DECOUPAGE})
+        suite = self.piloter(actions, juges={"decouper": DECOUPAGE},
+                             rapports=[{"statut": "fait", "methode_prete": True}])    # un prototype rendu sans « méthode prête » reprend
         f = self.fonc()
         self.assertEqual([q["id"] for q in f["file"]], ["e2", "e3"])        # le prototype est pris
         self.assertEqual(f["etape"], "prototype")

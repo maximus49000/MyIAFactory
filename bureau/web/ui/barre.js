@@ -13,6 +13,7 @@ import {definirAbonnement} from "./abonnement.js";
 import {accuseDe, creerAccuses, majEtatAccuses, noterAccuse} from "./accuse.js";
 import {brancherOptimiser} from "./optimiser.js";
 import {creerVoyant} from "./voyant.js";
+import {ouvrirDerniersLivrables} from "./derniers-livrables.js";
 import {creerHorloge, creerMenuParametres, raccourcir, resserrer, CLASSE_ETROITE} from "./barre-parametres.js";
 
 const INTERVALLE_CHARGE = 5000;
@@ -73,6 +74,10 @@ export function creerBarre(entete, bandeau) {
   charge.append(etiquette, piste, valeur, boutonOptimiser);
 
   const zoneActions = el("div", "barre-actions");
+  // « Derniers livrables » : sur chaque projet, le dernier livrable de chaque variante (derniers-livrables.js).
+  const boutonDerniers = el("button", "bouton-barre bouton-derniers-livrables", "Derniers livrables");
+  boutonDerniers.type = "button";
+  boutonDerniers.addEventListener("click", () => ouvrirDerniersLivrables(dernierEtat, boutonDerniers));
   const boutonListe = el("button", "bouton-barre bouton-liste", "Toutes les tâches");
   boutonListe.type = "button";
   boutonListe.hidden = true;  // montré seulement pour un relevé qui a la vue liste (version 2)
@@ -96,6 +101,7 @@ export function creerBarre(entete, bandeau) {
   raccourcir(boutonQuestion, "?");
   raccourcir(boutonFonctions, "Fonct.");
   raccourcir(boutonListe, "Tâches");
+  raccourcir(boutonDerniers, "Livr.");
   raccourcir(boutonOptimiser, "Optim.");
 
   // Maquette validée (2026-11-23) : à gauche la consommation Claude (le rond seul, jamais caché), puis l'heure, un
@@ -119,11 +125,11 @@ export function creerBarre(entete, bandeau) {
       ? [...retenue.children].map((s) => s.textContent) : []),
   });
   entete.append(blocAbonnement, horloge.racine, separateur, titre, leVoyant.racine, leVoyant.annonce, retenue, charge, zoneActions, boutonNouvelle, boutonCorrection,
-                boutonQuestion, boutonFonctions, zoneLivrable, boutonListe, menu.racine);
+                boutonQuestion, boutonFonctions, boutonDerniers, zoneLivrable, boutonListe, menu.racine);
 
   // Une seule ligne à toutes les largeurs : ce qui ne tient pas passe dans le menu de la roue, de droite à gauche
   // (barre-parametres.js). Sur téléphone : l'heure, le rond de consommation, le projet, le voyant et la roue.
-  const pliables = () => [...zoneActions.children, boutonNouvelle, boutonCorrection, boutonQuestion, boutonFonctions, zoneLivrable,
+  const pliables = () => [...zoneActions.children, boutonNouvelle, boutonCorrection, boutonQuestion, boutonFonctions, boutonDerniers, zoneLivrable,
                           boutonListe, ...(telephone() ? [boutonOptimiser] : [])];
   // Les entrées du menu pour un élément replié : lui-même, ou les liens et boutons du « Dernier livrable ».
   function entreesDe(e) {

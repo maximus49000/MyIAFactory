@@ -1,0 +1,85 @@
+{
+ "id": "10_tools_phrase_dans_brief",
+ "titre": "Lancement d'un agent serveur refusé : valeur invalide pour --tools",
+ "type": "jugement",
+ "negatif": false,
+ "source": "Essai réel FM_Stats, 2026-11-26",
+ "note": "La ligne « Outils » du brief contient une phrase : défaut du moteur, pas du projet. Une amélioration est notée ; la tâche est relancée après correction du moteur, pas renvoyée au dev.",
+ "dossier": {
+  "decision": {
+   "genre": "blocage_analyse",
+   "texte": "Blocage analysé.",
+   "motif": "echec_agent",
+   "analyse": "Le lancement de l'agent serveur est refusé : « error: invalid value for --tools ». La ligne « Outils » du brief contient une phrase au lieu d'une liste d'outils.",
+   "question": "Que faire ?",
+   "recommandation": "Relancer la tâche."
+  },
+  "verdicts": [
+   "suivre",
+   "preciser"
+  ],
+  "choix": [],
+  "questions": [],
+  "tache": {
+   "id": "t25",
+   "titre": "Recette serveur",
+   "etape": "recette",
+   "metier": "testeur",
+   "element": "e1",
+   "journal": [
+    "claude: invalid value for --tools: 'Lecture, écriture ; tout ce qu'il faut'"
+   ]
+  },
+  "fonctionnalite": {
+   "id": "f30",
+   "nom": "Statistiques par équipe",
+   "etape": "serie",
+   "flux": [
+    {
+     "nom": "Dev",
+     "validation": false
+    },
+    {
+     "nom": "Recette",
+     "validation": false
+    },
+    {
+     "nom": "Validation du Directeur",
+     "validation": true
+    }
+   ]
+  },
+  "lecons_du_metier": [],
+  "deja_appris": [],
+  "recentes": [],
+  "mots_interdits": [
+   "ProjetExemple"
+  ],
+  "anomalies": [],
+  "service": {
+   "adresse": "https://service.exemple"
+  }
+ },
+ "attendu": {
+  "verdicts": [
+   "suivre",
+   "preciser"
+  ],
+  "amelioration": true
+ },
+ "simule": {
+  "raison": "Réponse simulée du banc.",
+  "verdict": "preciser",
+  "texte": "Le refus vient du moteur (la ligne Outils du brief est une phrase), pas du projet : attends la correction du moteur puis relance la tâche, sans rien changer au code du projet.",
+  "choix": null,
+  "reponses": null,
+  "generalisable": false,
+  "lecon": null,
+  "amelioration": {
+   "titre": "Valider la ligne Outils du brief avant le lancement",
+   "description": "Une phrase dans la ligne Outils du brief est passée telle quelle à --tools et fait refuser le lancement ; le moteur doit ne garder que des noms d'outils valides."
+  },
+  "anomalies": null
+ },
+ "decision_id": "d10"
+}

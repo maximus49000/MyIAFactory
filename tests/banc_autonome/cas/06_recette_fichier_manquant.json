@@ -1,0 +1,116 @@
+{
+ "id": "06_recette_fichier_manquant",
+ "titre": "Journal du service : FileNotFoundError sur style_graphiques.json",
+ "type": "jugement",
+ "negatif": false,
+ "source": "Essai réel FM_Stats, 2026-11-26",
+ "note": "Le Dockerfile ne copie que serveur/ : le fichier docs/style_graphiques.json manque dans l'image. Défaut du code livré : renvoi à la tâche de dev avec la cause et le test à écrire.",
+ "dossier": {
+  "decision": {
+   "genre": "tache_bloquee",
+   "texte": "Tâche bloquée sans décision.",
+   "motif": "recette_echec"
+  },
+  "verdicts": [
+   "relancer",
+   "renvoyer",
+   "laisser"
+  ],
+  "choix": [],
+  "questions": [],
+  "tache": {
+   "id": "t22",
+   "titre": "Recette des graphiques",
+   "etape": "recette",
+   "metier": "testeur",
+   "element": "e1",
+   "journal": [
+    "GET /graphiques : 500."
+   ]
+  },
+  "fonctionnalite": {
+   "id": "f30",
+   "nom": "Statistiques par équipe",
+   "etape": "serie",
+   "flux": [
+    {
+     "nom": "Dev",
+     "validation": false
+    },
+    {
+     "nom": "Recette",
+     "validation": false
+    },
+    {
+     "nom": "Validation du Directeur",
+     "validation": true
+    }
+   ]
+  },
+  "lecons_du_metier": [],
+  "deja_appris": [],
+  "recentes": [],
+  "mots_interdits": [
+   "ProjetExemple"
+  ],
+  "anomalies": [],
+  "service": {
+   "adresse": "https://service.exemple",
+   "redeployable": false
+  },
+  "taches_dev": [
+   {
+    "id": "t16",
+    "titre": "Graphiques",
+    "etape": "dev",
+    "metier": "dev",
+    "journal": [
+     "Lecture du style depuis docs/style_graphiques.json."
+    ]
+   }
+  ],
+  "faits_du_service": {
+   "commit_deploye": "f4e5d6c",
+   "sante": "ok",
+   "journal_service": [
+    "FileNotFoundError: '/app/docs/style_graphiques.json'"
+   ]
+  },
+  "rapport_de_la_tache": {
+   "statut": "echec",
+   "message": "500 sur /graphiques."
+  }
+ },
+ "attendu": {
+  "verdicts": [
+   "renvoyer"
+  ],
+  "tache_dev": "t16",
+  "texte_evoque": [
+   [
+    "style_graphiques"
+   ],
+   [
+    "dockerfile",
+    "image",
+    "copie"
+   ],
+   [
+    "test"
+   ]
+  ]
+ },
+ "simule": {
+  "raison": "Réponse simulée du banc.",
+  "verdict": "renvoyer",
+  "texte": "/app/docs/style_graphiques.json est introuvable : le Dockerfile ne copie que serveur/. Mets le fichier sous serveur/ (ou copie-le dans l'image) et écris un test qui charge le style depuis l'image.",
+  "choix": null,
+  "reponses": null,
+  "generalisable": false,
+  "lecon": null,
+  "amelioration": null,
+  "anomalies": null,
+  "tache_dev": "t16"
+ },
+ "decision_id": "d6"
+}

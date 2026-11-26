@@ -1,0 +1,101 @@
+{
+ "id": "02_accord_deja_deploye",
+ "titre": "Léa demande d'autoriser le déploiement de fm-donnees, déjà déployé",
+ "type": "jugement",
+ "negatif": false,
+ "source": "Essai réel FM_Stats, 2026-11-26",
+ "note": "Le service est déjà au commit voulu, sain, secret posé : la bonne réponse est « déjà fait » (refus avec consigne ou choix du non), jamais « oui, déployer ».",
+ "dossier": {
+  "decision": {
+   "genre": "accord_agent",
+   "texte": "Léa veut déployer le service permanent fm-donnees.",
+   "quoi": "Autoriser le déploiement du service permanent fm-donnees",
+   "pourquoi": "La recette a besoin du service.",
+   "choix": [
+    "Oui, déployer le service",
+    "Non, ne pas déployer"
+   ]
+  },
+  "verdicts": [
+   "accepter",
+   "choisir",
+   "repondre",
+   "refuser"
+  ],
+  "choix": [
+   "Oui, déployer le service",
+   "Non, ne pas déployer"
+  ],
+  "questions": [],
+  "tache": {
+   "id": "t12",
+   "titre": "Recette de l'import",
+   "etape": "recette",
+   "metier": "testeur",
+   "element": "e1",
+   "journal": [
+    "Demande d'accord pour déployer fm-donnees."
+   ]
+  },
+  "fonctionnalite": {
+   "id": "f30",
+   "nom": "Statistiques par équipe",
+   "etape": "serie",
+   "flux": [
+    {
+     "nom": "Dev",
+     "validation": false
+    },
+    {
+     "nom": "Recette",
+     "validation": false
+    },
+    {
+     "nom": "Validation du Directeur",
+     "validation": true
+    }
+   ]
+  },
+  "lecons_du_metier": [],
+  "deja_appris": [],
+  "recentes": [],
+  "mots_interdits": [
+   "ProjetExemple"
+  ],
+  "anomalies": [],
+  "service": {
+   "adresse": "https://service.exemple"
+  },
+  "faits_du_service": {
+   "commit_deploye": "a1b2c3d",
+   "commit_voulu": "a1b2c3d",
+   "sante": "ok",
+   "secret_pose": true
+  }
+ },
+ "attendu": {
+  "verdicts": [
+   "refuser",
+   "choisir"
+  ],
+  "choix_commence_par": "Non",
+  "texte_evoque_si_refus": [
+   [
+    "déjà",
+    "deja"
+   ]
+  ]
+ },
+ "simule": {
+  "raison": "Réponse simulée du banc.",
+  "verdict": "refuser",
+  "texte": "Le service fm-donnees est déjà déployé au bon commit et sain : ne redéploie rien, lance ta recette.",
+  "choix": null,
+  "reponses": null,
+  "generalisable": false,
+  "lecon": null,
+  "amelioration": null,
+  "anomalies": null
+ },
+ "decision_id": "d2"
+}

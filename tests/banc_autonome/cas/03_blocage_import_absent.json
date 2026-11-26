@@ -1,0 +1,95 @@
+{
+ "id": "03_blocage_import_absent",
+ "titre": "L'import réel et l'URL du service ne sont pas dans le clone du testeur",
+ "type": "jugement",
+ "negatif": false,
+ "source": "Essai réel FM_Stats, 2026-11-26",
+ "note": "Le service public (lecture publique, sans jeton) contient l'import réel : consigne d'interroger l'URL publique, sans copier de base ni jeton.",
+ "dossier": {
+  "decision": {
+   "genre": "blocage_analyse",
+   "texte": "Blocage analysé.",
+   "motif": "echec_agent",
+   "analyse": "L'import réel (fm.sqlite) et l'URL du service ne sont pas dans le clone du testeur.",
+   "question": "Pouvez-vous fournir l'import réel et l'adresse du service ?",
+   "recommandation": "Demander au Directeur de fournir la base et l'adresse."
+  },
+  "verdicts": [
+   "suivre",
+   "preciser"
+  ],
+  "choix": [],
+  "questions": [],
+  "tache": {
+   "id": "t12",
+   "titre": "Recette de l'import",
+   "etape": "recette",
+   "metier": "testeur",
+   "element": "e1",
+   "journal": [
+    "Impossible : fm.sqlite absent du clone."
+   ]
+  },
+  "fonctionnalite": {
+   "id": "f30",
+   "nom": "Statistiques par équipe",
+   "etape": "serie",
+   "flux": [
+    {
+     "nom": "Dev",
+     "validation": false
+    },
+    {
+     "nom": "Recette",
+     "validation": false
+    },
+    {
+     "nom": "Validation du Directeur",
+     "validation": true
+    }
+   ]
+  },
+  "lecons_du_metier": [],
+  "deja_appris": [],
+  "recentes": [],
+  "mots_interdits": [
+   "ProjetExemple"
+  ],
+  "anomalies": [],
+  "service": {
+   "adresse": "https://service.exemple"
+  }
+ },
+ "attendu": {
+  "verdicts": [
+   "preciser"
+  ],
+  "texte_evoque": [
+   [
+    "https://service.exemple",
+    "url",
+    "adresse"
+   ],
+   [
+    "public",
+    "lecture"
+   ]
+  ],
+  "texte_exclut": [
+   "Bearer ",
+   "token="
+  ]
+ },
+ "simule": {
+  "raison": "Réponse simulée du banc.",
+  "verdict": "preciser",
+  "texte": "Interroge le service en ligne https://service.exemple (pages en lecture publique, sans jeton) : il contient l'import réel. Ne copie aucune base et n'écris aucun jeton.",
+  "choix": null,
+  "reponses": null,
+  "generalisable": false,
+  "lecon": null,
+  "amelioration": null,
+  "anomalies": null
+ },
+ "decision_id": "d3"
+}

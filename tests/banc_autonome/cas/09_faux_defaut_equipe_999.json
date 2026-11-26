@@ -1,0 +1,121 @@
+{
+ "id": "09_faux_defaut_equipe_999",
+ "titre": "/equipe/999 répond 200 : l'équipe 999 existe vraiment",
+ "type": "jugement",
+ "negatif": false,
+ "source": "Essai réel FM_Stats, 2026-11-26",
+ "note": "Le test de recette suppose une équipe inexistante ; l'équipe 999 est dans les données. Ne pas demander de corriger le service : corriger le test (viser un identifiant vraiment absent).",
+ "dossier": {
+  "decision": {
+   "genre": "tache_bloquee",
+   "texte": "Tâche bloquée sans décision.",
+   "motif": "recette_echec"
+  },
+  "verdicts": [
+   "relancer",
+   "renvoyer",
+   "laisser"
+  ],
+  "choix": [],
+  "questions": [],
+  "tache": {
+   "id": "t24",
+   "titre": "Recette des pages équipe",
+   "etape": "recette",
+   "metier": "testeur",
+   "element": "e1",
+   "journal": [
+    "Défaut : /equipe/999 devrait répondre 404, il répond 200."
+   ]
+  },
+  "fonctionnalite": {
+   "id": "f30",
+   "nom": "Statistiques par équipe",
+   "etape": "serie",
+   "flux": [
+    {
+     "nom": "Dev",
+     "validation": false
+    },
+    {
+     "nom": "Recette",
+     "validation": false
+    },
+    {
+     "nom": "Validation du Directeur",
+     "validation": true
+    }
+   ]
+  },
+  "lecons_du_metier": [],
+  "deja_appris": [],
+  "recentes": [],
+  "mots_interdits": [
+   "ProjetExemple"
+  ],
+  "anomalies": [],
+  "service": {
+   "adresse": "https://service.exemple",
+   "redeployable": false
+  },
+  "taches_dev": [
+   {
+    "id": "t15",
+    "titre": "Page équipe",
+    "etape": "dev",
+    "metier": "dev",
+    "journal": [
+     "404 pour une équipe inconnue, testé."
+    ]
+   }
+  ],
+  "faits_du_service": {
+   "commit_deploye": "f4e5d6c",
+   "sante": "ok",
+   "pages": {
+    "/equipe/999": {
+     "code": 200
+    },
+    "/equipe/99999999": {
+     "code": 404
+    }
+   }
+  },
+  "rapport_de_la_tache": {
+   "statut": "echec",
+   "message": "/equipe/999 répond 200 au lieu de 404."
+  }
+ },
+ "attendu": {
+  "verdicts": [
+   "relancer"
+  ],
+  "texte_evoque": [
+   [
+    "999"
+   ],
+   [
+    "test"
+   ],
+   [
+    "existe",
+    "présente",
+    "presente",
+    "données",
+    "donnees"
+   ]
+  ]
+ },
+ "simule": {
+  "raison": "Réponse simulée du banc.",
+  "verdict": "relancer",
+  "texte": "/equipe/999 répond 200 parce que l'équipe 999 existe dans les données : ce n'est pas un défaut du service. Corrige le test en visant un identifiant absent (ex. /equipe/99999999, qui répond bien 404) puis refais la recette.",
+  "choix": null,
+  "reponses": null,
+  "generalisable": false,
+  "lecon": null,
+  "amelioration": null,
+  "anomalies": null
+ },
+ "decision_id": "d9"
+}

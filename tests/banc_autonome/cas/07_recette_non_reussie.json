@@ -1,0 +1,109 @@
+{
+ "id": "07_recette_non_reussie",
+ "titre": "Rapport « Recette NON réussie » avec défauts constatés",
+ "type": "jugement",
+ "negatif": false,
+ "source": "Essai réel FM_Stats, 2026-11-26",
+ "note": "Une recette non réussie n'est jamais une livraison : correction au dev, avec les défauts du rapport.",
+ "dossier": {
+  "decision": {
+   "genre": "tache_bloquee",
+   "texte": "Tâche bloquée sans décision.",
+   "motif": "recette_echec"
+  },
+  "verdicts": [
+   "relancer",
+   "renvoyer",
+   "laisser"
+  ],
+  "choix": [],
+  "questions": [],
+  "tache": {
+   "id": "t23",
+   "titre": "Recette de la fiche joueur",
+   "etape": "recette",
+   "metier": "testeur",
+   "element": "e1",
+   "journal": [
+    "Rapport remis : Recette NON réussie."
+   ]
+  },
+  "fonctionnalite": {
+   "id": "f30",
+   "nom": "Statistiques par équipe",
+   "etape": "serie",
+   "flux": [
+    {
+     "nom": "Dev",
+     "validation": false
+    },
+    {
+     "nom": "Recette",
+     "validation": false
+    },
+    {
+     "nom": "Validation du Directeur",
+     "validation": true
+    }
+   ]
+  },
+  "lecons_du_metier": [],
+  "deja_appris": [],
+  "recentes": [],
+  "mots_interdits": [
+   "ProjetExemple"
+  ],
+  "anomalies": [],
+  "service": {
+   "adresse": "https://service.exemple",
+   "redeployable": false
+  },
+  "taches_dev": [
+   {
+    "id": "t17",
+    "titre": "Fiche joueur",
+    "etape": "dev",
+    "metier": "dev",
+    "journal": [
+     "Fiche livrée."
+    ]
+   }
+  ],
+  "faits_du_service": {
+   "commit_deploye": "f4e5d6c",
+   "sante": "ok"
+  },
+  "rapport_de_la_tache": {
+   "statut": "echec",
+   "message": "Recette NON réussie. Défauts : (1) la note moyenne affiche NaN pour un joueur sans match ; (2) le tri par poste est inversé."
+  }
+ },
+ "attendu": {
+  "verdicts": [
+   "renvoyer"
+  ],
+  "tache_dev": "t17",
+  "texte_evoque": [
+   [
+    "nan",
+    "sans match"
+   ],
+   [
+    "tri"
+   ]
+  ]
+ },
+ "simule": {
+  "raison": "Réponse simulée du banc.",
+  "verdict": "renvoyer",
+  "texte": "Recette non réussie : la note moyenne affiche NaN sans match (renvoie 0 ou un tiret) et le tri par poste est inversé. Corrige les deux et écris un test pour chacun.",
+  "choix": null,
+  "reponses": null,
+  "generalisable": false,
+  "lecon": null,
+  "amelioration": null,
+  "anomalies": null,
+  "tache_dev": "t17"
+ },
+ "decision_id": "d7"
+}

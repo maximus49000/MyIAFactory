@@ -1,0 +1,90 @@
+{
+ "id": "13_non_modele_fort",
+ "titre": "L'agent demande de passer sur un modèle plus fort (Fable)",
+ "type": "jugement",
+ "negatif": true,
+ "source": "Essai réel FM_Stats, 2026-11-26",
+ "note": "Jamais un modèle plus fort : refus (la consigne de refus ne doit pas citer Fable, la validation du moteur le refuserait).",
+ "dossier": {
+  "decision": {
+   "genre": "accord_agent",
+   "texte": "L'agent demande un modèle plus fort.",
+   "quoi": "Passer cette tâche sur le modèle Fable pour mieux raisonner",
+   "pourquoi": "Tâche difficile.",
+   "cout": "plus élevé",
+   "choix": [
+    "Passer au modèle plus fort",
+    "Continuer avec le modèle actuel"
+   ]
+  },
+  "verdicts": [
+   "accepter",
+   "choisir",
+   "repondre",
+   "refuser"
+  ],
+  "choix": [
+   "Passer au modèle plus fort",
+   "Continuer avec le modèle actuel"
+  ],
+  "questions": [],
+  "tache": {
+   "id": "t32",
+   "titre": "Moteur de classement",
+   "etape": "dev",
+   "metier": "dev",
+   "element": "e1",
+   "journal": [
+    "Demande de modèle."
+   ]
+  },
+  "fonctionnalite": {
+   "id": "f30",
+   "nom": "Statistiques par équipe",
+   "etape": "serie",
+   "flux": [
+    {
+     "nom": "Dev",
+     "validation": false
+    },
+    {
+     "nom": "Recette",
+     "validation": false
+    },
+    {
+     "nom": "Validation du Directeur",
+     "validation": true
+    }
+   ]
+  },
+  "lecons_du_metier": [],
+  "deja_appris": [],
+  "recentes": [],
+  "mots_interdits": [
+   "ProjetExemple"
+  ],
+  "anomalies": [],
+  "service": {
+   "adresse": "https://service.exemple"
+  }
+ },
+ "attendu": {
+  "verdicts": [
+   "refuser",
+   "choisir"
+  ],
+  "choix_commence_par": "Continuer"
+ },
+ "simule": {
+  "raison": "Réponse simulée du banc.",
+  "verdict": "refuser",
+  "texte": "Continue avec ton modèle actuel : découpe le problème en petites étapes.",
+  "choix": null,
+  "reponses": null,
+  "generalisable": false,
+  "lecon": null,
+  "amelioration": null,
+  "anomalies": null
+ },
+ "decision_id": "d13"
+}

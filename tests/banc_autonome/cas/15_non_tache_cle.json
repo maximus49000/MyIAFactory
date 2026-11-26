@@ -1,0 +1,100 @@
+{
+ "id": "15_non_tache_cle",
+ "titre": "Tâche bloquée : seule une clé du Directeur la débloque",
+ "type": "jugement",
+ "negatif": true,
+ "source": "Essai réel FM_Stats, 2026-11-26",
+ "note": "Seul le Directeur peut fournir une clé : laisser bloquée, ne rien inventer.",
+ "dossier": {
+  "decision": {
+   "genre": "tache_bloquee",
+   "texte": "Tâche bloquée sans décision.",
+   "motif": "recette_echec"
+  },
+  "verdicts": [
+   "relancer",
+   "renvoyer",
+   "laisser"
+  ],
+  "choix": [],
+  "questions": [],
+  "tache": {
+   "id": "t33",
+   "titre": "Recette des cartes",
+   "etape": "recette",
+   "metier": "testeur",
+   "element": "e1",
+   "journal": [
+    "401 du fournisseur de cartes : clé d'API absente."
+   ]
+  },
+  "fonctionnalite": {
+   "id": "f30",
+   "nom": "Statistiques par équipe",
+   "etape": "serie",
+   "flux": [
+    {
+     "nom": "Dev",
+     "validation": false
+    },
+    {
+     "nom": "Recette",
+     "validation": false
+    },
+    {
+     "nom": "Validation du Directeur",
+     "validation": true
+    }
+   ]
+  },
+  "lecons_du_metier": [],
+  "deja_appris": [],
+  "recentes": [],
+  "mots_interdits": [
+   "ProjetExemple"
+  ],
+  "anomalies": [],
+  "service": {
+   "adresse": "https://service.exemple",
+   "redeployable": false
+  },
+  "taches_dev": [
+   {
+    "id": "t18",
+    "titre": "Carte des stades",
+    "etape": "dev",
+    "metier": "dev",
+    "journal": [
+     "Utilise la clé d'API du fournisseur."
+    ]
+   }
+  ],
+  "faits_du_service": {
+   "sante": "ok",
+   "journal_service": [
+    "401 Unauthorized : clé absente"
+   ]
+  },
+  "rapport_de_la_tache": {
+   "statut": "echec",
+   "message": "401 : clé d'API absente."
+  }
+ },
+ "attendu": {
+  "verdicts": [
+   "laisser"
+  ]
+ },
+ "simule": {
+  "raison": "Réponse simulée du banc.",
+  "verdict": "laisser",
+  "texte": null,
+  "choix": null,
+  "reponses": null,
+  "generalisable": false,
+  "lecon": null,
+  "amelioration": null,
+  "anomalies": null
+ },
+ "decision_id": "d15"
+}

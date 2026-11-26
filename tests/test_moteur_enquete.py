@@ -108,5 +108,36 @@ class Outils(tmr.Base):
         self.assertTrue(any("a lu (journal" in x and "FileNotFoundError" in x for x in textes))
 
 
+class BranchesAgent(tmr.Base):
+    def git(self, *argv):
+        import subprocess
+        subprocess.run(["git", "-C", str(self.projet.dossier), "-c", "user.email=t@t.test", "-c", "user.name=T", *argv],
+                       check=True, capture_output=True)
+
+    def test_les_branches_agent_non_fusionnees_d_abord(self):
+        self.git("init", "-q", "-b", "main")
+        (self.projet.dossier / "a.txt").write_text("a", encoding="utf-8")
+        self.git("add", "a.txt")
+        self.git("commit", "-q", "-m", "base")
+        self.git("branch", "agent/t1")                       # au même commit : fusionnée
+        self.git("checkout", "-q", "-b", "agent/t2")
+        (self.projet.dossier / "b.txt").write_text("b", encoding="utf-8")
+        self.git("add", "b.txt")
+        self.git("commit", "-q", "-m", "Catalogue : route")
+        self.git("checkout", "-q", "main")                   # agent/t2 : jamais fusionnée
+        b = regles.branches_agent(self.projet)
+        self.assertEqual([(x["branche"], x["fusionnee"]) for x in b], [("agent/t2", False), ("agent/t1", True)])
+        self.assertEqual(b[0]["sujet"], "Catalogue : route")
+
+    def test_sans_depot_git_rien(self):
+        self.assertEqual(regles.branches_agent(self.projet), [])
+
+    def test_les_deux_dossiers_portent_les_branches(self):
+        with mock.patch.object(regles, "branches_agent", return_value=[{"branche": "agent/t9", "fusionnee": False, "sujet": "x"}]):
+            d = regles._dossier_autonome(self.projet, self.etat, {"id": "d1", "genre": "serie_arretee", "fonctionnalite": "f1",
+                                                                  "texte": "x"})
+        self.assertEqual(d["branches_agent"][0]["branche"], "agent/t9")
+
+
 if __name__ == "__main__":
     unittest.main()

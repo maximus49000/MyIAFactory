@@ -11,6 +11,9 @@ pas un succès, même si l'agent a écrit « ok ».
 
 `analyse` : la cause probable, 1 à 3 phrases, en français, sans jargon (elle est montrée au Directeur).
 
+Le dossier donne `branches_agent` (branches `agent/<tâche>`, fusionnées ou non). Avant de conclure que du code manque « dans le clone »,
+vérifie-les : une branche non fusionnée qui le contient se fusionne (consigne : « fusionne agent/… »), elle ne se réécrit pas.
+
 `voie`, une seule parmi celles du dossier :
 - `retour` : l'agent peut finir lui-même avec une consigne plus précise. `consigne` : ce qu'il doit faire autrement,
   précis et vérifiable (900 caractères au plus). La tâche repart avec le même métier et les mêmes outils.

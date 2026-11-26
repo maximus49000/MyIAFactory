@@ -42,7 +42,8 @@ Dossiers attendus (préparés par la table de règles) :
   autonomes), `mots_interdits`. Pour une tâche bloquée sans décision (`decision.genre` = `tache_bloquee`) : aussi
   `taches_dev` ([{id, titre, etape, metier, journal}], les tâches faites de la fonctionnalité) et `service` (vrai si
   le projet déclare un service permanent redéployable). Tout dossier porte aussi `anomalies` (les anomalies du
-  logiciel encore « nouvelles » : id, titre, description) et `service` ({adresse} : le service en ligne du projet) ; une décision qui parle du service ajoute
+  logiciel encore « nouvelles » : id, titre, description) et `branches_agent` ([{branche, fusionnee, sujet}] : les branches locales `agent/<tâche>` et si elles sont fusionnées),
+  `service` ({adresse} : le service en ligne du projet) ; une décision qui parle du service ajoute
   `faits_du_service` (état, commit, santé, noms des secrets présents, pages) et `deja_fait` (vrai : l'action est déjà faite).
 
 - `repondre_question` : `projet` (nom, description), `genre`, `fonctionnalites` ([{id, nom, nature, etape, cahier}]),

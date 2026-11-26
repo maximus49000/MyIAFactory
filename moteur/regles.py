@@ -4576,9 +4576,13 @@ def _chemins_du_projet(projet, r, fid=None):
 
 ROLES_DE_RECETTE = ("testeur", "recette")
 RECETTES_RATEES_MAX = 3          # au-delà, la recette est bloquée comme un échec : le Chef analyse, le Directeur tranche
-CONSIGNE_RECETTE = ("Tu fais la recette : ajoute à ton rapport `\"recette_reussie\": true` si tout ce que tu devais vérifier "
-                    "passe, `false` au moindre défaut constaté (liste-les dans `message.texte`, chacun précis). Une recette "
-                    "non réussie rouvre une correction : n'écris jamais « fait » sans ce champ à `false` quand elle échoue.")
+CONSIGNE_RECETTE = ("Tu fais la recette : ajoute à ton rapport `\"recette_reussie\": true` si tout ce que tu as pu vérifier "
+                    "passe, `false` au moindre défaut CONSTATÉ (liste-les dans `message.texte`, chacun précis). Une recette "
+                    "non réussie rouvre une correction : n'écris jamais « fait » sans ce champ à `false` quand elle échoue. "
+                    "Ce que tu n'as PAS pu vérifier (accès manquant, donnée absente du clone, appareil indisponible) n'est "
+                    "pas un défaut : écris-le sous « Non vérifié » dans `message.texte`, garde `recette_reussie` à `true` si "
+                    "le reste passe, et ne demande jamais une correction pour une vérification impossible. Pour les données "
+                    "réelles, interroge le service en ligne du projet plutôt que le clone.")
 MOTIF_RECETTE_RATEE = re.compile(r"recette\s+(?:n['’]a\s+pas|non|pas)\s+r[ée]ussi", re.IGNORECASE)
 TITRE_RECETTE_RATEE = "Recette non réussie"
 

@@ -578,6 +578,21 @@ def erreur_questions(questions):
     return None
 
 
+def erreur_reponses_aux_questions(questions, reponses):
+    """Une réponse par question (une liste de choix parmi ceux de la question ; un seul si elle n'est pas « multiple »),
+    ou le message d'erreur."""
+    if not questions:
+        return "cette demande ne pose pas de questions à choix"
+    if not isinstance(reponses, list) or len(reponses) != len(questions):
+        return f"répondez à chacune des {len(questions)} questions, et à elles seules"
+    for k, (q, a) in enumerate(zip(questions, reponses), 1):
+        if (not isinstance(a, list) or not a or not all(isinstance(x, str) and x in q["choix"] for x in a)
+                or len(set(a)) != len(a) or (len(a) > 1 and not q.get("multiple"))):
+            return f"la réponse à la question {k} doit être un des choix proposés" + (
+                " (plusieurs possibles)" if q.get("multiple") else "")
+    return None
+
+
 def _verifier_documents(f, nom, erreurs):
     """Les documents produits pour la fonctionnalité : `{chemin, titre}` et, facultatifs, d'où ils viennent."""
     documents = _liste_facultative(f.get("documents"), f"{nom} : « documents »", erreurs)
@@ -769,6 +784,10 @@ def _verifier_decisions_projet(r, cles_agents, erreurs, ids_decisions):
             if d.get("choix") is not None and (not isinstance(d["choix"], list) or not 1 <= len(d["choix"]) <= 6 or not all(
                     _texte_plein(x) and len(x) <= 120 for x in d["choix"])):
                 erreurs.append(f"{nom} : la décision « {i} » : « choix » est une liste de 1 à 6 textes de 120 caractères au plus.")
+            if d.get("questions") is not None:
+                probleme = erreur_questions(d["questions"])
+                if probleme:
+                    erreurs.append(f"{nom} : la décision « {i} » : {probleme}")
             touchees = d.get("regles_touchees")
             if touchees is not None and (not isinstance(touchees, list) or not all(
                     _est_dict(x) and _texte_plein(x.get("id")) and _texte_plein(x.get("texte")) for x in touchees)):

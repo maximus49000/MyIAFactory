@@ -510,6 +510,38 @@ function evaluerTestsServeur(ctx) {
   return li;
 }
 
+// La boîte des questions d'un agent : chaque question avec ses choix (un seul, ou plusieurs si « multiple »). `reponses()` :
+// la liste des choix retenus par question ; `complete()` : chaque question a au moins un choix.
+function boiteQuestions(d, questions) {
+  const element = el("div", "decision-questions");
+  element.append(el("div", "decision-texte", `Vos réponses (${questions.length} questions)`));
+  const champs = [];
+  const ecouteurs = [];
+  questions.forEach((q, k) => {
+    const groupe = el("fieldset", "decision-question");
+    groupe.append(el("legend", "", `${k + 1}. ${q.texte}`));
+    const entrees = [];
+    for (const c of q.choix.filter(plein)) {
+      const e = document.createElement("input");
+      e.type = q.multiple === true ? "checkbox" : "radio";
+      e.name = `question-${d.id}-${k}`;
+      e.value = c;
+      e.addEventListener("change", () => ecouteurs.forEach((f) => f()));
+      const etiquette = el("label", "decision-choix");
+      etiquette.append(e, el("span", "", " " + c));
+      groupe.append(etiquette);
+      entrees.push(e);
+    }
+    element.append(groupe);
+    champs.push(entrees);
+  });
+  const retenus = (entrees) => entrees.filter((e) => e.checked).map((e) => e.value);
+  return {element,
+    reponses: () => champs.map(retenus),
+    complete: () => champs.every((entrees) => retenus(entrees).length > 0),
+    surChangement: (f) => ecouteurs.push(f)};
+}
+
 // « Demandes d'accord des agents » : l'agent, ce qu'il veut faire et pourquoi, ce que ça implique (fenêtres, branchement,
 // coût), le rappel de la règle quand il vise un appareil physique ; « J'accepte », « Je refuse » et une consigne facultative.
 function decisionAccordAgent(ctx, d) {
@@ -527,6 +559,9 @@ function decisionAccordAgent(ctx, d) {
     li.append(el("div", "decision-regle", debut + r.texte));
   }
   if (!ctx.etat.agir) return li;
+  const questions = Array.isArray(d.questions) ? d.questions.filter((q) => plein(q?.texte) && Array.isArray(q.choix)) : [];
+  const boite = questions.length >= 2 ? boiteQuestions(d, questions) : null;     // plusieurs questions : une boîte dédiée
+  if (boite) li.append(boite.element);
   const consigne = document.createElement("input");
   consigne.type = "text";
   consigne.maxLength = 500;
@@ -556,7 +591,13 @@ function decisionAccordAgent(ctx, d) {
   const avant = () => (retenir && retenir.checked ? regleValide(ctx, regle.value) : true);   // coché mais vide : rien ne part
   const rangee = el("div", "lecon-boutons");
   const choix = (Array.isArray(d.choix) ? d.choix : []).filter(plein);
-  if (choix.length) {     // l'agent a proposé des choix : ses boutons, la demande n'est pas écartée
+  if (boite) {     // une réponse par question, un seul envoi
+    const envoyer = boutonDemande(ctx, "Envoyer mes réponses", "bouton",
+      () => demandeAccordAgent(d, "repondre", consigne.value, retenue("repondre"), undefined, boite.reponses()), avant);
+    envoyer.disabled = true;
+    boite.surChangement(() => { envoyer.disabled = !boite.complete(); });
+    rangee.append(envoyer);
+  } else if (choix.length) {     // l'agent a proposé des choix : ses boutons, la demande n'est pas écartée
     for (const c of choix) {
       rangee.append(boutonDemande(ctx, c, "bouton secondaire", () => demandeAccordAgent(d, "choisir", consigne.value, retenue("choisir", c), c), avant));
     }

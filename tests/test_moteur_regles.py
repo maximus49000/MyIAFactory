@@ -1299,6 +1299,34 @@ class Arrets(Base):
         self.assertEqual(len(self.decisions_accord()), 1)                  # rien n'est écarté
         self.assertNotIn("choix", self.ACCORD["message"])
 
+    PLUSIEURS = {**ACCORD, "message": {"texte": "Trois questions à trancher avant la maquette.", "attend": True, "questions": [
+        {"texte": "Confirmer le mode destructif ?", "choix": ["Annuler / Supprimer et recréer", "Saisie du mot SUPPRIMER"]},
+        {"texte": "Sort des données absentes ?", "choix": ["Les supprimer", "Les garder"]},
+        {"texte": "Aperçu avant exécution ?", "choix": ["Oui", "Non"], "multiple": True}]},
+        "accord": {"quoi": "réponses au cadrage", "partenaire": "aucun", "cout": "0"}}
+
+    def test_plusieurs_questions_une_boite_et_une_reponse_par_question(self):
+        self.piloter(self.depart_cadrage(), rapports=[self.PLUSIEURS])
+        d, = self.decisions_accord()
+        self.assertEqual([q["texte"] for q in d["questions"]], ["Confirmer le mode destructif ?", "Sort des données absentes ?",
+                                                               "Aperçu avant exécution ?"])
+        self.assertNotIn("choix", d)                                     # plus de boutons de la seule première question
+        self.assertTrue(d["questions"][2]["multiple"])
+        # une réponse manquante ou hors choix : refusée, rien n'est écarté
+        demande, relance = self.traiter(type="accord_agent", decision=d["id"], verdict="repondre",
+                                        reponses=[["Les supprimer"], ["Les supprimer"], ["Oui"]])
+        self.assertEqual(relance, [])
+        self.assertIn("question 1", self.statut(demande["id"])["reponse"])
+        self.assertEqual(len(self.decisions_accord()), 1)
+        demande, relance = self.traiter(type="accord_agent", decision=d["id"], verdict="repondre",
+                                        reponses=[["Saisie du mot SUPPRIMER"], ["Les garder"], ["Oui", "Non"]], texte="Merci.")
+        self.assertEqual([a[0] for a in relance], ["agent"])
+        message = relance[0][3]
+        self.assertIn("1. Confirmer le mode destructif ? → Saisie du mot SUPPRIMER", message)
+        self.assertIn("3. Aperçu avant exécution ? → Oui ; Non", message)
+        self.assertIn("Sa consigne : Merci.", message)
+        self.assertEqual(self.decisions_accord(), [])
+
     def test_demande_de_regle_du_bureau(self):
         d, relance = self.traiter(type="regle_projet", operation="ajouter", texte="Pas de Docker.")
         self.assertEqual(relance, [])

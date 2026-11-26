@@ -47,7 +47,7 @@ FACULTATIFS = {"parallelisme": ("agents_serveur_max", "ordre_lieux", "ordre_lieu
                "faire_chez_partenaire": ("texte", "fichiers"), "challenge": ("texte", "solution"), "fonctionnalite": ("images", "fichiers", "nature", "concerne", "captures"),
                "question": ("images", "fichiers", "fil", "fonctionnalite"), "message": ("images", "fichiers"),
                "cahier": ("texte",), "methode": ("texte",), "genre": ("description",), "lecon": ("etage",),
-               "organisation": ("texte", "fable", "installer"), "valider_etape": ("texte", "reponses"), "accord_agent": ("texte", "regle", "choix"), "regle_projet": ("id", "texte"), "environnement": ("fonctionnalite", "outil"),
+               "organisation": ("texte", "fable", "installer"), "valider_etape": ("texte", "reponses"), "accord_agent": ("texte", "regle", "choix", "reponses"), "regle_projet": ("id", "texte"), "environnement": ("fonctionnalite", "outil"),
                "installer_outil": ("fonctionnalite",), "depot_git": ("allegement",), "recruter": ("lieu",), "blocage_analyse": ("texte",), "elargir_genre": ("description",), "genre_fonctionnalite": ("genre", "description", "projet_cree")}
 DEMANDES_V4 = ("fonctionnalite", "message", "cahier", "methode", "genre", "session_cloud", "retour_element",
                "organisation", "genre_fonctionnalite", "environnement", "elargir_genre", "valider_etape", "installer_outil",
@@ -596,8 +596,12 @@ def _verifier_v4(demande, r, elements):
         d = _decision(r.get("decisions_projet", []), demande["decision"], "accord_agent")
         if d is None:
             return "Décision inconnue."
-        if demande["verdict"] not in ("accepter", "refuser", "choisir"):
-            return "Réponse inconnue (accepter, refuser ou choisir)."
+        if demande["verdict"] not in ("accepter", "refuser", "choisir", "repondre"):
+            return "Réponse inconnue (accepter, refuser, choisir ou repondre)."
+        if demande["verdict"] == "repondre":
+            erreur = releve.erreur_reponses_aux_questions(d.get("questions") or [], demande.get("reponses"))
+            if erreur:
+                return erreur.capitalize() + "."
         if demande["verdict"] == "choisir" and demande.get("choix") not in (d.get("choix") or []):
             return "Ce choix n'est pas l'un de ceux que l'agent a proposés."
         if len(demande.get("texte") or "") > MAX_TEXTE:

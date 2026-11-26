@@ -1279,6 +1279,12 @@ def _accord_a_donner(ctx, s, e):
         if not isinstance(c, list) or not 1 <= len(c) <= 6 or not all(isinstance(x, str) and x.strip() and len(x) <= 120 for x in c):
             raise Refus("« choix » est une liste de 1 à 6 textes de 120 caractères au plus.")
         d["choix"] = c
+    if e.get("questions") is not None:      # plusieurs questions à choix : une boîte dédiée au bureau (une réponse par question)
+        probleme = rel.erreur_questions(e["questions"])
+        if probleme:
+            raise Refus(f"« accord_agent » : {probleme}")
+        d["questions"] = [{"texte": q["texte"].strip()[:300], "choix": [c.strip()[:120] for c in q["choix"]],
+                           **({"multiple": True} if q.get("multiple") else {})} for q in e["questions"]]
     if e.get("regle_proposee") is not None:      # la règle que la case « Retenir comme règle du projet » propose
         d["regle_proposee"] = _phrase_courte(e, "regle_proposee", rp.MAX_TEXTE)
     touchees = e.get("regles_touchees")

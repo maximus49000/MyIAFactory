@@ -7959,7 +7959,8 @@ def _dossier_autonome(projet, etat, d):
     except Refus:
         nouvelles = []
     plus = {"anomalies": nouvelles, "service": {"adresse": _adresse_du_service(projet)}}
-    if d["genre"] != GENRE_TACHE_BLOQUEE and _decision_du_service(d) and _service_a_redeployer(projet):
+    if (d["genre"] != GENRE_TACHE_BLOQUEE and (_decision_du_service(d) or d["genre"] == SERIE_ARRETEE)
+            and _service_a_redeployer(projet)):
         # l'état réel avant de répondre (essai FM_Stats : « oui, déployer » alors que le service était déjà en ligne et sain)
         textes = " ".join(str(d.get(c) or "") for c in ("quoi", "pourquoi", "texte", "commande"))
         plus["faits_du_service"] = service_permanent.faits_du_service(

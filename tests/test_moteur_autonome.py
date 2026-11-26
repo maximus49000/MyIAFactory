@@ -448,6 +448,14 @@ class TacheBloquee(tsr.AvecValidation):
         self.assertFalse(action[2]["deja_fait"])
         self.assertIsNone(jugement.valider("decider_autonome", objet(verdict="accepter"), action[2]))
 
+    def test_une_serie_arretee_recoit_aussi_les_faits_du_service(self):
+        self.avec_service([("a_jour", "ok")])
+        with mock.patch.object(regles.service_permanent, "faits_du_service", return_value=self.faits_sains()):
+            dossier = regles._dossier_autonome(self.projet, self.etat, {"id": "d9", "genre": "serie_arretee",
+                                                                       "fonctionnalite": "f1", "texte": "Série arrêtée."})
+        self.assertEqual(dossier["faits_du_service"]["etat"], "actif")
+        self.assertFalse(dossier["deja_fait"])      # le garde « déjà fait » ne vaut que pour un accord
+
     def test_une_decision_sans_rapport_avec_le_service_n_a_pas_de_faits(self):
         self.ok("decision", entree={"action": "poser", "portee": "projet", "genre": "accord_agent", "agent": "chef", "texte": "Un agent demande votre accord.",
                                     "tache": self.recette, "quoi": "Générer 5 images"})

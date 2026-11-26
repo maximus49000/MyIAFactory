@@ -607,7 +607,8 @@ def _transmettre_a_l_agent(projet, demande, fid, tid, agent):
     if joints:      # tu peux les lire : chemin, type, taille de chacun
         texte += (" Fichiers joints (à lire si utile) :\n" + "\n".join(fichiers_joints.lignes_pour_agent(joints)) + "\n"
                   + fichiers_joints.CONSIGNE_LECTURE)
-    detache.ajouter_question(projet.factory.parent, tid, texte or "(message sans texte)", demande=demande["id"])
+    detache.ajouter_question(projet.factory.parent, tid, texte or "(message sans texte)", demande=demande["id"],
+                             retour=demande.get("type") == "retour")
     prenom = prenom_de(projet, agent)
     dit = texte_question_transmise(prenom)
     _dire(projet, fid, dit)
@@ -2306,12 +2307,18 @@ def _sur_retour(projet, demande, etat):
         return _reprendre_la_tache(projet, etat, t["id"], fid,
                                    "Consigne de l'utilisateur pour la reprise de cette tâche : " + demande["texte"],
                                    "Reprise sur votre retour : " + texte)
+    return confier_le_retour(projet, etat, demande["id"], t, demande["texte"])
+
+
+def confier_le_retour(projet, etat, demande_id, t, texte, termine=True):
+    """Le retour de l'utilisateur sur la tâche `t` devient une tâche « Retour » confiée à un agent. `termine` faux : la
+    demande est déjà close (retour transmis à l'agent, qui a fini sans le reprendre)."""
     nouvelle = _creer_tache(projet, "Retour : " + t["titre"], t.get("fonctionnalite"),
                             t.get("role") or _role_production(projet, t.get("fonctionnalite")), "retour",
-                            element=t.get("element"), journal=["Retour de l'utilisateur : " + demande["texte"]])
-    _terminer(projet, {"demande": demande["id"]}, "J'ai confié votre retour à un agent.")
-    suivre_demande(projet, demande["id"], "confie", f"Confié à la tâche {nouvelle} : suivez-la au tableau.",
-                   tache=nouvelle)
+                            element=t.get("element"), journal=["Retour de l'utilisateur : " + texte])
+    if termine:
+        _terminer(projet, {"demande": demande_id}, "J'ai confié votre retour à un agent.")
+    suivre_demande(projet, demande_id, "confie", f"Confié à la tâche {nouvelle} : suivez-la au tableau.", tache=nouvelle)
     return _demarrer_en_attente(projet, etat, t.get("fonctionnalite"))
 
 

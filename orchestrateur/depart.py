@@ -232,6 +232,15 @@ pas un essai qui a réussi, et préfère un outil du projet qui fait le travail 
 manque, dis-le dans ton résultat plutôt que de la chercher partout."""
 
 
+CONTRAT_API = """## Contrat d'interface
+Si ta tâche crée ou change une API (routes, messages, fichier d'échange entre deux programmes), tu écris ou tu mets à jour
+son contrat d'interface dans le dépôt (par exemple `docs/api.md` ou un `openapi.yaml`), clair et précis : chaque route
+(méthode, chemin), ses paramètres, le corps de la requête et de la réponse avec un exemple, les codes d'erreur,
+l'authentification (le nom du jeton et où il se donne, jamais sa valeur) et la version. Il doit correspondre aux routes
+réelles, que le test le vérifie. Si ta tâche utilise une API existante, lis son contrat d'abord ; s'il n'existe pas ou
+s'il diverge du code, signale-le dans ton résultat et écris-le."""
+
+
 LANCEUR_DE_TESTS = Path(__file__).resolve().parent.parent / "lancer.py"
 
 
@@ -647,6 +656,7 @@ def message(factory, fiche, tache, brief_du_role, lecons_memoire, glossaire=(), 
     if inscrits or ecartes:
         parties.append(_partenaires_inscrits(inscrits, ecartes))
     parties.append(SOBRIETE)
+    parties.append(CONTRAT_API)
     if fiche["lieu"] not in LIEUX_SANS_POSTE:
         parties.append(tests_un_a_la_fois(route))
         if deport:
@@ -701,6 +711,7 @@ def message_lot(factory, fiche, taches, briefs, lecons_memoire, glossaire=(), re
     if inscrits or ecartes:
         parties.append(_partenaires_inscrits(inscrits, ecartes))
     parties.append(SOBRIETE)
+    parties.append(CONTRAT_API)
     if fiche["lieu"] not in LIEUX_SANS_POSTE:
         parties.append(tests_un_a_la_fois(route))
         if deport:

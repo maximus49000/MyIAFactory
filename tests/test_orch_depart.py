@@ -590,3 +590,12 @@ class TestDepartCommandes(AvecProjet):
         m = self.ok("depart", entree={"agent": "dev-1", "tache": t["id"]})["message"]
         self.assertIn("Sonnet", m)
         self.assertIn("Haiku", m)
+
+
+class ContratDInterface(unittest.TestCase):
+    """Un agent qui crée ou utilise une API reçoit la consigne d'écrire/lire son contrat d'interface (règle du Directeur)."""
+
+    def test_la_consigne_est_precise_et_sans_valeur_de_jeton(self):
+        from orchestrateur import depart
+        for mot in ("contrat d'interface", "méthode, chemin", "codes d'erreur", "jamais sa valeur", "routes", "version"):
+            self.assertIn(mot, depart.CONTRAT_API)

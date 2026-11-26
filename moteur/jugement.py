@@ -41,7 +41,8 @@ Dossiers attendus (préparés par la table de règles) :
   `lecons_du_metier`, `deja_appris` (les réponses que le moteur donne seul), `recentes` (les dernières décisions
   autonomes), `mots_interdits`. Pour une tâche bloquée sans décision (`decision.genre` = `tache_bloquee`) : aussi
   `taches_dev` ([{id, titre, etape, metier, journal}], les tâches faites de la fonctionnalité) et `service` (vrai si
-  le projet déclare un service permanent redéployable).
+  le projet déclare un service permanent redéployable). Tout dossier porte aussi `anomalies` (les anomalies du
+  logiciel encore « nouvelles » : id, titre, description) et `service` ({adresse} : le service en ligne du projet).
 
 - `repondre_question` : `projet` (nom, description), `genre`, `fonctionnalites` ([{id, nom, nature, etape, cahier}]),
   `fonctionnalite` (celle visée, cahier et éléments, ou null), `regles_projet`, `fil` (messages précédents),
@@ -819,6 +820,13 @@ def _valider_decider_autonome(o, d):
     erreur = _erreur_lecon(o, d)
     if erreur:
         return erreur
+    an = o.get("anomalies")
+    if an is not None:
+        connues = {x.get("id") for x in d.get("anomalies") or [] if isinstance(x, dict)}
+        if not (isinstance(an, list) and all(isinstance(x, dict) and x.get("id") in connues
+                                             and x.get("etat") in ("vue", "reglee") for x in an)):
+            return ("« anomalies » : null, ou une liste de {id (une anomalie du dossier), etat (vue | reglee)} : « reglee » "
+                    "seulement si le défaut du logiciel est corrigé depuis.")
     a = o.get("amelioration")
     if a is not None and not (isinstance(a, dict) and _ligne(a.get("titre")) and len(a["titre"]) <= TITRE_ANOMALIE_MAX
                               and _texte(a.get("description")) and len(a["description"]) <= CONSIGNE_BLOCAGE_MAX):

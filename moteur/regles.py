@@ -7910,12 +7910,17 @@ def _dossier_autonome(projet, etat, d):
             decision[cle] = d[cle] if not isinstance(d[cle], str) else d[cle][:1500]
     verdicts = [v for v in VERDICTS_AUTONOMES[d["genre"]]
                 if not (v == "autoriser" and not d.get("programme")) and not (v == "suivre" and not (d.get("recommandation") or "").strip())]
-    plus = {}
+    try:
+        nouvelles = [{"id": a["id"], "titre": a["titre"], "description": a["description"][:300]}
+                     for a in lancer(projet, "anomalies", {"action": "lister"})["anomalies"] if a["etat"] == "nouvelle"][-8:]
+    except Refus:
+        nouvelles = []
+    plus = {"anomalies": nouvelles, "service": {"adresse": _adresse_du_service(projet)}}
     if d["genre"] == GENRE_TACHE_BLOQUEE:
         taches_dev = _taches_faites_de(projet, t)
         service = _service_a_redeployer(projet) and (d["tache"] not in etat.setdefault("autonome_redeploye", set()))
         verdicts = [v for v in verdicts if not (v == "renvoyer" and not taches_dev) and not (v == "redeployer" and not service)]
-        plus = {"taches_dev": taches_dev, "service": service}
+        plus.update(taches_dev=taches_dev, service={"adresse": _adresse_du_service(projet), "redeployable": service})
     mots = [m for m in list(fac.get("mots_interdits") or []) + [fac.get("nom") or ""] if m]
     return {
         "decision": decision, "verdicts": verdicts,
@@ -7947,11 +7952,58 @@ def _demande_autonome(d, o):
     return demande
 
 
-def _deposer_autonome(projet, etat, d, demande, raison):
-    """Dépose la réponse comme une demande du bureau (traitée au même passage, journalisée avec sa raison)."""
+VERBES_AUTONOMES = {"accepter": "J'ai accepté", "autoriser": "J'ai autorisé l'outil", "refuser": "J'ai refusé",
+                    "choisir": "J'ai fait le choix", "repondre": "J'ai répondu", "relancer": "J'ai relancé",
+                    "suivre": "J'ai suivi la recommandation", "preciser": "J'ai précisé la consigne"}
+
+
+def _dire_le_travail(projet, tid, phrase, fid=None):
+    """Le Chef dit au bureau, dans la discussion de la fonctionnalité (là où il parle déjà), ce que Claude autonome vient de
+    faire et pourquoi : une phrase par action. Sans fonctionnalité connue, rien (le journal de la tâche le dit)."""
+    if fid is None and tid:
+        try:
+            fid = _tache(projet, tid).get("fonctionnalite")
+        except Refus:
+            fid = None
+    if fid:
+        try:
+            _dire(projet, fid, " ".join(phrase.split())[:700])
+        except Refus:
+            pass
+
+
+def _phrase_autonome(projet, d, demande, raison, lecon):
+    """Ce que dit le Chef d'une réponse de Claude autonome à `d` : le geste, la tâche, la raison (français simple)."""
+    v, texte, titre = demande["verdict"], demande.get("texte"), ""
+    if d.get("tache"):
+        try:
+            titre = f" « {_tache(projet, d['tache']).get('titre')} »"
+        except Refus:
+            pass
+    if d["genre"] == GENRE_TACHE_BLOQUEE:
+        phrase = {"relancer": f"J'ai relancé la tâche{titre} avec une consigne précise : {texte}",
+                  "renvoyer": f"J'ai renvoyé le défaut à l'agent de développement (tâche {demande.get('tache_dev')}) avec le "
+                              f"diagnostic : {texte}",
+                  "redeployer": f"Je redéploie le service pour la tâche{titre} ; je la relancerai dès qu'il répond.",
+                  "laisser": f"J'ai laissé la tâche{titre} bloquée : seul vous pouvez agir."}.get(v, f"J'ai répondu {v}.")
+    else:
+        sujet = d.get("quoi") or d.get("programme") or MOTIFS_BLOCAGE.get(d.get("motif")) or (
+            "la série arrêtée" if d["genre"] == SERIE_ARRETEE else d["genre"])
+        phrase = (f"{VERBES_AUTONOMES.get(v, 'J ai répondu')} à votre place : {sujet}{titre}."
+                  + (f" Consigne : {texte}" if texte else ""))
+    phrase += f" Pourquoi : {raison}"
+    if lecon:
+        phrase += f" J'en retiens une leçon : {lecon['texte']}"
+    return phrase
+
+
+def _deposer_autonome(projet, etat, d, demande, raison, lecon=None):
+    """Dépose la réponse comme une demande du bureau (traitée au même passage, journalisée avec sa raison, dite au bureau
+    par le Chef : un seul message par réponse)."""
     lancer(projet, "actions", {**demande, "claude_autonome": True, "raison": raison[:600]})
     if d.get("tache"):
         _journal(projet, d["tache"], f"Claude autonome ({demande['verdict']}) : {raison}")
+    _dire_le_travail(projet, d.get("tache"), _phrase_autonome(projet, d, demande, raison, lecon), d.get("fonctionnalite"))
     recentes = etat.setdefault("autonome_recentes", [])
     recentes.append({"genre": d["genre"], "sur": str(d.get("quoi") or d.get("programme") or d.get("motif") or "")[:120],
                      "verdict": demande["verdict"], "raison": raison[:200]})
@@ -7968,7 +8020,7 @@ def _apres_decider_autonome(projet, o, ctx, etat):
     if d is None:
         return []      # le Directeur a répondu pendant la réflexion : rien à faire
     try:
-        _deposer_autonome(projet, etat, d, _demande_autonome(d, o), o["raison"])
+        _deposer_autonome(projet, etat, d, _demande_autonome(d, o), o["raison"], o.get("lecon"))
     except Refus:
         return []      # la décision reste posée : le Directeur la voit
     if d["genre"] == GENRE_TACHE_BLOQUEE:
@@ -7982,6 +8034,8 @@ def _apres_decider_autonome(projet, o, ctx, etat):
             pass
     if o.get("lecon"):
         _lecon_du_chef(projet, t, o["lecon"], valider=True)
+    for x in o.get("anomalies") or []:
+        _fermer_une_anomalie(projet, t, x, o["raison"])
     a = o.get("amelioration")
     if a:
         try:
@@ -8001,6 +8055,21 @@ def _apres_decider_autonome(projet, o, ctx, etat):
         except OSError:
             pass
     return []
+
+
+def _fermer_une_anomalie(projet, t, x, raison):
+    """Une anomalie du logiciel que la cause du blocage a désignée : « Réglée » si le défaut est corrigé depuis, « Vue »
+    sinon (demande `anomalie`, comme les boutons du bureau). Une phrase du Chef."""
+    try:
+        lancer(projet, "actions", {"type": "anomalie", "anomalie": x["id"], "etat": x["etat"], "claude_autonome": True,
+                                   "raison": raison[:600]})
+    except Refus:
+        return
+    titre = next((a["titre"] for a in lancer(projet, "anomalies", {"action": "lister"})["anomalies"] if a["id"] == x["id"]),
+                 x["id"])
+    _dire_le_travail(projet, t.get("id"), f"J'ai marqué l'anomalie du logiciel « {titre} » comme "
+                     f"{'réglée : elle est corrigée depuis' if x['etat'] == 'reglee' else 'vue'}. Pourquoi : {raison}",
+                     t.get("fonctionnalite"))
 
 
 def _autonome_rate(projet, ctx, etat):
@@ -8094,6 +8163,17 @@ def _taches_faites_de(projet, t):
     return rendues[-12:]
 
 
+def _adresse_du_service(projet):
+    """L'adresse publique du service permanent du projet (cache des services), ou None."""
+    try:
+        m = service_permanent._module()
+        fiche = m.lire_cache().get(m.identifiant(Path(projet.dossier)))
+        a = fiche.get("adresse") if isinstance(fiche, dict) else None
+        return a if isinstance(a, str) and a.startswith(("http://", "https://")) else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def _service_a_redeployer(projet):
     """Le projet déclare un service permanent (`.factory/service.json`) que le moteur a le droit de déployer."""
     try:
@@ -8155,6 +8235,58 @@ def _sur_tache_bloquee(projet, demande, etat):
 _SUR[GENRE_TACHE_BLOQUEE] = _sur_tache_bloquee
 
 
+def _signature_des_causes(projet):
+    """Ce qui peut lever un blocage de l'extérieur : la version du service en ligne et les anomalies du logiciel réglées.
+    None si elle ne peut pas être lue (rien n'est relancé)."""
+    try:
+        m = service_permanent._module()
+        fiche = m.lire_cache().get(m.identifiant(Path(projet.dossier))) if _service_a_redeployer(projet) else None
+        etat_service = fiche.get("etat") if isinstance(fiche, dict) and isinstance(fiche.get("etat"), dict) else {}
+        reglees = tuple(sorted(a["id"] for a in lancer(projet, "anomalies", {"action": "lister"})["anomalies"]
+                               if a["etat"] == "reglee"))
+        return (etat_service.get("commit"), reglees)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _relancer_si_la_cause_a_change(projet, etat):
+    """Un blocage n'est jamais réévalué : sa raison reste affichée après que la cause est levée. En mode autonome, une tâche
+    bloquée est relancée (demande `retour` « Relance demandée… », comme le bouton) une seule fois par changement de cause :
+    nouvelle version du service en ligne, ou anomalie du logiciel passée « Réglée ». Sans changement, rien."""
+    bloquees = []
+    for x in _etat(projet)["taches"]:
+        if x.get("bloquee") and x["colonne"] != "fait" and x["id"] not in (etat.get("autonome_service") or {}):
+            try:
+                t = _tache(projet, x["id"])
+            except Refus:
+                continue
+            if str(t.get("etape") or "") != ETAPE_INSTALLATION and not _validation_bloquee(t):
+                bloquees.append(t)
+    vus = etat.setdefault("autonome_cause", {})
+    for tid in [i for i in vus if i not in {t["id"] for t in bloquees}]:
+        del vus[tid]
+    signature = _signature_des_causes(projet) if bloquees else None
+    if signature is None:
+        return []
+    for t in bloquees:
+        avant = vus.get(t["id"])
+        vus[t["id"]] = signature
+        if avant is None or avant == signature:
+            continue
+        quoi = ("le service en ligne a une nouvelle version" if avant[0] != signature[0]
+                else "une anomalie du logiciel est réglée")
+        try:
+            lancer(projet, "actions", {"type": "retour", "tache": t["id"], "claude_autonome": True,
+                                       "texte": f"Relance demandée : {quoi} depuis ton blocage ; reprends cette tâche.",
+                                       "raison": quoi})
+        except Refus:
+            continue
+        _journal(projet, t["id"], f"Claude autonome relance la tâche : {quoi}.")
+        _dire_le_travail(projet, t["id"], f"J'ai relancé la tâche « {t.get('titre')} » : {quoi}, la cause de son blocage "
+                                          "a peut-être disparu.")
+    return []
+
+
 def _suivre_le_redeploiement(projet, etat):
     """À chaque passage : les tâches qui attendent le redéploiement du service. Le service sain (version livrée en ligne,
     contrôle de santé passé), la tâche repart ; un échec, un retour arrière ou 45 minutes sans résultat la rendent au
@@ -8175,7 +8307,14 @@ def _suivre_le_redeploiement(projet, etat):
         except Exception:  # noqa: BLE001
             continue
         if statut == "a_jour":
+            repond, vu = service_permanent.sante_repond(projet.dossier)
+            if not repond and time.time() - v["depuis"] <= AUTONOME_SERVICE_ATTENTE_S:
+                continue       # le service est déployé mais pas prêt (503, index en préparation) : on attend encore
             attente.pop(tid, None)
+            _dire_le_travail(projet, tid, f"J'ai relancé la tâche « {t.get('titre')} » : " + (
+                "le service est redéployé et répond." if repond else
+                f"le service est redéployé, mais il ne répondait toujours pas après un long délai ({vu}) ; je relance "
+                "quand même, le journal dira ce qu'elle trouve."))
             actions += _reprendre_la_tache(
                 projet, etat, tid, t.get("fonctionnalite"),
                 v.get("texte") or "Le service permanent a été redéployé avec la version corrigée : refais la recette contre lui.",
@@ -8201,6 +8340,7 @@ def repondre_en_autonome(projet, etat):
     faites = etat.setdefault("autonome_faites", set())
     reprises = etat.setdefault("autonome_reprises", {})
     actions, appris, modifie = _suivre_le_redeploiement(projet, etat), None, False
+    actions += _relancer_si_la_cause_a_change(projet, etat)
     for d in _etat(projet)["decisions"] + _blocages_sans_decision(projet, etat):
         if d["id"] in faites or d.get("genre") not in VERDICTS_AUTONOMES:
             continue

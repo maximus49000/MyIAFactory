@@ -6,6 +6,7 @@ from pathlib import Path
 
 RACINE = Path(__file__).resolve().parent.parent
 DOSSIERS = ("bureau", "moteur", "orchestrateur", "installation", "banc")
+PAR_DEFAUT = re.compile(r"=\s*subprocess\.(run|Popen)")   # exécuteur par défaut injectable : doit masquer la fenêtre
 APPEL = re.compile(r"subprocess\.(run|Popen)\(")
 # Lancés depuis une console (installation, outil en ligne de commande), ou masqués par un drapeau calculé ailleurs.
 EXCEPTIONS = {
@@ -35,6 +36,13 @@ class SansFenetre(unittest.TestCase):
                     and "**options" not in appel and "creationflags=_sans_fenetre()" not in appel:
                 manquants.append(f"{f.relative_to(RACINE)}:{n}")
         self.assertEqual(manquants, [], "commandes lancées sans CREATE_NO_WINDOW (fenêtre noire sous Windows)")
+
+
+class ExecuteursParDefaut(unittest.TestCase):
+    def test_ssh_masque_sa_fenetre_par_defaut(self):
+        for f in ("plateforme_ssh.py",):
+            texte = (RACINE / "outils" / f).read_text(encoding="utf-8")
+            self.assertEqual(PAR_DEFAUT.findall(texte), [], f"{f} : exécuteur par défaut sans CREATE_NO_WINDOW")
 
 
 if __name__ == "__main__":

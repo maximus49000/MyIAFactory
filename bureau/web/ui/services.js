@@ -64,7 +64,8 @@ export async function copierJeton(projet, copier, fetchFn = globalThis.fetch) {
   try {
     await copier(r.d.jeton);
   } catch {
-    return {ok: false, message: "La copie a été refusée par le navigateur."};
+    // dernier recours : le jeton est rendu pour s'afficher dans un champ à sélectionner à la main (clic du Directeur seulement)
+    return {ok: false, jeton: r.d.jeton, message: "La copie a été refusée par le navigateur : touchez le champ pour sélectionner le jeton, puis copiez-le."};
   }
   return {ok: true, message: "Jeton copié : à donner seulement aux personnes qui doivent appeler le service."};
 }
@@ -91,7 +92,18 @@ function carte(s, options) {
   const zoneJeton = el("div", "service-jeton");
   if (s.jeton_present) {
     const b = el("button", "", "Copier le jeton");
-    b.addEventListener("click", async () => { msg.textContent = (await copierJeton(projet, copier, fetchFn)).message; });
+    b.addEventListener("click", async () => {
+      const res = await copierJeton(projet, copier, fetchFn);
+      msg.textContent = res.message;
+      zoneJeton.querySelectorAll?.(".service-jeton-champ").forEach((x) => x.remove());
+      if (res.jeton) {
+        const champ = el("input", "service-jeton-champ");
+        champ.readOnly = true;
+        champ.value = res.jeton;
+        champ.addEventListener("focus", () => champ.select?.());
+        zoneJeton.append(champ);
+      }
+    });
     zoneJeton.append(el("span", "ligne-detail", "Jeton d'accès (Authorization: Bearer) : au coffre du poste "), b);
   } else {
     zoneJeton.append(el("span", "ligne-detail", "Jeton d'accès : créé au premier déploiement"));
@@ -148,10 +160,31 @@ function carte(s, options) {
   return c;
 }
 
+// Copie : l'API du navigateur, sinon (bureau ouvert en http depuis un téléphone : API refusée) une zone de texte copiée par
+// `execCommand`. Lève si aucune des deux ne copie.
+export async function copierDansLePressePapiers(texte) {
+  try {
+    await globalThis.navigator.clipboard.writeText(texte);
+    return;
+  } catch { /* repli ci-dessous */ }
+  const zone = document.createElement("textarea");
+  zone.value = texte;
+  zone.setAttribute("readonly", "");
+  zone.style = "position: fixed; opacity: 0";
+  document.body.append(zone);
+  try {
+    zone.select();
+    zone.setSelectionRange?.(0, texte.length);
+    if (!document.execCommand("copy")) throw new Error("copie refusée");
+  } finally {
+    zone.remove();
+  }
+}
+
 // La zone entière. `services` : la liste (null : lecture impossible). Options : fetchFn, copier(texte), confirmer(question), relire().
 export function zoneServices(services, options = {}) {
   const opts = {fetchFn: options.fetchFn || globalThis.fetch,
-    copier: options.copier || ((t) => globalThis.navigator.clipboard.writeText(t)),
+    copier: options.copier || copierDansLePressePapiers,
     confirmer: options.confirmer || ((q) => globalThis.confirm(q)), relire: options.relire};
   const z = el("section", "services-zone");
   z.append(el("h3", "", "Services"));

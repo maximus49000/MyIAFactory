@@ -15,12 +15,27 @@ ATTENTE_LONGUE_S = 1800     # une exécution distante attendue depuis plus de 30
 NOMS_ATTENDUS = {"apk": "l'APK"}
 NOMS_LIEUX = {"github": "GitHub"}
 MIN_DUREES = 3
+MAX_HISTORIQUE = 50          # appels gardés dans la fiche (le plus récent d'abord)
+TEXTE_HISTORIQUE_MAX = 120   # un appel dit en une courte phrase
 DUREE_MIN_S, DUREE_MAX_S = 30, 6 * 3600     # en dehors : une durée aberrante, écartée
 
 
 def _secondes(texte, maintenant):
     d = lire_date(texte)
     return None if d == TRES_ANCIEN else max(0.0, (maintenant - d).total_seconds())
+
+
+def _historique(travail):
+    """Les appels récents de l'agent (`travail["historique"]`, du plus récent au plus ancien) : au plus `MAX_HISTORIQUE`
+    éléments `{"t": heure | None, "texte": phrase courte}` ; un élément mal formé est écarté."""
+    brut = (travail or {}).get("historique")
+    sortie = []
+    for h in brut if isinstance(brut, list) else []:
+        if isinstance(h, dict) and isinstance(h.get("texte"), str) and h["texte"].strip():
+            sortie.append({"t": h["t"] if isinstance(h.get("t"), str) else None, "texte": h["texte"][:TEXTE_HISTORIQUE_MAX]})
+        if len(sortie) >= MAX_HISTORIQUE:
+            break
+    return sortie
 
 
 def _minutes(secondes):
@@ -73,7 +88,8 @@ def pour_la_tache(tache, taches, executions, moteur_vivant, maintenant, delai_ar
         return _dans_le_lot(lot, taches, moteur_vivant)
     liste = (travail or {}).get("avancement") if isinstance((travail or {}).get("avancement"), dict) else {}
     points = liste.get("points") or []
-    base = {"points": points, "en_cours": liste.get("en_cours"), "phase": (travail or {}).get("phase")}
+    base = {"points": points, "en_cours": liste.get("en_cours"), "phase": (travail or {}).get("phase"),
+            "historique": _historique(travail)}
     passe = _secondes((travail or {}).get("depuis"), maintenant)
     cumul = _secondes(tache.get("debut"), maintenant)
     reste, reste_texte = (None, "inconnu")
@@ -154,7 +170,7 @@ def _dans_le_lot(lot, taches, moteur_vivant):
     Ni temps passé ni temps restant : ils sont sur la tâche en cours."""
     liste = lot.get("avancement") if isinstance(lot.get("avancement"), dict) else {}
     base = {"points": liste.get("points") or [], "en_cours": liste.get("en_cours"), "phase": None, "passe_s": None,
-            "cumul_s": None, "reste": None, "reste_texte": "inconnu", "lot": {k: lot.get(k) for k in ("rang", "total")}}
+            "cumul_s": None, "reste": None, "reste_texte": "inconnu", "historique": [], "lot": {k: lot.get(k) for k in ("rang", "total")}}
     courante = _titre(taches, lot.get("courante"))
     if moteur_vivant is False:
         return {**base, "etat": "moteur_arrete", "etat_texte": "moteur arrêté : rien n'avance tant qu'il n'est pas relancé"}

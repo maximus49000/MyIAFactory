@@ -152,6 +152,30 @@ export function questionsAAttendre(e, t) {
 const PHASES = {lecture: "il lit le code", modification: "il modifie des fichiers", compilation: "il compile",
                 tests: "il lance des tests", autre: "il travaille"};
 
+const HISTORIQUE_VISIBLE = 20;
+
+// L'historique des appels de l'agent (du plus récent au plus ancien) : 20 visibles, « Voir tout » pour le reste. Null s'il est vide.
+export function blocHistorique(historique) {
+  const liste = Array.isArray(historique) ? historique : [];
+  if (!liste.length) return null;
+  const bloc = el("div", "historique-appels");
+  const ul = el("ul", "historique-liste");
+  const montrer = (tout) => ul.replaceChildren(...(tout ? liste : liste.slice(0, HISTORIQUE_VISIBLE)).map((h) => {
+    const li = el("li", "historique-appel", h.texte);
+    if (h.t) li.setAttribute("title", h.t);
+    return li;
+  }));
+  montrer(false);
+  bloc.append(ligne("Historique des appels", ""), ul);
+  if (liste.length > HISTORIQUE_VISIBLE) {
+    const b = el("button", "lien-retour", `Voir tout (${liste.length})`);
+    b.type = "button";
+    b.addEventListener("click", () => { montrer(true); b.hidden = true; });
+    bloc.append(b);
+  }
+  return bloc;
+}
+
 // Où en est la tâche (liste de l'agent, sinon sa phase), le temps passé et restant, et si ça avance (voir avancementEnClair).
 function blocAvancement(av, travail) {
   const bloc = el("div", "avancement");
@@ -182,6 +206,8 @@ function blocAvancement(av, travail) {
   temps.push("reste " + av.reste);
   bloc.append(ligne("Temps", temps.join(" · ")));
   if (travail?.action) bloc.append(ligne("Au travail", travail.action));
+  const historique = blocHistorique(av.historique);
+  if (historique) bloc.append(historique);
   return bloc;
 }
 

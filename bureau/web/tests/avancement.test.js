@@ -85,3 +85,38 @@ test("attenteTestsEnClair : la position dans la file des tests, sans position si
   assert.equal(attenteTestsEnClair({}), "En attente pour lancer les tests");
   assert.equal(attenteTestsEnClair(null), null);
 });
+
+test("l'historique des appels : tableau sûr, jamais undefined, éléments mal formés écartés", () => {
+  assert.deepEqual(avancementEnClair(base).historique, []);
+  const a = avancementEnClair({...base, historique: [{t: "2026-11-26T10:00:00+01:00", texte: "lit a.py"}, {texte: 3}, null, {t: null, texte: "lance python"}]});
+  assert.deepEqual(a.historique.map((h) => h.texte), ["lit a.py", "lance python"]);
+});
+
+// Faux DOM minimal : le texte d'un appel passe toujours par textContent.
+class Noeud {
+  constructor(tag) { this.tagName = tag; this.enfants = []; this.className = ""; this._texte = ""; this.auteurs = {}; this.hidden = false; }
+  set textContent(v) { this._texte = String(v); this.enfants = []; }
+  get textContent() { return this._texte + this.enfants.map((e) => e.textContent).join(""); }
+  append(...e) { this.enfants.push(...e); }
+  replaceChildren(...e) { this._texte = ""; this.enfants = e; }
+  setAttribute() {}
+  addEventListener(nom, f) { (this.auteurs[nom] ||= []).push(f); }
+  tous(pred) { return [...(pred(this) ? [this] : []), ...this.enfants.flatMap((e) => e.tous(pred))]; }
+}
+globalThis.document = {createElement: (t) => new Noeud(t), createTextNode: (t) => { const n = new Noeud("#texte"); n.textContent = t; return n; }};
+Object.defineProperty(Noeud.prototype, "innerHTML", {get() { return ""; }, set() { throw new Error("innerHTML interdit"); }});
+
+test("la fiche montre 20 appels, puis tous après « Voir tout », en texte simple", async () => {
+  const {blocHistorique} = await import("../ui/detail.js");
+  const h = Array.from({length: 30}, (_, i) => ({t: null, texte: i === 0 ? "<b>lit a.py</b>" : `lit f${i}.py`}));
+  const bloc = blocHistorique(h);
+  const lignes = () => bloc.tous((n) => n.className === "historique-appel");
+  assert.equal(lignes().length, 20);
+  assert.ok(bloc.textContent.includes("<b>lit a.py</b>"));           // du texte, jamais du HTML
+  const bouton = bloc.tous((n) => n.tagName === "button")[0];
+  assert.ok(bouton.textContent.includes("Voir tout"));
+  bouton.auteurs.click[0]();
+  assert.equal(lignes().length, 30);
+  assert.equal(blocHistorique([]), null);
+  assert.equal(blocHistorique(Array.from({length: 5}, () => ({t: null, texte: "x"}))).tous((n) => n.tagName === "button").length, 0);
+});

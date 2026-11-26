@@ -1571,3 +1571,8 @@ html.mobile .question-actions .bouton { min-height: 44px; }
 .ligne-reglage.verrouille, .ligne-reglage.inapplicable { opacity: 0.55; }
 .pastille-origine { padding: 1px 8px; border-radius: 10px; background: var(--fond-2); font-size: 0.8em; }
 .reglages-message:empty { display: none; }
+
+/* « Derniers livrables » (ui/derniers-livrables.js) : une ligne par variante. */
+.liste-livrables { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.livrable-variante { padding: 10px 12px; border-radius: 10px; background: #f6f2e8; overflow-wrap: anywhere; }
+.livrable-variante .document-telecharger { display: inline-block; margin-top: 6px; }

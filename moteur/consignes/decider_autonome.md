@@ -30,8 +30,15 @@ Réponses d'après le genre de la décision :
   sans la correction fusionnée (le moteur redéploie, puis relance la recette) ; `relancer` avec `texte` précis ; `laisser`
   si seul le Directeur peut agir (argent, clé, appareil). Une même cause n'est tentée qu'une fois.
 
+Réponds par les moyens que le projet a déjà : si le Chef demande au Directeur une donnée ou une adresse que le projet possède
+(`service.adresse` : le service en ligne, pages en lecture publique), réponds `preciser`/`relancer` avec la consigne qui s'en
+sert, jamais en copiant une base ni en écrivant un jeton, plutôt que de laisser bloquée.
+
 Tu n'accordes jamais un modèle plus fort (jamais Fable), une clé, ni une dépense ; une consigne qui le demande est
 refusée.
+
+`anomalies` : `null`, ou `[{"id", "etat"}]` pour les anomalies du dossier que la cause désigne : `reglee` si le défaut du
+logiciel est corrigé depuis, `vue` sinon. Un défaut du moteur lui-même (pas du projet) demande aussi une `amelioration`.
 
 Pour rendre le moteur plus performant :
 - `lecon` (attendue dès que la cause peut revenir) : `{"portee": "metier", "texte": "…"}` pour le métier de ce
@@ -50,7 +57,7 @@ Forme de la réponse :
 
 ```json
 {"raison": "…", "verdict": "accepter", "texte": null, "choix": null, "reponses": null,
- "generalisable": false, "lecon": {"portee": "metier", "texte": "…"}, "amelioration": null}
+ "generalisable": false, "lecon": {"portee": "metier", "texte": "…"}, "amelioration": null, "anomalies": null}
 ```
 
 Réponds seulement par ce JSON.

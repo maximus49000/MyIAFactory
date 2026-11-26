@@ -264,9 +264,10 @@ class TacheBloquee(tsr.AvecValidation):
 
     # --- Cas 3 : le service tourne sans la correction : redéploiement, puis la recette repart une fois sain.
 
-    def avec_service(self, statuts):
+    def avec_service(self, statuts, sante=((True, "HTTP 200"),) * 5):
         s = regles.service_permanent
-        patchs = [mock.patch.object(s, "raison_de_ne_pas_deployer", return_value=None),
+        patchs = [mock.patch.object(s, "sante_repond", side_effect=list(sante)),
+                  mock.patch.object(s, "raison_de_ne_pas_deployer", return_value=None),
                   mock.patch.object(s, "_commit_du_depot", return_value="a" * 40),
                   mock.patch.object(s, "declencher", return_value="Service permanent : lancé."),
                   mock.patch.object(s, "statut_du_serveur", side_effect=statuts)]
@@ -306,6 +307,115 @@ class TacheBloquee(tsr.AvecValidation):
         regles.repondre_en_autonome(self.projet, self.etat)
         self.assertTrue(self.la(self.recette)["bloquee"])
         self.assertTrue(any("revient au Directeur" in str(j.get("texte")) for j in self.la(self.recette)["journal"]))
+
+    # --- Cas 5 : attendre que le service réponde 200 avant de relancer la recette.
+
+    def test_la_recette_attend_que_le_service_reponde(self):
+        declencher = self.avec_service([("a_jour", "ok")] * 3, sante=[(False, "HTTP 503"), (True, "HTTP 200")])
+        self.bloquer()
+        self.appliquer(self.juger(), objet(verdict="redeployer"))
+        self.traiter_la_reponse()
+        regles.repondre_en_autonome(self.projet, self.etat)           # déployé mais 503 : on attend
+        self.assertTrue(self.la(self.recette)["bloquee"])
+        regles.repondre_en_autonome(self.projet, self.etat)           # 200 : la recette repart
+        self.assertFalse(self.la(self.recette).get("bloquee"))
+
+    def test_la_sante_se_lit_sur_l_adresse_du_service(self):
+        class Reponse:
+            status = 503
+            def __enter__(self): return self
+            def __exit__(self, *a): return False
+        m = mock.Mock()
+        m.lire_cache.return_value = {"p": {"adresse": "https://service.test"}}
+        m.identifiant.return_value = "p"
+        m.lire_declaration.return_value = {"sante": "/sante"}
+        vus = []
+        self.assertEqual(regles.service_permanent.sante_repond(
+            self.dossier, module=m, ouvrir=lambda url, timeout: vus.append(url) or Reponse()), (False, "HTTP 503"))
+        self.assertEqual(vus, ["https://service.test/sante"])
+
+    # --- Cas 4 : l'anomalie du logiciel désignée par la cause est fermée.
+
+    def test_une_anomalie_corrigee_depuis_est_marquee_reglee(self):
+        a = self.ok("anomalies", entree={"action": "ajouter", "titre": "Lancement refusé : --tools",
+                                         "description": "Valeur invalide pour --tools."})["anomalie"]["id"]
+        self.bloquer()
+        action = self.juger()
+        self.assertEqual([x["id"] for x in action[2]["anomalies"]], [a])
+        self.assertIn("anomalies", jugement.valider("decider_autonome", objet(verdict="laisser",
+                                                    anomalies=[{"id": "a99", "etat": "reglee"}]), action[2]))
+        self.appliquer(action, objet(verdict="relancer", texte="Refais la tâche.", anomalies=[{"id": a, "etat": "reglee"}]))
+        (demande,) = [x for x in self.demande_en_attente() if x["type"] == "anomalie"]
+        self.assertEqual((demande["etat"], demande["claude_autonome"]), ("reglee", True))
+        regles.traiter_demande(self.projet, demande, self.etat)
+        self.assertEqual(self.ok("anomalies")["anomalies"][0]["etat"], "reglee")
+
+    # --- Cas 6 et 7 : les moyens du projet sont donnés à Claude.
+
+    def test_le_dossier_donne_l_adresse_du_service_et_les_anomalies(self):
+        self.bloquer()
+        with mock.patch.object(regles, "_adresse_du_service", return_value="https://service.test"):
+            _, _, dossier, _ = self.juger()
+        self.assertEqual(dossier["service"]["adresse"], "https://service.test")
+        self.assertEqual(dossier["anomalies"], [])
+
+    # --- Cas 8 : une relance par changement de cause, jamais sans changement.
+
+    def passer(self, signature):
+        with mock.patch.object(regles, "_signature_des_causes", return_value=signature):
+            regles.repondre_en_autonome(self.projet, self.etat)
+        return [x for x in self.demande_en_attente() if x["type"] == "retour"]
+
+    def test_une_relance_par_changement_de_cause_pas_sans_changement(self):
+        self.projet.claude_autonome = True
+        self.assertEqual(self.passer(("c1", ())), [])                 # première vue : rien
+        self.assertEqual(self.passer(("c1", ())), [])                 # aucun changement : rien
+        (relance,) = self.passer(("c2", ()))                          # le service a une nouvelle version
+        self.assertTrue(relance["claude_autonome"] and relance["texte"].startswith("Relance demandée"))
+        regles.traiter_demande(self.projet, relance, self.etat)
+        self.assertFalse(self.la(self.recette).get("bloquee"))
+        self.ok("tache", entree={"id": self.recette, "bloquee": BLOQUEE})
+        self.assertEqual(self.passer(("c2", ())), [])                 # même cause : pas de seconde relance
+        self.assertEqual(len(self.passer(("c2", ("a1",)))), 1)        # une anomalie réglée : une relance de plus
+
+    def test_sans_le_reglage_aucune_relance(self):
+        self.assertEqual(self.passer(("c1", ())), [])
+        self.assertEqual(self.passer(("c2", ())), [])
+
+    # --- Cas 9 : le Chef dit chaque action, une phrase, jamais deux ; rien sans le réglage.
+
+    def paroles(self):
+        return [m["texte"] for m in self.suivi()["fonctionnalites"][0]["discussion"] if m["auteur"] == "chef"]
+
+    def test_chaque_reponse_laisse_exactement_un_message_du_chef(self):
+        self.bloquer()
+        avant = len(self.paroles())
+        self.appliquer(self.juger(), objet(verdict="renvoyer", tache_dev=self.dev, texte="Corrige /sante.",
+                                           raison="Le défaut vient du code livré.",
+                                           lecon={"portee": "metier", "texte": "Teste /sante avant de livrer."}))
+        nouveaux = self.paroles()[avant:]
+        self.assertEqual(len(nouveaux), 1)
+        self.assertIn("J'ai renvoyé le défaut", nouveaux[0])
+        self.assertIn("Le défaut vient du code livré.", nouveaux[0])
+        self.assertIn("leçon", nouveaux[0])
+        self.traiter_la_reponse()
+        self.assertEqual(len(self.paroles()[avant:]), 1)             # le traitement n'en ajoute pas
+
+    def test_la_relance_apres_le_redeploiement_est_dite_une_fois(self):
+        self.avec_service([("a_jour", "ok")])
+        self.bloquer()
+        self.appliquer(self.juger(), objet(verdict="redeployer"))
+        self.traiter_la_reponse()
+        avant = len(self.paroles())
+        regles.repondre_en_autonome(self.projet, self.etat)
+        (parole,) = self.paroles()[avant:]
+        self.assertIn("le service est redéployé et répond", parole)
+
+    def test_sans_le_reglage_le_chef_ne_dit_rien(self):
+        avant = len(self.paroles())
+        self.bloquer(activer=False)
+        regles.repondre_en_autonome(self.projet, self.etat)
+        self.assertEqual(len(self.paroles()), avant)
 
 
 class Apprentissage(tmr.Arrets):

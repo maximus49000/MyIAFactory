@@ -149,6 +149,30 @@ def deployer_si_modifie(dossier, maintenant, module=None, commit_du_depot=_commi
     return ("Déploiement automatique (case cochée) : " + ligne) if ligne else None
 
 
+def sante_repond(dossier, module=None, ouvrir=None):
+    """`(vrai, détail)` : la page de santé du service en ligne (`sante` de la déclaration, « /sante » sinon) répond-elle 200 ?
+    Un service qui vient d'être déployé peut répondre 503 (« Index en préparation ») plusieurs minutes. Sans adresse
+    connue (le cache n'en a pas), rien à attendre : vrai. Aucun jeton n'est envoyé."""
+    from urllib import error, request
+    try:
+        m = module or _module()
+        fiche = m.lire_cache().get(m.identifiant(Path(dossier)))
+        adresse = fiche.get("adresse") if isinstance(fiche, dict) else None
+        chemin = str(m.lire_declaration(dossier).get("sante") or "/sante")
+    except Exception:  # noqa: BLE001
+        return True, "adresse inconnue"
+    if not isinstance(adresse, str) or not adresse.startswith(("http://", "https://")):
+        return True, "adresse inconnue"
+    try:
+        with (ouvrir or request.urlopen)(adresse.rstrip("/") + chemin, timeout=8) as r:
+            code = getattr(r, "status", 200)
+    except error.HTTPError as e:
+        code = e.code
+    except (OSError, ValueError):
+        return False, "injoignable"
+    return code == 200, f"HTTP {code}"
+
+
 def annonce(resultat):
     """Le message dit au Directeur après un déploiement : en ligne (adresse), retour arrière ou échec, avec la raison. Jamais le
     jeton ni un secret (le jeton se copie dans la zone « Services » du bureau). `resultat` : `(code, réponse)` de `deployer`."""

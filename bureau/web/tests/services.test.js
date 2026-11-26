@@ -118,3 +118,13 @@ test("lecture impossible et liste vide", async () => {
   assert.equal(await lireServices(reseau({"GET /api/services": reponse(500, {})})), null);
   assert.equal((await lireServices(reseau({"GET /api/services": reponse(200, {services: [service()]})}))).length, 1);
 });
+
+test("copie refusee (bureau en http) : le jeton s'affiche dans un champ a selectionner, jamais avant le clic", async () => {
+  const f = reseau({"POST /api/services/fm-stats/jeton": reponse(200, {jeton: JETON})});
+  const c = zoneServices([service()], {fetchFn: f, copier: async () => { throw new Error("refusé"); }});
+  assert.ok(!c.textContent.includes(JETON));
+  await clic(boutons(c, "Copier le jeton")[0]);
+  const champs = c.tous((n) => n.tagName === "input" && n.value === JETON);
+  assert.equal(champs.length, 1);
+  assert.equal(champs[0].readOnly, true);
+});

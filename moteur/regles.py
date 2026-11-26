@@ -6345,7 +6345,7 @@ def _de_quoi_verifier(projet, precedent):
     """Vrai si le Directeur aura de quoi vérifier : un lien d'accès, ou une image ou un livrable téléchargeable qui
     existent dans le projet."""
     return rel.acces_ok(precedent.get("acces")) or _fichier_existe(
-        projet, precedent, lambda c: rel.est_image(c) or rel.est_telechargeable(c))
+        projet, precedent, lambda c: rel.est_image(c) or rel.est_telechargeable(c) or str(c).lower().endswith(".html"))
 
 
 def _maquette_du_cahier(projet, fid, element=None):
@@ -6431,7 +6431,9 @@ def _manques_de_nature(projet, nature, precedent, apk_exige=False):
         return ([] if rel.acces_ok(precedent.get("acces")) or _fichier_existe(projet, precedent, rel.est_executable)
                 else ["livrable"]) + ([] if rel.mode_operatoire_ok(precedent.get("mode_operatoire")) else ["mode_operatoire"])
     if nature == "visuel":
-        return [] if _fichier_existe(projet, precedent, rel.est_image) else ["image"]
+        # une maquette HTML autonome vaut une image : le bureau l'ouvre dans l'application (essai réel FM_Stats, 2026-11-26 :
+        # « sans image » deux fois pour une maquette HTML, faute de navigateur sans fenêtre au serveur)
+        return [] if _fichier_existe(projet, precedent, lambda c: rel.est_image(c) or str(c).lower().endswith(".html"))             else ["image"]
     if nature == "son":
         return [] if _fichier_existe(projet, precedent, rel.est_son) else ["son"]
     if nature == "mecanique":

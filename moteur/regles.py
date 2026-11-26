@@ -2363,6 +2363,19 @@ def _refaire_avant_la_validation(projet, demande, etat, t, qui="Directeur"):
     rang = next((k for k, s in enumerate(production) if ETAPES_DE_VALIDATION + s["id"] == t["etape"]), None)
     avant = None if rang is None else next((k for k in range(rang - 1, -1, -1)
                                             if not wf.est_validation(production[k])), None)
+    if (v is not None and rang is None and _maquette_du_cahier_validee(projet, fid)
+            and _est_etape_maquette({"id": str(t["etape"])[len(ETAPES_DE_VALIDATION):]})):
+        # validation d'une maquette que le cahier validé couvre déjà (FM_Stats f24, 2026-11-26) : rien à refaire ni à
+        # faire valider, l'élément reprend à la première étape qui reste
+        lancer(projet, "tache", {"id": t["id"], "colonne": "fait", "active": False, "bloquee": None,
+                                 "journal": ["Maquette déjà validée au cahier des charges : étape sautée."]})
+        v.pop("rien_a_verifier", None)
+        v.update(phase="flux", pas=0)
+        _tache_de_flux(projet, etat, v, journal=["La maquette du cahier fait foi : le développement commence."])
+        _dire(projet, fid, f"« {v['element']['nom']} » : la maquette du cahier des charges, déjà validée, fait foi ; "
+                           "l'élément passe au développement.")
+        _terminer(projet, {"demande": demande["id"]}, "La maquette du cahier est déjà validée : le développement commence.")
+        return _demarrer_en_attente(projet, etat, fid)
     if v is None or avant is None:
         raise Refus("l'étape à refaire avant cette validation n'est plus dans le workflow")
     texte = " ".join(str(demande["texte"]).split())

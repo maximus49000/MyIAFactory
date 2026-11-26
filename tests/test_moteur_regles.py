@@ -2214,6 +2214,24 @@ class Validation(Base):
         (nouvelle,) = self.decisions()
         self.assertEqual(nouvelle["doit_marcher"], DIT["doit_marcher"])
 
+    def test_retour_sur_la_validation_d_une_maquette_deja_validee_au_cahier_saute_l_etape(self):
+        """Essai réel (FM_Stats f24, 2026-11-26) : validation de maquette bloquée alors que le cahier validé la porte
+        déjà ; la règle retire l'étape du workflow, « Relancer » répondait « n'est plus dans le workflow ». L'étape est
+        sautée : la validation est refermée, l'élément reprend au début du flux restant, sans refaire de maquette."""
+        self.projet_avec_validation()
+        rien = {**verdict("e1"), **DIT, "message": {"texte": "Testé."}}
+        self.piloter(regles.avancer(self.projet, self.etat),
+                     rapports=[{"statut": "fait", "message": {"texte": "Programmé."}}, rien, rien])
+        (val,) = self.taches(etape="validation:valider")
+        avant = len(self.taches(etape="flux:essai"))
+        with mock.patch.object(regles, "_maquette_du_cahier_validee", return_value=True), \
+                mock.patch.object(regles, "_est_etape_maquette", lambda e: "valider" in str(e.get("id"))):
+            d, _ = self.traiter(type="retour", tache=val["id"], texte="Relancer")
+        self.assertIn("déjà validée", self.statut(d["id"])["reponse"])
+        (val,) = self.taches(etape="validation:valider")
+        self.assertEqual((val["colonne"], val.get("bloquee")), ("fait", None))
+        self.assertEqual(len(self.taches(etape="flux:essai")), avant)      # l'étape d'avant n'est pas refaite
+
     def test_retour_sur_une_validation_bloquee_d_une_serie_close_la_rouvre(self):
         """Essai réel (FM_Stats f12) : la série s'était close en laissant l'élément de côté ; « Relancer » répondait
         « l'étape à refaire n'est plus dans le workflow ». Le retour rouvre la série et refait l'étape."""

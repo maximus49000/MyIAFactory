@@ -114,10 +114,20 @@ def lire(travaux, dossiers):
             "adresse": fiche.get("adresse") if isinstance(fiche.get("adresse"), str) else None,
             "jeton_present": bool(m.lire_jeton(projet, **k)), "secrets": secrets,
             "journal": [str(l)[:500] for l in (journal.get("lignes") or [])][-JOURNAL_MAX:],
-            "deploiement": fiche.get("deploiement") if isinstance(fiche.get("deploiement"), dict) else None,
+            "deploiement": _deploiement_lu(m, fiche.get("deploiement")),
             "auto": auto.get(projet) is True,
             "action": travaux.dernier.get(projet), "occupe": travaux.en_cours(projet), "maj": fiche.get("maj")})
     return {"services": services}
+
+
+def _deploiement_lu(m, dep):
+    """Le déploiement du cache ; « en cours » devient « interrompu » si le processus qui le menait n'existe plus."""
+    if not isinstance(dep, dict):
+        return None
+    abandonne = getattr(m, "deploiement_abandonne", None)
+    if callable(abandonne) and abandonne(dep):
+        return dict(dep, statut="interrompu")
+    return dep
 
 
 def poster(travaux, projet, action, corps, dossiers):

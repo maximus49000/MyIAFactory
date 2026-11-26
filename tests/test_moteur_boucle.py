@@ -504,9 +504,12 @@ class Detaches(Base):
         with mock.patch.object(regles, "suivre_demande", wraps=regles.suivre_demande) as suivre:
             self.moteur.tour()                    # la tâche finie : l'agent rédige sa réponse, puis la rend
             self.moteur.tour()
-        self.assertEqual([c.args[2] for c in suivre.call_args_list], ["reponse_en_cours", "repondu"])
+        # un retour est une consigne de travail : l'agent ayant fini sans la reprendre, elle devient une tâche « Retour »
+        # (essai réel FM_Stats, 2026-11-26 : « Ajouter un état d'avancement… » n'a reçu qu'une réponse, rien n'a changé)
+        self.assertEqual([c.args[2] for c in suivre.call_args_list], ["confie"])
         s = self.suivi_du_retour(i)
-        self.assertEqual((s["etat"], s["texte"]), ("repondu", "Réponse de Léa : Voilà."))
+        self.assertEqual(s["etat"], "confie")
+        self.assertEqual(len([t for t in self.suivi()["taches"] if t["titre"].startswith("Retour")]), 1)
 
     def test_le_bureau_compte_la_reponse_jusqu_a_pris_en_compte(self):
         from bureau import etat as bureau_etat

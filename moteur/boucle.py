@@ -1489,6 +1489,7 @@ class Moteur:
     def _transmettre_les_questions(self, projet, etat, e, actions):
         """Les questions posées pendant la tâche : dans la matière de la tâche si elle repart (nouvel essai, réponse
         refusée), sinon l'agent reprend sa session pour y répondre."""
+        retours = detache.retours_en_attente(projet.factory.parent, e.tache)
         questions, demandes = detache.prendre_questions_et_demandes(projet.factory.parent, e.tache)
         if not questions:
             return actions
@@ -1504,6 +1505,16 @@ class Moteur:
                     regles.suivre_demande(projet, d, "repris", f"La tâche {e.tache} repart : {prenom} tient compte de "
                                           "votre question dans ce nouvel essai et y répondra dans la discussion.",
                                           tache=e.tache)
+                return actions
+        if retours:      # des consignes de travail (« Faire un retour ») : jamais une réponse seule, qui ne change rien
+            tache = regles._tache(projet, e.tache)
+            nouvelles = []
+            for d, texte in retours.items():
+                nouvelles += regles.confier_le_retour(projet, etat, d, tache, texte, termine=False)
+            questions = [q for q in questions if q not in retours.values()]
+            demandes = [d for d in demandes if d not in retours]
+            actions = list(actions) + nouvelles
+            if not questions:
                 return actions
         modele = (etat["departs"].get(e.tache) or {}).get("modele")
         self._repondre(projet, etat, e.tache, e.agent, questions, e.session, modele=modele,

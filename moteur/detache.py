@@ -583,11 +583,23 @@ def questions(dossier_factory, tache):
     return [x["texte"] for x in _questions_et_demandes(dossier_factory, tache)]
 
 
-def ajouter_question(dossier_factory, tache, texte, demande=None):
+def ajouter_question(dossier_factory, tache, texte, demande=None, retour=False):
+    """Une question ou un retour de l'utilisateur pour l'agent au travail ; `retour` : c'est une consigne de travail (le
+    bouton « Faire un retour »), pas une question : si l'agent finit sans la reprendre, elle devient une tâche « Retour »."""
     chemin = _chemin_questions(dossier_factory, tache)
     _preparer(chemin.parent)
     _ecrire(chemin, _questions_et_demandes(dossier_factory, tache)
-            + [{"texte": str(texte), **({"demande": demande} if demande else {})}])
+            + [{"texte": str(texte), **({"demande": demande} if demande else {}), **({"retour": True} if retour else {})}])
+
+
+def retours_en_attente(dossier_factory, tache):
+    """`{demande: texte}` : les retours (consignes de travail) en attente pour la tâche, sans les retirer du fichier."""
+    try:
+        q = json.loads(_chemin_questions(dossier_factory, tache).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return {x["demande"]: x["texte"] for x in q if isinstance(x, dict) and x.get("retour") is True
+            and isinstance(x.get("demande"), str) and isinstance(x.get("texte"), str)}
 
 
 def prendre_questions_et_demandes(dossier_factory, tache):

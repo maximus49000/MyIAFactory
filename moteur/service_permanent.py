@@ -86,7 +86,7 @@ def deployer_si_modifie(dossier, maintenant, module=None, commit_du_depot=_commi
     fiche = m.lire_cache().get(projet)
     fiche = fiche if isinstance(fiche, dict) else {}
     if (isinstance(fiche.get("deploiement"), dict) and fiche["deploiement"].get("statut") == "en_cours"
-            and not _en_cours_perime(fiche["deploiement"], maintenant)):
+            and not _en_cours_perime(fiche["deploiement"], maintenant) and not getattr(m, "deploiement_abandonne", lambda _d: False)(fiche["deploiement"])):
         return None
     commit = commit_du_depot(dossier)
     if commit is None:

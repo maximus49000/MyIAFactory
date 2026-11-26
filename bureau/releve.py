@@ -356,7 +356,7 @@ NATURES = ("en_jeu", "visuel", "son", "mecanique", "autre")
 MIN_ETAPES_MODE = 2         # le mode opératoire d'une validation en jeu : 2 à 10 étapes courtes
 MAX_ETAPES_MODE = 10
 MAX_ETAPE_MODE = 200
-EXTENSIONS_DOCUMENTS = (".md", ".pdf", ".txt", ".docx", ".pptx", ".xlsx", ".csv", ".epub")
+EXTENSIONS_DOCUMENTS = (".md", ".pdf", ".txt", ".docx", ".pptx", ".xlsx", ".csv", ".epub", ".html")   # une page HTML (maquette) s'ouvre dans l'application : ce n'est pas un livrable à essayer
 EXTENSIONS_SONS = (".mp3", ".ogg", ".wav", ".flac")
 EXTENSIONS_MEDIAS = EXTENSIONS_SONS + (".mp4", ".webm")
 

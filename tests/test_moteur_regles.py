@@ -2458,6 +2458,11 @@ class Validation(Base):
         (val,) = self.taches(etape="validation:valider")
         self.assertIn("sans image", val["bloquee"])
 
+    def test_visuel_avec_une_maquette_html_suffit(self):
+        self.fichier("pieces/f1/maquette.html", b"<html></html>")
+        self.valider_nature(self.rendu("visuel", ["pieces/f1/maquette.html"]))
+        self.assertEqual(len(self.decisions()), 1, [t.get("bloquee") for t in self.taches(etape="validation:valider")])
+
     def test_visuel_retire_l_apk_des_fichiers_montres(self):
         self.fichier("build/jeu.apk", b"PK" + b"\x00" * 8)
         self.fichier("pieces/f1/essai.png")

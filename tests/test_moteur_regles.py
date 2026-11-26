@@ -1365,8 +1365,9 @@ class Arrets(Base):
         self.assertFalse(t["active"])
         self.assertEqual(decisions[0]["tache"], t["id"])
         d, relance = self.traiter(type="outil_agent", decision=decisions[0]["id"], verdict="refuser")
-        self.assertEqual(relance, [])
-        self.assertTrue(self.taches(etape="cadrage")[0]["bloquee"])
+        self.assertEqual([x[0] for x in relance], ["agent"])      # la tâche repart sans l'outil, plus de blocage
+        self.assertFalse(self.taches(etape="cadrage")[0]["bloquee"])
+        self.assertIn("ne le redemande pas", " ".join(self.taches(etape="cadrage")[0]["journal"][-1:][0]["texte"] for _ in [0]) + str(relance))
 
     def test_agent_sans_rapport_relance_une_fois_puis_bloque(self):
         actions = self.depart_cadrage()

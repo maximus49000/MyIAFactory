@@ -100,6 +100,7 @@ MOTIF_TYPE_EMULATION='"type"[[:space:]]*:[[:space:]]*"emulation"'
 MOTIF_ECHEANCE='"echeance"[[:space:]]*:[[:space:]]*true'
 MOTIF_FLUTTER='"flutter":[[:space:]]*(true|false)[[:space:]]*[,}]'
 MOTIF_SIGNATURE='"signature":[[:space:]]*"(aucune|debug_serveur|poste_signe)"[[:space:]]*[,}]'
+MOTIF_APK_DEPOT='"apk_depot":[[:space:]]*"([A-Za-z0-9_][A-Za-z0-9_./-]{0,198}\.apk)"[[:space:]]*[,}]'
 MOTIF_FLUTTER_DOSSIER='"flutter_dossier":[[:space:]]*(null|"([^"\\]{0,200})")[[:space:]]*[,}]'
 PTRACE_SCOPE=/proc/sys/kernel/yama/ptrace_scope    # lu seulement (jamais modifié ici)
 if [ -n "${ENVELOPPE_PTRACE_SCOPE:-}" ]; then PTRACE_SCOPE="$ENVELOPPE_PTRACE_SCOPE"; fi                           # tests
@@ -462,6 +463,12 @@ esac
 # identifiant ou null est refusée.
 REPREND=""
 demande=$(head -c 65536 -- "$DOSSIER/entree/demande.json" 2>/dev/null)
+# Un APK existant à déposer dans le clone de l'agent (« "apk_depot": "<chemin>.apk" », tâche de vérification) : entree/app.apk
+# doit alors exister (fichier ordinaire non vide) ; le dépôt lui-même est fait par l'entrée de l'agent, dans /travail/projet.
+if [[ $demande =~ $MOTIF_APK_DEPOT ]]; then
+  [ -f "$DOSSIER/entree/app.apk" ] && [ ! -L "$DOSSIER/entree/app.apk" ] && [ -s "$DOSSIER/entree/app.apk" ] ||
+    fin_erreur "Entrée manquante : entree/app.apk (apk_depot)."
+fi
 reste="${demande//\"reprend\"/}"
 occurrences=$(( (${#demande} - ${#reste}) / 9 ))
 if [ "$occurrences" -gt 1 ]; then fin_erreur "demande.json : clé reprend en double."; fi

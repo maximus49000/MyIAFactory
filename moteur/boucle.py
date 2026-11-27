@@ -1035,6 +1035,13 @@ class Moteur:
         if places:                          # les places serveur du projet ; sans réglage, le défaut du serveur (2)
             base["places"] = places
         plus_ex = {"apk": apk} if apk else {}
+        if mode != "pilote" and reponse is None:      # une vérification : l'APK existant est déposé dans son clone
+            try:
+                depot = regles.apk_a_deposer(projet, regles._tache(projet, tache))
+            except (regles.Refus, regles.ErreurMoteur, OSError):
+                depot = None
+            if depot:
+                plus_ex["apk"], base["apk_depot"] = depot[0], depot[1]
         plus_ex["suivi_direct"] = {         # le suivi en direct de l'agent, recopié là où le bureau lit les agents locaux
             "dossier": detache.dossier(projet.factory.resolve().parent),
             "cle": f"{tache}.reponse" if reponse is not None else tache, "agent": fiche["cle"],

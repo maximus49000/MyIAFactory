@@ -131,6 +131,20 @@ def demande_de_construction(dossier, variante, e, tache, maintenant=None):
     return True, None
 
 
+def candidats(dossier, motifs=None):
+    """Les APK existants dont les sources correspondent au code testé : le plus récent de CHAQUE variante (plusieurs variantes
+    possibles quand aucune règle ne désigne celle qu'une tâche teste)."""
+    e = empreinte(dossier, motifs)
+    if e is None:
+        return []
+    par_variante = {}
+    for x in lire(dossier):
+        if x["empreinte"] == e and (Path(dossier) / x["chemin"]).is_file():
+            if x.get("variante") not in par_variante or (x.get("date") or "") > (par_variante[x["variante"]].get("date") or ""):
+                par_variante[x["variante"]] = x
+    return sorted(par_variante.values(), key=lambda x: x.get("date") or "", reverse=True)
+
+
 def fournir(dossier, variante=None, tache=None, motifs=None, maintenant=None, demander=True):
     """Ce qu'une tâche de test reçoit : un dict `{etat, ...}`.
     - `etat: "existant"` : l'APK le plus récent de la variante dont l'empreinte correspond aux sources (`apk` : l'entrée) ;

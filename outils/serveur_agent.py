@@ -38,7 +38,15 @@ LIMITES_AGENT_FLUTTER = {**LIMITES_AGENT, "memoire_mo": 12288, "cpus": 4}
 MODES_AGENT = ("seul", "pilote")
 PLACES_DEFAUT = 2
 CLES_DEMANDE_AGENT = frozenset({"id", "projet", "tache", "mode", "modele", "branche", "base", "limites", "reprend", "places",
-                                "genre", "flutter", "flutter_dossier", "signature"})
+                                "genre", "flutter", "flutter_dossier", "signature", "apk_depot"})
+# Un APK déjà construit, déposé dans le clone de l'agent (tâche de vérification : elle le trouve sans le reconstruire) : un chemin
+# relatif du dépôt, sans « .. », sans dossier caché, qui finit par .apk ; l'APK part dans entree/app.apk (aussi hors pilote).
+MOTIF_APK_DEPOT = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_./-]{0,198}\.apk", re.ASCII)
+
+
+def apk_depot_valide(chemin):
+    return (isinstance(chemin, str) and MOTIF_APK_DEPOT.fullmatch(chemin) is not None and ".." not in chemin
+            and "//" not in chemin and not any(p.startswith(".") for p in chemin.split("/")))
 # Signature des APK (tâche 15e, réglage `signature_apk` du projet) : `debug_serveur` monte la clé de debug du serveur en lecture seule
 # dans le conteneur de l'agent ; `aucune` et `poste_signe` ne montent aucune clé (la clé de release reste au poste).
 SIGNATURES = ("aucune", "debug_serveur", "poste_signe")
@@ -74,6 +82,7 @@ class DemandeAgent:
     flutter: bool = False
     flutter_dossier: object = None     # le sous-dossier Flutter du projet (« . » pour la racine), ou None
     signature: str = "aucune"
+    apk_depot: object = None           # où déposer l'APK existant dans le clone (tâche de vérification), ou None
 
 
 class RefusRecuperation(ValueError):
@@ -267,6 +276,9 @@ def valider_demande_agent(brut, git=_git):
                                         or not MOTIF_DOSSIER_FLUTTER.fullmatch(flutter_dossier) or flutter_dossier == ".."):
         raise ValueError("Dossier Flutter invalide : « . » ou un nom de sous-dossier direct (lettres, chiffres, _ . -), "
                          "pour un projet Flutter seulement.")
+    apk_depot = brut.get("apk_depot")
+    if apk_depot is not None and not apk_depot_valide(apk_depot):
+        raise ValueError("« apk_depot » : un chemin relatif du dépôt qui finit par .apk (sans « .. », sans dossier caché).")
     signature = brut.get("signature", "aucune")
     if not isinstance(signature, str) or signature not in SIGNATURES:
         raise ValueError("« signature » vaut aucune, debug_serveur ou poste_signe.")
@@ -281,7 +293,8 @@ def valider_demande_agent(brut, git=_git):
         limites[cle] = _entier_limite(cle, v, plafonds)
     return DemandeAgent(id=ident, projet=projet, tache=tache, mode=mode, modele=modele, branche=branche, base=base,
                         limites=MappingProxyType(limites), reprend=reprend, places=places, genre=genre,
-                        flutter=flutter, flutter_dossier=flutter_dossier, signature=signature)
+                        flutter=flutter, flutter_dossier=flutter_dossier, signature=signature,
+                        apk_depot=apk_depot)
 
 
 def capacites_requises(d):
@@ -302,6 +315,8 @@ def _demande_dict(d):
             "flutter_dossier": d.flutter_dossier}
     if d.signature != "aucune":      # une seule fois, relue par l'enveloppe par motif strict ; absente = aucune
         brut["signature"] = d.signature
+    if d.apk_depot is not None:      # absente = pas de dépôt ; relue par l'enveloppe et l'entrée de l'agent par motif strict
+        brut["apk_depot"] = d.apk_depot
     return brut
 
 
@@ -311,7 +326,7 @@ def _demande_sure(demande):
                 "modele": demande.modele, "branche": demande.branche, "base": demande.base,
                 "limites": dict(demande.limites), "reprend": demande.reprend, "places": demande.places,
                 "genre": demande.genre, "flutter": demande.flutter, "flutter_dossier": demande.flutter_dossier,
-                "signature": demande.signature}
+                "signature": demande.signature, "apk_depot": demande.apk_depot}
     elif isinstance(demande, dict):
         brut = demande
     else:
@@ -649,7 +664,7 @@ def _envoyer(serveur, ssh, d, paquet, argv, consigne, message, apk, construction
     if construction:       # variables de construction (adresse et jeton du service) : 0600, lues par `construire-apk` seul
         membres.append(("entree/construction.env", construction, 0o600))
         fichiers.append("construction.env")
-    if d.mode == "pilote":
+    if d.mode == "pilote" or d.apk_depot is not None:
         membres.append(("entree/app.apk", apk, 0o644))
         fichiers.append("app.apk")
     try:
@@ -750,7 +765,7 @@ def _lancer_agent(demande, paquet, argv, consigne, message, apk, dossier, ssh, a
     for nom, v in (("Consigne", consigne), ("Message", message)):
         if not v or len(v) > 1024 * 1024:
             raise st.RefusLancement(f"{nom} vide ou trop long (1 Mo au plus).")
-    if d.mode == "pilote":
+    if d.mode == "pilote" or d.apk_depot is not None:
         st._apk_sur(apk)
     else:
         apk = None

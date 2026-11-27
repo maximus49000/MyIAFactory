@@ -1456,3 +1456,28 @@ class TestEntreeAgent(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestApkDepot(unittest.TestCase):
+    """`apk_depot` : l'enveloppe exige entree/app.apk (fichier ordinaire non vide) quand la demande annonce un emplacement, même hors
+    pilote ; sans `apk_depot`, rien ne change."""
+
+    def test_apk_depot_sans_apk_echoue_net_et_avec_apk_part(self):
+        with Banc() as b:
+            b.ecrire_entree(apk_depot="android_app/build/app/outputs/flutter-apk/app-client-release.apk")
+            r = b.lancer("seul", "30", "2048", "2", "2")
+            self.assertEqual(r.returncode, 1, r.stderr + r.stdout)
+            self.assertIn("apk_depot", b.etat()["raison"])
+            self.assertEqual(b.appels("docker run"), [])
+        with Banc() as b:
+            b.ecrire_entree(apk_depot="android_app/build/app/outputs/flutter-apk/app-client-release.apk")
+            (b.entree / "app.apk").write_bytes(b"PK")
+            self.assertEqual(b.lancer("seul", "30", "2048", "2", "2").returncode, 0)
+            b.arreter()
+            b.attendre_final()
+
+    def test_sans_apk_depot_rien_ne_change(self):
+        with Banc() as b:
+            self.assertEqual(b.lancer("seul", "30", "2048", "2", "2").returncode, 0)
+            b.arreter()
+            b.attendre_final()

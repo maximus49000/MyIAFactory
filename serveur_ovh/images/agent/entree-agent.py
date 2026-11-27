@@ -103,6 +103,8 @@ MESSAGE_RESTES = "Agent : travail non commité à la fin"
 MOTIF_TACHE = re.compile(r"[A-Za-z0-9_.-]{1,60}")
 MOTIF_BRANCHE = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_./-]{0,199}")
 MOTIF_BASE = re.compile(r"[0-9a-f]{40}")
+MOTIF_APK_DEPOT = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_./-]{0,198}\.apk", re.ASCII)
+APK_DEPOT_MAX = 400 * 1024 * 1024      # l'APK déposé : 400 Mo au plus (même ordre que la limite du poste)
 MOTIF_ID = re.compile(r"t[0-9]{8}-[0-9]{6}-[0-9a-f]{4}")
 MOTIF_JETON = re.compile(r"[A-Za-z0-9._-]{20,400}")
 SANS_LIEN = getattr(os, "O_NOFOLLOW", 0)
@@ -183,7 +185,12 @@ def valider_demande(brut):
         limites = {}
     if not isinstance(limites, dict):
         raise Refus("limites : objet attendu")
-    return {"tache": tache, "branche": branche, "base": base, "reprend": reprend,
+    apk_depot = brut.get("apk_depot")
+    if apk_depot is not None and (not isinstance(apk_depot, str) or not MOTIF_APK_DEPOT.fullmatch(apk_depot)
+                                  or ".." in apk_depot or "//" in apk_depot
+                                  or any(p.startswith(".") for p in apk_depot.split("/"))):
+        raise Refus("apk_depot refusé (chemin relatif .apk, sans « .. » ni dossier caché)")
+    return {"tache": tache, "branche": branche, "base": base, "reprend": reprend, "apk_depot": apk_depot,
             "tours": _entier(limites.get("tours"), "tours", 1, TOURS_MAX, TOURS_MAX),
             "flux_octets": _entier(limites.get("flux_octets"), "flux_octets", 1, LIMITE_FLUX, LIMITE_FLUX),
             "duree_s": _entier(limites.get("duree_s"), "duree_s", 1, DUREE_MAX_S, DUREE_DEFAUT_S)}
@@ -291,7 +298,38 @@ def preparer_depot(c, d, env):
     git(depot, "config", "user.name", IDENTITE[0], env=env, capture_output=True)
     git(depot, "config", "user.email", IDENTITE[1], env=env, capture_output=True)
     git(depot, "switch", "-q", "-c", f"agent/{d['tache']}", env=env, capture_output=True)
+    deposer_l_apk(c, d, depot)
     return depot
+
+
+def deposer_l_apk(c, d, depot):
+    """Un APK déjà construit (`apk_depot`) est copié de /entree/app.apk à son chemin du clone, pour que la tâche de vérification
+    le trouve sans le reconstruire. Jamais à travers un lien (le dépôt de l'agent peut en contenir : un dossier du chemin qui
+    est un lien est refusé), jamais hors du dépôt, jamais un fichier déjà présent écrasé s'il est un lien."""
+    chemin = d.get("apk_depot")
+    if not chemin:
+        return
+    source = os.path.join(c["entree"], "app.apk")
+    if os.path.islink(source) or not os.path.isfile(source) or os.path.getsize(source) > APK_DEPOT_MAX:
+        raise Refus("app.apk absent ou trop gros pour apk_depot")
+    racine = os.path.realpath(depot)
+    courant = racine
+    morceaux = chemin.split("/")
+    for dossier in morceaux[:-1]:
+        courant = os.path.join(courant, dossier)
+        if os.path.islink(courant):
+            raise Refus("apk_depot : un dossier du chemin est un lien")
+        os.makedirs(courant, exist_ok=True)
+    cible = os.path.join(courant, morceaux[-1])
+    if os.path.islink(cible) or not os.path.realpath(cible).startswith(racine + os.sep):
+        raise Refus("apk_depot : cible refusée (lien ou hors du dépôt)")
+    with open(source, "rb") as lu, open(cible, "wb") as ecrit:
+        while True:
+            bloc = lu.read(1 << 20)
+            if not bloc:
+                break
+            ecrit.write(bloc)
+    os.chmod(cible, 0o644)
 
 
 def neutraliser_attributs(depot):

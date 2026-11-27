@@ -4700,6 +4700,40 @@ def _variante_du_test(projet, t, variantes):
     return variantes[0] if len(variantes) == 1 else None
 
 
+def apk_a_deposer(projet, t):
+    """`(chemin du poste, chemin relatif au dépôt)` de l'APK existant à déposer dans le clone d'un agent serveur de VÉRIFICATION
+    (métier testeur/recette) : celui que `_consigne_de_l_apk_existant` lui donne (variante choisie par `_variante_du_test`, sources
+    qui correspondent), jamais un APK périmé ; None sinon (aucun APK correspondant : la consigne demande alors UNE construction).
+    Le fichier doit être ordinaire, non un lien, dans le dépôt, un chemin que l'enveloppe du serveur accepte."""
+    if str(t.get("role") or "").lower() not in ROLES_DE_RECETTE:
+        return None
+    try:
+        variantes = sorted({x.get("variante") for x in registre_apk.lire(projet.dossier) if x.get("variante")})
+        variante = _variante_du_test(projet, t, variantes)
+        if variante is None and len(variantes) > 1:
+            return None          # plusieurs variantes possibles : rien n'est imposé (la consigne liste les candidats)
+        r = registre_apk.fournir(projet.dossier, variante, tache=t["id"], motifs=_factory(projet).get("apk_ignore"), demander=False)
+        if r["etat"] != "existant":
+            return None
+        rel = r["apk"]["chemin"]
+        chemin = Path(projet.dossier) / rel
+        racine = Path(projet.dossier).resolve()
+        if chemin.is_symlink() or not chemin.is_file() or not chemin.resolve().is_relative_to(racine):
+            return None
+    except Exception:  # noqa: BLE001
+        return None
+    try:
+        outils = str(Path(__file__).resolve().parent.parent / "outils")
+        if outils not in sys.path:
+            sys.path.append(outils)
+        import serveur_agent
+        if not serveur_agent.apk_depot_valide(rel):
+            return None
+    except Exception:  # noqa: BLE001
+        return None
+    return str(chemin), rel
+
+
 def _consigne_de_l_apk_existant(projet, t):
     """Un test qui a besoin d'un APK reçoit L'APK EXISTANT dont l'empreinte des sources correspond au code testé (jamais une
     reconstruction ni une livraison) ; sinon UNE seule construction est demandée, partagée entre les tests qui l'attendent.
@@ -4727,7 +4761,9 @@ def _consigne_de_l_apk_existant(projet, t):
     if r["etat"] == "existant":
         a = r["apk"]
         texte = (f"APK à tester : `{a['chemin']}` (variante {a['variante']}, sources {a['empreinte']}, construit le {a['date']}) : "
-                 "il correspond au code testé. NE construis PAS d'APK et ne lance aucune livraison ; indique dans ton rapport "
+                 "il correspond au code testé et il est déposé à cet emplacement de ton clone avant ton départ (s'il y manque "
+                 "malgré tout, dis-le sous « Non vérifié » : ne le reconstruis pas). "
+                 "NE construis PAS d'APK et ne lance aucune livraison ; indique dans ton rapport "
                  "`\"apk_utilise\": {\"variante\", \"empreinte\", \"date\"}`.")
         autres = [v for v in variantes if v != a["variante"]]
         if autres:

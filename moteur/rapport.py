@@ -12,7 +12,7 @@ Forme (voir la consigne de fin d'étape de `orchestrateur/depart.py`) :
      "nom": str?, "cahier": {"maquette": [chemin ou {chemin, legende}], "etapes": [texte], "partenaires": [{id, mode}]?,
                              "taille": {valeur: petite | moyenne | grande, pourquoi, fichiers?}?}?,
      "fiche_correction": {"en_clair"?, "symptome", "reproduction": [texte], "attendu", "piste"?, "taille"?: petite | normale}?,   (cadrage d'une correction)
-     "methode_prete": bool?, "recette_reussie": bool?, "echecs_preexistants": [str]?, "non_faites": [id de tâche]?,
+     "methode_prete": bool?, "recette_reussie": bool?, "echecs_preexistants": [str]?, "apk_utilise": {variante, empreinte, date}?, "non_faites": [id de tâche]?,
      "usage_estime": int?, "comptes_rendus": [{"element", "texte", "images"?, "points_a_verifier"?, "acces"?, "doit_marcher"?, "pas_encore"?, "conclusion"?, "nature"?, "mode_operatoire"?}]?,
      "points_a_verifier": [str]?, "acces": {"url", "description"?}?,
      "nature": "en_jeu" | "visuel" | "son" | "mecanique" | "autre"?, "mode_operatoire": [str]?}
@@ -26,6 +26,8 @@ faux. Une valeur qui n'est pas vrai/faux est écartée.
 `echecs_preexistants` : rendu par une tâche de recette : les noms des tests en échec qui échouaient DÉJÀ avant la correction
 (rejoués sur la base) et étrangers à l'évolution ; ils ne comptent pas dans `recette_reussie` et le moteur ouvre une tâche
 dédiée à chacun (une seule fois par test). Une valeur mal formée est écartée.
+`apk_utilise` : rendu par une tâche de test qui a reçu un APK (voir `registre_apk`) : lequel (variante, empreinte des sources,
+date de construction), pour que la recette soit traçable. Une valeur mal formée est écartée.
 `non_faites` : dans un lot, les tâches que l'agent n'a pas faites (ou en partie) ; le moteur ne les marque pas faites,
 elles repartent à part. Une forme fautive est écartée.
 `usage_estime` : le total de tokens que l'agent estime avoir employés (un agent cloud ne peut pas faire mieux : le
@@ -99,6 +101,12 @@ def lire(texte):
             v["conforme"] = False      # un défaut relevé est un refus : ses points ne sont plus ignorés (essai de coûts, 2026-11-19)
     if "recette_reussie" in r and not isinstance(r["recette_reussie"], bool):
         del r["recette_reussie"]
+    if "apk_utilise" in r:
+        a = r["apk_utilise"]
+        if isinstance(a, dict) and all(isinstance(a.get(k), str) and a[k].strip() for k in ("variante", "empreinte", "date")):
+            r["apk_utilise"] = {k: a[k].strip()[:80] for k in ("variante", "empreinte", "date")}
+        else:
+            del r["apk_utilise"]
     if "echecs_preexistants" in r:
         noms = r["echecs_preexistants"]
         if isinstance(noms, list):

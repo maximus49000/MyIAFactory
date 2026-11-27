@@ -27,7 +27,7 @@ from pathlib import Path
 
 from bureau import attente, deport_types
 from bureau import reglages as reglages_bureau
-from moteur import agents, appel, cloud, detache, executeur_serveur, figes, git_sur, jugement, regles, service_permanent
+from moteur import agents, appel, cloud, detache, executeur_serveur, figes, git_sur, jugement, regles, registre_apk, service_permanent
 from orchestrateur import anonymat, connaissances
 from orchestrateur import depart as dp
 from orchestrateur import factory as fa
@@ -1751,6 +1751,11 @@ class Moteur:
         une modification POSTÉRIEURE du code les rend périmés. Jamais une erreur."""
         for ligne in getattr(e, "livrables", None) or []:
             m = re.match(r"Livrable rapatrié : (.+?) \(", ligne) if isinstance(ligne, str) else None
+            if m and m.group(1).lower().endswith(".apk"):      # le registre des APK construits (voir `registre_apk`)
+                try:
+                    registre_apk.enregistrer(projet.dossier, m.group(1), regles._factory(projet).get("apk_ignore"))
+                except Exception:      # noqa: BLE001 : jamais une raison d'arrêter la date des livrables
+                    pass
             if not m:
                 continue
             try:

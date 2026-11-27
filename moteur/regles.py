@@ -32,7 +32,7 @@ from datetime import datetime
 from pathlib import Path
 
 from installation import estimation, proposition
-from moteur import accord_outil, agents, apk_besoin, cloud, detache, deploiement, environnement, jugement, rapport, service_permanent
+from moteur import accord_outil, agents, apk_besoin, cloud, registre_apk, detache, deploiement, environnement, jugement, rapport, service_permanent
 from moteur.appel import est_une_limite as appel_limite
 from moteur.jugement import ACTIONS_CONSEIL, COMMANDES_INTERDITES_AU_CONSEIL  # noqa: F401
 from bureau import fichiers_joints
@@ -4550,6 +4550,7 @@ def _matiere(projet, etat, t):
         production = _production(projet, fid)
         if str(t.get("role") or "").lower() in ROLES_DE_RECETTE:
             parties.append(CONSIGNE_RECETTE)
+            parties += _consigne_de_l_apk_existant(projet, t)
         rang = next((k for k, x in enumerate(production) if etape == ETAPES_DE_FLUX + x["id"]), None)
         if rang is not None and len(production) > 1 and rang == len(production) - 1 and _sans_relecteur(projet):
             parties.append(AVANT_DE_LIVRER)          # la dernière étape du flux : ne livre pas un défaut connu
@@ -4647,6 +4648,38 @@ def _chemins_du_projet(projet, r, fid=None):
         r["comptes_rendus"] = [{**c, "images": [image(x) for x in c["images"]]} if isinstance(c.get("images"), list)
                                else c for c in r["comptes_rendus"]]
     return r
+
+
+def _consigne_de_l_apk_existant(projet, t):
+    """Un test qui a besoin d'un APK reçoit L'APK EXISTANT dont l'empreinte des sources correspond au code testé (jamais une
+    reconstruction ni une livraison) ; sinon UNE seule construction est demandée, partagée entre les tests qui l'attendent.
+    Rend les lignes de la consigne (vide hors projet Flutter) et note la décision au journal de la tâche (traçabilité)."""
+    try:
+        titre = str(t.get("titre") or "").lower()
+        connues = {x.get("variante") for x in registre_apk.lire(projet.dossier)}
+        variante = next((v for v in sorted(connues) if v and v.lower() in titre), None)
+        r = registre_apk.fournir(projet.dossier, variante, tache=t["id"], motifs=_factory(projet).get("apk_ignore"))
+    except Exception:  # noqa: BLE001 : une lecture ratée ne change rien à la consigne
+        return []
+    if r["etat"] == "existant":
+        a = r["apk"]
+        texte = (f"APK à tester : `{a['chemin']}` (variante {a['variante']}, sources {a['empreinte']}, construit le {a['date']}) : "
+                 "il correspond au code testé. NE construis PAS d'APK et ne lance aucune livraison ; indique dans ton rapport "
+                 "`\"apk_utilise\": {\"variante\", \"empreinte\", \"date\"}`.")
+    elif r["etat"] == "a_construire" and r["construire"]:
+        cause = "les sources ont changé depuis le dernier" if r["raison"] == "perime" else "aucun n'a été construit jusqu'ici"
+        texte = (f"Aucun APK de la variante « {r['variante']} » ne correspond aux sources actuelles ({r['empreinte']}) "
+                 f"({cause}). "
+                 "Construis-le UNE fois (`construire-apk`), puis teste cet APK et indique-le dans `apk_utilise`. Les autres "
+                 "tests de ces sources attendent le tien.")
+    elif r["etat"] == "a_construire":
+        texte = (f"Aucun APK de la variante « {r['variante']} » ne correspond aux sources actuelles, mais la tâche {r['attend']} "
+                 "est déjà chargée de le construire : ne le construis PAS ; attends son APK (réessaie plus tard) ou dis dans "
+                 "ton rapport que tu n'as pas pu le vérifier (« Non vérifié »).")
+    else:
+        return []
+    _journal(projet, t["id"], texte[:480])
+    return [texte]
 
 
 ROLES_DE_RECETTE = ("testeur", "recette")

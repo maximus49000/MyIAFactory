@@ -1796,6 +1796,9 @@ class Moteur:
                                                         "journal": [texte]})
                 except Exception:
                     pass
+                if getattr(e, "branche", None):      # la fusion saute avec le rapport : jamais en silence (FM_Stats f29)
+                    regles._journal(projet, e.tache, f"Sa branche {e.branche} n'est pas fusionnée : le rapport n'a pas pu être "
+                                                     "appliqué. Les tests qui en dépendent attendent sa fusion.")
                 continue
             finally:
                 if e.estime is None:      # un agent local : son résultat est appliqué, ses fichiers sont oubliés

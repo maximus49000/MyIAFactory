@@ -4327,7 +4327,7 @@ def _dernier_pas_du_dernier_element(projet, etat, t, fid, f):
         return False
     if (f or {}).get("file"):
         return False
-    en_cours = ("flux", "relecture", "correction", "captures", "validation", "attente_methode")
+    en_cours = ("flux", "relecture", "correction", "captures", "validation", "attente_methode", "attente_service")
     return not any(v["fid"] == fid and v["element"].get("id") != t.get("element") and v["phase"] in en_cours
                    for v in _m(etat, "elements").values())
 
@@ -4377,7 +4377,7 @@ def _revue_d_ensemble(projet, etat, v, journal):
             or not _sans_relecteur(projet) or v["pas"] != _etape_de_relecture(projet, fid)
             or wf.est_validation(production[v["pas"]]) or len(_elements_de(f)) < 2):
         return None
-    en_cours = ("flux", "relecture", "correction", "captures", "validation", "attente_methode")
+    en_cours = ("flux", "relecture", "correction", "captures", "validation", "attente_methode", "attente_service")
     dernier = not f.get("file") and not any(
         x["fid"] == fid and x["element"].get("id") != v["element"]["id"] and x["phase"] in en_cours
         for x in _m(etat, "elements").values())
@@ -6115,6 +6115,11 @@ def _attendre_le_directeur(projet, etat, v, s):
     liens, service = ([], None)
     if _touche_le_service(projet, v, fichiers_elt if fichiers_elt is not None else _fichiers_de_l_element(projet, v)):
         liens, service = _liens_du_service(projet, v, str(precedent.get("doit_marcher") or ""))
+    if liens:      # aucune fiche tant que le service n'est pas chargé et prêt : l'élément attend, rien n'est demandé au Directeur
+        manques, a_deployer = _service_pret_pour_valider(projet, v, liens)
+        if manques:
+            _retenir_la_validation_du_service(projet, etat, v, manques, a_deployer)
+            return None
     if liens and not rel.acces_ok(precedent.get("acces")):
         precedent = {**precedent, "acces": {"url": liens[0]["adresse"], "description": "Le service en ligne"}}
     if (nature in ("visuel", "son", "mecanique") and not apk_exige) or sans_apk:   # jamais l'apk pour juger un visuel, un son…
@@ -6167,10 +6172,12 @@ def _attendre_le_directeur(projet, etat, v, s):
             captures = ([], raison)
     v["phase"] = "validation"
     element = v["element"]
-    tid = lancer(projet, "tache", {"titre": f"Validation du Directeur : {element['nom']}", "fonctionnalite": v["fid"],
-                                   "etape": ETAPES_DE_VALIDATION + s["id"], "active": False, "colonne": s["id"],
-                                   "element": element["id"]})["id"]
-    v["taches"].append(tid)
+    tid = v.pop("tache_retiree", None)      # une validation retirée puis rouverte : sa tâche est reprise, pas doublée
+    if tid is None:
+        tid = lancer(projet, "tache", {"titre": f"Validation du Directeur : {element['nom']}", "fonctionnalite": v["fid"],
+                                       "etape": ETAPES_DE_VALIDATION + s["id"], "active": False, "colonne": s["id"],
+                                       "element": element["id"]})["id"]
+        v["taches"].append(tid)
     a_valider = s["nom"] + (f" — {s['raison'].strip()}" if isinstance(s.get("raison"), str) and s["raison"].strip()
                             else "")
     objectif = _objectif_de(projet, v, s)[:OBJECTIF_MAX]
@@ -7354,6 +7361,120 @@ def _liens_du_service(projet, v, texte_libre=""):
     return liens, service
 
 
+SERVICE_VERIF_S = 30              # le contrôle du service (commit déployé, /sante, route d'exemple) est refait toutes les 30 s
+SERVICE_RETARD_S = 1800           # au-delà : une anomalie dit laquelle des conditions manque (jamais une validation vide)
+
+
+def _service_pret_pour_valider(projet, v, liens):
+    """`(manques, a_deployer)` : ce qui manque pour demander à un Directeur de valider un élément du service — (a) le service a
+    le commit de l'élément (`statut_du_serveur` ; « attente » : le déploiement est à faire), (b) il est prêt : `/sante` et une route
+    publique d'exemple répondent 200 (un 503 « index en préparation » n'est pas prêt), (c) des liens à cliquer. Rien ne manque : `[]`."""
+    manques, a_deployer = [], False
+    if not liens:
+        return ["aucune adresse du service à donner au Directeur"], False
+    try:
+        commit = service_permanent._commit_du_depot(projet.dossier)
+        statut, detail = service_permanent.statut_du_serveur(projet.dossier, commit) if commit else ("a_jour", "")
+    except Exception:  # noqa: BLE001 : un contrôle illisible ne bloque pas la validation
+        statut, detail = "a_jour", ""
+    if statut == "attente":
+        manques.append(f"le service n'a pas encore la version de l'élément ({detail or 'déploiement à faire'})")
+        a_deployer = True
+    elif statut == "echec":
+        manques.append(f"le déploiement du service a échoué ({detail})")
+    base = (_adresse_du_service(projet) or "").rstrip("/")
+    chemins = ["/sante"] + [x["adresse"][len(base):] for x in liens[2:3] if base and x["adresse"].startswith(base)]
+    try:
+        faits = service_permanent.faits_du_service(projet.dossier, chemins, lignes=0)
+        codes = {p.get("chemin"): p.get("code") for p in faits.get("pages") or []}
+        for c in chemins:
+            if codes.get(c) == 503:
+                manques.append(f"le service n'est pas prêt : {c} répond 503 (index en préparation)")
+            elif codes.get(c) != 200:
+                manques.append(f"le service ne répond pas encore 200 sur {c}" + (f" ({codes.get(c)})" if codes.get(c) else ""))
+    except Exception:  # noqa: BLE001
+        pass
+    return manques, a_deployer
+
+
+def _retenir_la_validation_du_service(projet, etat, v, manques, a_deployer, tache=None):
+    """La validation d'un élément du service n'est pas encore possible : aucune fiche, l'élément attend (`attente_service`) ; le
+    déploiement est demandé s'il le faut (une fois), le Chef le dit (une fois)."""
+    v["phase"] = "attente_service"
+    attente = v.setdefault("attente_service", {"depuis": time.time(), "dit": False, "deploye": False, "anomalie": False})
+    attente.update(manque="; ".join(manques), dernier=time.time())
+    if tache:
+        v["tache_retiree"] = tache
+    if a_deployer and not attente["deploye"]:
+        attente["deploye"] = True
+        ligne = service_permanent.declencher(projet.dossier, annoncer=lambda x: _dire(projet, v["fid"], x))
+        if ligne and v.get("taches"):
+            _journal(projet, v["taches"][-1], ligne)
+    if not attente["dit"]:
+        attente["dit"] = True
+        _dire(projet, v["fid"], f"La validation de « {v['element']['nom']} » n'est pas demandée tout de suite : " + attente["manque"]
+              + ". Je la poserai dès que le service sera prêt.")
+
+
+def attendre_le_service(projet, etat):
+    """À chaque tour : (1) les éléments du service qui attendent (`attente_service`) sont revus toutes les `SERVICE_VERIF_S` :
+    tout prêt, la fiche de validation est posée (la tâche retirée est reprise) ; après `SERVICE_RETARD_S`, une anomalie dit
+    laquelle des conditions manque ; (2) une validation DÉJÀ posée pour un élément du service devenu impossible (le service
+    redéployé répond 503) est retirée, puis rouverte quand tout est prêt. Rend les actions qui suivent."""
+    actions, maintenant = [], time.time()
+    for v in list(_m(etat, "elements").values()):
+        a = v.get("attente_service")
+        if v.get("phase") != "attente_service" or a is None or maintenant - a.get("dernier", 0) < SERVICE_VERIF_S:
+            continue
+        a["dernier"] = maintenant
+        try:
+            liens, _ = _liens_du_service(projet, v, str((v.get("dernier_rapport") or {}).get("doit_marcher") or ""))
+            manques, a_deployer = _service_pret_pour_valider(projet, v, liens)
+        except (Refus, ErreurMoteur):
+            continue
+        if not manques:
+            v["phase"] = "flux"
+            v.pop("attente_service", None)
+            _dire(projet, v["fid"], f"Le service est prêt : la validation de « {v['element']['nom']} » est posée.")
+            try:
+                _tache_de_flux(projet, etat, v)
+            except (Refus, ErreurMoteur) as e:
+                _journal(projet, v["taches"][-1], f"La fiche de validation n'a pas pu être posée : {e}")
+            continue
+        a["manque"] = "; ".join(manques)
+        if a_deployer and not a["deploye"]:
+            _retenir_la_validation_du_service(projet, etat, v, manques, a_deployer)
+        if maintenant - a["depuis"] > SERVICE_RETARD_S and not a["anomalie"]:
+            a["anomalie"] = True
+            _noter_une_anomalie(projet, etat, v["taches"][-1] if v.get("taches") else None, "", "Validation en attente du service : "
+                                + a["manque"][:80], f"« {v['element']['nom']} » attend depuis plus de {SERVICE_RETARD_S // 60} "
+                                f"minutes une validation possible : {a['manque']}. Aucune validation vide n'est demandée.")
+    for d in [x for x in _etat(projet)["decisions"] if x.get("genre") == GENRE_VALIDATION]:
+        cle = f"verif_service:{d['id']}"
+        if maintenant - _m(etat, "verifs_service").get(cle, 0) < SERVICE_VERIF_S * 2:
+            continue
+        _m(etat, "verifs_service")[cle] = maintenant
+        v = _element_en_validation(projet, etat, d)
+        if v is None:
+            continue
+        try:
+            # le moteur relancé ne connaît de l'élément que sa tâche de validation : toutes ses tâches sont relues du suivi
+            toutes = [x["id"] for x in lancer(projet, "detail", {"fonctionnalite": v["fid"], "taches": True})["taches"]
+                      if x.get("element") == v["element"]["id"]]
+            if not _touche_le_service(projet, v, _fichiers_de_l_element(projet, {**v, "taches": list(dict.fromkeys(list(v.get("taches") or []) + toutes))})):
+                continue
+            liens, _ = _liens_du_service(projet, v, str((v.get("dernier_rapport") or {}).get("doit_marcher") or ""))
+            manques, a_deployer = _service_pret_pour_valider(projet, v, liens) if liens else ([], False)
+        except (Refus, ErreurMoteur):
+            continue
+        if manques:      # devenue impossible (service redéployé, 503…) : retirée, rouverte plus tard
+            lancer(projet, "decision", {"action": "lever", "id": d["id"]})
+            if v.get("taches"):
+                _journal(projet, v["taches"][-1], "Validation retirée : " + "; ".join(manques) + ".")
+            _retenir_la_validation_du_service(projet, etat, v, manques, a_deployer, tache=d.get("tache"))
+    return actions
+
+
 def _consigne_du_service_en_ligne(projet, etat, t):
     """Le brief d'une vérification qui porte sur le service : son adresse (jamais le jeton) et les pages à interroger, pour tester
     EN LIGNE au lieu d'écrire « aucune adresse »."""
@@ -7694,6 +7815,7 @@ def avancer(projet, etat):
     _liberer_les_lots_orphelins(projet, etat, _etat(projet))
     livrer_si_calme(projet, etat, force=bool(etat.pop("livrer_maintenant", False)))
     _publier_les_livrables(projet)
+    actions += attendre_le_service(projet, etat)
     actions += fusionner_avant_les_tests(projet, etat)
     actions += _demarrer_en_attente(projet, etat, None)
     if not projet.pause_globale:

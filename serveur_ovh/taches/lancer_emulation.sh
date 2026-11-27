@@ -2,7 +2,10 @@
 # Enveloppe HÔTE d'une tâche d'émulation : exécutée sur le serveur (par SSH), elle prend le créneau, démarre le conteneur
 # `myiafactory/emulateur` puis rend la main ; un veilleur DÉTACHÉ (setsid + nohup, survit à la fin de la session SSH) tient le
 # créneau, applique les limites et écrit l'état final. Un appelant mort ne laisse donc ni conteneur ni créneau.
-# Usage : lancer_emulation.sh <id> <mode> [duree_s [inactivite_s [memoire_mo [cpus [captures [octets]]]]]]
+# Usage : lancer_emulation.sh <id> <mode> [duree_s [inactivite_s [memoire_mo [cpus [captures [octets [hotes]]]]]]]
+#   hotes (facultatif, après captures et octets) : noms d'hôtes séparés par des virgules, 5 au plus. Absent : l'émulateur n'a AUCUN
+#   réseau (--network none), comme toujours. Présent : réseau BORNÉ (voir « Réseau borné » plus bas). L'accord du Directeur est
+#   vérifié par le lanceur du poste AVANT l'envoi (`serveur_tache_cli`), jamais ici : cette enveloppe n'a pas de moyen de le lire.
 #   captures (1..50) et octets (1..104857600) facultatifs : passés au conteneur en -e PONT_CAPTURES / -e PONT_OCTETS (limites du pont) ;
 #   absents, le conteneur garde les valeurs du pont (50 captures, 100 Mo).
 #   id : t<AAAAMMJJ>-<HHMMSS>-<4 hexa> ; mode : scenario | pilote ; valeurs par défaut : 1200 s, 600 s, 6144 Mo, 2 processeurs
@@ -62,7 +65,7 @@ refuser() { printf '%s\n' "lancer_emulation : $1" >&2; exit 2; }
 
 VEILLEUR=0
 if [ "${1:-}" = --veilleur ]; then VEILLEUR=1; shift; fi
-[ $# -ge 2 ] && [ $# -le 8 ] || refuser "usage : <id> <scenario|pilote> [duree_s [inactivite_s [memoire_mo [cpus [captures [octets]]]]]]"
+[ $# -ge 2 ] && [ $# -le 9 ] || refuser "usage : <id> <scenario|pilote> [duree_s [inactivite_s [memoire_mo [cpus [captures [octets [hotes]]]]]]]"
 for argument in "$@"; do                 # aucun caractère de contrôle (retour à la ligne final compris : `$` d'un motif l'accepterait)
   [[ $argument == *[[:cntrl:]]* ]] && refuser "caractère de contrôle refusé dans un argument."
 done
@@ -81,6 +84,21 @@ fi
 if [ $# -ge 8 ]; then
   [[ $8 =~ ^[1-9][0-9]{0,8}$ ]] && [ "$8" -le 104857600 ] || refuser "octets refusés (1 à 104857600, sans zéro initial)."
   SUPPL+=("$8"); ENV_SUPPL+=(-e "PONT_OCTETS=$8")
+fi
+HOTES=""                                  # hôtes autorisés (réseau borné), séparés par des virgules ; vide : aucun réseau
+if [ $# -ge 9 ]; then
+  MOTIF_HOTE='^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*\.[a-z]{2,24}$'
+  case "$9" in ,*|*,|*,,*) refuser "hotes refusés (liste mal formée)." ;; esac     # read -a ignorerait un champ vide final
+  IFS=, read -r -a LISTE_HOTES <<< "$9"
+  [ "${#LISTE_HOTES[@]}" -ge 1 ] && [ "${#LISTE_HOTES[@]}" -le 5 ] || refuser "hotes refusés (1 à 5 noms séparés par des virgules)."
+  for h in "${LISTE_HOTES[@]}"; do
+    [ "${#h}" -le 253 ] && [[ $h =~ $MOTIF_HOTE ]] || refuser "hôte refusé (nom DNS en minuscules, jamais une adresse IP)."
+    case "$h" in
+      *.local|*.localhost|*.internal|*.lan|*.home|*.corp|*.arpa|*.onion|*.intranet) refuser "hôte refusé (domaine interne)." ;;
+    esac
+  done
+  HOTES="$9"
+  SUPPL+=("$9")                           # relayé au veilleur : il retire le réseau et le proxy à la fin
 fi
 [ -n "${HOME:-}" ] || refuser "HOME absent."
 SONDE="${ENVELOPPE_SONDE_S:-5}"
@@ -125,6 +143,186 @@ agent_actif() { ! agent_fini && processus_vivant "$TACHES/$AGENT_LIE/pont-hote.p
 AGENT_LIE=""
 if [ "$MODE" = pilote ]; then AGENT_LIE=$(agent_lie); fi
 
+# --- Réseau borné (seulement si des hôtes sont demandés) -----------------------
+#
+# Mécanisme, SANS règle de pare-feu de l'hôte ni droit root autre que `sudo docker` :
+#   - un réseau Docker `--internal` (reseau-<id>) : pas de passerelle, rien n'en sort, l'hôte et ses autres conteneurs n'y
+#     sont pas ; l'émulateur n'est branché QUE sur lui ;
+#   - un conteneur proxy (reseau-<id>, alias proxy-sortant), de la même image, branché sur ce réseau ET sur le pont par défaut
+#     de Docker : c'est le seul chemin de sortie. Il n'accepte que `CONNECT <hôte>:443` pour un hôte déclaré ; il ne résout
+#     JAMAIS de nom (aucun DNS) : il ne se connecte qu'aux adresses publiques résolues et vérifiées ICI, sur l'hôte, avant le
+#     lancement (adresses privées, bouclage, lien local, métadonnées, CGNAT : refus de toute la demande) ; un changement de
+#     DNS par la suite (rebinding) n'a donc aucun effet ;
+#   - l'émulateur reçoit ces mêmes adresses par --add-host (son DNS les lit dans /etc/hosts) et `-http-proxy` vers le proxy.
+# Fermé par défaut : sans hôtes rien de tout cela n'existe (--network none). Un échec de l'une des étapes refuse la tâche.
+PROXY_PORT=3128
+RESEAU_NOM="reseau-$ID"
+nettoyer_reseau() {   # sans effet quand aucun hôte n'était demandé ; idempotent ; garde le journal du proxy (reseau-proxy.log)
+  [ -n "$HOTES" ] || return 0
+  dk 30 logs --tail 500 "$RESEAU_NOM" > "$DOSSIER/reseau-proxy.log" 2>&1
+  dk 30 rm -f "$RESEAU_NOM" >/dev/null 2>&1
+  dk 30 network rm "$RESEAU_NOM" >/dev/null 2>&1
+  return 0
+}
+
+# ip_publique <a.b.c.d> : 0 si l'adresse IPv4 est publique (ni privée, ni bouclage, ni lien local/métadonnées, ni CGNAT, ni réservée).
+ip_publique() {
+  local a b c d
+  [[ $1 =~ ^([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})\.([0-9]{1,3})$ ]] || return 1
+  a=$((10#${BASH_REMATCH[1]})); b=$((10#${BASH_REMATCH[2]})); c=$((10#${BASH_REMATCH[3]})); d=$((10#${BASH_REMATCH[4]}))
+  [ "$a" -le 255 ] && [ "$b" -le 255 ] && [ "$c" -le 255 ] && [ "$d" -le 255 ] || return 1
+  [ "$a" -eq 0 ] || [ "$a" -eq 10 ] || [ "$a" -eq 127 ] || [ "$a" -ge 224 ] && return 1
+  [ "$a" -eq 100 ] && [ "$b" -ge 64 ] && [ "$b" -le 127 ] && return 1
+  [ "$a" -eq 169 ] && [ "$b" -eq 254 ] && return 1
+  [ "$a" -eq 172 ] && [ "$b" -ge 16 ] && [ "$b" -le 31 ] && return 1
+  [ "$a" -eq 192 ] && [ "$b" -eq 168 ] && return 1
+  [ "$a" -eq 192 ] && [ "$b" -eq 0 ] && [ "$c" -eq 0 ] && return 1
+  [ "$a" -eq 198 ] && { [ "$b" -eq 18 ] || [ "$b" -eq 19 ]; } && return 1
+  return 0
+}
+
+# resoudre_hotes : remplit HOTES_IP (« hôte=ip[,ip] » séparés par des espaces) ; 1 avec RAISON_RESEAU si un hôte ne se résout pas
+# ou donne une adresse non publique. Au plus 4 adresses IPv4 par hôte.
+resoudre_hotes() {
+  local h ip ips n
+  HOTES_IP=()
+  for h in "${LISTE_HOTES[@]}"; do
+    ips=""; n=0
+    while read -r ip _; do
+      [ -n "$ip" ] || continue
+      ip_publique "$ip" || { RAISON_RESEAU="hôte $h : l'adresse $ip n'est pas publique (réseau interne, bouclage, métadonnées ou réservée)."; return 1; }
+      case ",$ips," in *",$ip,"*) continue ;; esac
+      n=$((n + 1)); [ "$n" -le 4 ] || break
+      ips="${ips:+$ips,}$ip"
+    done < <(getent ahostsv4 "$h" 2>/dev/null | awk '{print $1}')
+    [ -n "$ips" ] || { RAISON_RESEAU="hôte $h : aucune adresse IPv4 trouvée."; return 1; }
+    HOTES_IP+=("$h=$ips")
+  done
+  return 0
+}
+
+# Le proxy (source Java compilée par `java` au lancement : l'image a déjà un JDK, rien de plus à installer ; écrite dans le
+# dossier de la tâche, montée en lecture seule). CONNECT seulement, port 443 seulement, hôtes et adresses résolus ici seulement.
+ecrire_proxy() {
+  mkdir -p -- "$DOSSIER/reseau" && chmod 755 "$DOSSIER/reseau" || return 1
+  cat > "$DOSSIER/reseau/ProxySortant.java" <<'FIN_PROXY_JAVA'
+import java.io.*;
+import java.net.*;
+import java.util.*;
+import java.util.concurrent.*;
+
+/** Proxy sortant à liste blanche : CONNECT <hôte>:443 seulement, vers des adresses données en arguments (jamais de DNS). */
+public class ProxySortant {
+    static final Map<String, List<String>> HOTES = new HashMap<>();
+    static final Set<String> ADRESSES = new HashSet<>();
+    static final int MAX_CONNEXIONS = 32, INACTIF_MS = 120000, ENTETE_MAX = 8192;
+    // 443 toujours ; la propriété système ne sert qu'aux essais automatiques (jamais posée au lancement du conteneur).
+    static final int PORT_DISTANT = Integer.getInteger("proxy.portdistant", 443);
+    static final java.util.regex.Pattern IPV4 = java.util.regex.Pattern.compile("[0-9]{1,3}(\\.[0-9]{1,3}){3}");
+
+    public static void main(String[] a) throws Exception {
+        int port = Integer.parseInt(a[0]);
+        for (int i = 1; i < a.length; i++) {
+            String[] kv = a[i].split("=", 2);
+            List<String> ips = new ArrayList<>();
+            for (String ip : kv[1].split(",")) {
+                if (!IPV4.matcher(ip).matches()) throw new IllegalArgumentException("adresse refusée");
+                ips.add(ip);
+                ADRESSES.add(ip);
+            }
+            HOTES.put(kv[0], ips);
+        }
+        ExecutorService pool = Executors.newCachedThreadPool();
+        Semaphore places = new Semaphore(MAX_CONNEXIONS);
+        try (ServerSocket serveur = new ServerSocket(port, 50)) {
+            while (true) {
+                Socket client = serveur.accept();
+                if (!places.tryAcquire()) { client.close(); continue; }
+                pool.submit(() -> { try { traiter(client); } finally { places.release(); } });
+            }
+        }
+    }
+
+    static String sur(String s) {
+        StringBuilder b = new StringBuilder();
+        for (int i = 0; i < s.length() && i < 80; i++) { char c = s.charAt(i); b.append(c >= 32 && c < 127 ? c : '?'); }
+        return b.toString();
+    }
+
+    static void refuser(Socket client, String code, String hote) throws IOException {
+        System.out.println("REFUSE " + sur(hote));
+        client.getOutputStream().write(("HTTP/1.1 " + code + "\r\nConnection: close\r\n\r\n").getBytes("US-ASCII"));
+    }
+
+    static void traiter(Socket client) {
+        Socket sortie = null;
+        try (client) {
+            client.setSoTimeout(INACTIF_MS);
+            BufferedInputStream in = new BufferedInputStream(client.getInputStream());
+            ByteArrayOutputStream entete = new ByteArrayOutputStream();
+            int dernier = 0, c;
+            while ((c = in.read()) >= 0) {
+                entete.write(c);
+                dernier = ((dernier << 8) | c) & 0xFFFFFFFF;
+                if (dernier == 0x0D0A0D0A || entete.size() > ENTETE_MAX) break;
+            }
+            String texte = entete.toString("ISO-8859-1");
+            String ligne = texte.split("\r\n", 2)[0];
+            String[] parties = ligne.split(" ");
+            if (entete.size() > ENTETE_MAX || dernier != 0x0D0A0D0A || parties.length != 3 || !parties[0].equals("CONNECT")) {
+                refuser(client, "405 Method Not Allowed", ligne);
+                return;
+            }
+            int deux = parties[1].lastIndexOf(':');
+            String hote = deux < 0 ? parties[1] : parties[1].substring(0, deux);
+            String port = deux < 0 ? "" : parties[1].substring(deux + 1);
+            if (!port.equals("443")) { refuser(client, "403 Forbidden", parties[1]); return; }
+            hote = hote.toLowerCase(Locale.ROOT);
+            List<String> ips = HOTES.get(hote);
+            if (ips == null && ADRESSES.contains(hote)) ips = List.of(hote);
+            if (ips == null) { refuser(client, "403 Forbidden", parties[1]); return; }
+            for (String ip : ips) {
+                try {
+                    Socket s = new Socket();
+                    s.connect(new InetSocketAddress(InetAddress.getByName(ip), PORT_DISTANT), 10000);
+                    sortie = s;
+                    break;
+                } catch (IOException e) { /* adresse suivante */ }
+            }
+            if (sortie == null) { refuser(client, "502 Bad Gateway", parties[1]); return; }
+            sortie.setSoTimeout(INACTIF_MS);
+            System.out.println("OK " + sur(hote) + ":443");
+            client.getOutputStream().write("HTTP/1.1 200 Connection established\r\n\r\n".getBytes("US-ASCII"));
+            client.getOutputStream().flush();
+            final Socket distant = sortie;
+            Thread aller = new Thread(() -> copier(in, distant, client));
+            aller.setDaemon(true);
+            aller.start();
+            copier(distant.getInputStream(), client, distant);
+        } catch (IOException e) {
+            // connexion coupée ou délai d'inactivité : fin normale
+        } finally {
+            if (sortie != null) try { sortie.close(); } catch (IOException e) { }
+        }
+    }
+
+    static void copier(InputStream de, Socket vers, Socket autre) {
+        byte[] tampon = new byte[16384];
+        try {
+            OutputStream o = vers.getOutputStream();
+            int n;
+            while ((n = de.read(tampon)) >= 0) { o.write(tampon, 0, n); o.flush(); }
+        } catch (IOException e) {
+        } finally {
+            try { vers.close(); } catch (IOException e) { }
+            try { autre.close(); } catch (IOException e) { }
+        }
+    }
+}
+FIN_PROXY_JAVA
+  chmod 644 "$DOSSIER/reseau/ProxySortant.java"
+}
+
 # --- Veilleur (détaché) ----------------------------------------------------
 
 veilleur() {
@@ -137,6 +335,7 @@ veilleur() {
   conclure() {   # conclure <etat> <statut> <raison>
     FINI=1
     ecrire_etat "$1" "$2" "$debut_iso" "$(maintenant_iso)" "$3"
+    nettoyer_reseau
     liberer_creneau
     exit 0
   }
@@ -265,24 +464,59 @@ if [[ $taille_img =~ ^[0-9]{1,15}$ ]] && [ "$taille_img" -gt "$IMAGE_MAX_OCTETS"
   fin_erreur "Image système trop grosse pour /avd : system.img fait $((taille_img / 1048576)) Mo, au plus $((IMAGE_MAX_OCTETS / 1048576)) Mo (tmpfs /avd de ${AVD_TMPFS_GO} Go moins 2 Go de marge : l'émulateur en fait une copie inscriptible)."
 fi
 
+RESEAU_EMUL=none                                    # fermé par défaut : seule la présence d'hôtes (accord vérifié par le lanceur) l'ouvre
+HOTES_IP=(); ADD_HOTES=(); ENV_PROXY=(); RAISON_DEMARRAGE="Conteneur en cours de démarrage."
+if [ -n "$HOTES" ]; then
+  RAISON_RESEAU=""
+  resoudre_hotes || fin_erreur "Réseau refusé : ${RAISON_RESEAU} Rien n'a démarré."      # d'abord : un refus ne touche à rien
+  # Le créneau est tenu : un proxy ou un réseau `reseau-*` qui traîne est celui d'une tâche morte, on le retire.
+  for ancien in $(dk 20 ps -aq --filter "label=myiafactory.genre=proxy" 2>/dev/null); do dk 30 rm -f "$ancien" >/dev/null 2>&1; done
+  for ancien in $(dk 20 network ls -q --filter "label=myiafactory.genre=reseau" 2>/dev/null); do dk 30 network rm "$ancien" >/dev/null 2>&1; done
+  case "$ICI$DOSSIER" in *,*) fin_erreur "Chemin non admis (virgule) : montage impossible." ;; esac
+  ecrire_proxy || fin_erreur "Réseau refusé : le proxy n'a pas pu être écrit. Rien n'a démarré."
+  RESEAU_EMUL="$RESEAU_NOM"
+  for hip in "${HOTES_IP[@]}"; do
+    for ip in $(printf '%s' "${hip#*=}" | tr ',' ' '); do ADD_HOTES+=(--add-host "${hip%%=*}:$ip"); done
+  done
+  ENV_PROXY=(-e "PONT_PROXY=http://proxy-sortant:$PROXY_PORT")
+  RAISON_DEMARRAGE="Conteneur en cours de démarrage ; réseau ouvert (HTTPS, port 443) vers : ${HOTES_IP[*]}."
+  printf '%s\n' "$(maintenant_iso) réseau ouvert (CONNECT :443 seulement) vers : ${HOTES_IP[*]}" > "$DOSSIER/reseau.txt"
+fi
+
 honorer_final                                       # relu juste avant d'écrire en_cours
 printf '%s\n' "$$" > "$DOSSIER/enveloppe.pid"      # AVANT en_cours : un second lancement voit une enveloppe vivante, pas un veilleur mort
-ecrire_etat en_cours "" "$(maintenant_iso)" "" "Conteneur en cours de démarrage."
+ecrire_etat en_cours "" "$(maintenant_iso)" "" "$RAISON_DEMARRAGE"
+
+if [ -n "$HOTES" ]; then
+  # Réseau interne (sans passerelle), puis le proxy : démarré sur le pont par défaut, puis branché sur le réseau interne.
+  PROXY=(run --pull never --rm -d --init --name "$RESEAU_NOM" --network bridge --label myiafactory.genre=proxy
+    --user 1000:1000 --cap-drop ALL --security-opt no-new-privileges --read-only --tmpfs /tmp:size=64m,mode=1777
+    --memory 192m --memory-swap 192m --cpus 0.5 --pids-limit 128 -e HOME=/tmp --entrypoint java
+    --mount "type=bind,src=$DOSSIER/reseau,dst=/proxy,readonly"
+    "$IMAGE" -Xmx96m /proxy/ProxySortant.java "$PROXY_PORT" "${HOTES_IP[@]}")
+  if ! dk 30 network create --internal --label myiafactory.genre=reseau "$RESEAU_NOM" >/dev/null 2>"$DOSSIER/docker-reseau.log" \
+     || ! dk 120 "${PROXY[@]}" >/dev/null 2>>"$DOSSIER/docker-reseau.log" \
+     || ! dk 30 network connect --alias proxy-sortant "$RESEAU_NOM" "$RESEAU_NOM" >/dev/null 2>>"$DOSSIER/docker-reseau.log"; then
+    nettoyer_reseau
+    fin_erreur "Réseau borné impossible à établir (voir docker-reseau.log) : rien n'a démarré."
+  fi
+fi
 
 # --mount (et non -v) : un chemin source absent est une erreur, jamais un dossier créé par root ; SDK et entree en lecture seule.
-COMMANDE=(run --pull never --rm -d --init --name "tache-$ID" --network none --device /dev/kvm
+COMMANDE=(run --pull never --rm -d --init --name "tache-$ID" --network "$RESEAU_EMUL" ${ADD_HOTES[@]+"${ADD_HOTES[@]}"} --device /dev/kvm
   --user 1000:1000 --group-add "$kvm_gid" --cap-drop ALL --security-opt no-new-privileges
   --read-only --tmpfs /tmp:size=512m,mode=1777 --tmpfs "/avd:size=${AVD_TMPFS_GO}g,mode=1777"
   --memory "${MEMOIRE}m" --memory-swap "${MEMOIRE}m" --cpus "$CPUS" --pids-limit 512 --ulimit nofile=4096:4096
   -e ANDROID_AVD_HOME=/avd -e HOME=/tmp -e ANDROID_USER_HOME=/tmp/.android -e PONT_SORTIE=/sortie -e PONT_AVD=emul
   -e PONT_EMULATEUR=/opt/android-sdk/emulator/emulator -e PONT_ADB=/opt/android-sdk/platform-tools/adb
-  -e "TACHE_DUREE_S=$DUREE" -e "TACHE_IMAGE_SYSTEME=$IMAGE_SYSTEME" ${ENV_SUPPL[@]+"${ENV_SUPPL[@]}"}
+  -e "TACHE_DUREE_S=$DUREE" -e "TACHE_IMAGE_SYSTEME=$IMAGE_SYSTEME" ${ENV_SUPPL[@]+"${ENV_SUPPL[@]}"} ${ENV_PROXY[@]+"${ENV_PROXY[@]}"}
   --mount "type=bind,src=$SDK,dst=/opt/android-sdk,readonly"
   --mount "type=bind,src=$DOSSIER/entree,dst=/entree,readonly"
   --mount "type=bind,src=$DOSSIER/sortie,dst=/sortie"
   "$IMAGE")
 if ! dk 120 "${COMMANDE[@]}" >/dev/null 2>"$DOSSIER/docker-run.log"; then
   dk 30 rm -f "tache-$ID" >/dev/null 2>&1          # un docker run figé (délai) a pu laisser un conteneur à demi créé
+  nettoyer_reseau
   fin_erreur "Démarrage du conteneur impossible (docker run en échec : voir docker-run.log)."
 fi
 

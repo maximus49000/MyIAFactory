@@ -36,7 +36,12 @@ INACTIVITE_MIN_S = 300           # mode pilote : jamais sous le budget de démar
 ETATS = ("en_attente", "en_cours", "terminee", "echouee", "arretee")
 TYPES = ("emulation",)
 MODES = ("scenario", "pilote")
-CLES_DEMANDE = frozenset({"id", "type", "projet", "mode", "scenario", "limites", "demandeur", "apk"})
+CLES_DEMANDE = frozenset({"id", "type", "projet", "mode", "scenario", "limites", "demandeur", "apk", "hotes"})
+# Réseau borné de l'émulateur (voir docs/serveur-taches.md « Réseau borné ») : des NOMS d'hôtes DNS (jamais une adresse IP), 5 au
+# plus, joints en HTTPS (port 443) seulement. Même motif que l'enveloppe (`lancer_emulation.sh`), qui revalide.
+HOTES_MAX = 5
+MOTIF_HOTE = re.compile(r"[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*\.[a-z]{2,24}", re.ASCII)
+SUFFIXES_INTERNES = (".local", ".localhost", ".internal", ".lan", ".home", ".corp", ".arpa", ".onion", ".intranet")
 MOTIF_ID = re.compile(r"t[0-9]{8}-[0-9]{6}-[0-9a-f]{4}", re.ASCII)
 MOTIF_SCENARIO = re.compile(r"[a-z0-9_-]{1,40}", re.ASCII)
 
@@ -51,6 +56,7 @@ class Demande:
     limites: object          # MappingProxyType : immuable
     demandeur: str
     apk: object
+    hotes: tuple = ()        # hôtes joignables par l'émulateur (réseau borné, accord du Directeur) ; vide : aucun réseau
 
 
 def nouvel_id(maintenant=time.time, hasard=secrets.token_hex):
@@ -75,6 +81,29 @@ def _limites(brut):
             raise ValueError(f"La limite « {cle} » doit être comprise entre 1 et {LIMITES_DEFAUT[cle]}.")
         sortie[cle] = v
     return MappingProxyType(sortie)
+
+
+def valider_hotes(brut):
+    """Tuple d'hôtes validé (`ValueError` en français) ; `None` ou liste vide : aucun réseau. Des noms DNS en minuscules,
+    sans doublon, jamais une adresse IP ni un domaine interne : ce n'est qu'une première barrière, l'enveloppe du serveur
+    refuse encore toute adresse non publique après résolution."""
+    if brut is None:
+        return ()
+    if not isinstance(brut, (list, tuple)) or not all(isinstance(h, str) for h in brut):
+        raise ValueError("Les hôtes du réseau doivent être une liste de noms d'hôtes.")
+    if len(brut) > HOTES_MAX:
+        raise ValueError(f"Trop d'hôtes pour le réseau borné ({HOTES_MAX} au plus).")
+    vus = []
+    for h in brut:
+        if len(h) > 253 or not MOTIF_HOTE.fullmatch(h):
+            raise ValueError("Hôte du réseau refusé : un nom DNS en minuscules est attendu (jamais une adresse IP, ni un "
+                             "port, ni un chemin).")
+        if h.endswith(SUFFIXES_INTERNES):
+            raise ValueError("Hôte du réseau refusé : un domaine interne n'est pas joignable.")
+        if h in vus:
+            raise ValueError("Hôte du réseau refusé : doublon.")
+        vus.append(h)
+    return tuple(vus)
 
 
 def _controle(c):
@@ -120,7 +149,7 @@ def valider_demande(brut):
     return Demande(id=ident, type="emulation", projet=_texte_court(brut.get("projet"), "projet"), mode=mode,
                    scenario=scenario, limites=limites,
                    demandeur=_texte_court(brut.get("demandeur"), "demandeur"),
-                   apk=_texte_court(brut.get("apk"), "apk", None))
+                   apk=_texte_court(brut.get("apk"), "apk", None), hotes=valider_hotes(brut.get("hotes")))
 
 
 # ---------------------------------------------------------------- index du poste
@@ -764,10 +793,11 @@ fi
 rm -rf "$d"
 exit $r
 """
-# Arguments de l'enveloppe : <id> <mode> <duree_s> <inactivite_s> <memoire_mo> <cpus> <captures> <octets>, tous des entiers
-# validés (limites de la demande, toujours dans les bornes de l'enveloppe : captures 1..50, octets 1..104857600).
+# Arguments de l'enveloppe : <id> <mode> <duree_s> <inactivite_s> <memoire_mo> <cpus> <captures> <octets> [<hotes>], les huit
+# premiers des entiers validés (limites de la demande, toujours dans les bornes de l'enveloppe : captures 1..50, octets
+# 1..104857600) ; <hotes> (noms validés par `valider_hotes`, séparés par des virgules) seulement pour un réseau borné.
 _LANCER = f"""# tache:lancer @ID@
-exec bash "{ENVELOPPE_DISTANTE}" @ID@ @MODE@ @DUREE@ @INACTIVITE@ @MEMOIRE@ @CPUS@ @CAPTURES@ @OCTETS@
+exec bash "{ENVELOPPE_DISTANTE}" @ID@ @MODE@ @DUREE@ @INACTIVITE@ @MEMOIRE@ @CPUS@ @CAPTURES@ @OCTETS@@HOTES@
 """
 # Empreinte de l'image de l'émulateur sur le serveur (marqueur écrit par l'étape d'installation) : une lecture fixe.
 _IMAGE = f"""# tache:image
@@ -974,7 +1004,8 @@ def _demande_sure(demande):
         limites = demande.limites
         brut = {"id": demande.id, "type": demande.type, "projet": demande.projet, "mode": demande.mode,
                 "scenario": demande.scenario, "demandeur": demande.demandeur, "apk": demande.apk,
-                "limites": dict(limites) if isinstance(limites, (dict, MappingProxyType)) else limites}
+                "limites": dict(limites) if isinstance(limites, (dict, MappingProxyType)) else limites,
+                "hotes": list(demande.hotes)}
     elif isinstance(demande, dict):
         brut = demande
     else:
@@ -987,7 +1018,8 @@ def _demande_sure(demande):
 
 def _demande_dict(d):
     return {"id": d.id, "type": d.type, "projet": d.projet, "mode": d.mode, "scenario": d.scenario,
-            "limites": dict(d.limites), "demandeur": d.demandeur, "apk": d.apk}
+            "limites": dict(d.limites), "demandeur": d.demandeur, "apk": d.apk,
+            "hotes": list(d.hotes)}
 
 
 def _envoyer(serveur, ssh, demande, apk):
@@ -1089,6 +1121,8 @@ def lancer(demande, apk, dossier=plateforme_acces.DOSSIER, ssh=plateforme_ssh, a
     fiche = {"etat": "en_attente", "serveur_id": serveur.id, "mode": d.mode, "projet": d.projet,
              "scenario": d.scenario, "demandeur": d.demandeur, "limites": dict(d.limites), "cree": _maintenant_iso(),
              "debut": None, "fin": None, "statut": None, "raison": "APK envoyé : démarrage demandé."}
+    if d.hotes:
+        fiche["reseau"] = list(d.hotes)         # le journal de la tâche dit que le réseau était ouvert, et vers qui
     try:
         Index(dossier).enregistrer(d.id, _masque(fiche, dossier))
     except (ErreurIndex, TimeoutError, ValueError, OSError) as e:
@@ -1104,7 +1138,8 @@ def lancer(demande, apk, dossier=plateforme_acces.DOSSIER, ssh=plateforme_ssh, a
         return sortie("echouee", erreur=probleme + (f" ({avert})" if avert else ""))
     commande = _script(_LANCER, d.id, MODE=d.mode, DUREE=str(int(d.limites["duree_s"])),
                        INACTIVITE=str(int(d.limites["inactivite_s"])), MEMOIRE=str(MEMOIRE_MO), CPUS=str(CPUS),
-                       CAPTURES=str(int(d.limites["captures"])), OCTETS=str(int(d.limites["octets"])))
+                       CAPTURES=str(int(d.limites["captures"])), OCTETS=str(int(d.limites["octets"])),
+                       HOTES=(" " + ",".join(d.hotes)) if d.hotes else "")
     attendu = 0
     while True:
         code, sortie_texte, erreur = _bash(serveur, ssh, commande, delai=180)

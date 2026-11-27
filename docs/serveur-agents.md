@@ -210,7 +210,7 @@ Une **réponse aux questions** d'un agent (voir plus bas) repart toujours en mod
 serveur (`~/taches/.creneau-emulation`), distinct des places d'agent, et **partagé avec les tâches « Test »** et les recettes. Créneau occupé : `demarrer` rend le
 code 4 « créneau d'émulation occupé, réessaie plus tard », et l'agent peut réessayer.
 
-**Limites de l'émulation liée.** Celles de la tranche A (2 processeurs, 6144 Mo, sans réseau, 50 captures, 100 Mo de médias, 5 vidéos...) avec deux
+**Limites de l'émulation liée.** Celles de la tranche A (2 processeurs, 6144 Mo, sans réseau : le réseau borné de `docs/serveur-taches.md` ne vaut que pour `serveur-tache lancer`, jamais pour l'émulation liée à un agent, 50 captures, 100 Mo de médias, 5 vidéos...) avec deux
 différences : la durée de l'émulation est **le temps qui reste à l'agent**, et son inactivité est de 600 s au plus, bornée par ce reste. Quand il ne reste
 plus de temps, plus aucune nouvelle émulation n'est créée (code 4). L'émulation est arrêtée (« fin ») avec l'agent, qu'il finisse, soit arrêté ou échoue.
 

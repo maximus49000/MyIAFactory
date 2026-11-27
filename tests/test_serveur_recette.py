@@ -251,5 +251,79 @@ class TestExecuter(Base):
         self.assertEqual((res["etapes_faites"], res["echec"]["etape"]), (0, 0))
 
 
+class TestReseauBorne(Base):
+    """`reseau: true` : refusé sans l'accord du Directeur (donné par l'appelant, jamais lu dans le fichier), accepté avec
+    l'accord et des hôtes valides ; chaque forme fautive est refusée."""
+    HOTES = ["service.exemple", "api.service.exemple"]
+
+    def reseau(self, **plus):
+        return recette_json(reseau=True, hotes=self.HOTES, **plus)
+
+    def test_sans_accord_refuse_et_dit_quoi_regler(self):
+        self.ecrire("demo", self.reseau())
+        with self.assertRaises(ValueError) as c:
+            sr.charger(str(self.projet), "demo")
+        self.assertIn("recette-emulateur-reseau", str(c.exception))
+        self.assertIn("Réglages", str(c.exception))
+        with self.assertRaises(ValueError):
+            sr.charger(str(self.projet), "demo", accord_reseau=False)
+
+    def test_accord_non_booleen_refuse(self):
+        self.ecrire("demo", self.reseau())
+        for faux in ("oui", 1, None, [True]):
+            with self.assertRaises(ValueError, msg=repr(faux)):
+                sr.charger(str(self.projet), "demo", accord_reseau=faux)
+
+    def test_un_champ_accord_dans_la_recette_ne_donne_rien(self):
+        self.refuse(self.reseau(accord=True), motif="objet")
+        self.refuse(self.reseau(accord_reseau=True), motif="objet")
+
+    def test_avec_accord_et_hotes_valides(self):
+        self.ecrire("demo", self.reseau())
+        r = sr.charger(str(self.projet), "demo", accord_reseau=True)
+        self.assertTrue(r.reseau)
+        self.assertEqual(r.hotes, ("service.exemple", "api.service.exemple"))
+
+    def test_par_defaut_aucun_reseau(self):
+        self.ecrire("demo", recette_json())
+        r = sr.charger(str(self.projet), "demo", accord_reseau=True)       # l'accord seul n'ouvre rien
+        self.assertEqual((r.reseau, r.hotes), (False, ()))
+        self.ecrire("demo", {"nom": "demo", "etapes": []})
+        self.assertFalse(sr.charger(str(self.projet), "demo", accord_reseau=True).reseau)
+
+    def refuse_avec_accord(self, contenu, motif):
+        self.ecrire("demo", contenu)
+        with self.assertRaises(ValueError) as c:
+            sr.charger(str(self.projet), "demo", accord_reseau=True)
+        self.assertIn(motif, str(c.exception))
+
+    def test_hotes_obligatoires_avec_reseau(self):
+        sans = recette_json(reseau=True)
+        self.refuse_avec_accord(sans, "hotes")
+        self.refuse_avec_accord(recette_json(reseau=True, hotes=[]), "non vide")
+        self.refuse_avec_accord(recette_json(reseau=True, hotes="service.exemple"), "non vide")
+
+    def test_hote_invalide_refuse(self):
+        for mauvais in ("127.0.0.1", "10.0.0.5", "169.254.169.254", "Service.Exemple", "service.exemple:8080",
+                        "service.exemple/chemin", "https://service.exemple", "localhost", "service", "a b.exemple",
+                        "service.exemple.", "-x.exemple", "db.internal", "nas.local", "x.localhost", "x.lan",
+                        "x\nautre.exemple", "", "é.exemple", "service.exemple\n"):
+            self.refuse_avec_accord(recette_json(reseau=True, hotes=[mauvais]), "Hôte")
+
+    def test_hotes_forme_fautive_refusee(self):
+        self.refuse_avec_accord(recette_json(reseau=True, hotes=[1]), "liste de noms")
+        self.refuse_avec_accord(recette_json(reseau=True, hotes=[None]), "liste de noms")
+        self.refuse_avec_accord(recette_json(reseau=True, hotes=["service.exemple", "service.exemple"]), "doublon")
+        self.refuse_avec_accord(recette_json(reseau=True, hotes=[f"h{i}.exemple" for i in range(6)]), "Trop d'hôtes")
+
+    def test_reseau_ni_vrai_ni_faux_refuse(self):
+        for faux in ("true", 1, None, [], "oui"):
+            self.refuse_avec_accord(recette_json(reseau=faux), "true ou false")
+
+    def test_hotes_sans_reseau_refuse(self):
+        self.refuse_avec_accord(recette_json(reseau=False, hotes=["service.exemple"]), "reseau: true")
+        self.refuse_avec_accord(recette_json(reseau=False, hotes=0), "liste")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -22,13 +22,13 @@ class TestCatalogues(unittest.TestCase):
                 self.assertEqual(set(entree), CLES, nom)
 
     def test_le_generique_est_le_catalogue_d_origine(self):
-        self.assertEqual(list(GENERIQUE), ["apk", "tests", "emulateur", "charge", "recette-emulateur", "service"])
+        self.assertEqual(list(GENERIQUE), ["apk", "tests", "emulateur", "charge", "recette-emulateur", "recette-emulateur-reseau", "service"])
         self.assertEqual(GENERIQUE["tests"]["consomme"], ["apk"])
         self.assertEqual(GENERIQUE["apk"]["produit"], "apk")
 
     def test_android_valeurs_du_catalogue(self):
         self.assertEqual(list(ANDROID), ["apk", "tests", "lint", "emulateur", "release", "release-signe",
-                                         "recette-emulateur", "service"])
+                                         "recette-emulateur", "recette-emulateur-reseau", "service"])
         self.assertNotIn("charge", ANDROID)
         self.assertEqual(ANDROID["apk"]["commande"], "./gradlew assembleDebug")
         self.assertEqual(ANDROID["apk"]["artefact"], "app/build/outputs/apk/debug/*.apk")
@@ -188,6 +188,31 @@ class TestAccordDuBureau(unittest.TestCase):
     def refus(self, racine, **k):
         from bureau.deport_types import refus_accord
         return refus_accord(str(racine), self.RECETTE, bureau=str(self.bureau), **k)
+
+    def test_accord_reseau_se_lit_comme_l_accord_de_la_recette(self):
+        """`recette-emulateur-reseau` : réglé sur serveur dans les réglages ENREGISTRÉS du projet, jamais ailleurs."""
+        from bureau.deport_types import ACTION_RESEAU, refus_accord
+        d, f = self.projet("avec")
+        f.write_text(json.dumps({"deport": {"lieux": {self.RECETTE: "serveur", ACTION_RESEAU: "serveur"}}}), encoding="utf-8")
+        sans, g = self.projet("sans")
+        self.inscrire(f, g)
+        self.assertIsNone(refus_accord(str(d), ACTION_RESEAU, bureau=str(self.bureau)))
+        refus = refus_accord(str(sans), ACTION_RESEAU, bureau=str(self.bureau))      # recette réglée, pas le réseau
+        self.assertIn("recette-emulateur-reseau", refus)
+        self.assertIn("pas réglée sur serveur", refus)
+        faux, _ = self.projet("forge")                                               # non enregistré : jamais lu
+        (faux / ".factory" / "reglages.json").write_text(
+            json.dumps({"deport": {"lieux": {ACTION_RESEAU: "serveur"}}}), encoding="utf-8")
+        self.assertIn("n'est pas enregistré", refus_accord(str(faux), ACTION_RESEAU, bureau=str(self.bureau)))
+
+    def test_accord_reseau_se_regle_sur_serveur_seulement(self):
+        from bureau.deport_types import ANDROID, GENERIQUE
+        for catalogue in (GENERIQUE, ANDROID):
+            self.assertEqual(deport.valider_lieux({"recette-emulateur-reseau": "serveur"}, catalogue=catalogue),
+                             {"recette-emulateur-reseau": "serveur"})
+            for lieu in ("poste", "github"):
+                with self.assertRaises(ValueError):
+                    deport.valider_lieux({"recette-emulateur-reseau": lieu}, catalogue=catalogue)
 
     def test_dossier_non_enregistre_avec_des_reglages_forges_refuse(self):
         d, _ = self.projet("forge")

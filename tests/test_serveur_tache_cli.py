@@ -826,5 +826,88 @@ class TestAiguillage(unittest.TestCase):
             self.assertNotIn("Traceback", r.stderr)
 
 
+class TestReseauBorne(Base):
+    """Accord du Directeur `recette-emulateur-reseau` : lu dans les réglages du projet enregistré, jamais dans la recette."""
+    HOTES = ["service.exemple"]
+
+    def accorder(self, reseau="serveur"):
+        lieux = {"recette-emulateur": "serveur"}
+        if reseau:
+            lieux["recette-emulateur-reseau"] = reseau
+        (self.projet / ".factory" / "reglages.json").write_text(json.dumps({"deport": {"lieux": lieux}}), encoding="utf-8")
+
+    def recette_reseau(self, **plus):
+        (self.projet / ".factory" / "recettes" / "web.json").write_text(
+            json.dumps({**RECETTE, "nom": "web", "reseau": True, "hotes": self.HOTES, **plus}), encoding="utf-8")
+
+    def lancer_web(self, *plus):
+        return self.tache("lancer", "--apk", str(self.apk), "--mode", "scenario", "--scenario", "web",
+                          "--projet", str(self.projet), "--attendre", *plus)
+
+    def test_recette_reseau_sans_accord_refusee_avant_tout_envoi(self):
+        self.recette_reseau()
+        code, _s, erreur = self.lancer_web()
+        self.assertEqual(code, 1)
+        self.assertIn("recette-emulateur-reseau", erreur)
+        self.assertEqual(self.noms(), [])                    # rien n'a été envoyé
+
+    def test_recette_reseau_avec_accord_envoie_les_hotes(self):
+        self.recette_reseau()
+        self.accorder()
+        code, sortie, erreur = self.lancer_web()
+        self.assertEqual((code, erreur), (0, ""), sortie)
+        demande = self.moteur.appels[0][1]
+        self.assertEqual(demande.hotes, ("service.exemple",))
+
+    def test_accord_regle_ailleurs_que_serveur_ne_vaut_pas(self):
+        self.recette_reseau()
+        for lieu in ("poste", "github", ""):
+            self.accorder(lieu)
+            code, _s, erreur = self.lancer_web()
+            self.assertEqual(code, 1, lieu)
+            self.assertEqual(self.noms(), [])
+
+    def test_recette_sans_reseau_reste_sans_hote_meme_avec_accord(self):
+        self.accorder()
+        code, _s, _e = self.tache("lancer", "--apk", str(self.apk), "--mode", "scenario", "--scenario", "demo",
+                                  "--projet", str(self.projet), "--attendre")
+        self.assertEqual(code, 0)
+        self.assertEqual(self.moteur.appels[0][1].hotes, ())
+
+    def test_pilote_hotes_sans_accord_refuse(self):
+        code, _s, erreur = self.tache("lancer", "--apk", str(self.apk), "--mode", "pilote", "--hotes", "service.exemple",
+                                      "--projet", str(self.projet))
+        self.assertEqual(code, 2)
+        self.assertIn("recette-emulateur-reseau", erreur)
+        self.assertEqual(self.noms(), [])
+
+    def test_pilote_hotes_avec_accord(self):
+        self.accorder()
+        code, _s, erreur = self.tache("lancer", "--apk", str(self.apk), "--mode", "pilote", "--hotes",
+                                      "service.exemple,api.service.exemple", "--projet", str(self.projet))
+        self.assertEqual((code, erreur), (0, ""))
+        self.assertEqual(self.moteur.appels[0][1].hotes, ("service.exemple", "api.service.exemple"))
+
+    def test_pilote_sans_option_hotes_aucun_reseau_meme_avec_accord(self):
+        self.accorder()
+        self.tache("lancer", "--apk", str(self.apk), "--mode", "pilote", "--projet", str(self.projet))
+        self.assertEqual(self.moteur.appels[0][1].hotes, ())
+
+    def test_pilote_hote_invalide_refuse_meme_avec_accord(self):
+        self.accorder()
+        for mauvais in ("127.0.0.1", "10.0.0.1,service.exemple", "service.exemple,", "localhost"):
+            code, _s, _e = self.tache("lancer", "--apk", str(self.apk), "--mode", "pilote", "--hotes", mauvais,
+                                      "--projet", str(self.projet))
+            self.assertEqual(code, 1, mauvais)
+            self.assertEqual(self.noms(), [], mauvais)
+
+    def test_scenario_refuse_l_option_hotes(self):
+        self.accorder()
+        code, _s, erreur = self.tache("lancer", "--apk", str(self.apk), "--mode", "scenario", "--scenario", "demo",
+                                      "--hotes", "service.exemple", "--projet", str(self.projet), "--attendre")
+        self.assertEqual(code, 2)
+        self.assertEqual(self.noms(), [])
+
+
 if __name__ == "__main__":
     unittest.main()

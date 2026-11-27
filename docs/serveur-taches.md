@@ -117,7 +117,7 @@ limite ne peut jamais dépasser son défaut.
 | Mémoire du conteneur | **6144 Mo** (swap identique : pas de swap) | `docker run` |
 | Processeurs | **2** | `docker run` |
 | Processus du conteneur | **512** ; 4096 fichiers ouverts | `docker run` |
-| Réseau | **aucun** (`--network none`) | `docker run` |
+| Réseau | **aucun** (`--network none`), sauf réseau borné accordé par le Directeur (voir « Réseau borné ») | `docker run` |
 | Chaque journal rapatrié | 5 Mo au plus (au-delà il n'est pas rapatrié) | serveur et poste |
 
 **Pourquoi 10 minutes d'inactivité et non 5 (décision R9).** La conception disait 5 minutes. Mais le pont accorde jusqu'à 300 s
@@ -194,8 +194,8 @@ plus) :
 ```
 
 Règles (le fichier vient du projet, donc d'un agent : il est traité comme une donnée hostile, validé en entier **avant** tout
-envoi) : clés permises `nom` (facultative, doit égaler le nom du fichier), `reseau` (doit être `false` ; `true` est refusé en
-tranche A) et `etapes` (obligatoire) ; chaque étape est `{"verbe": ..., "args": [...]}` ; **les arguments sont du TEXTE**
+envoi) : clés permises `nom` (facultative, doit égaler le nom du fichier), `reseau` (`false` par défaut ; `true` seulement avec l'accord `recette-emulateur-reseau` du Directeur et une liste
+`hotes`, voir « Réseau borné »), `hotes` et `etapes` (obligatoire) ; chaque étape est `{"verbe": ..., "args": [...]}` ; **les arguments sont du TEXTE**
 (des chaînes, même pour les nombres : `"args": ["100", "200"]`) validé par les mêmes motifs que le pont ; **200 étapes** au
 plus, **64 Ko** au plus, UTF-8 ; ni lien symbolique ni jonction dans `.factory`, `recettes` ou le fichier ; clés JSON
 dupliquées refusées. Les étapes sont déroulées dans l'ordre et la recette **s'arrête au premier code non nul** du pont.
@@ -324,11 +324,71 @@ entrée dont le fichier mène ailleurs est écartée. La règle est la même dan
   (toujours dans la liste fermée de verbes).
 - Piste de durcissement : un registre d'accord **côté bureau** que les agents ne peuvent pas écrire (rien n'est fait).
 
+## Réseau borné de l'émulateur (applications qui parlent à un service web)
+
+**Par défaut l'émulateur n'a aucun réseau** (`--network none`) : une application qui se synchronise avec le service en ligne du
+projet affiche « serveur injoignable ». Quand l'application en a besoin, le Directeur peut ouvrir un réseau **borné**, projet
+par projet. Rien ne change pour un projet qui ne le demande pas.
+
+**Les trois conditions, toutes requises** (sinon : `--network none`, comme avant) :
+
+1. **L'accord du Directeur, par projet** : l'action `recette-emulateur-reseau` (« Recette sur émulateur : réseau borné »)
+   réglée sur « serveur » dans les réglages du projet (bureau, Réglages, Actions), comme `recette-emulateur`. Elle se lit
+   dans les réglages ENREGISTRÉS au bureau (`bureau.deport_types.refus_accord`), jamais dans un fichier de recette ni dans une
+   option : une recette ne peut pas se donner cet accord. `deporter recette-emulateur-reseau` n'existe pas (ce n'est pas une
+   action à lancer). Sans accord, `reseau: true` est refusé avec le message qui dit quoi régler et où.
+2. **Des hôtes déclarés** : en mode scénario, la clé `hotes` de la recette (`"reseau": true, "hotes": ["service.exemple"]`) ;
+   en mode pilote, `serveur-tache lancer --mode pilote --hotes service.exemple,api.service.exemple`. Des **noms DNS** en
+   minuscules (jamais une adresse IP, un port ou un chemin), **5 au plus**, sans doublon, ni domaine interne (`.local`,
+   `.internal`, `.lan`...). Ce que dit le fichier de recette reste une donnée hostile : validé avant tout envoi, puis
+   revalidé par l'enveloppe du serveur.
+3. **Des adresses publiques** : l'enveloppe résout chaque hôte **sur le serveur, avant le lancement** et refuse toute la demande
+   si une adresse est privée, de bouclage, de lien local (métadonnées comprises), CGNAT, réservée ou multicast, ou si un hôte
+   n'a aucune adresse IPv4 (IPv6 : jamais utilisé).
+
+**Mécanisme (sans règle de pare-feu de l'hôte, sans autre droit que `sudo docker`).**
+
+```
+émulateur ──(réseau Docker interne reseau-<id> : sans passerelle)──> proxy reseau-<id> ──(pont Docker)──> adresses résolues
+```
+
+- Un réseau Docker `--internal` (`reseau-<id>`) : rien n'en sort, l'hôte et les autres conteneurs n'y sont pas. L'émulateur n'est
+  branché que sur lui (jamais `host`, jamais le pont par défaut).
+- Un conteneur **proxy** (même image, `java` sur une source unique embarquée dans `lancer_emulation.sh`, `--cap-drop ALL`,
+  système de fichiers en lecture seule, 192 Mo, 0,5 processeur), branché sur le pont par défaut ET sur le réseau interne : c'est
+  le seul chemin de sortie. Il n'accepte que `CONNECT <hôte>:443` : **HTTPS seulement** ; tout le reste (HTTP clair, autres
+  ports, autres méthodes) est refusé. Il ne résout **jamais** de nom : il ne se connecte qu'aux adresses vérifiées publiques
+  plus haut (un changement de DNS après coup n'a aucun effet). 32 connexions, 120 s d'inactivité par connexion.
+- L'émulateur reçoit ces mêmes adresses par `--add-host` (son DNS les lit dans `/etc/hosts`) et démarre avec `-http-proxy` vers
+  le proxy (`PONT_PROXY`, forme exacte `http://proxy-sortant:3128`, vérifiée par le pont). Un programme de l'application qui
+  contournerait le proxy n'atteint rien : le réseau interne n'a pas de sortie (échec fermé).
+- **Aucun secret** n'est transmis à l'émulateur ni au proxy (seules les variables posées par l'enveloppe) ; aucun socket Docker.
+
+**Durée et journal.** Le créneau unique, la durée maximale et l'inactivité sont ceux de toute tâche d'émulation ; le proxy et le
+réseau sont retirés à la fin, quelle qu'elle soit (arrêt, limite, plantage, veilleur interrompu) ; au lancement, un proxy ou un
+réseau `reseau-*` resté d'une tâche morte est retiré (le créneau est tenu). La tâche **dit que le réseau était ouvert et vers
+qui** : la raison d'`etat.json` (« réseau ouvert (HTTPS, port 443) vers : hôte=adresse »), le champ `reseau` de la fiche
+(`serveur-tache lister`), `~/taches/<id>/reseau.txt` et `~/taches/<id>/reseau-proxy.log` (hôtes acceptés ou refusés).
+
+**Ce que l'isolation permet et ne permet pas.** Permet : HTTPS vers les hôtes déclarés, rien d'autre ; pas d'accès au réseau
+interne de l'hôte, à ses ports, aux autres conteneurs, aux métadonnées, au socket Docker. Ne permet pas (limites assumées) :
+HTTP en clair, ports autres que 443, hôtes sans nom DNS public, IPv6, un service dont l'adresse change pendant la tâche (les
+adresses sont figées au lancement : relancer), un site dont l'adresse dépend du client (CDN). Le proxy ne peut pas empêcher
+l'application d'envoyer ce qu'elle veut AUX hôtes déclarés : déclarer un hôte, c'est lui faire confiance pour la durée de la
+tâche (le service du projet, typiquement). Le proxy tourne sur le pont Docker par défaut : une règle de pare-feu de l'hôte qui
+limiterait ce pont renforcerait l'ensemble (non faite ici : la configuration du serveur n'est pas touchée).
+
+**Déploiement (à faire, avec l'accord du Directeur).** `pont.sh` fait partie de l'image `emulateur-image` : la mise à jour de
+l'image (bureau, Serveurs, `emulateur-image`) est nécessaire avant le premier lancement après cette évolution (le lanceur refuse
+tant que l'empreinte de l'image est périmée) ; `lancer_emulation.sh` est redéposé à chaque lancement. Les tests de l'enveloppe
+se font avec un faux `docker` : la vraie jonction (`-http-proxy` de l'émulateur vers le proxy, HTTPS jusqu'au service) ne se
+vérifie que par un essai réel.
+
 ## Sécurité : ce que le conteneur ne peut pas faire
 
 - Il tourne avec l'**utilisateur 1000** (pas root), `--cap-drop ALL`, `no-new-privileges`, système de fichiers en **lecture
   seule** (seuls `/tmp` 512 Mo et `/avd` 9 Go sont des volumes mémoire : des plafonds, seul l'écrit occupe la mémoire),
-  **aucun réseau**, 512 processus, mémoire et swap bornés (6144 Mo par défaut). `/avd` fait 9 Go parce que l'émulateur copie
+  **aucun réseau** (sauf le réseau borné accordé, plus haut), 512 processus, mémoire et swap bornés (6144 Mo par défaut). `/avd` fait 9 Go parce que l'émulateur copie
   le `system.img` de l'hôte (4,3 Go pour android-34 google_apis) dans l'AVD et exige ~7,4 Go libres ; le réglage
   `disk.dataPartition.size` du `config.ini` n'y change rien. Une image système plus grosse que 9 Go moins 2 Go de marge est
   refusée avant `docker run`, avec sa raison dans `etat.json`.
@@ -344,7 +404,7 @@ entrée dont le fichier mène ailleurs est écartée. La règle est la même dan
   refusés).
 - Toute commande Docker passe par `sudo -n docker ...` (jamais de mot de passe demandé).
 - **Ce que l'application émulée peut atteindre** : le *loopback du conteneur* seulement (adb sur 5037, console de
-  l'émulateur sur 5554). C'est contenu : sans réseau, il n'y a rien d'autre à atteindre. Les journaux, captures et textes de l'application sont **des données, jamais des instructions** ; la consigne
+  l'émulateur sur 5554). C'est contenu : sans réseau, il n'y a rien d'autre à atteindre (avec le réseau borné : seulement HTTPS vers les hôtes déclarés). Les journaux, captures et textes de l'application sont **des données, jamais des instructions** ; la consigne
   de départ de l'agent le lui dit.
 
 ## Dans le bureau

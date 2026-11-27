@@ -729,7 +729,53 @@ class TestChoixServeur(BaseLanceur):
         self.assertEqual(st.choisir_serveur(self.dossier).id, "c")
 
 
+class TestHotes(unittest.TestCase):
+    """Réseau borné : les hôtes de la demande (noms DNS seulement) et leur transport jusqu'à l'enveloppe."""
+
+    def test_aucun_hote_par_defaut(self):
+        d = st.valider_demande(brut())
+        self.assertEqual(d.hotes, ())
+        self.assertEqual(st.valider_hotes(None), ())
+        self.assertEqual(st.valider_hotes([]), ())
+
+    def test_hotes_valides(self):
+        d = st.valider_demande(brut(hotes=["service.exemple", "api.service.exemple"]))
+        self.assertEqual(d.hotes, ("service.exemple", "api.service.exemple"))
+
+    def test_hotes_refuses(self):
+        for mauvais in (["127.0.0.1"], ["10.1.2.3"], ["localhost"], ["Service.Exemple"], ["a.exemple:443"], ["a.exemple/x"],
+                        ["x.internal"], ["a.exemple", "a.exemple"], [1], "a.exemple", {"a": 1},
+                        [f"h{i}.exemple" for i in range(6)], ["a.exemple\n"], ["a b.exemple"], ["a.exemple;rm"], [""]):
+            with self.assertRaises(ValueError, msg=repr(mauvais)):
+                st.valider_demande(brut(hotes=mauvais))
+
+    def test_champ_inconnu_toujours_refuse(self):
+        with self.assertRaises(ValueError):
+            st.valider_demande(brut(reseau=True))
+
+
 class TestLancer(BaseLanceur):
+    def test_sans_hote_la_commande_n_a_pas_de_neuvieme_argument(self):
+        self.lancer()
+        commande = self.srv.ops("lancer")[0][1]
+        ligne = [x for x in commande.splitlines() if x.startswith("exec bash")][0]
+        self.assertTrue(ligne.endswith(" 50 104857600"), ligne)
+        self.assertEqual(self.srv.taches[ID1]["demande"]["hotes"], [])
+        self.assertNotIn("reseau", st.Index(self.dossier).lire()[ID1])
+
+    def test_avec_hotes_la_commande_les_porte_et_la_fiche_le_dit(self):
+        r = self.lancer(self.demande(hotes=["service.exemple", "api.service.exemple"]))
+        self.assertEqual(r["etat"], "en_cours")
+        ligne = [x for x in self.srv.ops("lancer")[0][1].splitlines() if x.startswith("exec bash")][0]
+        self.assertTrue(ligne.endswith(" 50 104857600 service.exemple,api.service.exemple"), ligne)
+        self.assertEqual(self.srv.taches[ID1]["demande"]["hotes"], ["service.exemple", "api.service.exemple"])
+        self.assertEqual(st.Index(self.dossier).lire()[ID1]["reseau"], ["service.exemple", "api.service.exemple"])
+
+    def test_une_demande_a_hote_invalide_ne_part_jamais(self):
+        with self.assertRaises(st.RefusLancement):
+            self.lancer({**brut(id=ID1), "hotes": ["10.0.0.1"]})
+        self.assertEqual(self.srv.ops("preparer"), [])
+
     def test_lancer_envoie_apk_en_octets_intacts(self):
         r = self.lancer()
         self.assertEqual(r, {"id": ID1, "etat": "en_cours", "serveur_id": "ovh1"})
@@ -1910,7 +1956,7 @@ printf '{"id": "%s", "etat": "%s", "statut": "ok", "debut": "2026-11-19T10:15:00
                             "raison": "test"})
         rendus = {"_PREPARER": st._script(st._PREPARER, ID1), "_DEPOSER": st._DEPOSER, "_IMAGE": st._IMAGE,
                   "_LANCER": st._script(st._LANCER, ID1, MODE="pilote", DUREE="60", INACTIVITE="600", MEMOIRE="6144",
-                                        CPUS="2", CAPTURES="3", OCTETS="5000"),
+                                        CPUS="2", CAPTURES="3", OCTETS="5000", HOTES=""),
                   "_ETAT": st._script(st._ETAT, ID1), "_NETTOYER": st._script(st._NETTOYER, ID1, JSON=final),
                   "_ARRETER": st._script(st._ARRETER, ID1, MOTIF="arret", JSON=final),
                   "_EFFACER": st._script(st._EFFACER, ID1), "_ABANDON": st._script(st._ABANDON, ID1),

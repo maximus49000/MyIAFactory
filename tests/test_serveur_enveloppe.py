@@ -17,7 +17,9 @@ CLES_ETAT = {"id", "etat", "statut", "debut", "fin", "raison"}
 DOCKER = r'''echo "docker $*" >> "$FAUX_JOURNAL"
 ET="$FAUX_ETAT"
 case "$1" in
-  run) echo "run-vu: pid=$([ -s "$FAUX_DOSSIER/enveloppe.pid" ] && echo oui || echo non) etat=$(cat "$FAUX_DOSSIER/etat.json")" >> "$FAUX_JOURNAL"
+  network) [ -n "${FAUX_RESEAU_ECHEC:-}" ] && [ "$2" = create ] && { echo "network boom" >&2; exit 1; }; exit 0 ;;
+  run) case "$*" in *genre=proxy*) [ -n "${FAUX_PROXY_ECHEC:-}" ] && { echo "proxy boom" >&2; exit 125; }; printf '%s\n' "$@" > "$ET/run-proxy.txt"; echo cidproxy; exit 0 ;; esac
+       echo "run-vu: pid=$([ -s "$FAUX_DOSSIER/enveloppe.pid" ] && echo oui || echo non) etat=$(cat "$FAUX_DOSSIER/etat.json")" >> "$FAUX_JOURNAL"
        [ -n "${FAUX_RUN_ECHEC:-}" ] && { echo "boom" >&2; exit 125; }
        printf '%s\n' "$@" > "$ET/run.txt"; touch "$ET/vivant"; echo cid123 ;;
   ps|inspect)   # un seul compteur de contrôles : « ps » de l'enveloppe puis « inspect » du veilleur
@@ -38,7 +40,7 @@ case "$1" in
       [ -n "${FAUX_CONTENEUR_EXISTE:-}" ] && echo cidautre
       [ -e "$ET/vivant" ] && echo cid123
       exit 0 ;;
-  stop|kill|rm) [ -n "${FAUX_STOP_ECHEC:-}" ] && exit 1; rm -f "$ET/vivant" ;;
+  stop|kill|rm) case "$*" in *tache-*) [ -n "${FAUX_STOP_ECHEC:-}" ] && exit 1; rm -f "$ET/vivant" ;; esac ;;
 esac
 exit 0'''
 FAUX = {
@@ -52,7 +54,8 @@ FAUX = {
     # date : note l'état au moment où le veilleur... non : au moment où l'enveloppe écrit en_cours (premier appel après enveloppe.pid)
     "date": 'echo "date: pid=$([ -s "$FAUX_DOSSIER/enveloppe.pid" ] && echo oui || echo non) etat=$(cat "$FAUX_DOSSIER/etat.json" 2>/dev/null)" >> "$FAUX_JOURNAL"\nexec /usr/bin/date "$@"',
     "timeout": 'echo "timeout $*" >> "$FAUX_JOURNAL"\nshift\nexec "$@"',
-    "getent": '[ -n "${FAUX_SANS_KVM:-}" ] && exit 2\necho "kvm:x:993:"',
+    "getent": '[ "$1" = ahostsv4 ] && { for ip in ${FAUX_IP_HOTE-93.184.216.34}; do echo "$ip STREAM $2"; done; exit 0; }\n'
+              '[ -n "${FAUX_SANS_KVM:-}" ] && exit 2\necho "kvm:x:993:"',
 }
 
 class Banc:
@@ -704,6 +707,265 @@ nom=""; prec=""; for a in "$@"; do [ "$prec" = --name ] && nom="$a"; prec="$a"; 
 [ -n "${AVD_SANS_CONFIG:-}" ] && exit 0
 mkdir -p "$ANDROID_AVD_HOME/$nom.avd"
 printf 'hw.ramSize=1024\nfoo=bar\ndisk.dataPartition.size=800M\n' > "$ANDROID_AVD_HOME/$nom.avd/config.ini"'''
+
+
+@unittest.skipUnless(shutil.which("bash"), "bash absent")
+class TestReseauBorne(unittest.TestCase):
+    """Réseau borné : l'émulateur n'a un réseau que si des hôtes sont demandés (le lanceur du poste a vérifié l'accord du
+    Directeur) ; le réseau est alors interne, le proxy est le seul chemin de sortie, les adresses sont vérifiées publiques."""
+    HOTES = "service.exemple,api.service.exemple"
+    LIMITES = ("scenario", "30", "30", "2048", "2", "50", "104857600")
+
+    def lancer(self, b, hotes=HOTES, **env):
+        return b.lancer(*self.LIMITES, *([hotes] if hotes is not None else []), env=env)
+
+    def appels_docker(self, b, sous_commande):
+        return [x for x in b.appels("docker ") if x.split()[1:2] == [sous_commande]]
+
+    def test_sans_hote_aucun_reseau_ni_proxy(self):
+        with Banc() as b:
+            self.assertEqual(self.lancer(b, None).returncode, 0)
+            a = b.run_args()
+            self.assertTrue(any(a[i:i + 2] == ["--network", "none"] for i in range(len(a))), a)
+            self.assertNotIn("--add-host", a)
+            self.assertFalse(any(x.startswith("PONT_PROXY") for x in a), a)
+            self.assertEqual(self.appels_docker(b, "network"), [])
+            self.assertFalse((b.et / "run-proxy.txt").exists())
+            self.assertFalse((b.dossier / "reseau").exists())
+            b.arreter()
+            b.attendre_final()
+            self.assertEqual(self.appels_docker(b, "network"), [])          # rien à retirer non plus
+
+    def test_avec_hotes_reseau_interne_proxy_et_emulateur_sur_ce_reseau_seulement(self):
+        with Banc() as b:
+            r = self.lancer(b)
+            self.assertEqual(r.returncode, 0, r.stderr + r.stdout)
+            a, p = b.run_args(), (b.et / "run-proxy.txt").read_text(encoding="utf-8").splitlines()
+
+            def suite(args, *motif):
+                self.assertTrue(any(args[i:i + len(motif)] == list(motif) for i in range(len(args))), f"{motif} absent de {args}")
+
+            reseau = f"reseau-{ID}"
+            # l'émulateur : sur le réseau interne SEUL, jamais « none » remplacé par bridge ou host ; adresses épinglées
+            suite(a, "--network", reseau)
+            self.assertEqual([a[i + 1] for i in range(len(a) - 1) if a[i] == "--network"], [reseau])
+            suite(a, "--add-host", "service.exemple:93.184.216.34")
+            suite(a, "--add-host", "api.service.exemple:93.184.216.34")
+            suite(a, "-e", "PONT_PROXY=http://proxy-sortant:3128")
+            for x in ("--privileged", "host", "--cap-add", "--dns", "docker.sock"):
+                self.assertFalse(any(x in y for y in a if y != "--add-host"), f"{x} dans {a}")
+            suite(a, "--cap-drop", "ALL")
+            # le réseau : interne (aucune passerelle), puis le proxy branché dessus avec son alias
+            creer = self.appels_docker(b, "network")
+            self.assertIn(f"docker network create --internal --label myiafactory.genre=reseau {reseau}", creer)
+            self.assertIn(f"docker network connect --alias proxy-sortant {reseau} {reseau}", creer)
+            # le proxy : même durcissement, jamais de DNS à lui, ne se connecte qu'aux adresses résolues par l'hôte
+            suite(p, "--network", "bridge")
+            suite(p, "--cap-drop", "ALL")
+            suite(p, "--security-opt", "no-new-privileges")
+            suite(p, "--user", "1000:1000")
+            suite(p, "--entrypoint", "java")
+            self.assertIn("--read-only", p)
+            self.assertNotIn("--privileged", p)
+            self.assertTrue(any(x.startswith("type=bind,") and x.endswith(",dst=/proxy,readonly") for x in p), p)
+            suite(p, "/proxy/ProxySortant.java", "3128", "service.exemple=93.184.216.34", "api.service.exemple=93.184.216.34")
+            # le journal de la tâche dit que le réseau est ouvert, et vers qui
+            self.assertIn("réseau ouvert", b.etat()["raison"])
+            self.assertIn("service.exemple=93.184.216.34", b.etat()["raison"])
+            self.assertIn("service.exemple", (b.dossier / "reseau.txt").read_text(encoding="utf-8"))
+            b.arreter()
+            b.attendre_final()
+            # fin de tâche : le proxy et le réseau sont retirés
+            self.assertIn(f"docker rm -f {reseau}", b.appels("docker "))
+            self.assertIn(f"docker network rm {reseau}", b.appels("docker "))
+            self.assertTrue((b.dossier / "reseau-proxy.log").exists())
+
+    def test_le_script_n_a_aucun_autre_chemin_de_sortie(self):
+        code = SCRIPT.read_text(encoding="utf-8")
+        lignes = [x for x in code.splitlines() if not x.lstrip().startswith("#")]
+        self.assertEqual([x for x in lignes if "--network none" in x], [])     # « none » n'est que la valeur par défaut de RESEAU_EMUL
+        self.assertIn("RESEAU_EMUL=none", code)
+        self.assertIn('RESEAU_EMUL="$RESEAU_NOM"', code)
+        for interdit in ("--network host", "--privileged", "docker.sock", "iptables", "nft "):
+            self.assertNotIn(interdit, code)
+
+    def test_adresse_non_publique_refuse_toute_la_demande(self):
+        for ip in ("10.0.0.5", "127.0.0.1", "169.254.169.254", "192.168.1.10", "172.16.4.4", "172.31.255.255", "100.64.0.1",
+                   "0.0.0.0", "224.0.0.1", "255.255.255.255", "198.18.0.1", "192.0.0.8", "93.184.216.34 10.0.0.5"):
+            with self.subTest(ip), Banc(FAUX_IP_HOTE=ip) as b:
+                r = self.lancer(b)
+                self.assertEqual(r.returncode, 1, r.stderr + r.stdout)
+                e = b.etat()
+                self.assertEqual((e["etat"], e["statut"]), ("echouee", "erreur"))
+                self.assertIn("pas publique", e["raison"])
+                self.assertEqual(b.appels("docker run"), [], b.journal)            # ni émulateur ni proxy
+                self.assertEqual(self.appels_docker(b, "network"), [])
+
+    def test_adresses_publiques_proches_des_bornes_acceptees(self):
+        for ip in ("172.32.0.1", "172.15.255.255", "100.63.255.255", "100.128.0.1", "169.255.0.1", "11.0.0.1", "223.255.255.254",
+                   "198.17.0.1", "198.20.0.1"):
+            with self.subTest(ip), Banc(FAUX_IP_HOTE=ip) as b:
+                self.assertEqual(self.lancer(b).returncode, 0, ip)
+                b.arreter()
+                b.attendre_final()
+
+    def test_hote_sans_adresse_refuse(self):
+        with Banc(FAUX_IP_HOTE="") as b:
+            r = self.lancer(b)
+            self.assertEqual(r.returncode, 1)
+            self.assertIn("aucune adresse", b.etat()["raison"])
+            self.assertEqual(b.appels("docker run"), [])
+
+    def test_adresse_ipv6_ou_texte_n_est_jamais_acceptee(self):
+        for ip in ("::1", "fe80::1", "pasuneadresse", "1.2.3", "1.2.3.4.5", "999.1.1.1", "01.2.3.4x"):
+            with self.subTest(ip), Banc(FAUX_IP_HOTE=ip) as b:
+                self.assertEqual(self.lancer(b).returncode, 1, ip)
+                self.assertEqual(b.appels("docker run"), [])
+
+    def test_hotes_mal_formes_refuses_avant_tout(self):
+        for hotes in ("127.0.0.1", "10.0.0.1,service.exemple", "Service.Exemple", "service.exemple:8080", "localhost",
+                      "service.exemple,", ",service.exemple",
+                      "service.exemple,a.exemple,b.exemple,c.exemple,d.exemple,e.exemple",
+                      "db.internal", "nas.local", "a b.exemple", "x.exemple;touch", "x.exemple\ny.exemple", "", "-x.exemple"):
+            with self.subTest(hotes), Banc() as b:
+                r = self.lancer(b, hotes)
+                self.assertEqual(r.returncode, 2, f"{hotes!r}: {r.stderr}")
+                self.assertEqual(b.appels("docker "), [])
+                self.assertFalse(b.dossier.exists())
+
+    def test_neuf_arguments_au_plus(self):
+        with Banc() as b:
+            self.assertEqual(b.lancer("scenario", "30", "30", "2048", "2", "50", "104857600", "a.exemple", "x").returncode, 2)
+
+    def test_reseau_impossible_a_creer_refuse_la_tache_sans_emulateur(self):
+        for env in ({"FAUX_RESEAU_ECHEC": "1"}, {"FAUX_PROXY_ECHEC": "1"}):
+            with self.subTest(env), Banc(**env) as b:
+                r = self.lancer(b)
+                self.assertEqual(r.returncode, 1, r.stderr + r.stdout)
+                e = b.etat()
+                self.assertEqual((e["etat"], e["statut"]), ("echouee", "erreur"))
+                self.assertIn("Réseau borné impossible", e["raison"])
+                self.assertEqual(b.appels("docker run --pull never --rm -d --init --name tache-"), [], b.journal)
+                self.assertIn(f"docker network rm reseau-{ID}", b.appels("docker "))         # rien ne traîne
+
+    def test_echec_de_l_emulateur_retire_le_reseau(self):
+        with Banc(FAUX_RUN_ECHEC="1") as b:
+            r = self.lancer(b)
+            self.assertEqual(r.returncode, 1)
+            self.assertIn(f"docker network rm reseau-{ID}", b.appels("docker "))
+            self.assertIn(f"docker rm -f reseau-{ID}", b.appels("docker "))
+
+    def test_le_veilleur_retire_le_reseau_aussi_quand_le_conteneur_meurt_seul(self):
+        with Banc(FAUX_MEURT_AU_PS="3") as b:
+            self.assertEqual(self.lancer(b).returncode, 0)
+            b.attendre_final()
+            self.assertIn(f"docker network rm reseau-{ID}", b.appels("docker "))
+
+    def test_un_ancien_proxy_ou_reseau_est_retire_avant(self):
+        with Banc() as b:
+            self.assertEqual(self.lancer(b).returncode, 0)
+            self.assertTrue(any("ps -aq --filter label=myiafactory.genre=proxy" in x for x in b.appels("docker ")), b.journal)
+            self.assertTrue(any("network ls -q --filter label=myiafactory.genre=reseau" in x for x in b.appels("docker ")), b.journal)
+            b.arreter()
+            b.attendre_final()
+
+
+@unittest.skipUnless(shutil.which("bash") and shutil.which("java") and shutil.which("javac"), "bash ou JDK absent")
+class TestProxySortant(unittest.TestCase):
+    """Le proxy Java embarqué dans l'enveloppe : CONNECT <hôte>:443 vers des adresses données, rien d'autre. Lancé pour de
+    vrai en local ; l'adresse « distante » est le bouclage, le port distant (réservé aux essais, propriété système) un port libre."""
+
+    @classmethod
+    def setUpClass(cls):
+        import re
+        import socket
+        import socketserver
+        import threading
+        texte = SCRIPT.read_text(encoding="utf-8")
+        m = re.search(r"<<'FIN_PROXY_JAVA'\n(.*?)\nFIN_PROXY_JAVA\n", texte, re.S)
+        assert m, "source Java du proxy introuvable dans l'enveloppe"
+        cls._t = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
+        cls.dossier = Path(cls._t.name)
+        (cls.dossier / "ProxySortant.java").write_text(m.group(1) + "\n", encoding="utf-8", newline="\n")
+
+        class Echo(socketserver.BaseRequestHandler):
+            def handle(self):
+                try:
+                    while True:
+                        d = self.request.recv(4096)
+                        if not d:
+                            return
+                        self.request.sendall(b"ECHO:" + d)
+                except OSError:
+                    return      # le proxy a coupé : fin normale
+
+        socketserver.ThreadingTCPServer.allow_reuse_address = True
+        cls.echo = socketserver.ThreadingTCPServer(("127.0.0.1", 0), Echo)
+        cls.port_echo = cls.echo.server_address[1]
+        threading.Thread(target=cls.echo.serve_forever, daemon=True).start()
+        with socket.socket() as s:
+            s.bind(("127.0.0.1", 0))
+            cls.port = s.getsockname()[1]
+        cls.proc = subprocess.Popen(
+            ["java", f"-Dproxy.portdistant={cls.port_echo}", (cls.dossier / "ProxySortant.java").as_posix(), str(cls.port),
+             "service.exemple=127.0.0.1"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        fin = time.time() + 60
+        while time.time() < fin:
+            try:
+                socket.create_connection(("127.0.0.1", cls.port), timeout=1).close()
+                break
+            except OSError:
+                if cls.proc.poll() is not None:
+                    raise AssertionError("proxy arrêté : " + cls.proc.stderr.read())
+                time.sleep(0.3)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.proc.kill()
+        cls.proc.wait()
+        cls.echo.shutdown()
+        cls.echo.server_close()
+        cls._t.cleanup()
+
+    def requete(self, texte, apres=None):
+        import socket
+        with socket.create_connection(("127.0.0.1", self.port), timeout=10) as s:
+            s.sendall(texte.encode("latin-1"))
+            rep = s.recv(4096).decode("latin-1")
+            if apres is not None and rep.startswith("HTTP/1.1 200"):
+                s.sendall(apres)
+                rep += s.recv(4096).decode("latin-1")
+            return rep
+
+    def test_connect_vers_un_hote_declare_passe(self):
+        rep = self.requete("CONNECT service.exemple:443 HTTP/1.1\r\nHost: service.exemple:443\r\n\r\n", b"salut")
+        self.assertTrue(rep.startswith("HTTP/1.1 200"), rep)
+        self.assertIn("ECHO:salut", rep)
+
+    def test_connect_par_adresse_declaree_passe_et_ailleurs_non(self):
+        self.assertTrue(self.requete("CONNECT 127.0.0.1:443 HTTP/1.1\r\n\r\n").startswith("HTTP/1.1 200"))
+        for refus in ("CONNECT 127.0.0.2:443 HTTP/1.1\r\n\r\n", "CONNECT 10.0.0.1:443 HTTP/1.1\r\n\r\n",
+                      "CONNECT 169.254.169.254:443 HTTP/1.1\r\n\r\n", "CONNECT autre.exemple:443 HTTP/1.1\r\n\r\n",
+                      "CONNECT localhost:443 HTTP/1.1\r\n\r\n"):
+            self.assertTrue(self.requete(refus).startswith("HTTP/1.1 403"), refus)
+
+    def test_autre_port_refuse(self):
+        for port in ("80", "22", "8443", "0", "", "443x"):
+            rep = self.requete(f"CONNECT service.exemple:{port} HTTP/1.1\r\n\r\n")
+            self.assertTrue(rep.startswith("HTTP/1.1 403"), f"{port}: {rep}")
+
+    def test_autre_methode_refusee(self):
+        for texte in ("GET http://service.exemple/ HTTP/1.1\r\nHost: service.exemple\r\n\r\n", "POST / HTTP/1.1\r\n\r\n",
+                      "CONNECT service.exemple:443\r\n\r\n", "connect service.exemple:443 HTTP/1.1\r\n\r\n"):
+            self.assertTrue(self.requete(texte).startswith("HTTP/1.1 405"), texte)
+
+    def test_hote_en_majuscules_est_le_meme_hote(self):
+        self.assertTrue(self.requete("CONNECT SERVICE.EXEMPLE:443 HTTP/1.1\r\n\r\n").startswith("HTTP/1.1 200"))
+
+    def test_entete_trop_gros_refuse_et_le_proxy_survit(self):
+        rep = self.requete("CONNECT service.exemple:443 HTTP/1.1\r\n" + "X: " + "a" * 20000 + "\r\n\r\n")
+        self.assertTrue(rep.startswith("HTTP/1.1 405"), rep[:40])
+        self.assertTrue(self.requete("CONNECT service.exemple:443 HTTP/1.1\r\n\r\n").startswith("HTTP/1.1 200"))
 
 
 @unittest.skipUnless(shutil.which("bash"), "bash absent")

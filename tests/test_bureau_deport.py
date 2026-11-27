@@ -257,15 +257,15 @@ class TestDeportParTypeDeProjet(AvecServeur):
 
     def test_projet_generique_expose_les_quatre_actions(self):
         d = self.json("/api/etat")["deport"]
-        self.assertEqual([a["id"] for a in d["actions"]], ["apk", "tests", "emulateur", "charge", "recette-emulateur", "service"])
-        self.assertEqual(set(d["lieux"]), {"apk", "tests", "emulateur", "charge", "recette-emulateur", "service"})
+        self.assertEqual([a["id"] for a in d["actions"]], ["apk", "tests", "emulateur", "charge", "recette-emulateur", "recette-emulateur-reseau", "service"])
+        self.assertEqual(set(d["lieux"]), {"apk", "tests", "emulateur", "charge", "recette-emulateur", "recette-emulateur-reseau", "service"})
 
     def test_projet_android_expose_ses_actions_avec_libelle_lieux_et_bientot(self):
         self.en_android()
         d = self.json("/api/etat")["deport"]
         actions = {a["id"]: a for a in d["actions"]}
         self.assertEqual(list(actions), ["apk", "tests", "lint", "emulateur", "release", "release-signe",
-                                         "recette-emulateur", "service"])
+                                         "recette-emulateur", "recette-emulateur-reseau", "service"])
         self.assertEqual(actions["tests"]["libelle"], "Tests unitaires")
         self.assertEqual(actions["emulateur"]["lieux"], ["poste"])
         self.assertIn("clés de signature", actions["release"]["bientot"])
@@ -352,7 +352,7 @@ class TestDeportReglagesAbimes(AvecServeur):
         (self.tmp / "demo" / "factory.json").write_text("[" * 100000 + "]" * 100000, encoding="utf-8")
         self.p._cache_etat = (0.0, self.p._cache_etat[1])
         d = self.json("/api/etat")["deport"]
-        self.assertEqual([a["id"] for a in d["actions"]], ["apk", "tests", "emulateur", "charge", "recette-emulateur", "service"])
+        self.assertEqual([a["id"] for a in d["actions"]], ["apk", "tests", "emulateur", "charge", "recette-emulateur", "recette-emulateur-reseau", "service"])
 
     def test_un_lieu_perime_apres_changement_de_genre_ne_bloque_pas_les_reglages(self):
         self.ecrire_lieux({"charge": "github", "apk": "poste"})

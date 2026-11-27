@@ -327,7 +327,8 @@ class Projet:
                "projet": ctx["lieux_projet"].get(action)}
         valeurs = {n: v for n, v in lus.items() if n in niveaux and v is not None}
         cat = catalogue if applicable else deport_types.catalogue_union()
-        servie = deport_types.servie_au_serveur(action, cat) or deport_types.service_permanent(action, cat)
+        servie = (deport_types.servie_au_serveur(action, cat) or deport_types.service_permanent(action, cat)
+                 or deport_types.accord_au_serveur(action, cat))
         routee = deport_types.routee_au_serveur(action, cat)
         return {"id": "deport." + action, "section": "actions", "libelle": entree["libelle"],
                 "aide": entree["bientot"] or "", "forme": "lieu", "choix": list(entree["lieux"]), "niveaux": niveaux,
@@ -425,7 +426,7 @@ class Projet:
             if valeur == "serveur":   # les mêmes garde-fous que les cases grisées de la page
                 cat = catalogue if applicable else union
                 if not (deport_types.servie_au_serveur(action, cat) or deport_types.routee_au_serveur(action, cat)
-                        or deport_types.service_permanent(action, cat)):
+                        or deport_types.service_permanent(action, cat) or deport_types.accord_au_serveur(action, cat)):
                     raise ValueError("« %s » : le lieu « serveur » n'est pas encore disponible (bientôt)."
                                      % entree["libelle"])
                 if not modserveurs.declare():

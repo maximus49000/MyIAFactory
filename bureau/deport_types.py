@@ -18,6 +18,13 @@ _SERVEUR_SEUL = "ne tourne que sur le serveur (accord permanent pour ce projet)"
 # Les actions que `deporter` sait servir sur le serveur (tâches d'émulation, `outils/serveur_tache_cli.py`). Une telle
 # action ne tourne nulle part ailleurs : pas de défaut au poste, le Directeur la règle sur serveur projet par projet.
 SERVIES_AU_SERVEUR = ("recette-emulateur",)
+# Un ACCORD du Directeur qui ne se lance pas : « recette-emulateur-reseau » ouvre, pour ce projet seulement, l'accès réseau BORNÉ
+# (hôtes déclarés, HTTPS) de l'émulateur du serveur. Réglé sur serveur dans les réglages du projet, comme `recette-emulateur` ;
+# jamais déduit d'un fichier de recette (donnée d'un agent). Pas d'accord : l'émulateur n'a aucun réseau.
+ACCORDS_AU_SERVEUR = ("recette-emulateur-reseau",)
+ACTION_RESEAU = "recette-emulateur-reseau"
+_RESEAU_SERVEUR_SEUL = ("accord permanent pour ce projet : l'émulateur du serveur peut joindre, en HTTPS seulement, les hôtes "
+                        "déclarés par la recette (ex. le service du projet) ; sans lui, aucun réseau")
 # Les actions que `lancer.py tests` sait ROUTER au serveur (conception § 5.7, `outils/tests_serveur.py`) : elles gardent
 # leurs autres lieux (le repli au poste existe) ; l'accord se lit dans les réglages enregistrés du projet, sinon dans
 # le défaut du bureau (`refus_route`).
@@ -59,6 +66,8 @@ GENERIQUE = {
     "emulateur": _entree("Émulateur", consomme=["apk"], lieux=("poste", "serveur"), bientot=_PEU_FIABLE),
     "charge": _entree("Charge", consomme=["apk"]),
     "recette-emulateur": _entree("Recette sur émulateur", consomme=["apk"], lieux=("serveur",), bientot=_SERVEUR_SEUL),
+    "recette-emulateur-reseau": _entree("Recette sur émulateur : réseau borné", lieux=("serveur",),
+                                        bientot=_RESEAU_SERVEUR_SEUL),
     "service": _entree("Service permanent", lieux=("serveur",), bientot=_SERVICE_SEUL),
 }
 
@@ -80,6 +89,8 @@ ANDROID = {
     # l'APK installé sur un émulateur du serveur, piloté par un scénario (recette) ou par l'agent ; `emulateur` (les
     # tests instrumentés Gradle) reste au poste
     "recette-emulateur": _entree("Recette sur émulateur", consomme=["apk"], lieux=("serveur",), bientot=_SERVEUR_SEUL),
+    "recette-emulateur-reseau": _entree("Recette sur émulateur : réseau borné", lieux=("serveur",),
+                                        bientot=_RESEAU_SERVEUR_SEUL),
     # le serveur de données d'une application (ex. FM_Stats f14) : un conteneur permanent du projet
     "service": _entree("Service permanent", lieux=("serveur",), bientot=_SERVICE_SEUL),
 }
@@ -142,6 +153,11 @@ def racine_du_projet(dossier):
 def servie_au_serveur(nom, catalogue):
     """Vrai si `deporter` sait servir l'action `nom` sur le serveur et que ce catalogue l'y permet."""
     return nom in SERVIES_AU_SERVEUR and nom in catalogue and "serveur" in catalogue[nom]["lieux"]
+
+
+def accord_au_serveur(nom, catalogue):
+    """Vrai pour un accord du Directeur réglable sur serveur (`recette-emulateur-reseau`) que ce catalogue offre."""
+    return nom in ACCORDS_AU_SERVEUR and nom in catalogue and "serveur" in catalogue[nom]["lieux"]
 
 
 def service_permanent(nom, catalogue):
@@ -233,7 +249,8 @@ def refus_accord(racine, action, bureau=None, reglages=None):
     if not enregistres:
         return MSG_NON_ENREGISTRE % (racine, BUREAU if bureau is None else bureau, action)
     catalogue = catalogue_du_projet(racine)[1]
-    if not (servie_au_serveur(action, catalogue) or service_permanent(action, catalogue)):
+    if not (servie_au_serveur(action, catalogue) or service_permanent(action, catalogue)
+            or accord_au_serveur(action, catalogue)):
         return "« %s » n'est pas une action servie au serveur pour ce type de projet." % action
     if reglages is not None:
         enregistres = [r for r in enregistres if _norme(r) == _norme(reglages)]

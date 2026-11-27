@@ -196,6 +196,52 @@ class ValidationPossible(Fiche):
         validations = [t for t in self.suivi()["taches"] if str(t.get("etape")).startswith("validation")]
         self.assertEqual(len(validations), 1)
 
+    def avec_cahier(self, etapes):
+        reel = regles._fonc
+        return mock.patch.object(regles, "_fonc", side_effect=lambda p, f: {**reel(p, f), "cahier": {"etapes": etapes}})
+
+    def faits_page_en_503(self, dossier, chemins, **_):
+        return dict(FAITS, pages=[{"chemin": c, "code": 503 if c.startswith("/equipe") else 200} for c in chemins])
+
+    def test_la_page_d_exemple_du_cahier_est_controlee_meme_sans_liens_publics(self):
+        """FM_Stats d133 : /sante répondait 200 pendant que /equipe/77?saison=2025, citée au cahier, répondait 503."""
+        v = self.element("e1", "Pages publiques", "serveur/pages.py")
+        v["dernier_rapport"]["doit_marcher"] = "Les pages répondent."
+        with self.avec_cahier(["Ouvrir /equipe/77?saison=2025 : blocs FORME, MATCHS"]),                 mock.patch.object(regles.service_permanent, "faits_du_service", side_effect=self.faits_page_en_503):
+            self.poser_sans_fiche(v)
+        self.assertEqual((self.decisions(), v["phase"]), ([], "attente_service"))
+        self.assertIn("/equipe/77?saison=2025 répond 503", v["attente_service"]["manque"])
+
+    def test_une_validation_deja_posee_est_retiree_quand_la_page_du_cahier_repond_503(self):
+        v = self.element("e1", "Pages publiques", "serveur/pages.py")
+        v["dernier_rapport"]["doit_marcher"] = "Les pages répondent."
+        with self.avec_cahier(["Ouvrir /equipe/77?saison=2025 : blocs"]):
+            with mock.patch.object(regles.service_permanent, "faits_du_service", side_effect=lambda d, c, **k: dict(
+                    FAITS, pages=[{"chemin": x, "code": 200} for x in c])):
+                self.poser_sans_fiche(v)
+            self.assertEqual(len(self.decisions()), 1)
+            self.etat = regles.nouvel_etat()                                 # moteur relancé
+            with mock.patch.object(regles.service_permanent, "faits_du_service", side_effect=self.faits_page_en_503),                     mock.patch.object(regles, "_projet_flutter", return_value=True):
+                regles.attendre_le_service(self.projet, self.etat)
+        self.assertEqual(self.decisions(), [])
+
+    def test_une_validation_posee_sans_liens_avant_la_regle_est_renvoyee_avec_ses_liens(self):
+        v = self.element("e1", "Pages publiques", "serveur/pages.py")
+        self.poser_sans_fiche(v)
+        (d,) = self.decisions()
+        suivi = self.suivi()
+        for x in suivi["decisions_projet"] if "decisions_projet" in suivi else []:
+            x.pop("liens", None)
+        (self.dossier / "suivi.json").write_text(json.dumps(suivi), encoding="utf-8")
+        with mock.patch.object(regles, "_projet_flutter", return_value=True):
+            regles.attendre_le_service(self.projet, self.etat)
+            self.assertEqual(self.decisions(), [])                            # retirée
+            self.etat["elements"]["f1/e1"]["attente_service"]["dernier"] = 0
+            regles.attendre_le_service(self.projet, self.etat)                # renvoyée
+        (rouverte,) = self.decisions()
+        self.assertEqual(rouverte["tache"], d["tache"])
+        self.assertTrue(rouverte["liens"])
+
 
 class BriefDeLaVerification(reg.Depot):
     def tache(self, titre):

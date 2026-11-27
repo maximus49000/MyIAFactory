@@ -7306,6 +7306,7 @@ def _l_element_a_besoin_d_un_apk(projet, v):
     return apk_besoin.touche_l_application(dossier_app, fichiers, motifs), fichiers
 
 
+MOTIF_PAGE_EXEMPLE = re.compile(r"(?<![\w.:/])(/[a-z][\w\-/]{1,60}(?:\?[\w=&.\-%]{1,60})?)(?![\w\-])")
 MOTS_DU_SERVICE = ("page", "graphique", "catalogue", "route", "serveur", "service", "api", "svg", "en ligne")
 DOSSIERS_DU_SERVICE = ("serveur/", "server/")
 MOTIF_CHEMIN_PUBLIC = re.compile(r"/[A-Za-z0-9_./~%?=&+-]{0,200}")
@@ -7340,6 +7341,17 @@ def _liens_du_service(projet, v, texte_libre=""):
     for c in MOTIF_PAGE.findall(cites)[:4]:
         if MOTIF_CHEMIN_PUBLIC.fullmatch(c) and c not in ("/", "/sante"):
             chemins.append((f"Page {c}", c))
+    # Sans `liens_publics` ni page citée par l'élément : les pages d'exemple du cahier de la fonctionnalité (FM_Stats d133 : `/sante`
+    # répondait 200 pendant que `/equipe/77?saison=2025`, citée au cahier, répondait 503 « index en préparation »).
+    try:
+        cahier = _fonc(projet, v["fid"]).get("cahier") or {}
+        etapes = " ".join(str(e) for e in (cahier.get("etapes") or []))
+    except (Refus, ErreurMoteur, KeyError, TypeError):
+        etapes = ""
+    if len(chemins) < 3:
+        for c in MOTIF_PAGE_EXEMPLE.findall(etapes)[:2]:
+            if MOTIF_CHEMIN_PUBLIC.fullmatch(c) and c not in ("/", "/sante"):
+                chemins.append((f"Page {c}", c))
     vus, liens = set(), []
     for libelle, chemin in chemins:
         if chemin not in vus:
@@ -7383,7 +7395,7 @@ def _service_pret_pour_valider(projet, v, liens):
     elif statut == "echec":
         manques.append(f"le déploiement du service a échoué ({detail})")
     base = (_adresse_du_service(projet) or "").rstrip("/")
-    chemins = ["/sante"] + [x["adresse"][len(base):] for x in liens[2:3] if base and x["adresse"].startswith(base)]
+    chemins = ["/sante"] + [x["adresse"][len(base):] for x in liens[2:5] if base and x["adresse"].startswith(base)]
     try:
         faits = service_permanent.faits_du_service(projet.dossier, chemins, lignes=0)
         codes = {p.get("chemin"): p.get("code") for p in faits.get("pages") or []}
@@ -7467,6 +7479,8 @@ def attendre_le_service(projet, etat):
             manques, a_deployer = _service_pret_pour_valider(projet, v, liens) if liens else ([], False)
         except (Refus, ErreurMoteur):
             continue
+        if not manques and liens and not d.get("liens"):      # posée avant la règle, sans adresses à cliquer : renvoyée avec
+            manques = ["la fiche de validation n'avait pas les adresses du service à cliquer"]
         if manques:      # devenue impossible (service redéployé, 503…) : retirée, rouverte plus tard
             lancer(projet, "decision", {"action": "lever", "id": d["id"]})
             if v.get("taches"):

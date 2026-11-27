@@ -125,7 +125,7 @@ class BaseMoteur(tsr.AvecValidation, Depot):
         self.projet.claude_autonome = True
 
     def conflit(self):
-        with mock.patch.object(regles, "_analyser_le_blocage", return_value=[]):
+        with mock.patch.object(regles, "_analyser_le_blocage", return_value=[]),                 mock.patch.object(regles, "_fusion_de_documentation", return_value=False):      # le jugement de Claude seul est essayé
             regles.fusion_impossible(self.projet, self.etat, self.tid, "agent-1", "agent/t289", None,
                                      "conflit de fusion : add/add docs/recette.md")
 
@@ -139,6 +139,30 @@ class BaseMoteur(tsr.AvecValidation, Depot):
     def objet(self, **plus):
         return {"raison": "La version du dépôt est plus complète et exacte.", "verdict": "garder_depot", "texte": None,
                 "generalisable": False, "lecon": None, "amelioration": None, **plus}
+
+
+class ResolueSeule(BaseMoteur):
+    """Un conflit sur un fichier de documentation se résout seul, dans la même tâche (FM_Stats f36 : docs/api.md)."""
+
+    def test_un_conflit_de_documentation_est_resolu_sans_question_ni_correction(self):
+        taches = len(self.suivi()["taches"])
+        with mock.patch.object(regles, "_analyser_le_blocage", return_value=[]) as analyse:
+            regles.fusion_impossible(self.projet, self.etat, self.tid, "agent-1", "agent/t289", None,
+                                     "conflit de fusion : add/add docs/recette.md")
+        analyse.assert_not_called()                                    # ni analyse du Chef, ni question au Directeur
+        self.assertEqual(len(self.suivi()["taches"]), taches)          # aucune tâche de correction
+        self.assertTrue(any("résolu seul" in j["texte"] for t in self.suivi()["taches"] if t["id"] == self.tid for j in t["journal"]))
+        self.assertTrue(any("conflit de documentation" in p for p in self.paroles()))
+        self.git("merge-base", "--is-ancestor", "agent/t289", "HEAD")
+
+
+class ResolueSeuleCode(BaseMoteur):
+    CODE = True
+
+    def test_un_conflit_de_code_suit_son_cours(self):
+        with mock.patch.object(regles, "_analyser_le_blocage", return_value=[]) as analyse:
+            regles.fusion_impossible(self.projet, self.etat, self.tid, "agent-1", "agent/t289", None, "conflit de fusion : serveur.py")
+        analyse.assert_called_once()
 
 
 class DansLeMoteur(BaseMoteur):

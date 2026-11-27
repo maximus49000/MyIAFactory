@@ -26,6 +26,11 @@ faux. Une valeur qui n'est pas vrai/faux est écartée.
 `echecs_preexistants` : rendu par une tâche de recette : les noms des tests en échec qui échouaient DÉJÀ avant la correction
 (rejoués sur la base) et étrangers à l'évolution ; ils ne comptent pas dans `recette_reussie` et le moteur ouvre une tâche
 dédiée à chacun (une seule fois par test). Une valeur mal formée est écartée.
+`echecs_a_classer` : rendu par une tâche de recette : les tests en échec que la recette n'a pas pu rejouer sur la base (préexistant
+ou non ?) ; ils ne comptent pas dans `recette_reussie` : le moteur ouvre UNE tâche à chacun, qui les rejoue sur la base (jamais une
+correction de l'évolution). `hors_perimetre` : les défauts relevés hors des critères de l'élément vérifié : chacun devient une
+anomalie séparée, jamais un échec de la recette. `non_verifie` : ce que le cadre de la recette ne permet pas de vérifier : dit au
+Directeur, jamais un échec. Une valeur mal formée est écartée.
 `apk_utilise` : rendu par une tâche de test qui a reçu un APK (voir `registre_apk`) : lequel (variante, empreinte des sources,
 date de construction), pour que la recette soit traçable. Une valeur mal formée est écartée.
 `non_faites` : dans un lot, les tâches que l'agent n'a pas faites (ou en partie) ; le moteur ne les marque pas faites,
@@ -113,6 +118,13 @@ def lire(texte):
             r["echecs_preexistants"] = [" ".join(n.split())[:120] for n in noms if isinstance(n, str) and n.strip()][:10]
         else:
             del r["echecs_preexistants"]
+    for cle in ("echecs_a_classer", "hors_perimetre", "non_verifie"):
+        if cle in r:
+            v = r[cle]
+            if isinstance(v, list):
+                r[cle] = [" ".join(n.split())[:300] for n in v if isinstance(n, str) and n.strip()][:10]
+            else:
+                del r[cle]
     if r["statut"] == "accord_requis":
         a = r.get("accord")
         if not isinstance(a, dict) or not all(_texte(a.get(c)) for c in ("quoi", "partenaire", "cout")):

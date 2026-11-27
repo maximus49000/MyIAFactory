@@ -32,7 +32,7 @@ from datetime import datetime
 from pathlib import Path
 
 from installation import estimation, proposition
-from moteur import accord_outil, agents, cloud, detache, deploiement, environnement, jugement, rapport, service_permanent
+from moteur import accord_outil, agents, apk_besoin, cloud, detache, deploiement, environnement, jugement, rapport, service_permanent
 from moteur.appel import est_une_limite as appel_limite
 from moteur.jugement import ACTIONS_CONSEIL, COMMANDES_INTERDITES_AU_CONSEIL  # noqa: F401
 from bureau import fichiers_joints
@@ -6995,6 +6995,90 @@ def _deja_livre(projet, v):
     return False
 
 
+ROLES_SANS_CODE = ("testeur", "recette", "relecteur")     # ils ne changent pas le code : un test local ne rend rien « inconnu »
+
+
+def _fichiers_de_la_tache(projet, tid):
+    """Les fichiers que la tâche a modifiés d'après la branche locale `agent/<tâche>` de son agent serveur : fusionnée
+    (le commit « Factory : fusion de agent/<tâche> », sa différence avec son premier parent) ou non (sa différence avec
+    la base commune avec HEAD). Sans branche : une tâche d'agent serveur n'a rien commité (liste vide) ; une tâche locale
+    d'un métier sans code aussi ; sinon None (inconnu)."""
+    git = service_permanent._git
+    branche = f"agent/{tid}"
+    if git(projet.dossier, "rev-parse", "--verify", "-q", f"refs/heads/{branche}")[0] == 0:
+        if git(projet.dossier, "merge-base", "--is-ancestor", branche, "HEAD")[0] == 0:
+            code, sortie = git(projet.dossier, "log", "--merges", "-1", "--format=%H", "--fixed-strings",
+                               f"--grep=Factory : fusion de {branche}", "HEAD")
+            fusion = sortie.strip()
+            if code != 0 or not fusion:
+                return None
+            code, sortie = git(projet.dossier, "diff", "--name-only", f"{fusion}^1", fusion)
+        else:
+            code, base = git(projet.dossier, "merge-base", "HEAD", branche)
+            if code != 0 or not base.strip():
+                return None
+            code, sortie = git(projet.dossier, "diff", "--name-only", base.strip(), branche)
+        return [x for x in sortie.splitlines() if x.strip()] if code == 0 else None
+    try:
+        t = _tache(projet, tid)
+    except Refus:
+        return None
+    if not t.get("agent"):
+        return []
+    agent = next((a for a in _etat(projet)["agents"] if a["cle"] == t["agent"]), {})
+    if agent.get("lieu") == "serveur" or str(t.get("role") or "").lower() in ROLES_SANS_CODE:
+        return []
+    return None
+
+
+def _l_element_a_besoin_d_un_apk(projet, v):
+    """`(besoin, fichiers)` : l'élément change-t-il l'application ? Vrai (comme avant) pour un projet qui n'est pas Flutter,
+    ou si les fichiers modifiés par ses tâches ne se lisent pas (`fichiers` : None). Voir `moteur/apk_besoin.py`."""
+    if not _projet_flutter(projet) or not v.get("taches"):
+        return True, None
+    fichiers = []
+    for tid in v.get("taches") or []:
+        f = _fichiers_de_la_tache(projet, tid)
+        if f is None:
+            return True, None
+        fichiers += [x for x in f if x not in fichiers]
+    try:
+        dossier_app = service_permanent_projet_flutter().dossier_flutter(projet.dossier)
+    except Exception:  # noqa: BLE001
+        return True, None
+    motifs = _factory(projet).get("apk_ignore")
+    motifs = apk_besoin.IGNORE_PAR_DEFAUT if motifs is None else motifs
+    return apk_besoin.touche_l_application(dossier_app, fichiers, motifs), fichiers
+
+
+def service_permanent_projet_flutter():
+    outils = str(Path(__file__).resolve().parent.parent / "outils")
+    if outils not in sys.path:
+        sys.path.append(outils)
+    import projet_flutter
+    return projet_flutter
+
+
+def _livrer_sans_apk(projet, etat, v, fichiers):
+    """L'élément ne touche pas l'application : l'étape de livraison d'APK n'est pas lancée, l'élément est livré. Une ligne
+    claire au journal, une phrase du Chef ; le service permanent est quand même redéployé s'il n'a pas la version (la même
+    règle qu'après une livraison : `_attend_le_serveur` conclut l'élément quand le serveur est à jour)."""
+    liste = ", ".join(fichiers[:8]) + (" …" if len(fichiers) > 8 else "") if fichiers else "aucun fichier modifié"
+    ligne = f"Aucun APK à livrer : l'élément ne touche pas l'application (fichiers : {liste})."
+    if v.get("taches"):
+        _journal(projet, v["taches"][-1], ligne)
+    _dire(projet, v["fid"], f"« {v['element']['nom']} » ne change pas l'application : je ne construis pas d'APK. "
+                            + ("Le service sera mis à jour s'il le faut." if _service_a_redeployer(projet) else ""))
+    try:
+        commit = service_permanent._commit_du_depot(projet.dossier)
+        if commit and service_permanent.statut_du_serveur(projet.dossier, commit)[0] == "attente":
+            service_permanent.declencher(projet.dossier, annoncer=lambda texte: _dire(projet, v["fid"], texte))
+    except Exception:  # noqa: BLE001 : jamais une raison d'arrêter la livraison
+        pass
+    v["sans_apk"] = True
+    return _element_fait(projet, etat, v)
+
+
 def livrer_si_calme(projet, etat, force=False):
     """Un seul livrable pour le produit : les éléments conformes attendent ensemble (`A_LIVRER`) ; une livraison part
     quand aucun élément n'est plus au travail (ou tout de suite sur « Livrer maintenant »), menée par l'un d'eux pour
@@ -7006,6 +7090,16 @@ def livrer_si_calme(projet, etat, force=False):
     etat.pop("attente_livraison", None)
     if not prets:
         return False
+    sans_apk = []
+    for v in prets:           # un APK n'est construit que si l'évolution en a besoin
+        besoin, fichiers = _l_element_a_besoin_d_un_apk(projet, v)
+        if not besoin:
+            sans_apk.append((v, fichiers))
+    for v, fichiers in sans_apk:
+        _livrer_sans_apk(projet, etat, v, fichiers)
+    prets = [v for v in prets if v["phase"] == A_LIVRER]
+    if not prets:
+        return bool(sans_apk)
     noms = [v["element"]["nom"] for v in prets]
     if not force and _livraison_sur_demande(projet):
         # essai de coûts du 2026-11-19 : l'apk coûte 8 à 14 min à chaque évolution ; le Directeur choisit quand livrer
@@ -7029,8 +7123,6 @@ def livrer_si_calme(projet, etat, force=False):
         if _deja_livre(projet, v):
             _element_fait(projet, etat, v)
     prets = [v for v in prets if v["phase"] == A_LIVRER]
-    if not prets:
-        return False
     noms = [v["element"]["nom"] for v in prets]
     meneur, autres = prets[-1], prets[:-1]
     cles = [f"{v['fid']}/{v['element']['id']}" for v in prets]
@@ -7761,6 +7853,10 @@ def _fin_de_fonctionnalite(projet, etat, fid, bloques=()):
              if x.get("moment") != "avant"] if v["fid"] == fid else None      # jamais l'« avant » d'une correction
         if c:      # la capture du résultat final : celle du dernier élément qui en a rendu une
             captures = c
+    if not livrables and not acces and any(v["fid"] == fid and v.get("sans_apk") for v in _m(etat, "elements").values()):
+        adresse = _adresse_du_service(projet)      # pas d'APK : le service est déployé, son adresse tient lieu de livrable
+        if adresse:
+            acces = {"url": adresse, "description": "Pas d'APK : le service est déployé."}
     fin = {"livrables": livrables}
     if acces:
         fin["acces"] = {k: acces[k] for k in ("url", "description") if acces.get(k)}

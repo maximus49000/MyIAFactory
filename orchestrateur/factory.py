@@ -16,7 +16,7 @@ RESERVES = ("cadrage", "fait")   # colonnes que l'orchestrateur ajoute lui-même
 CLES = ("nom", "skill", "genre", "mots_interdits", "fiches", "controles", "consignes", "reglages", "services",
         "flux", "workflows", "description", "seuil_methode", "catalogues", "sessions", "suivi", "pieces", "commandes", "memoire",
         "modele_orchestrateur", "agents_locaux_max", "agents_cloud_max", "agents_serveur_max", "ordre_lieux",
-        "ordre_lieux_par_metier", "environnement", "apk_ignore")
+        "ordre_lieux_par_metier", "environnement", "apk_ignore", "apk_adresse_integree")
 AGENTS_LOCAUX = (1, 16)     # les places locales d'un projet (2 par défaut)
 AGENTS_CLOUD = (0, 16)      # les places cloud d'un projet (0 par défaut ; absent : voir `depart.places_cloud`)
 AGENTS_SERVEUR = (0, 4)     # les places serveur d'un projet (0 par défaut)
@@ -211,6 +211,9 @@ def _lire(chemin):
     apk_ignore = d.get("apk_ignore")
     if apk_ignore is not None and not (isinstance(apk_ignore, list) and all(_texte(x) for x in apk_ignore)):
         raise FactoryInvalide("Factory : « apk_ignore » doit être une liste de motifs de chemins (textes non vides).")
+    adresse_integree = d.get("apk_adresse_integree")
+    if adresse_integree is not None and not isinstance(adresse_integree, bool):
+        raise FactoryInvalide("Factory : « apk_adresse_integree » doit valoir true ou false.")
     seuil = d.get("seuil_methode", 3)
     if isinstance(seuil, bool) or not isinstance(seuil, int) or seuil < 1:
         raise FactoryInvalide("Factory : « seuil_methode » doit être un entier d'au moins 1.")
@@ -263,6 +266,7 @@ def _lire(chemin):
                       for w in workflows],
         "description": description, "seuil_methode": seuil,
         **({"apk_ignore": list(apk_ignore)} if apk_ignore is not None else {}),
+        **({"apk_adresse_integree": adresse_integree} if adresse_integree is not None else {}),
         "catalogues": catalogues, "sessions": chem("sessions", "sessions.json"),
         "suivi": chem("suivi", "suivi.json"), "pieces": chem("pieces", "pieces"),
         "commandes": {k: list(v) for k, v in commandes.items()},

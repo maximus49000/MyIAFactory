@@ -8,6 +8,7 @@ from pathlib import Path
 from unittest import mock
 
 from moteur import rapport, regles, registre_apk
+from orchestrateur import factory as fa
 from tests import test_moteur_serie_reprise as tsr
 
 RACINE = Path(__file__).resolve().parent.parent
@@ -226,6 +227,31 @@ class BonneVariante(Depot):
         texte = self.donne(self.tache("Vérification : correction « APK Client sans adresse du service »"))
         self.assertIn(CLIENT, texte)
         self.assertNotIn(MAITRE, texte)
+
+    def test_le_brief_donne_la_variante_a_tester_son_chemin_sa_date_et_interdit_les_autres(self):
+        texte = self.donne(self.tache("Vérification : correction « APK Client sans adresse du service »"))
+        self.assertIn("variante client", texte)
+        self.assertIn(CLIENT, texte)
+        self.assertIn("construit le", texte)
+        self.assertIn("ne teste pas maitre", texte)
+        self.assertNotIn("adresse du service est déjà intégrée", texte)        # rien d'affirmé sans le réglage
+
+    def test_l_adresse_du_service_integree_est_dite_sans_jamais_sa_valeur(self):
+        d = json.loads(self.factory.read_text(encoding="utf-8"))
+        d["apk_adresse_integree"] = True
+        self.factory.write_text(json.dumps(d), encoding="utf-8")
+        with mock.patch.object(regles, "_adresse_du_service", return_value="https://service.exemple"):
+            texte = self.donne(self.tache("Vérification : correction « APK Client »"))
+        self.assertIn("adresse du service est déjà intégrée", texte)
+        self.assertNotIn("service.exemple", texte)
+        self.assertIn("n'ouvre pas de requête `curl`", texte)
+
+    def test_apk_adresse_integree_doit_etre_un_booleen(self):
+        d = json.loads(self.factory.read_text(encoding="utf-8"))
+        d["apk_adresse_integree"] = "oui"
+        self.factory.write_text(json.dumps(d), encoding="utf-8")
+        with self.assertRaises(fa.FactoryInvalide):
+            fa.lire(self.factory)
 
     def test_l_apk_rapatrie_par_une_tache_de_la_meme_fonctionnalite_l_emporte(self):
         self.tache("Livraison de la correction", journal=[f"Livrable rapatrié : {CLIENT} (12 Mo)"], fait=True)

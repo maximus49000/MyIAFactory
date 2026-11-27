@@ -4729,6 +4729,12 @@ def _consigne_de_l_apk_existant(projet, t):
         texte = (f"APK à tester : `{a['chemin']}` (variante {a['variante']}, sources {a['empreinte']}, construit le {a['date']}) : "
                  "il correspond au code testé. NE construis PAS d'APK et ne lance aucune livraison ; indique dans ton rapport "
                  "`\"apk_utilise\": {\"variante\", \"empreinte\", \"date\"}`.")
+        autres = [v for v in variantes if v != a["variante"]]
+        if autres:
+            texte += f" C'est la variante « {a['variante']} » qu'il faut tester : ne teste pas {', '.join(autres)}."
+        if _factory(projet).get("apk_adresse_integree") is True:
+            texte += (" L'adresse du service est déjà intégrée à cet APK (le projet la pose à la construction) : ne la demande pas "
+                      "et ne la cherche pas ; n'ouvre pas de requête `curl` pour la retrouver.")
     elif r["etat"] == "a_construire" and r["construire"]:
         cause = "les sources ont changé depuis le dernier" if r["raison"] == "perime" else "aucun n'a été construit jusqu'ici"
         texte = (f"Aucun APK de la variante « {r['variante']} » ne correspond aux sources actuelles ({r['empreinte']}) "

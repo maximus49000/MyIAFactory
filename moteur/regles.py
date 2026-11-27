@@ -8854,6 +8854,108 @@ def _fermer_une_anomalie(projet, t, x, raison):
                      t.get("fonctionnalite"))
 
 
+# --- Claude autonome : la revue des anomalies du logiciel « nouvelles » (FM_Stats a27 : corrigée par la PR 112, restée « nouvelle »
+# plus de 5 minutes : `_fermer_une_anomalie` n'était appelée que quand une analyse de blocage désignait l'anomalie).
+
+ANOMALIE_REVUE_MIN = 5            # une anomalie « nouvelle » depuis plus de 5 minutes est revue
+REVUE_ANOMALIES_VERIF_S = 60      # la revue elle-même est faite une fois par minute
+PRS_CACHE_S = 300                 # les PR fusionnées sont relues toutes les 5 minutes
+DEMARRE_LE = time.time()          # ce moteur tourne avec le code fusionné avant cet instant, pas avec celui d'après
+
+
+def _prs_fusionnees():
+    """Les dernières PR fusionnées dans `main` du dépôt de la plateforme : `[{numero, titre, corps, fusionne_le}]` (`fusionne_le` :
+    secondes depuis 1970). Par `gh` (titre et corps), sinon par les fusions de `git log`. Liste vide si rien ne se lit."""
+    import subprocess
+    racine = str(Path(__file__).resolve().parent.parent)
+    try:
+        r = subprocess.run(["gh", "pr", "list", "--state", "merged", "--base", "main", "--limit", "60", "--json",
+                            "number,title,body,mergedAt"], cwd=racine, capture_output=True, text=True, timeout=30, encoding="utf-8",
+                           creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        if r.returncode == 0:
+            return [{"numero": x["number"], "titre": x.get("title") or "", "corps": x.get("body") or "",
+                     "fusionne_le": datetime.fromisoformat(x["mergedAt"].replace("Z", "+00:00")).timestamp()}
+                    for x in json.loads(r.stdout) if x.get("mergedAt")]
+    except (OSError, ValueError, subprocess.SubprocessError, KeyError):
+        pass
+    try:
+        r = subprocess.run(["git", "log", "main", "--merges", "-n", "60", "--format=%ct%x1f%s%x1f%b%x1e"], cwd=racine,
+                           capture_output=True, text=True, timeout=30, encoding="utf-8",
+                           creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    except (OSError, subprocess.SubprocessError):
+        return []
+    rendu = []
+    for bloc in r.stdout.split("\x1e"):
+        champs = bloc.strip("\n").split("\x1f")
+        m = re.search(r"#(\d+)", champs[1]) if len(champs) >= 3 else None
+        if m and champs[0].strip().isdigit():
+            rendu.append({"numero": int(m.group(1)), "titre": champs[1], "corps": champs[2], "fusionne_le": float(champs[0])})
+    return rendu
+
+
+def _pr_qui_corrige(a, prs):
+    """La PR fusionnée la plus récente qui cite l'anomalie `a` (son identifiant comme mot, avec le nom du projet ou le mot
+    « anomalie » dans le même texte), fusionnée après sa création ; None sinon."""
+    try:
+        creee = datetime.fromisoformat(str(a["t"])).timestamp()
+    except (KeyError, ValueError):
+        creee = 0
+    trouvees = []
+    for p in prs:
+        texte = f"{p['titre']}\n{p['corps']}"
+        if p["fusionne_le"] >= creee and re.search(rf"(?<![\w-]){re.escape(a['id'])}(?![\w-])", texte, re.IGNORECASE) and (
+                "anomalie" in texte.lower() or (a.get("projet") and str(a["projet"]).lower() in texte.lower())):
+            trouvees.append(p)
+    return max(trouvees, key=lambda p: p["fusionne_le"]) if trouvees else None
+
+
+def _revue_des_anomalies(projet, etat):
+    """Sous « Claude autonome », toutes les minutes : chaque anomalie du logiciel « nouvelle » depuis plus de `ANOMALIE_REVUE_MIN`
+    minutes est revue. Une PR fusionnée la cite ET le moteur tourne avec cette version (démarré après la fusion) : « Réglée »
+    avec la raison et le numéro de PR. PR fusionnée mais moteur plus ancien : rien, l'attente continue. Aucune PR qui la cite :
+    « Vue » (comprise, pas encore corrigée), avec la raison. Jamais « Réglée » sans PR fusionnée active. Le Chef le dit."""
+    maintenant = time.time()
+    if maintenant - etat.get("revue_anomalies_le", 0) < REVUE_ANOMALIES_VERIF_S:
+        return
+    etat["revue_anomalies_le"] = maintenant
+    try:
+        nouvelles = [a for a in lancer(projet, "anomalies", {"action": "lister"})["anomalies"] if a["etat"] == "nouvelle"]
+    except Refus:
+        return
+    revues = etat.setdefault("anomalies_revues", {})
+    a_revoir = []
+    for a in nouvelles:
+        try:
+            age = maintenant - datetime.fromisoformat(str(a["t"])).timestamp()
+        except (KeyError, ValueError):
+            continue
+        if age >= ANOMALIE_REVUE_MIN * 60 and revues.get(a["id"]) != "vue":
+            a_revoir.append(a)
+    if not a_revoir:
+        return
+    cache = etat.get("prs_fusionnees")
+    if cache is None or maintenant - cache[0] > PRS_CACHE_S:
+        cache = etat["prs_fusionnees"] = (maintenant, _prs_fusionnees())
+    for a in a_revoir:
+        pr = _pr_qui_corrige(a, cache[1])
+        if pr is None:
+            verdict, raison = "vue", ("aucune PR fusionnée dans main ne cite cette anomalie : elle est comprise, mais pas encore "
+                                      "corrigée")
+        elif pr["fusionne_le"] > DEMARRE_LE:
+            continue      # fusionnée après le démarrage de ce moteur : il tourne avec l'ancien code, l'attente continue
+        else:
+            verdict, raison = "reglee", (f"la PR {pr['numero']} (« {pr['titre'][:100]} ») la corrige : elle est fusionnée dans main "
+                                         "et ce moteur a démarré après la fusion")
+        t = {"id": None, "fonctionnalite": None}
+        if a.get("tache"):
+            try:
+                t = _tache(projet, a["tache"])
+            except Refus:
+                pass
+        _fermer_une_anomalie(projet, t, {"id": a["id"], "etat": verdict}, raison)
+        revues[a["id"]] = verdict
+
+
 def _autonome_rate(projet, ctx, etat):
     """Claude n'a pas pu réfléchir (deux essais sans réponse valable) : la réponse mécanique par défaut, pour que la
     suite avance quand même ; le journal le dit."""
@@ -9365,6 +9467,7 @@ def repondre_en_autonome(projet, etat):
     _suivre_les_actions(projet, etat)
     actions += _relancer_si_la_cause_a_change(projet, etat)
     _blocages_orphelins(projet, etat)
+    _revue_des_anomalies(projet, etat)
     for d in _etat(projet)["decisions"] + _blocages_sans_decision(projet, etat) + _fusions_en_conflit(projet, etat):
         if d["id"] in faites or d.get("genre") not in VERDICTS_AUTONOMES:
             continue

@@ -2046,6 +2046,28 @@ class Validation(Base):
                              {"chemin": "y.png", "titre": "Y"}])
         self.assertEqual(regles._fichiers_a_valider(None), [])
 
+    def test_apres_la_validation_un_element_sans_besoin_d_apk_n_en_construit_pas(self):
+        """FM_Stats, 2026-11-27 : « le bureau refait un apk tout le temps ». Après la validation du Directeur le moteur
+        créait la tâche de livraison tout droit, sans le contrôle `livrer_si_calme` : un élément qui ne change que des
+        documents faisait construire un APK."""
+        self.jusqu_a_la_validation()
+        with mock.patch.object(regles, "_l_element_a_besoin_d_un_apk", return_value=(False, ["docs/preuve.md"])):
+            d, actions = self.repondre(verdict="valider")
+            self.piloter(actions, rapports=[])
+        self.assertEqual(self.statut(d["id"])["statut"], "traitée")
+        self.assertEqual(self.taches(etape="flux:livraison"), [], "aucune étape de livraison d'APK")
+        self.assertEqual(self.etat["elements"]["f1/e1"]["phase"], "fait")
+        lignes = [j["texte"] for t in self.taches(etape="validation:valider") for j in t.get("journal", [])]
+        self.assertTrue(any("Aucun APK à livrer" in x for x in lignes), lignes)
+
+    def test_apres_la_validation_un_element_qui_change_l_application_livre_son_apk(self):
+        self.jusqu_a_la_validation()
+        with mock.patch.object(regles, "_l_element_a_besoin_d_un_apk", return_value=(True, ["android_app/lib/main.dart"])):
+            d, actions = self.repondre(verdict="valider")
+            self.piloter(actions, rapports=[{"statut": "fait", "message": {"texte": "Livré."}}])
+        self.assertEqual(len(self.taches(etape="flux:livraison")), 1)
+        self.assertEqual(self.etat["elements"]["f1/e1"]["phase"], "fait")
+
     def test_renvoyer_refait_l_etape_precedente_avec_la_remarque(self):
         self.jusqu_a_la_validation()
         d, actions = self.repondre(verdict="renvoyer", texte="Le menu est trop chargé.")

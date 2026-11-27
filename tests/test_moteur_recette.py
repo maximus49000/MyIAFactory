@@ -71,6 +71,47 @@ class Recette(tsr.AvecValidation):
             self.rendre(recette_reussie=False, message={"texte": "Défaut."})
         self.assertTrue(self.tache(self.recette).get("bloquee"))
 
+    # --- Les échecs préexistants : une tâche dédiée chacun, jamais une correction de la fonctionnalité (FM_Stats a22).
+
+    def dediees(self):
+        return [t for t in self.suivi()["taches"] if t["titre"].startswith("Échec préexistant : ")]
+
+    def test_un_echec_preexistant_ouvre_une_tache_dediee_et_la_recette_reussit(self):
+        self.rendre(recette_reussie=True, echecs_preexistants=["serveur_url_edition_test"],
+                    message={"texte": "Tout le périmètre passe ; un test échouait déjà sur la base."})
+        (dediee,) = self.dediees()
+        self.assertEqual(dediee["role"], "dev")
+        self.assertIn("serveur_url_edition_test", json.dumps(dediee["journal"], ensure_ascii=False))
+        self.assertIsNone(dediee.get("fonctionnalite"))                  # hors série : elle ne bloque rien
+        self.assertEqual(self.corrections(), [])                          # aucune correction de la fonctionnalité
+        self.assertNotIn("Recette non réussie", json.dumps(self.tache(self.recette)["journal"], ensure_ascii=False))
+        self.assertTrue(any("tâche à part" in m["texte"] for m in self.suivi()["fonctionnalites"][0]["discussion"]
+                            if m["auteur"] == "chef"))
+
+    def test_une_seule_tache_par_test_pas_de_doublon(self):
+        for _ in range(3):
+            self.rendre(recette_reussie=True, echecs_preexistants=["serveur_url_edition_test"])
+        self.assertEqual(len(self.dediees()), 1)
+
+    def test_un_preexistant_ne_compte_pas_comme_un_echec_de_recette(self):
+        for _ in range(regles.RECETTES_RATEES_MAX + 1):
+            self.rendre(recette_reussie=True, echecs_preexistants=["t_a"])
+        self.assertFalse(self.tache(self.recette).get("bloquee"))
+        self.assertEqual(self.corrections(), [])
+
+    def test_un_defaut_nouveau_avec_un_preexistant_rouvre_quand_meme_la_correction(self):
+        self.rendre(recette_reussie=False, echecs_preexistants=["t_a"], message={"texte": "Défaut nouveau : page vide."})
+        self.assertEqual(len(self.corrections()), 1)
+        self.assertEqual(len(self.dediees()), 1)
+
+    def test_le_contrat_ecarte_les_valeurs_mal_formees(self):
+        self.assertNotIn("echecs_preexistants", _lu({"statut": "fait", "echecs_preexistants": "t_a"}))
+        self.assertEqual(_lu({"statut": "fait", "echecs_preexistants": ["t_a", "", 3, " t_b "]})["echecs_preexistants"], ["t_a", "t_b"])
+
+    def test_la_consigne_demande_de_rejouer_sur_la_base_et_de_classer(self):
+        self.assertIn("echecs_preexistants", regles.CONSIGNE_RECETTE)
+        self.assertIn("sur la base", regles.CONSIGNE_RECETTE)
+
     def test_le_contrat_ecarte_une_valeur_qui_n_est_pas_vrai_faux(self):
         self.assertNotIn("recette_reussie", _lu({"statut": "fait", "recette_reussie": "non"}))
         self.assertIs(_lu({"statut": "fait", "recette_reussie": False})["recette_reussie"], False)

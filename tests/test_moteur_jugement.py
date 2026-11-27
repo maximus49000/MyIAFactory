@@ -672,7 +672,7 @@ class Consignes(unittest.TestCase):
     def test_cinq_consignes_courtes(self):
         for type_ in jugement.TYPES:
             texte = jugement.consigne(type_)
-            self.assertLessEqual(len(texte.splitlines()), 100, type_)    # proposer_organisation porte les deux formats
+            self.assertLessEqual(len(texte.splitlines()), 110, type_)    # proposer_organisation porte les deux formats
             self.assertIn("Réponds seulement par ce JSON.", texte, type_)
 
     def test_chaque_consigne_donne_ses_champs(self):

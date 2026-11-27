@@ -12,7 +12,7 @@ Forme (voir la consigne de fin d'étape de `orchestrateur/depart.py`) :
      "nom": str?, "cahier": {"maquette": [chemin ou {chemin, legende}], "etapes": [texte], "partenaires": [{id, mode}]?,
                              "taille": {valeur: petite | moyenne | grande, pourquoi, fichiers?}?}?,
      "fiche_correction": {"en_clair"?, "symptome", "reproduction": [texte], "attendu", "piste"?, "taille"?: petite | normale}?,   (cadrage d'une correction)
-     "methode_prete": bool?, "recette_reussie": bool?, "non_faites": [id de tâche]?,
+     "methode_prete": bool?, "recette_reussie": bool?, "echecs_preexistants": [str]?, "non_faites": [id de tâche]?,
      "usage_estime": int?, "comptes_rendus": [{"element", "texte", "images"?, "points_a_verifier"?, "acces"?, "doit_marcher"?, "pas_encore"?, "conclusion"?, "nature"?, "mode_operatoire"?}]?,
      "points_a_verifier": [str]?, "acces": {"url", "description"?}?,
      "nature": "en_jeu" | "visuel" | "son" | "mecanique" | "autre"?, "mode_operatoire": [str]?}
@@ -23,6 +23,9 @@ une entrée mal formée est écartée, jamais une raison de refuser le rapport.
 `recette_reussie` : rendu par une tâche de recette (métier testeur) : faux = la recette a échoué, la tâche n'est pas faite,
 une correction reçoit les défauts et l'étape suivante ne s'ouvre pas ; sans le champ, le texte « recette non réussie » vaut
 faux. Une valeur qui n'est pas vrai/faux est écartée.
+`echecs_preexistants` : rendu par une tâche de recette : les noms des tests en échec qui échouaient DÉJÀ avant la correction
+(rejoués sur la base) et étrangers à l'évolution ; ils ne comptent pas dans `recette_reussie` et le moteur ouvre une tâche
+dédiée à chacun (une seule fois par test). Une valeur mal formée est écartée.
 `non_faites` : dans un lot, les tâches que l'agent n'a pas faites (ou en partie) ; le moteur ne les marque pas faites,
 elles repartent à part. Une forme fautive est écartée.
 `usage_estime` : le total de tokens que l'agent estime avoir employés (un agent cloud ne peut pas faire mieux : le
@@ -96,6 +99,12 @@ def lire(texte):
             v["conforme"] = False      # un défaut relevé est un refus : ses points ne sont plus ignorés (essai de coûts, 2026-11-19)
     if "recette_reussie" in r and not isinstance(r["recette_reussie"], bool):
         del r["recette_reussie"]
+    if "echecs_preexistants" in r:
+        noms = r["echecs_preexistants"]
+        if isinstance(noms, list):
+            r["echecs_preexistants"] = [" ".join(n.split())[:120] for n in noms if isinstance(n, str) and n.strip()][:10]
+        else:
+            del r["echecs_preexistants"]
     if r["statut"] == "accord_requis":
         a = r.get("accord")
         if not isinstance(a, dict) or not all(_texte(a.get(c)) for c in ("quoi", "partenaire", "cout")):

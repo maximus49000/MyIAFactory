@@ -62,6 +62,10 @@ Un `outil_agent` : avant de refuser un outil, vois si l'agent obtient le même r
 délai 20 s) et dis-le (`refuser` avec cette consigne : sans jeton, rapporte les codes) ; ne conclus jamais « non vérifié » sur ce qui se
 vérifie sans l'outil. Un contrôle « sans jeton → 401 » est une vérification de sécurité à garder. `autoriser` seulement sans équivalent.
 
+Une recette bloquée par un test dont rien ne prouve qu'il est nouveau (sortie tronquée, échec ancien, étranger à l'évolution) :
+`relancer` avec la consigne de rejouer ce test sur la base (avant la correction), de le classer, de rendre son nom dans
+`echecs_preexistants` s'il échouait déjà, et `recette_reussie` selon les tests du périmètre ; jamais une nouvelle correction.
+
 Avant de `renvoyer` un défaut au dev, vérifie qu'il est réel : un test de recette peut se tromper (il vise une valeur qui existe
 vraiment, une page répond 200 sur un identifiant présent dans les données). Dans ce cas ne touche pas au code : `relancer` avec la
 consigne de corriger le test (viser une valeur vraiment absente) et dis pourquoi la page est juste.

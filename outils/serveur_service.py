@@ -49,13 +49,15 @@ SCRIPT_DISTANT = f"{DOSSIER_DISTANT}/services/service.py"
 CAPACITES = ("base",)
 COMMANDES_AGENT = ("etat", "journal")
 GESTION = ("etat", "journal", "redemarrer", "arreter", "supprimer")
-COMMANDES = ("deployer", "mettre-a-jour", "secrets", "jeton") + GESTION
+HTTPS = ("mandataire", "mandataire-supprimer")
+COMMANDES = ("deployer", "mettre-a-jour", "secrets", "jeton") + GESTION + HTTPS
 VARIABLE_AGENT = "MYIAFACTORY_AGENT"
 CACHE = "services.json"
 COFFRE = "services"
 SOURCES_MAX = 500 * 1024 * 1024
 DELAIS = {"recevoir": 600, "deployer": 2400, "etat": 60, "journal": 60, "redemarrer": 180, "arreter": 120,
-          "supprimer": 180, "jeton": 60, "poser-secrets": 60, "poser-variables": 60}
+          "supprimer": 180, "jeton": 60, "poser-secrets": 60, "poser-variables": 60, "mandataire": 420,
+          "mandataire-supprimer": 120}
 INJOIGNABLE = (124, 255)
 _VERROU_CACHE = threading.Lock()
 MSG_DIRECTEUR = ("« %s » est réservé au Directeur (bureau, zone Services, ou « py -3.12 lancer.py service %s » à la main) : "
@@ -215,11 +217,13 @@ def _deposer(serveur, ssh):
     return None
 
 
-def _appel(serveur, ssh, commande, projet, commit=None, entree=b"", lignes=None, masques=()):
+def _appel(serveur, ssh, commande, projet, commit=None, entree=b"", lignes=None, masques=(), domaine=None):
     """(code, réponse) du script hôte ; la réponse est l'objet JSON qu'il imprime (une seule ligne), masqué."""
     if not HOTE.MOTIF_PROJET.fullmatch(projet) or (commit is not None and not HOTE.MOTIF_COMMIT.fullmatch(commit)):
         raise ValueError("Identifiant de projet ou commit refusé.")
-    argv = ["python3", f'"{SCRIPT_DISTANT}"', commande, projet] + ([commit] if commit else [])
+    if domaine is not None and not HOTE.MOTIF_DOMAINE.fullmatch(domaine):
+        raise ValueError("Domaine refusé : un nom pleinement qualifié en minuscules (pas une adresse IP).")
+    argv = ["python3", f'"{SCRIPT_DISTANT}"', commande, projet] + ([commit] if commit else []) + ([domaine] if domaine else [])
     if lignes is not None:
         argv += ["--lignes", str(int(lignes))]
     code, sortie, erreur = serveur_tache._octets(serveur, ssh, " ".join(argv), entree,
@@ -415,6 +419,43 @@ def gerer(racine, commande, dossier=plateforme_acces.DOSSIER, ssh=plateforme_ssh
     return code, rep
 
 
+def domaine_sslip(hote):
+    """Le nom gratuit `a-b-c-d.sslip.io` qui désigne une adresse IPv4 (rien à déclarer chez un hébergeur de noms) ; ValueError
+    si `hote` n'est pas une adresse IPv4."""
+    m = re.fullmatch(r"(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})", str(hote))
+    if not m or any(int(x) > 255 for x in m.groups()):
+        raise ValueError("Le serveur n'est pas désigné par une adresse IPv4 : donnez un domaine avec --domaine.")
+    return "-".join(m.groups()) + ".sslip.io"
+
+
+@_garder
+def https(racine, commande, domaine=None, dossier=plateforme_acces.DOSSIER, ssh=plateforme_ssh, bureau=None):
+    """`mandataire` : met le service en HTTPS (domaine donné, sinon le nom gratuit sslip.io de l'adresse du serveur) ;
+    `mandataire-supprimer` : retire ce relais. Le Directeur seul ; l'adresse HTTPS est notée au cache."""
+    if commande not in HTTPS:
+        raise ValueError(f"Commande inconnue : {commande!r}.")
+    racine = Path(racine).resolve()
+    projet, serveur = _preparer(racine, dossier, bureau)
+    if commande == "mandataire":
+        domaine = domaine or domaine_sslip(serveur.hote)
+    else:
+        domaine = None
+    if domaine is not None and not HOTE.MOTIF_DOMAINE.fullmatch(domaine):
+        raise ValueError("Domaine refusé : un nom pleinement qualifié en minuscules (pas une adresse IP).")
+    masques = _masques(projet, dossier)
+    erreur = _deposer(serveur, ssh)
+    if erreur:
+        return 1, {"statut": "echec", "detail": erreur}
+    code, rep = _appel(serveur, ssh, commande, projet, masques=masques, domaine=domaine)
+    champs = {"dossier": str(racine), "serveur": serveur.id,
+              "derniere_action": {"commande": commande, "statut": rep.get("statut"), "detail": rep.get("detail"),
+                                  "le": _maintenant_iso()}}
+    if code == 0:
+        champs["adresse_https"] = rep.get("adresse") if commande == "mandataire" else None
+    _noter(dossier, projet, champs, masques)
+    return code, rep
+
+
 @_garder
 def jeton_depuis_serveur(racine, dossier=plateforme_acces.DOSSIER, ssh=plateforme_ssh, bureau=None):
     """Relit le jeton au serveur et le range au coffre (s'il manque au poste). Ne le rend qu'à l'appelant."""
@@ -433,15 +474,16 @@ def jeton_depuis_serveur(racine, dossier=plateforme_acces.DOSSIER, ssh=plateform
 # --- Commande -------------------------------------------------------------------------------------------------------------
 
 USAGE = ("Usage : py -3.12 lancer.py service <etat|journal|deployer|mettre-a-jour|redemarrer|arreter|supprimer|jeton|"
-         "secrets <NOM>...> [--dossier <projet>] [--commit <sha>] [--lignes N]")
+         "mandataire|mandataire-supprimer|secrets <NOM>...> [--dossier <projet>] [--commit <sha>] [--lignes N] "
+         "[--domaine <nom>]")
 
 
 def _analyser(argv):
     argv = list(argv)
-    opt = {"commande": None, "dossier": None, "commit": None, "lignes": 200, "noms": []}
+    opt = {"commande": None, "dossier": None, "commit": None, "lignes": 200, "noms": [], "domaine": None}
     while argv:
         o = argv.pop(0)
-        if o in ("--dossier", "--commit", "--lignes") and argv:
+        if o in ("--dossier", "--commit", "--lignes", "--domaine") and argv:
             v = argv.pop(0)
             if o == "--lignes":
                 if not re.fullmatch(r"[1-9][0-9]{0,2}", v) or int(v) > 200:
@@ -495,6 +537,8 @@ def main(argv=None, environ=None, saisir=getpass.getpass, est_tty=None, dossier=
             return 0
     elif commande in ("deployer", "mettre-a-jour"):
         code, rep = deployer(racine, opt["commit"], **k)
+    elif commande in HTTPS:
+        code, rep = https(racine, commande, domaine=opt["domaine"], **k)
     else:
         code, rep = gerer(racine, commande, lignes=opt["lignes"], **k)
     _imprimer({k2: v for k2, v in rep.items() if k2 != "jeton"})

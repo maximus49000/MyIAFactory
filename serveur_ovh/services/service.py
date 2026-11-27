@@ -13,6 +13,9 @@ Le poste dépose ce fichier dans ~/myiafactory/serveur_ovh/services/service.py, 
   service.py journal <projet> [--lignes N]   200 dernières lignes au plus, secrets et jeton masqués
   service.py redemarrer|arreter|supprimer <projet>
   service.py jeton <projet>                  la SEULE commande qui rend le jeton (pour le coffre du poste)
+  service.py mandataire <projet> <domaine>   met le service en HTTPS : un mandataire Caddy (certificat automatique) sur les ports
+                                             80 et 443, qui relaie <domaine> vers le port du service
+  service.py mandataire-supprimer <projet>   retire ce relais (et le mandataire, ses ports fermés, s'il n'en reste aucun)
   Option commune : --simuler (aucune commande docker, ufw ni sudo ; aucun fichier écrit ; le plan est rendu).
 
 Sortie standard : UN SEUL objet JSON {"commande", "projet", "statut", "detail", ...}, masqué (secrets et jeton).
@@ -73,9 +76,18 @@ RESERVEES = frozenset({"PATH", "HOME", "USER", "HOSTNAME", "SHELL", "PWD", "TERM
 PREFIXES_RESERVES = ("SERVICE_", "MYIAFACTORY_", "LD_", "DOCKER_", "PYTHON", "NODE_OPTIONS", "JAVA_TOOL_OPTIONS")
 DONNEES = "/data"
 COMMANDES = ("recevoir", "poser-variables", "poser-secrets", "deployer", "mettre-a-jour", "etat", "journal",
-             "redemarrer", "arreter", "supprimer", "jeton")
+             "redemarrer", "arreter", "supprimer", "jeton", "mandataire", "mandataire-supprimer")
 AVEC_COMMIT = ("recevoir", "deployer", "mettre-a-jour")
+AVEC_DOMAINE = ("mandataire",)
 OCCUPE = 75
+
+# --- Mandataire HTTPS (Caddy) : l'image est ÉPINGLÉE par empreinte ; ses seuls ports publics sont 80 (défi du certificat) et 443 ---
+MANDATAIRE_IMAGE = "caddy:2.10.2@sha256:c3d7ee5d2b11f9dc54f947f68a734c84e9c9666c92c88a7f30b9cba5da182adb"
+MANDATAIRE_NOM = "myiafactory-mandataire"
+MANDATAIRE_PORTS = (80, 443)
+DELAI_MANDATAIRE_S = 240      # le certificat est demandé au premier accès : ce délai pour répondre 200 à https://<domaine>/sante
+# Nom de domaine pleinement qualifié, minuscules ; jamais une adresse IP (le dernier segment est alphabétique).
+MOTIF_DOMAINE = re.compile(r"(?=.{4,100}\Z)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,24}", re.ASCII)
 
 
 class Refus(ValueError):
@@ -780,6 +792,124 @@ def cmd_jeton(service, **_):
     return 0, {"statut": "ok", "jeton": j, "detail": "Jeton du service."}
 
 
+# --- Mandataire HTTPS ------------------------------------------------------------------------------------------------------
+
+def _mandataire_dossier(racine):
+    return Path(racine) / "mandataire"
+
+
+def _relais(racine):
+    """{projet: domaine} des services mis en HTTPS."""
+    p = lire_json_local(_mandataire_dossier(racine) / "relais.json", {})
+    return {k: v for k, v in p.items() if isinstance(k, str) and isinstance(v, str)} if isinstance(p, dict) else {}
+
+
+def caddyfile(relais, ports):
+    """Le fichier de configuration : un site par domaine, relayé vers 127.0.0.1:<port> du service (jamais autre chose)."""
+    sites = []
+    for projet in sorted(relais):
+        port = ports.get(projet)
+        if not (isinstance(port, int) and PORT_MIN <= port <= PORT_MAX) or not MOTIF_DOMAINE.fullmatch(relais[projet]):
+            raise Echec("Relais incohérent : port ou domaine invalide pour " + projet + ".")
+        sites.append(f"{relais[projet]} {{\n\tencode zstd gzip\n\treverse_proxy 127.0.0.1:{port}\n}}\n")
+    return "{\n\tadmin off\n}\n\n" + "\n".join(sites)
+
+
+def _argv_mandataire(dossier):
+    d = str(dossier)
+    return ["run", "-d", "--name", MANDATAIRE_NOM, "--restart", "unless-stopped", "--network", "host",
+            "--read-only", "--tmpfs", "/tmp:rw,noexec,nosuid,nodev,size=64m",
+            "--cap-drop", "ALL", "--cap-add", "NET_BIND_SERVICE", "--security-opt", "no-new-privileges",
+            "--memory", "256m", "--cpus", "1", "--pids-limit", "128",
+            "-v", f"{d}/Caddyfile:/etc/caddy/Caddyfile:ro", "-v", f"{d}/data:/data", "-v", f"{d}/config:/config",
+            MANDATAIRE_IMAGE]
+
+
+def _appliquer_mandataire(racine, relais, hote, simuler, ports=None):
+    """Écrit la configuration puis démarre le mandataire (ou le recharge s'il tourne déjà) ; ouvre 80 et 443."""
+    dossier = _mandataire_dossier(racine)
+    ports = _ports(racine) if ports is None else ports
+    texte = caddyfile(relais, ports)
+    if not simuler:
+        dossier.mkdir(parents=True, exist_ok=True)
+        (dossier / "data").mkdir(exist_ok=True)
+        (dossier / "config").mkdir(exist_ok=True)
+        ecrire_prive(dossier / "Caddyfile", texte)
+        os.chmod(dossier / "Caddyfile", 0o644)          # lu par le conteneur (autre utilisateur) ; aucun secret dedans
+    existe, en_marche, image = inspecter(hote, MANDATAIRE_NOM)
+    if existe and en_marche and image == MANDATAIRE_IMAGE:
+        code, _o, e = docker(hote, "exec", MANDATAIRE_NOM, "caddy", "reload", "--config", "/etc/caddy/Caddyfile")
+        if code != 0:
+            raise Echec(f"Rechargement du mandataire impossible (code {code}).")
+    else:
+        if existe:
+            docker(hote, "rm", "-f", MANDATAIRE_NOM)
+        code, _o, e = docker(hote, "pull", MANDATAIRE_IMAGE, delai=DELAI_CONSTRUCTION_S)
+        if code != 0:
+            raise Echec(f"Image du mandataire introuvable (code {code}).")
+        code, _o, e = docker(hote, *_argv_mandataire(dossier))
+        if code != 0:
+            raise Echec(f"Démarrage du mandataire impossible (code {code}) : {e.strip()[:200]}")
+    for p in MANDATAIRE_PORTS:
+        code, _o, _e = ufw(hote, "allow", f"{p}/tcp")
+        if code != 0:
+            raise Echec(f"ufw allow {p}/tcp : échec (code {code}).")
+
+
+def cmd_mandataire(service, hote, simuler, domaine, **_):
+    """Met le service en HTTPS sur `domaine` (nom pleinement qualifié) : le mandataire obtient le certificat tout seul."""
+    existe, en_marche, _i = inspecter(hote, nom_conteneur(service.projet))
+    port = port_du_projet(service.racine, service.projet)
+    if simuler:                                           # l'hôte simulé ne sait rien du service : le plan se rend quand même
+        port = port or PORT_MIN
+    elif not (existe and en_marche and port):
+        raise Echec("Le service doit être déployé et en marche avant d'être mis en HTTPS.")
+    relais = _relais(service.racine)
+    for autre, d in relais.items():
+        if d == domaine and autre != service.projet:
+            raise Refus(f"Le domaine {domaine} est déjà relayé vers un autre service.")
+    relais[service.projet] = domaine
+    _appliquer_mandataire(service.racine, relais, hote, simuler, dict(_ports(service.racine), **{service.projet: port}))
+    if not simuler:
+        ecrire_prive(_mandataire_dossier(service.racine) / "relais.json", json.dumps(relais, indent=1))
+    url = f"https://{domaine}"
+    ok = False
+    t0 = time.time()
+    while True:
+        if hote.http(f"{url}/sante", delai=5) == 200:
+            ok = True
+            break
+        if time.time() - t0 > DELAI_MANDATAIRE_S and not isinstance(hote, Simulation):
+            break
+        hote.dormir(3)
+        if isinstance(hote, Simulation):
+            break
+    if not ok:
+        _c, sortie, erreur = docker(hote, "logs", "--tail", "15", MANDATAIRE_NOM)
+        raise Echec(f"{url}/sante ne répond pas après {DELAI_MANDATAIRE_S} s (certificat non obtenu ? les ports 80 et 443 "
+                    "doivent être joignables depuis Internet). Journal du mandataire : "
+                    + " | ".join(((sortie or "") + (erreur or "")).splitlines()[-6:])[:500])
+    return 0, {"statut": "simule" if simuler else "ok", "adresse": url, "domaine": domaine, "port": port,
+               "detail": f"Service en HTTPS : {url}"}
+
+
+def cmd_mandataire_supprimer(service, hote, simuler, **_):
+    relais = _relais(service.racine)
+    if service.projet not in relais:
+        return 0, {"statut": "simule" if simuler else "ok", "detail": "Ce service n'était pas en HTTPS."}
+    relais.pop(service.projet)
+    if relais:
+        _appliquer_mandataire(service.racine, relais, hote, simuler)
+    else:
+        docker(hote, "rm", "-f", MANDATAIRE_NOM)
+        for p in MANDATAIRE_PORTS:
+            ufw(hote, "delete", "allow", f"{p}/tcp")
+    if not simuler:
+        ecrire_prive(_mandataire_dossier(service.racine) / "relais.json", json.dumps(relais, indent=1))
+    return 0, {"statut": "simule" if simuler else "ok",
+               "detail": "Relais HTTPS retiré." + ("" if relais else " Mandataire arrêté, ports 80 et 443 fermés.")}
+
+
 # --- Entrée -------------------------------------------------------------------------------------------------------------
 
 def masquer(valeur, secrets):
@@ -808,16 +938,19 @@ def _analyser(argv):
     if not argv or argv[0] not in COMMANDES:
         raise Refus("Commande inconnue. Attendu : " + ", ".join(COMMANDES) + ".")
     commande = argv[0]
-    attendus = 3 if commande in AVEC_COMMIT else 2
+    attendus = 3 if commande in AVEC_COMMIT + AVEC_DOMAINE else 2
     if len(argv) != attendus:
         raise Refus(f"« {commande} » attend {attendus - 1} argument(s).")
     projet = argv[1]
     if not MOTIF_PROJET.fullmatch(projet):
         raise Refus("Projet refusé : minuscules, chiffres et -, 2 à 40 caractères.")
-    commit = argv[2] if attendus == 3 else None
+    commit = argv[2] if attendus == 3 and commande in AVEC_COMMIT else None
     if commit is not None and not MOTIF_COMMIT.fullmatch(commit):
         raise Refus("Commit refusé : 40 caractères hexadécimaux en minuscules.")
-    return commande, projet, commit, simuler, lignes
+    domaine = argv[2] if commande in AVEC_DOMAINE else None
+    if domaine is not None and not MOTIF_DOMAINE.fullmatch(domaine):
+        raise Refus("Domaine refusé : un nom pleinement qualifié en minuscules (pas une adresse IP).")
+    return commande, projet, commit, simuler, lignes, domaine
 
 
 def main(argv=None, entree=None, sortie=None, hote=None, racine=None, uid=None, gid=None):
@@ -831,7 +964,7 @@ def main(argv=None, entree=None, sortie=None, hote=None, racine=None, uid=None, 
                "projet": None}
     service = None
     try:
-        commande, projet, commit, simuler, lignes = _analyser(argv)
+        commande, projet, commit, simuler, lignes, domaine = _analyser(argv)
         reponse["projet"] = projet
         service = Service(racine, projet)
         if not simuler and commande not in ("etat", "journal", "jeton"):
@@ -841,13 +974,13 @@ def main(argv=None, entree=None, sortie=None, hote=None, racine=None, uid=None, 
         fonctions = {
             "recevoir": cmd_recevoir, "deployer": cmd_deployer, "mettre-a-jour": cmd_deployer, "etat": cmd_etat,
             "journal": cmd_journal, "redemarrer": cmd_redemarrer, "arreter": cmd_arreter, "supprimer": cmd_supprimer,
-            "jeton": cmd_jeton,
+            "jeton": cmd_jeton, "mandataire": cmd_mandataire, "mandataire-supprimer": cmd_mandataire_supprimer,
             "poser-variables": lambda **k: cmd_poser(fichier="variables.json", quoi="variables", **k),
             "poser-secrets": lambda **k: cmd_poser(fichier="secrets.json", quoi="secrets", **k),
         }
         masquables = service.valeurs_a_masquer()
         code, plus = fonctions[commande](service=service, commit=commit, entree=entree, hote=execution,
-                                         simuler=simuler, uid=uid, gid=gid, lignes=lignes)
+                                         simuler=simuler, uid=uid, gid=gid, lignes=lignes, domaine=domaine)
         if simuler:
             plus["commandes"] = execution.plan
         reponse.update(plus)

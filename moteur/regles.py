@@ -4657,7 +4657,12 @@ CONSIGNE_RECETTE = ("Tu fais la recette : ajoute à ton rapport `\"recette_reuss
                     "Ce que tu n'as PAS pu vérifier (accès manquant, donnée absente du clone, appareil indisponible) n'est "
                     "pas un défaut : écris-le sous « Non vérifié » dans `message.texte`, garde `recette_reussie` à `true` si "
                     "le reste passe, et ne demande jamais une correction pour une vérification impossible. Pour les données "
-                    "réelles, interroge le service en ligne du projet plutôt que le clone.")
+                    "réelles, interroge le service en ligne du projet plutôt que le clone. "
+                    "Pour CHAQUE test en échec, rejoue-le sur la base (le commit d'avant la correction, ou la branche principale "
+                    "sans les commits de ta tâche) et classe-le : `nouveau` (la correction le casse : défaut, `recette_reussie` "
+                    "faux) ou préexistant (il échouait déjà, étranger à l'évolution : ne le corrige pas). Rends les noms des "
+                    "préexistants dans `\"echecs_preexistants\": [noms]` : ils ne comptent pas dans `recette_reussie` (vrai si "
+                    "tous les tests du périmètre passent) ; une tâche dédiée sera ouverte pour eux.")
 MOTIF_RECETTE_RATEE = re.compile(r"recette\s+(?:n['’]a\s+pas|non|pas)\s+r[ée]ussi", re.IGNORECASE)
 TITRE_RECETTE_RATEE = "Recette non réussie"
 
@@ -4670,6 +4675,36 @@ def _recette_ratee(t, r):
     if isinstance(r.get("recette_reussie"), bool):
         return not r["recette_reussie"]
     return bool(MOTIF_RECETTE_RATEE.search(str((r.get("message") or {}).get("texte") or "")))
+
+
+ECHEC_PREEXISTANT = "Échec préexistant : "
+
+
+def _ouvrir_les_echecs_preexistants(projet, etat, t, r):
+    """Une recette dont des tests échouaient DÉJÀ avant la correction (`echecs_preexistants`) : une tâche de correction dédiée
+    à chacun (hors de la série : elle ne la bloque pas, ne rouvre jamais sa correction ni ne compte comme un échec de recette),
+    une seule fois par test (mémoire du moteur et tâches ouvertes), dite au Directeur par le Chef."""
+    noms = [n for n in r.get("echecs_preexistants") or [] if isinstance(n, str) and n.strip()]
+    if not noms or str(t.get("role") or "").lower() not in ROLES_DE_RECETTE:
+        return
+    deja = _m(etat, "echecs_preexistants", set)
+    ouverts = {x["titre"].lower() for x in _etat(projet)["taches"]}
+    nouveaux = []
+    for nom in noms:
+        cle = " ".join(nom.lower().split())
+        if cle in deja or (ECHEC_PREEXISTANT + nom).lower() in ouverts:
+            continue
+        deja.add(cle)
+        _creer_tache(projet, (ECHEC_PREEXISTANT + nom)[:120], None, _role_production(projet, t.get("fonctionnalite")), "correction",
+                     journal=[f"Le test « {nom} » échoue sur la base, avant l'évolution « {t.get('titre')} » : il est étranger à "
+                              "ce qui a été livré. Trouve pourquoi il échoue et corrige-le, avec un test."])
+        nouveaux.append(nom)
+    if nouveaux:
+        _journal(projet, t["id"], "Échecs préexistants (étrangers à l'évolution), une tâche dédiée ouverte : " + ", ".join(nouveaux))
+        if t.get("fonctionnalite"):
+            _dire(projet, t["fonctionnalite"], f"La recette est réussie ; {len(nouveaux)} test{'s' if len(nouveaux) > 1 else ''} "
+                  f"échouai{'ent' if len(nouveaux) > 1 else 't'} déjà avant l'évolution ({', '.join(nouveaux)}) : j'ai ouvert une "
+                  "tâche à part pour " + ("chacun" if len(nouveaux) > 1 else "lui") + ", la série n'attend pas.")
 
 
 def _rouvrir_la_recette(projet, etat, t, r, reponse):
@@ -4726,6 +4761,8 @@ def traiter_retour(projet, execution, etat):
         return (_apres_echec_d_installation(projet, etat, taches, "L'installation a échoué : " + reponse[:200])
                 + _analyser_le_blocage(projet, etat, taches[0], "echec", {"rapport": r}))
     t0 = _tache(projet, taches[0])
+    if len(taches) == 1 and r.get("statut") == "fait":
+        _ouvrir_les_echecs_preexistants(projet, etat, t0, r)       # jamais une raison de rouvrir la correction
     if len(taches) == 1 and _recette_ratee(t0, r):
         return _rouvrir_la_recette(projet, etat, t0, r, reponse)
     message_refuse = None

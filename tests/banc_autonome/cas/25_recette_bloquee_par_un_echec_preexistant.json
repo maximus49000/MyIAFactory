@@ -1,0 +1,119 @@
+{
+ "id": "25_recette_bloquee_par_un_echec_preexistant",
+ "titre": "La recette est bloquée par un test qui échouait déjà avant la correction",
+ "type": "jugement",
+ "negatif": false,
+ "source": "Anomalie a22 de FM_Stats (t294, f34, 2026-11-27) : la vérification échoue depuis près de deux heures sur serveur_url_edition_test",
+ "note": "Un échec préexistant étranger à la fonctionnalité bloque la recette. Bonne réponse : relancer la recette avec la consigne de rejouer le test sur la base, de le classer préexistant (echecs_preexistants) et de rendre recette_reussie selon les tests du périmètre ; pas de nouvelle correction de la fonctionnalité.",
+ "dossier": {
+  "decision": {
+   "genre": "tache_bloquee",
+   "motif": "autre",
+   "texte": "La tâche « Vérification de l'APK Client » est bloquée : la recette échoue depuis deux heures sur serveur_url_edition_test (variante Maître), sortie tronquée."
+  },
+  "verdicts": [
+   "relancer",
+   "renvoyer",
+   "laisser"
+  ],
+  "choix": [],
+  "questions": [],
+  "tache": {
+   "id": "t294",
+   "titre": "Vérification de l'APK Client",
+   "etape": "recette",
+   "metier": "testeur",
+   "element": null,
+   "journal": [
+    "Recette NON réussie : serveur_url_edition_test échoue.",
+    "Recette NON réussie : serveur_url_edition_test échoue.",
+    "Recette NON réussie : serveur_url_edition_test échoue (sortie tronquée)."
+   ]
+  },
+  "fonctionnalite": {
+   "id": "f30",
+   "nom": "Statistiques par équipe",
+   "etape": "serie",
+   "flux": [
+    {
+     "nom": "Dev",
+     "validation": false
+    },
+    {
+     "nom": "Recette",
+     "validation": false
+    },
+    {
+     "nom": "Validation du Directeur",
+     "validation": true
+    }
+   ]
+  },
+  "lecons_du_metier": [],
+  "deja_appris": [],
+  "recentes": [],
+  "mots_interdits": [
+   "ProjetExemple"
+  ],
+  "anomalies": [],
+  "service": {
+   "adresse": "https://service.exemple",
+   "redeployable": false
+  },
+  "taches_dev": [
+   {
+    "id": "t290",
+    "titre": "Correction des routes de lecture",
+    "etape": "correction",
+    "metier": "dev",
+    "journal": [
+     "Livré : routes de lecture protégées."
+    ]
+   }
+  ],
+  "faits_du_service": {
+   "commit": "2b0ad4a",
+   "etat": "actif",
+   "sante_ok": true,
+   "secrets": {},
+   "pages": [
+    {
+     "chemin": "/sante",
+     "code": 200,
+     "ms": 15
+    }
+   ],
+   "journal": [],
+   "erreur": null
+  }
+ },
+ "attendu": {
+  "verdicts": [
+   "relancer"
+  ],
+  "texte_evoque": [
+   [
+    "préexist",
+    "preexist",
+    "base",
+    "avant la correction"
+   ],
+   [
+    "echecs_preexistants",
+    "recette_reussie"
+   ]
+  ]
+ },
+ "simule": {
+  "raison": "Le test échoue peut-être depuis avant la correction : il faut le rejouer sur la base avant de conclure.",
+  "verdict": "relancer",
+  "texte": "Rejoue serveur_url_edition_test sur la base (le commit d'avant la correction). S'il échoue aussi, classe-le préexistant : mets son nom dans echecs_preexistants et rends recette_reussie vrai si les tests du périmètre passent.",
+  "choix": null,
+  "reponses": null,
+  "generalisable": false,
+  "lecon": null,
+  "amelioration": null,
+  "anomalies": null
+ },
+ "decision_id": "d25"
+}

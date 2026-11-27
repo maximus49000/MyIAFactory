@@ -40,6 +40,10 @@ DEFAUTS = {"port": 8770, "charge_max": 75, "fraicheur_min": 30, "releve": {}, "p
            "une_session_moyenne": False,
            # Qui signe les APK construits au serveur (15e) et le profil d'outils des agents du serveur (15g) : la valeur la plus sûre.
            "signature_apk": "aucune", "outils_agents_serveur": "aucun",
+           # Variables intégrées à l'APK à la construction au serveur (`--dart-define`), par variante Android : le NOM de
+           # la variable Dart et sa SOURCE (`service.adresse`, `service.jeton` ou `valeur:<texte non secret>`), jamais la
+           # valeur : {"client": {"SERVEUR_URL": "service.adresse", "SERVEUR_JETON": "service.jeton"}}. Vide : rien.
+           "variables_construction": {},
            # Exécution déportée : lieu de chaque action (poste, github, serveur), commande de remplacement éventuelle
            # par action, heure de la campagne de charge. Les clés absentes valent ces défauts.
            "deport": {"lieux": dict(LIEUX_PAR_DEFAUT), "commandes": {}, "charge_heure": "03:00"}}
@@ -186,10 +190,47 @@ def _verifier_moteur(r):
         raise ReglagesInvalides("Réglages : « livraison_github » doit valoir true ou false.")
     if type(r.get("une_session_moyenne")) is not bool:
         raise ReglagesInvalides("Réglages : « une_session_moyenne » doit valoir true ou false.")
+    r["variables_construction"] = normaliser_variables_construction(r.get("variables_construction", {}), "Réglages")
     for reglage in REGISTRE:
         if reglage.forme == "choix" and r.get(reglage.cle) not in reglage.options:
             raise ReglagesInvalides("Réglages : « %s » doit valoir l'un de : %s." % (reglage.cle, ", ".join(reglage.options)))
     r["deport"] = normaliser_deport(r.get("deport"), "Réglages")
+
+
+_VARIANTE_CONSTRUCTION = re.compile(r"^(\*|[a-z][A-Za-z0-9]{0,29})$")
+_NOM_CONSTRUCTION = re.compile(r"^[A-Z][A-Z0-9_]{0,63}$")
+_LITTERAL_CONSTRUCTION = re.compile(r"^[A-Za-z0-9._~:/?#@&+=%-]{1,512}$")     # le jeu du script du serveur
+SOURCES_CONSTRUCTION = ("service.adresse", "service.jeton")
+MAX_VARIABLES_CONSTRUCTION = 16
+
+
+def normaliser_variables_construction(v, contexte="Réglages"):
+    """Valide `variables_construction` : {variante: {NOM: source}} (`*` pour toutes les variantes). Une source est
+    `service.adresse`, `service.jeton` ou `valeur:<texte non secret>` ; jamais une valeur secrète écrite ici. Lève
+    ReglagesInvalides (message en français) si une forme est mauvaise ; rend une copie."""
+    if not isinstance(v, dict):
+        raise ReglagesInvalides(f"{contexte} : « variables_construction » doit être un objet {{variante: {{NOM: source}}}}.")
+    sortie, total = {}, 0
+    for variante, noms in v.items():
+        if not isinstance(variante, str) or not _VARIANTE_CONSTRUCTION.fullmatch(variante):
+            raise ReglagesInvalides(f"{contexte} : « variables_construction » : variante invalide (« * » ou minuscule "
+                                    "puis lettres et chiffres, 30 au plus).")
+        if not isinstance(noms, dict):
+            raise ReglagesInvalides(f"{contexte} : « variables_construction.{variante} » doit être un objet {{NOM: source}}.")
+        sortie[variante] = {}
+        for nom, source in noms.items():
+            total += 1
+            if not isinstance(nom, str) or not _NOM_CONSTRUCTION.fullmatch(nom):
+                raise ReglagesInvalides(f"{contexte} : « variables_construction » : nom de variable invalide "
+                                        "(majuscules, chiffres et _, commence par une lettre, 64 au plus).")
+            litteral = isinstance(source, str) and source.startswith("valeur:") and                 _LITTERAL_CONSTRUCTION.fullmatch(source[len("valeur:"):])
+            if not (source in SOURCES_CONSTRUCTION if isinstance(source, str) else False) and not litteral:
+                raise ReglagesInvalides(f"{contexte} : « variables_construction.{variante}.{nom} » : source "
+                                        "« service.adresse », « service.jeton » ou « valeur:<texte non secret> » attendue.")
+            sortie[variante][nom] = source
+    if total > MAX_VARIABLES_CONSTRUCTION:
+        raise ReglagesInvalides(f"{contexte} : « variables_construction » : {MAX_VARIABLES_CONSTRUCTION} variables au plus.")
+    return sortie
 
 
 def normaliser_deport(v, contexte="Réglages", catalogue=None):

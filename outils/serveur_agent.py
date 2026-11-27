@@ -565,7 +565,7 @@ exec bash "{AGENT_DISTANT}" @ID@ @MODE@ @DUREE@ @MEMOIRE@ @CPUS@ @PLACES@
 # 3 : absent ; 5 : trop gros ou lien.
 # Abandon (aucune place) : le paquet et l'APK déposés n'ont plus rien à faire sur le serveur.
 _ABANDON_AGENT = """# tache:abandon_agent @ID@
-rm -f -- "$HOME/taches/@ID@/entree/projet.bundle" "$HOME/taches/@ID@/entree/app.apk"
+rm -f -- "$HOME/taches/@ID@/entree/projet.bundle" "$HOME/taches/@ID@/entree/app.apk" "$HOME/taches/@ID@/entree/construction.env"
 """
 _FICHIER = """# tache:fichier @ID@ @NOM@
 set -u
@@ -637,7 +637,7 @@ def _archive_fichier(membres, sortie):
                 tar.addfile(info, io.BytesIO(donnees))
 
 
-def _envoyer(serveur, ssh, d, paquet, argv, consigne, message, apk):
+def _envoyer(serveur, ssh, d, paquet, argv, consigne, message, apk, construction=b""):
     """Crée ~/taches/<id> (qui ne doit pas exister) avec entree/ ; (code, erreur), 73 si l'identifiant est pris. L'archive est
     écrite dans un fichier temporaire, puis ce FICHIER est l'entrée standard de ssh (aucune copie du paquet en mémoire)."""
     demande = (json.dumps(_demande_dict(d), ensure_ascii=False, indent=2) + "\n").encode("utf-8")
@@ -646,6 +646,9 @@ def _envoyer(serveur, ssh, d, paquet, argv, consigne, message, apk):
                ("entree/consigne.md", consigne, 0o600), ("entree/message.md", message, 0o600),
                ("entree/demande.json", demande, 0o600)]
     fichiers = list(FICHIERS_ENTREE)
+    if construction:       # variables de construction (adresse et jeton du service) : 0600, lues par `construire-apk` seul
+        membres.append(("entree/construction.env", construction, 0o600))
+        fichiers.append("construction.env")
     if d.mode == "pilote":
         membres.append(("entree/app.apk", apk, 0o644))
         fichiers.append("app.apk")
@@ -680,7 +683,7 @@ def _doublon(dossier, d):
 
 
 def lancer_agent(demande, paquet, argv, consigne, message, apk=None, dossier=plateforme_acces.DOSSIER,
-                 ssh=plateforme_ssh, attente_max_s=600, dormir=time.sleep, projet=None, git=_git):
+                 ssh=plateforme_ssh, attente_max_s=600, dormir=time.sleep, projet=None, git=_git, construction=b""):
     """Voir `_lancer_agent`. `projet` (dossier du dépôt, facultatif) : les changements non commités sont listés dans
     `avertissement` du résultat (ils ne partent pas : seuls les commits partent) et une branche `agent/<tâche>` locale qui
     ne serait pas un ancêtre de la base est refusée avant tout envoi."""
@@ -700,7 +703,7 @@ def lancer_agent(demande, paquet, argv, consigne, message, apk=None, dossier=pla
             avertissement = (f"{len(lignes)} changement(s) non commité(s) restent sur le poste : seuls les commits partent à "
                              "l'agent (" + st._court(" ; ".join(l.strip() for l in lignes[:5]), 200)
                              + (" ; ..." if len(lignes) > 5 else "") + ").")
-    resultat = _lancer_agent(d, paquet, argv, consigne, message, apk, dossier, ssh, attente_max_s, dormir)
+    resultat = _lancer_agent(d, paquet, argv, consigne, message, apk, dossier, ssh, attente_max_s, dormir, construction)
     if sauvegarde and isinstance(resultat, dict) and resultat.get("id"):
         ligne = (f"{st._maintenant_iso()} La branche agent/{d.tache} existait déjà sans être un ancêtre de la base : "
                  f"renommée en {sauvegarde} (sauvegarde, rien supprimé) ; la tâche repart de la base.")
@@ -710,7 +713,7 @@ def lancer_agent(demande, paquet, argv, consigne, message, apk=None, dossier=pla
     return resultat
 
 
-def _lancer_agent(demande, paquet, argv, consigne, message, apk, dossier, ssh, attente_max_s, dormir):
+def _lancer_agent(demande, paquet, argv, consigne, message, apk, dossier, ssh, attente_max_s, dormir, construction=b""):
     """Envoie les entrées de l'agent (paquet Git, `argv.json`, consigne, message, demande ; `apk` obligatoire en mode pilote),
     démarre `lancer_agent.sh` sur le serveur choisi (capacités `BESOINS["agent-serveur"]` ou `["agent-pilote"]`), attend une
     place (nouvel essai toutes les 15 s jusqu'à `attente_max_s`) et tient l'index (fiche `type: agent`).
@@ -762,7 +765,8 @@ def _lancer_agent(demande, paquet, argv, consigne, message, apk, dossier, ssh, a
     candidat = d.id
     for _ in range(st.ESSAIS_ID):
         if candidat not in st.Index(dossier).lire():
-            code, erreur = _envoyer(serveur, ssh, replace(d, id=candidat), paquet, argv, consigne, message, apk)
+            code, erreur = _envoyer(serveur, ssh, replace(d, id=candidat), paquet, argv, consigne, message, apk,
+                                construction)
             if code == 0:
                 break
             if code != st.CODE_EXISTE:

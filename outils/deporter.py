@@ -552,6 +552,38 @@ def _usage_recette(opt, commande):
     return None
 
 
+def _registre_perime(projet, variante=None):
+    """Vrai si le registre des APK connaît des APK de la variante mais aucun ne correspond aux sources actuelles : un APK
+    plus ancien (sorti d'un motif de sortie locale) serait périmé, la recette ne le reçoit pas."""
+    try:
+        racine = str(Path(__file__).resolve().parent.parent)
+        if racine not in sys.path:
+            sys.path.insert(0, racine)
+        from moteur import registre_apk
+        r = registre_apk.fournir(str(projet), variante, demander=False)
+    except Exception:
+        return False
+    return r.get("etat") == "a_construire" and r.get("raison") == "perime"
+
+
+def _apk_du_registre(projet, variante=None):
+    """L'APK existant dont l'empreinte des sources correspond au code testé (`moteur/registre_apk.py`), sinon None : la
+    recette ne reçoit jamais un APK périmé quand le registre sait que les sources ont changé, et n'en construit pas un
+    nouveau quand un correspondant existe."""
+    try:
+        racine = str(Path(__file__).resolve().parent.parent)
+        if racine not in sys.path:
+            sys.path.insert(0, racine)
+        from moteur import registre_apk
+        r = registre_apk.fournir(str(projet), variante, demander=False)
+    except Exception:
+        return None
+    if r.get("etat") != "existant":
+        return None
+    chemin = (Path(projet) / r["apk"]["chemin"]).resolve()
+    return str(chemin) if chemin.is_file() else None
+
+
 def _apk_de_la_recette(opt, projet, catalogue, action, env):
     """`(chemin, None)` de l'APK, ou `(None, message)` : `--apk`, sinon l'artefact GitHub téléchargé (`env`), sinon la
     sortie locale publiée par le catalogue (`artefact` de l'action productrice), la plus récente."""
@@ -565,6 +597,12 @@ def _apk_de_la_recette(opt, projet, catalogue, action, env):
         chemin = (env or {}).get(_nom_variable(e["produit"]))
         if chemin:
             return chemin, None
+    existant = _apk_du_registre(projet, opt.get("variante"))
+    if existant:
+        return existant, None
+    if _registre_perime(projet, opt.get("variante")):
+        return None, ("L'APK construit ne correspond plus aux sources de l'application (le code a changé depuis) : une "
+                      "construction est nécessaire (« deporter apk » ou la commande du projet), ou donnez --apk <fichier>.")
     motifs = [e["artefact"] for e in sources if e["artefact"]]
     trouves = []
     for motif in motifs:

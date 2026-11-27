@@ -16,7 +16,7 @@ import re
 
 IGNORE_PAR_DEFAUT = ("**/assets/docs/**",)
 HORS_APPLICATION_A_LA_RACINE = ("serveur/", "server/", "docs/", ".factory/", "scripts/", "tests/", "Livrables/", ".github/")
-SANS_EFFET_SUR_L_APK = ("test/", "integration_test/")
+SANS_EFFET_SUR_L_APK = ("test/", "integration_test/", "build/", ".dart_tool/")      # tests et sorties de construction
 EXTENSIONS_DOCUMENTATION = (".md", ".mdx", ".txt", ".rst")
 
 

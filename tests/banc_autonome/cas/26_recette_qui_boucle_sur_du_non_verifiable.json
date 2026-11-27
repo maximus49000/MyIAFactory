@@ -1,0 +1,119 @@
+{
+ "id": "26_recette_qui_boucle_sur_du_non_verifiable",
+ "titre": "La recette échoue trois fois pour ce que son cadre ne peut pas vérifier",
+ "type": "jugement",
+ "negatif": false,
+ "source": "FM_Stats f35/f36 (2026-11-27) : environ quatre heures de cycles correction → vérification pour des critères hors du cadre de la recette",
+ "note": "Trois échecs de recette au même motif : l'écran de configuration initial est une autre fonctionnalité et la base réelle (4 M de lignes) n'est pas dans le clone. Bonne réponse : recadrer tout de suite, pas une quatrième correction : dire que le reste est vérifié, que ce qui ne l'est pas est « non vérifié » (non_verifie), rendre recette_reussie selon le périmètre ; la validation du Directeur couvre le reste.",
+ "dossier": {
+  "decision": {
+   "genre": "tache_bloquee",
+   "motif": "autre",
+   "texte": "La tâche « Vérification de la correction des pages » est bloquée : la recette a échoué trois fois (écran de configuration initial introuvable, base réelle absente du clone)."
+  },
+  "verdicts": [
+   "relancer",
+   "renvoyer",
+   "laisser"
+  ],
+  "choix": [],
+  "questions": [],
+  "tache": {
+   "id": "t331",
+   "titre": "Vérification de la correction des pages",
+   "etape": "recette",
+   "metier": "testeur",
+   "element": null,
+   "journal": [
+    "Recette NON réussie : l'écran de configuration initial n'existe pas dans l'APK testé.",
+    "Recette NON réussie : l'écran de configuration initial est absent ; la base de 4 millions de lignes n'est pas dans le clone.",
+    "Recette NON réussie : écran de configuration initial introuvable, données réelles absentes du clone."
+   ]
+  },
+  "fonctionnalite": {
+   "id": "f30",
+   "nom": "Statistiques par équipe",
+   "etape": "serie",
+   "flux": [
+    {
+     "nom": "Dev",
+     "validation": false
+    },
+    {
+     "nom": "Recette",
+     "validation": false
+    },
+    {
+     "nom": "Validation du Directeur",
+     "validation": true
+    }
+   ]
+  },
+  "lecons_du_metier": [],
+  "deja_appris": [],
+  "recentes": [],
+  "mots_interdits": [
+   "ProjetExemple"
+  ],
+  "anomalies": [],
+  "service": {
+   "adresse": "https://service.exemple",
+   "redeployable": false
+  },
+  "taches_dev": [
+   {
+    "id": "t290",
+    "titre": "Correction des routes de lecture",
+    "etape": "correction",
+    "metier": "dev",
+    "journal": [
+     "Livré : routes de lecture protégées."
+    ]
+   }
+  ],
+  "faits_du_service": {
+   "commit": "2b0ad4a",
+   "etat": "actif",
+   "sante_ok": true,
+   "secrets": {},
+   "pages": [
+    {
+     "chemin": "/sante",
+     "code": 200,
+     "ms": 15
+    }
+   ],
+   "journal": [],
+   "erreur": null
+  }
+ },
+ "attendu": {
+  "verdicts": [
+   "relancer"
+  ],
+  "texte_evoque": [
+   [
+    "non vérifié",
+    "non verifie",
+    "non_verifie"
+   ],
+   [
+    "périmètre",
+    "perimetre",
+    "hors du cadre"
+   ]
+  ]
+ },
+ "simule": {
+  "raison": "Trois échecs au même motif : ce que la recette exige dépasse son cadre (autre fonctionnalité, données absentes). On recadre au lieu de corriger de nouveau.",
+  "verdict": "relancer",
+  "texte": "Recadre la recette : ne vérifie QUE les critères de l'élément corrigé. L'écran de configuration initial est une autre fonctionnalité (hors périmètre) et la base réelle n'est pas dans ton clone : écris-les dans non_verifie, ne les compte pas comme un échec, et rends recette_reussie selon ce qui est dans le périmètre. La validation du Directeur couvre le reste.",
+  "choix": null,
+  "reponses": null,
+  "generalisable": false,
+  "lecon": null,
+  "amelioration": null,
+  "anomalies": null
+ },
+ "decision_id": "d26"
+}

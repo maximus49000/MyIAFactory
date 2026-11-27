@@ -71,6 +71,61 @@ class Recette(tsr.AvecValidation):
             self.rendre(recette_reussie=False, message={"texte": "Défaut."})
         self.assertTrue(self.tache(self.recette).get("bloquee"))
 
+    # --- Les corrections qui ne tournent pas en boucle (périmètre, non vérifiable, à classer, plafond).
+
+    def anomalies(self):
+        return self.ok("anomalies")["anomalies"]
+
+    def test_un_defaut_hors_perimetre_est_une_anomalie_separee_pas_un_echec(self):
+        self.rendre(recette_reussie=True, hors_perimetre=["L'écran de configuration initial n'a pas de bouton retour"],
+                    message={"texte": "Tout passe pour l'élément."})
+        self.assertEqual(self.corrections(), [])
+        (a,) = [x for x in self.anomalies() if x["titre"].startswith("Hors périmètre")]
+        self.assertIn("configuration initial", a["description"])
+
+    def test_ce_que_le_cadre_ne_permet_pas_de_verifier_n_est_pas_un_echec(self):
+        self.rendre(recette_reussie=True, non_verifie=["émulateur sans réseau : l'écran de synchro"],
+                    message={"texte": "Le reste passe."})
+        self.assertEqual(self.corrections(), [])
+        self.assertIn("Non vérifié", json.dumps(self.tache(self.recette)["journal"], ensure_ascii=False))
+
+    def test_un_echec_a_classer_ouvre_une_seule_tache_qui_le_rejoue_sur_la_base(self):
+        for _ in range(2):
+            self.rendre(recette_reussie=True, echecs_a_classer=["test_import_gros"], message={"texte": "Fait."})
+        taches = [t for t in self.suivi()["taches"] if t["titre"] == "Échec à classer : test_import_gros"]
+        self.assertEqual(len(taches), 1)
+        self.assertIn("sur la base", json.dumps(taches[0]["journal"], ensure_ascii=False))
+        self.assertEqual(self.corrections(), [])
+
+    def test_plus_de_deux_cycles_au_meme_motif_sous_claude_autonome_recadre_et_valide_en_non_verifie(self):
+        self.projet.claude_autonome = True
+        for _ in range(2):
+            self.rendre(recette_reussie=False, message={"texte": "La base de 4 millions de lignes manque : /equipe/77 répond 503."})
+        self.assertEqual(len(self.corrections()), 2)
+        for c in self.corrections():                                           # les corrections sont faites, la recette repart
+            self.ok("tache", entree={"id": c["id"], "colonne": "fait", "active": False})
+        self.rendre(recette_reussie=False, message={"texte": "La base de 4 millions de lignes manque : /equipe/77 répond 503."})
+        self.assertEqual(len(self.corrections()), 2)                          # pas de troisième correction
+        self.assertFalse(self.tache(self.recette).get("bloquee"))             # clôturée « non vérifié » : l'élément passe à la validation
+        self.assertIn("recette clôturée", json.dumps(self.tache(self.recette)["journal"], ensure_ascii=False))
+        self.assertTrue([x for x in self.anomalies() if x["titre"].startswith("Boucle de correction")])
+        paroles = [m["texte"] for m in self.suivi()["fonctionnalites"][0]["discussion"] if m["auteur"] == "chef"]
+        self.assertTrue(any("cycle 2 de correction" in p for p in paroles))
+        self.assertTrue(any("J'arrête la boucle" in p for p in paroles))
+
+    def test_un_motif_qui_change_n_est_pas_recadre(self):
+        self.projet.claude_autonome = True
+        self.rendre(recette_reussie=False, message={"texte": "Le bouton Valider est caché sur l'écran des équipes."})
+        self.rendre(recette_reussie=False, message={"texte": "Le graphique des buts manque ses axes gradués."})
+        self.rendre(recette_reussie=False, message={"texte": "La connexion au service expire après soixante secondes."})
+        self.assertTrue(self.tache(self.recette).get("bloquee"))              # comme avant : le Chef analyse, le Directeur tranche
+
+    def test_sans_claude_autonome_le_plafond_reste_le_blocage_d_avant(self):
+        for _ in range(3):
+            self.rendre(recette_reussie=False, message={"texte": "Même défaut : /equipe/77 répond 503."})
+        self.assertTrue(self.tache(self.recette).get("bloquee"))
+        self.assertNotEqual(self.tache(self.recette)["colonne"], "fait")
+
     # --- Les échecs préexistants : une tâche dédiée chacun, jamais une correction de la fonctionnalité (FM_Stats a22).
 
     def dediees(self):

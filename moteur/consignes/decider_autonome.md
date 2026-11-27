@@ -92,6 +92,11 @@ Pour rendre le moteur plus performant :
 
 `raison` : 1 à 3 phrases, en français, sans jargon : pourquoi cette réponse fait avancer. Elle est gardée dans le journal.
 
+Une recette qui échoue plusieurs fois pour le MÊME motif (journal de la tâche) ne reçoit pas une autre correction : recadre-la
+(`relancer` avec un texte précis). Elle ne vérifie QUE les critères de l'élément corrigé ; ce que son cadre ne permet pas (autre
+fonctionnalité, base réelle absente, émulateur sans réseau, pas de jeton) va dans `non_verifie`, ce n'est pas un échec, et
+`recette_reussie` se juge sur le périmètre ; un défaut hors périmètre va dans `hors_perimetre` (une anomalie à part).
+
 Forme de la réponse :
 
 ```json

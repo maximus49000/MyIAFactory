@@ -1373,12 +1373,22 @@ class Arrets(Base):
     def test_agent_sans_rapport_relance_une_fois_puis_bloque(self):
         actions = self.depart_cadrage()
         tid = actions[0][2][0]
-        e = agents.Execution(tid, "metier-1", usages=[usage()], erreur="rapport illisible")
+        e = agents.Execution(tid, "metier-1", usages=[usage()], erreur="l'appel a échoué : réseau")
         again = regles.traiter_retour(self.projet, e, self.etat)
         self.assertEqual([a[0] for a in again], ["agent"])
         self.assertEqual(regles.traiter_retour(self.projet, e, self.etat), [])
         t = self.taches(id=tid)[0]
         self.assertIn("deux essais", t["bloquee"])
+
+    def test_rapport_rejete_pour_sa_forme_pas_de_troisieme_essai_et_une_anomalie(self):
+        """Deux rejets de forme (déjà rappelés à l'agent dans `agents`) : la tâche est bloquée, le Chef note l'anomalie."""
+        actions = self.depart_cadrage()
+        tid = actions[0][2][0]
+        e = agents.Execution(tid, "metier-1", usages=[usage()], erreur="rapport illisible : « accord » manquant (deux essais sans rapport utilisable)")
+        self.assertEqual(regles.traiter_retour(self.projet, e, self.etat), [])
+        self.assertIn("deux essais", self.taches(id=tid)[0]["bloquee"])
+        (a,) = [x for x in self.ok("anomalies")["anomalies"] if x["titre"] == "Rapport rejeté pour sa forme"]
+        self.assertIn("accord", a["description"])
 
     def test_agent_arrete_depuis_le_bureau_bloque_sans_nouvel_essai(self):
         actions = self.depart_cadrage()

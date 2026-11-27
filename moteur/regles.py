@@ -4564,6 +4564,8 @@ def _matiere(projet, etat, t):
             parties.append(CONSIGNE_RECETTE)
             parties += _consigne_de_l_apk_existant(projet, t)
             parties += _consigne_du_service_en_ligne(projet, etat, t)
+        if etape in ("correction", "retour"):
+            parties.append(CONSIGNE_CORRECTION_BORNEE)
         rang = next((k for k, x in enumerate(production) if etape == ETAPES_DE_FLUX + x["id"]), None)
         if rang is not None and len(production) > 1 and rang == len(production) - 1 and _sans_relecteur(projet):
             parties.append(AVANT_DE_LIVRER)          # la dernière étape du flux : ne livre pas un défaut connu
@@ -4788,6 +4790,12 @@ def _consigne_de_l_apk_existant(projet, t):
     return [texte]
 
 
+CONSIGNE_CORRECTION_BORNEE = (
+    "Une correction ne traite QUE les défauts qu'on te donne : un autre défaut que tu aperçois se dit dans ton message "
+    "(il est noté à part), il n'est pas ajouté à ta tâche. Ton rapport doit avoir tous ses blocs (un bloc manquant, comme "
+    "`accord` d'un statut `accord_requis`, n'est rappelé qu'une fois). Un conflit de fusion sur de la documentation (`docs/…`) "
+    "est résolu par le moteur dans cette tâche : ne le refais pas. Ce qui ne se vérifie pas dans ton cadre se dit « non "
+    "vérifié », ce n'est pas une raison de rouvrir la correction. Voir `docs/corrections-sans-boucle.md`.")
 ROLES_DE_RECETTE = ("testeur", "recette")
 RECETTES_RATEES_MAX = 3          # au-delà, la recette est bloquée comme un échec : le Chef analyse, le Directeur tranche
 CONSIGNE_RECETTE = ("Tu fais la recette : ajoute à ton rapport `\"recette_reussie\": true` si tout ce que tu as pu vérifier "
@@ -4801,7 +4809,15 @@ CONSIGNE_RECETTE = ("Tu fais la recette : ajoute à ton rapport `\"recette_reuss
                     "sans les commits de ta tâche) et classe-le : `nouveau` (la correction le casse : défaut, `recette_reussie` "
                     "faux) ou préexistant (il échouait déjà, étranger à l'évolution : ne le corrige pas). Rends les noms des "
                     "préexistants dans `\"echecs_preexistants\": [noms]` : ils ne comptent pas dans `recette_reussie` (vrai si "
-                    "tous les tests du périmètre passent) ; une tâche dédiée sera ouverte pour eux.")
+                    "tous les tests du périmètre passent) ; une tâche dédiée sera ouverte pour eux. Un test en échec que tu "
+                    "ne peux pas rejouer sur la base : `\"echecs_a_classer\": [noms]` (jamais un échec de la recette : une tâche "
+                    "les rejoue). "
+                    "PÉRIMÈTRE : ne vérifie QUE les critères de l'élément corrigé (sa tâche, son objectif). Un défaut hors de ce "
+                    "périmètre n'est jamais un motif d'échec ni de nouvelle correction : liste-le dans "
+                    "`\"hors_perimetre\": [textes]` (une anomalie séparée sera ouverte). NON VÉRIFIABLE n'est pas un échec : ce que "
+                    "ton cadre ne permet pas (émulateur sans réseau, base partielle, pas de jeton, écran d'une autre "
+                    "fonctionnalité) se dit dans `\"non_verifie\": [textes]` ; la validation du Directeur ou une vérification "
+                    "ultérieure le couvre, et la recette reste réussie si le reste passe.")
 MOTIF_RECETTE_RATEE = re.compile(r"recette\s+(?:n['’]a\s+pas|non|pas)\s+r[ée]ussi", re.IGNORECASE)
 TITRE_RECETTE_RATEE = "Recette non réussie"
 
@@ -4817,6 +4833,41 @@ def _recette_ratee(t, r):
 
 
 ECHEC_PREEXISTANT = "Échec préexistant : "
+ECHEC_A_CLASSER = "Échec à classer : "
+
+
+def _noter_les_limites_de_la_recette(projet, etat, t, r):
+    """Ce que la recette a rendu à côté de son verdict, jamais un motif d'échec : les tests en échec qu'elle n'a pas pu classer
+    (UNE tâche à chacun qui les rejoue sur la base, une seule fois : FM_Stats a28), les défauts hors du périmètre de l'élément
+    (une anomalie séparée chacun) et ce que son cadre ne permet pas de vérifier (« non vérifié », dit au Directeur)."""
+    if str(t.get("role") or "").lower() not in ROLES_DE_RECETTE or r.get("statut") != "fait":
+        return
+    fid = t.get("fonctionnalite")
+    deja = _m(etat, "echecs_a_classer", set)
+    ouverts = {x["titre"].lower() for x in _etat(projet)["taches"]}
+    for nom in r.get("echecs_a_classer") or []:
+        cle = " ".join(nom.lower().split())
+        if cle in deja or (ECHEC_A_CLASSER + nom).lower() in ouverts:
+            continue
+        deja.add(cle)
+        _creer_tache(projet, (ECHEC_A_CLASSER + nom)[:120], None, _role_production(projet, fid), "correction",
+                     journal=[f"Le test « {nom} » échoue et la recette « {t.get('titre')} » n'a pas pu dire s'il échouait déjà avant "
+                              "l'évolution. Rejoue-le sur la base (le commit d'avant, ou la branche principale sans les commits de "
+                              "l'évolution) : s'il y échoue aussi, corrige-le avec un test ; s'il y passe, il est cassé par l'évolution : "
+                              "dis-le dans ton rapport."])
+        _journal(projet, t["id"], f"Échec à classer ({nom}) : une tâche le rejoue sur la base, la recette n'est pas rouverte.")
+    for texte in r.get("hors_perimetre") or []:
+        try:
+            _noter_une_anomalie(projet, etat, t["id"], t.get("titre") or "", "Hors périmètre : " + texte[:90],
+                                f"Relevé par la recette « {t.get('titre')} » hors des critères de l'élément vérifié : {texte} "
+                                "Une demande séparée, jamais un échec de la recette ni une nouvelle correction de cet élément.")
+        except Refus:
+            pass
+    if r.get("hors_perimetre") and fid:
+        _dire(projet, fid, f"La recette a relevé {len(r['hors_perimetre'])} défaut(s) hors du périmètre de cet élément : ils sont "
+              "notés à part (anomalies), ils ne bloquent pas la vérification.")
+    if r.get("non_verifie"):
+        _journal(projet, t["id"], "Non vérifié (le cadre de la recette ne le permet pas) : " + " ; ".join(r["non_verifie"])[:400])
 
 
 def _ouvrir_les_echecs_preexistants(projet, etat, t, r):
@@ -4844,6 +4895,74 @@ def _ouvrir_les_echecs_preexistants(projet, etat, t, r):
             _dire(projet, t["fonctionnalite"], f"La recette est réussie ; {len(nouveaux)} test{'s' if len(nouveaux) > 1 else ''} "
                   f"échouai{'ent' if len(nouveaux) > 1 else 't'} déjà avant l'évolution ({', '.join(nouveaux)}) : j'ai ouvert une "
                   "tâche à part pour " + ("chacun" if len(nouveaux) > 1 else "lui") + ", la série n'attend pas.")
+
+
+CYCLES_MAX = 2          # au-delà de 2 cycles correction → vérification sur un même élément, avec le même motif : on recadre
+MOTIF_RECETTE_JOURNAL = re.compile(r"^Recette non réussie\s*:\s*(.*)$", re.DOTALL)
+
+
+def _mots_du_motif(texte):
+    return {m for m in re.findall(r"[a-z0-9_./-]{4,}", normaliser_mot(texte).lower())}
+
+
+def _meme_motif(a, b):
+    """Deux motifs d'échec de recette se ressemblent (la moitié des mots significatifs du plus court en commun)."""
+    ma, mb = _mots_du_motif(a), _mots_du_motif(b)
+    return bool(ma and mb) and len(ma & mb) / min(len(ma), len(mb)) >= 0.5
+
+
+def _cycles_de_la_recette(t):
+    """`(motifs précédents, premier instant)` : les motifs des échecs déjà notés au journal de la tâche de recette (ils survivent à
+    un redémarrage du moteur) et l'instant du premier."""
+    motifs, debut = [], None
+    for j in t.get("journal") or []:
+        m = MOTIF_RECETTE_JOURNAL.match(str(j.get("texte") or ""))
+        if m:
+            motifs.append(m.group(1))
+            debut = debut or j.get("t")
+    return motifs, debut
+
+
+def _duree_depuis(instant):
+    try:
+        s = max(0, int(time.time() - datetime.fromisoformat(str(instant)).timestamp()))
+    except (TypeError, ValueError):
+        return ""
+    return f"{s // 3600} h {s % 3600 // 60:02d}" if s >= 3600 else f"{s // 60} min"
+
+
+def _recadrer_la_recette(projet, etat, t, r):
+    """Le plafond des corrections qui tournent en boucle : un 3e échec de recette sur un même élément, pour le même motif que
+    le précédent, ne relance pas une correction. Sous « Claude autonome » la recette est CLÔTURÉE : ce qui est vérifié est dit,
+    le reste est « non vérifié », l'élément passe à la validation du Directeur (jamais présenté comme terminé). Rend le rapport
+    à suivre, ou None (la recette suit son cours : `_rouvrir_la_recette`). Dans tous les cas, la mesure (cycles et durée depuis
+    le premier correctif) est dite au Chef, et une anomalie « boucle » est notée au 3e échec."""
+    motifs, debut = _cycles_de_la_recette(t)
+    texte = " ".join([str((r.get("message") or {}).get("texte") or "C'est fait.")]
+                     + [str(p) for v in r.get("verdicts") or [] for p in v.get("points") or []])
+    n = len(motifs) + 1
+    fid = t.get("fonctionnalite")
+    if fid and n >= 2:
+        _dire(projet, fid, f"Vérification de « {t.get('titre')} » : cycle {n} de correction"
+              + (f", depuis {_duree_depuis(debut)}" if _duree_depuis(debut) else "") + ".")
+    if n >= CYCLES_MAX + 1:
+        try:
+            _noter_une_anomalie(projet, etat, t["id"], t.get("titre") or "", f"Boucle de correction : {t.get('titre')}"[:120],
+                                f"{n} cycles correction → vérification sur « {t.get('titre')} » : {' '.join(texte.split())[:300]}")
+        except Refus:
+            pass
+    meme = bool(motifs) and _meme_motif(motifs[-1], texte)
+    if n < CYCLES_MAX + 1 or not meme or not reglage_effectif(projet, "claude_autonome"):
+        return None
+    defauts = " ".join(texte.split())[:500]
+    message = dict(r.get("message") or {})
+    message["texte"] = (f"Non vérifié : la recette n'a pas pu conclure après {n - 1} cycles de correction, avec le même motif : "
+                        f"{defauts} " + str(message.get("texte") or ""))[:2000]
+    _journal(projet, t["id"], f"Claude autonome : recette clôturée « non vérifié » après {n - 1} cycles au même motif : {defauts[:200]}")
+    if fid:
+        _dire(projet, fid, f"J'arrête la boucle de correction de « {t.get('titre')} » : même motif après {n - 1} cycles. Ce qui est "
+              f"vérifié est gardé ; le reste est « non vérifié » ({defauts[:200]}) et la validation du Directeur le couvre.")
+    return {**r, "recette_reussie": True, "message": message, "non_verifie": [*r.get("non_verifie", []), defauts[:300]]}
 
 
 def _rouvrir_la_recette(projet, etat, t, r, reponse):
@@ -4902,8 +5021,12 @@ def traiter_retour(projet, execution, etat):
     t0 = _tache(projet, taches[0])
     if len(taches) == 1 and r.get("statut") == "fait":
         _ouvrir_les_echecs_preexistants(projet, etat, t0, r)       # jamais une raison de rouvrir la correction
+        _noter_les_limites_de_la_recette(projet, etat, t0, r)
     if len(taches) == 1 and _recette_ratee(t0, r):
-        return _rouvrir_la_recette(projet, etat, t0, r, reponse)
+        recadree = _recadrer_la_recette(projet, etat, t0, r)       # même motif, plus de 2 cycles : validation « non vérifié »
+        if recadree is None:
+            return _rouvrir_la_recette(projet, etat, t0, r, reponse)
+        r = recadree
     message_refuse = None
     if isinstance(r.get("cahier"), dict) and r["cahier"].get("partenaires"):
         try:      # les partenaires décidés au cadrage : connus, connecté pour « direct », inscrit pour « inscrit »
@@ -5157,7 +5280,18 @@ def _agent_en_echec(projet, etat, execution, depart):
     if getattr(execution, "limite", False):
         return limite_serveur(projet, etat, depart["taches"], execution.erreur, getattr(execution, "branche", None))
     relancees = _m(etat, "relancees", set)
-    if tid not in relancees:
+    forme = "rapport illisible" in str(execution.erreur or "")
+    if forme and tid not in relancees:
+        # un rapport rejeté pour sa FORME (bloc manquant) : les deux essais ont déjà eu le rappel ciblé ; pas de troisième
+        # essai identique (FM_Stats f36 : « accord » manquant, deux rejets) : la tâche est bloquée et le Chef note l'anomalie
+        relancees.add(tid)
+        try:
+            _noter_une_anomalie(projet, etat, tid, _tache(projet, tid).get("titre") or "", "Rapport rejeté pour sa forme",
+                                f"L'agent a rendu deux fois un rapport illisible : {str(execution.erreur)[:300]}. Pas de troisième essai "
+                                "identique.")
+        except Refus:
+            pass
+    elif tid not in relancees:
         relancees.add(tid)
         lancer(projet, "tache", {"id": tid, "journal": [f"L'agent n'a pas rendu de rapport ({execution.erreur}) : "
                                                         "nouvel essai."]})
@@ -9999,11 +10133,33 @@ def lecture_interrompue(projet):
             lancer(projet, "questions", {"action": "marquer", "id": q["id"], "etat": "repondue"})
 
 
+def _fusion_de_documentation(projet, t, branche):
+    """Un conflit qui ne porte que sur des fichiers de documentation (`docs/api.md`…) : la fusion est refaite en gardant, sur les
+    seuls passages en conflit, la version de la branche (l'ajout de la tâche), le reste venant du dépôt à jour (`cloud.fusion_bornee`,
+    un commit de fusion, rien n'est poussé). Dans la même tâche : aucune tâche de correction (FM_Stats f36 : un conflit sur
+    `docs/api.md` refaisait une tâche entière). Vrai si c'est fait ; faux (le conflit suit son cours) si un fichier n'est pas de la
+    documentation ou si la fusion échoue."""
+    try:
+        refus = cloud.fusion_bornee(str(projet.dossier), branche, "branche")
+    except Exception as e:  # noqa: BLE001
+        refus = f"{type(e).__name__} : {e}"
+    if refus is not None:
+        _journal(projet, t["id"], f"Conflit non résolu seul : {refus}"[:300])
+        return False
+    _journal(projet, t["id"], f"Conflit de documentation résolu seul dans la même tâche : la version de la branche {branche} est "
+             "gardée sur les passages en conflit, le reste vient du dépôt à jour.")
+    _dire_le_travail(projet, t["id"], f"Le conflit de documentation de la branche {branche} est résolu : j'ai gardé l'ajout de la "
+                     "tâche et le reste du dépôt à jour, sans nouvelle tâche de correction.", t.get("fonctionnalite"))
+    return True
+
+
 def fusion_impossible(projet, etat, tid, agent, branche, adresse, raison):
     """La branche cloud d'une tâche faite ne fusionne pas : la question au Directeur (comme avant), puis l'analyse du
     Chef."""
     t = _tache(projet, tid)
     lancer(projet, "tache", {"id": tid, "journal": [f"Fusion de la branche {branche} impossible : {raison}"]})
+    if "conflit" in str(raison) and _fusion_de_documentation(projet, t, branche):
+        return []      # un conflit de documentation est résolu dans la même tâche : ni question, ni nouvelle tâche de correction
     if etat is not None and reglage_effectif(projet, "claude_autonome") and "conflit" in str(raison):
         etat.setdefault("autonome_fusions", {})[(tid, branche)] = {"raison": str(raison)[:300], "agent": agent,
                                                                   "fonctionnalite": t.get("fonctionnalite")}

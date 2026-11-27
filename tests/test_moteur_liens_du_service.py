@@ -66,6 +66,54 @@ class Fiche(reg.Depot):
         self.assertEqual((d["service"]["pret"], d["service"]["commit"][:7]), (True, "2b0ad4a"))
         self.assertEqual(d["acces"]["url"], BASE + "/")
 
+    def test_un_element_du_service_n_a_ni_apk_ni_point_d_installation_mais_des_points_sur_les_pages(self):
+        """FM_Stats d136 : la fiche portait encore l'APK rapatrié et « Le livrable se télécharge, s'installe »."""
+        v = self.element("e1", "Pages et graphiques publics", "serveur/pages.py")
+        v["dernier_rapport"]["points"] = []          # l'agent n'en a pas rendu : ils sont tirés de l'objectif
+        v["dernier_rapport"]["doit_marcher"] = "La page équipe a ses 5 onglets ; le graphique a axes, légende, valeurs et unité."
+        self.journaliser_un_rapatriement(v)
+        d = self.poser(v)
+        self.assertEqual(self.chemins(d), ["docs/rapport.md"])
+        textes = " ".join(d["points"])
+        self.assertNotRegex(textes, r"(?i)télécharge|installe|apk")
+        self.assertIn("onglets", textes)
+        self.assertIn("axes gradués", textes)
+        self.assertIn("Les liens du service", textes)
+
+    def test_les_points_d_installation_d_un_agent_sont_retires_pour_le_service(self):
+        v = self.element("e1", "Pages publiques", "serveur/pages.py")
+        v["dernier_rapport"]["points"] = ["La page équipe s'ouvre", "Le livrable se télécharge, s'installe et s'ouvre sans erreur"]
+        d = self.poser(v)
+        self.assertEqual(d["points"], ["La page équipe s'ouvre"])
+
+    def test_le_compte_rendu_reprend_la_verification_et_dit_ce_que_le_service_contient(self):
+        v = self.element("e1", "Pages publiques", "serveur/pages.py")
+        v["dernier_rapport"]["compte_rendu"] = "Livrable rapatrié : app-maitre-release.apk (71 Mo)"
+        self.ok("tache", entree={"id": v["taches"][0], "journal": ["Non vérifié (le cadre de la recette ne le permet pas) : "
+                                                                  "base de 4 millions de lignes absente du clone"]})
+        with mock.patch.object(regles, "_sante_du_service", return_value="index.prets : False ; index.en_cours_depuis_s : 310"):
+            d = self.poser(v)
+        cr = d["compte_rendu"]
+        self.assertNotIn("Livrable rapatrié", cr)
+        self.assertIn("Non vérifié", cr)
+        self.assertIn("base de 4 millions", cr)
+        self.assertIn("Le service contient le commit 2b0ad4a", cr)
+        self.assertIn("index.prets : False", cr)
+
+    def test_la_sante_du_service_est_resumee_sans_jeton(self):
+        class Rep:
+            def __enter__(self): return self
+            def __exit__(self, *a): return False
+            def read(self, n): return b'{"status":"ok","index":{"prets":false,"en_cours_depuis_s":310,"total":9},"tables":{"t_match":3960000},"secret":"x"}'
+        with mock.patch("urllib.request.urlopen", return_value=Rep()):
+            texte = regles._sante_du_service(self.projet)
+        self.assertIn("index.prets : False", texte)
+        self.assertIn("tables.t_match : 3960000", texte)
+        self.assertNotIn("secret", texte)
+
+    def journaliser_un_rapatriement(self, v):
+        self.ok("tache", entree={"id": v["taches"][0], "journal": ["Livrable rapatrié : " + f"{reg.APP}/build/app-maitre-release.apk (71 Mo)"]})
+
     def test_un_element_application_est_valide_comme_avant(self):
         d = self.poser(self.element("e1", "Écran des équipes", f"{reg.APP}/lib/equipes.dart"))
         self.assertNotIn("liens", d)

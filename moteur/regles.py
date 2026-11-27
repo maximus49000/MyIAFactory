@@ -6231,6 +6231,91 @@ def _avec_les_livrables_rapatries(projet, v, precedent):
     return {**precedent, "fichiers": fichiers + ajoutes} if ajoutes else precedent
 
 
+def _sante_du_service(projet):
+    """Ce que le service dit de lui-même sur `/sante` (lecture publique, sans jeton), en une phrase : commit, état des index, nombre
+    de lignes par table… (les clés qui parlent d'index, de lignes, de tables, de version ; au plus 8). Vide si rien ne se lit."""
+    base = (_adresse_du_service(projet) or "").rstrip("/")
+    if not base:
+        return ""
+    from urllib import error, request
+    try:
+        with request.urlopen(base + "/sante", timeout=10) as r:
+            corps = json.loads(r.read(200000).decode("utf-8", "replace"))
+    except (error.URLError, OSError, ValueError):
+        return ""
+    gardees = []
+
+    def parcourir(prefixe, o, profondeur):
+        pairs = o.items() if isinstance(o, dict) else enumerate(o[:9]) if isinstance(o, list) else ()
+        for k, x in pairs:
+            nom = f"{prefixe}{k}"
+            if isinstance(x, (dict, list)):
+                if profondeur < 3:
+                    parcourir(nom + ".", x, profondeur + 1)
+            elif MOTIF_SANTE.search(nom) and len(gardees) < 8:
+                gardees.append(f"{nom} : {x}")
+    parcourir("", corps, 0)
+    return " ; ".join(" ".join(x.split()) for x in gardees)[:400]
+
+
+MOTIF_SANTE = re.compile(r"index|ligne|table|pret|prêt|en_cours|version|commit|etat|état", re.IGNORECASE)
+MOTIF_INSTALLATION = re.compile(r"t[ée]l[ée]charge|s'installe|installe|\bapk\b", re.IGNORECASE)
+
+
+def _points_du_service(objectif, precedent, liens):
+    """Les points à vérifier d'un élément qui ne touche que le SERVICE : jamais l'APK ni « se télécharge, s'installe » ; des points
+    sur les pages et les graphiques, tirés de l'objectif de l'élément (onglets, graphique, catalogue), et sur les liens."""
+    garde = [p for p in precedent.get("points") or [] if isinstance(p, str) and not MOTIF_INSTALLATION.search(p)]
+    if garde:
+        return garde[:rel.MAX_POINTS]
+    texte = normaliser_mot(" ".join(str(x) for x in (objectif, precedent.get("doit_marcher"), precedent.get("en_clair")) if x)).lower()
+    debut = "Le résultat correspond à l'objectif : "
+    obj = " ".join(str(objectif or "").split())
+    points = [debut + (obj if len(obj) <= rel.MAX_POINT - len(debut) else obj[:rel.MAX_POINT - len(debut) - 1].rstrip() + "…")
+              if obj else rel.POINT_PAR_DEFAUT]
+    if "onglet" in texte:
+        points.append("La page équipe a tous ses onglets, avec les mêmes blocs et libellés que l'écran de l'application")
+    if re.search(r"graphique|courbe|svg|legende", texte):
+        points.append("Le graphique a ses axes gradués, sa légende, ses valeurs et son unité")
+    if "catalogue" in texte:
+        points.append("Le catalogue liste les routes et leurs paramètres, avec un lien d'exemple qui répond")
+    if re.search(r"donnee|valeur|ligne|saison", texte):
+        points.append("Les valeurs affichées sont celles des données réelles du service (une saison connue)")
+    points.append("Les liens du service s'ouvrent et répondent sans erreur" if liens else "La page s'ouvre sans erreur")
+    return points[:rel.MAX_POINTS]
+
+
+def _compte_rendu_du_service(projet, v, precedent, service):
+    """Le compte rendu de la fiche d'un élément du service : le rapport de vérification (ce qui est vérifié, ce qui est « non vérifié »)
+    et ce que le service contient (commit déployé, état des index, lignes par table). Jamais réduit à « Livrable rapatrié : … »."""
+    base = str(precedent.get("compte_rendu") or "")
+    base = "" if base.lstrip().startswith("Livrable rapatrié") else base
+    lignes = []
+    for tid in reversed(v.get("taches") or []):
+        try:
+            journal = [str(j.get("texte") or "") for j in lancer(projet, "detail", {"tache": tid}).get("journal") or []]
+        except (Refus, ErreurMoteur):
+            continue
+        lignes += [x for x in journal if x.startswith(("Non vérifié", "Claude autonome : recette clôturée", "Échecs préexistants"))]
+        if lignes:
+            break
+    non_verifie = precedent.get("pas_encore")
+    parties = [base.strip()]
+    if lignes and not any(x[:40] in base for x in lignes):
+        parties.append(" ".join(" ".join(x.split()) for x in lignes[:3]))
+    elif isinstance(non_verifie, str) and non_verifie.strip() and non_verifie.strip()[:40] not in base:
+        parties.append("Non vérifié : " + " ".join(non_verifie.split()))
+    contenu = ["Le service contient"]
+    if service and service.get("commit"):
+        contenu.append(f"le commit {service['commit'][:12]}")
+    sante = _sante_du_service(projet)
+    if sante:
+        contenu.append(f"(/sante : {sante})")
+    if len(contenu) > 1:
+        parties.append(" ".join(contenu) + ".")
+    return " ".join(p for p in parties if p)[:COMPTE_RENDU_MAX] or "Rapport de vérification : voir les liens du service."
+
+
 def _attendre_le_directeur(projet, etat, v, s):
     """L'élément arrive à une étape de validation : une tâche sans agent et une décision de projet, avec le compte rendu
     et les fichiers de l'étape précédente, ses points à vérifier et son lien d'accès. Rien ne part tant que le Directeur
@@ -6259,7 +6344,8 @@ def _attendre_le_directeur(projet, etat, v, s):
     if (nature in ("visuel", "son", "mecanique") and not apk_exige) or sans_apk:   # jamais l'apk pour juger un visuel, un son…
         precedent = {**precedent, "fichiers": [x for x in precedent.get("fichiers") or []
                                                if not rel.est_executable(x.get("chemin"))]}
-    precedent = _avec_les_livrables_rapatries(projet, v, precedent)
+    if not sans_apk:      # un élément du service seul : jamais l'APK rapatrié d'une autre tâche (d136)
+        precedent = _avec_les_livrables_rapatries(projet, v, precedent)
     if not rel.texte_dit_ok(precedent.get("doit_marcher"), rel.MAX_DOIT_MARCHER):
         # Après un renvoi, ce qui doit marcher est connu : les points que le Directeur a demandé de revoir (essai réel :
         # l'agent, jugeant la correction déjà faite ailleurs, ne le disait pas, deux fois, et la validation restait bloquée).
@@ -6321,6 +6407,9 @@ def _attendre_le_directeur(projet, etat, v, s):
               "objectif": objectif, "a_valider": a_valider[:OBJECTIF_MAX],
               "compte_rendu": precedent.get("compte_rendu") or "", "fichiers": _fichiers_a_valider(precedent.get("fichiers")),
               "points": precedent.get("points") or _points_derives(objectif, precedent)}
+    if liens and sans_apk:      # un élément du service seul : des points sur les pages, un compte rendu qui dit ce que le service contient
+        entree["points"] = _points_du_service(objectif, precedent, liens)
+        entree["compte_rendu"] = _compte_rendu_du_service(projet, v, precedent, service)
     if precedent.get("acces"):
         entree["acces"] = precedent["acces"]
     if liens:

@@ -819,7 +819,8 @@ def _argv_mandataire(dossier):
     d = str(dossier)
     return ["run", "-d", "--name", MANDATAIRE_NOM, "--restart", "unless-stopped", "--network", "host",
             "--read-only", "--tmpfs", "/tmp:rw,noexec,nosuid,nodev,size=64m",
-            "--cap-drop", "ALL", "--cap-add", "NET_BIND_SERVICE", "--security-opt", "no-new-privileges",
+            "--cap-drop", "ALL", "--cap-add", "NET_BIND_SERVICE", "--cap-add", "DAC_OVERRIDE",
+            "--security-opt", "no-new-privileges",
             "--memory", "256m", "--cpus", "1", "--pids-limit", "128",
             "-v", f"{d}/Caddyfile:/etc/caddy/Caddyfile:ro", "-v", f"{d}/data:/data", "-v", f"{d}/config:/config",
             MANDATAIRE_IMAGE]
@@ -836,20 +837,17 @@ def _appliquer_mandataire(racine, relais, hote, simuler, ports=None):
         (dossier / "config").mkdir(exist_ok=True)
         ecrire_prive(dossier / "Caddyfile", texte)
         os.chmod(dossier / "Caddyfile", 0o644)          # lu par le conteneur (autre utilisateur) ; aucun secret dedans
-    existe, en_marche, image = inspecter(hote, MANDATAIRE_NOM)
-    if existe and en_marche and image == MANDATAIRE_IMAGE:
-        code, _o, e = docker(hote, "exec", MANDATAIRE_NOM, "caddy", "reload", "--config", "/etc/caddy/Caddyfile")
-        if code != 0:
-            raise Echec(f"Rechargement du mandataire impossible (code {code}).")
-    else:
-        if existe:
-            docker(hote, "rm", "-f", MANDATAIRE_NOM)
-        code, _o, e = docker(hote, "pull", MANDATAIRE_IMAGE, delai=DELAI_CONSTRUCTION_S)
-        if code != 0:
-            raise Echec(f"Image du mandataire introuvable (code {code}).")
-        code, _o, e = docker(hote, *_argv_mandataire(dossier))
-        if code != 0:
-            raise Echec(f"Démarrage du mandataire impossible (code {code}) : {e.strip()[:200]}")
+    # Toujours recréé : le conteneur reflète ainsi exactement la configuration actuelle (réglages d'isolement compris) ; le
+    # certificat est gardé dans le dossier de données, la reprise est immédiate.
+    existe, _en_marche, _image = inspecter(hote, MANDATAIRE_NOM)
+    if existe:
+        docker(hote, "rm", "-f", MANDATAIRE_NOM)
+    code, _o, e = docker(hote, "pull", MANDATAIRE_IMAGE, delai=DELAI_CONSTRUCTION_S)
+    if code != 0:
+        raise Echec(f"Image du mandataire introuvable (code {code}).")
+    code, _o, e = docker(hote, *_argv_mandataire(dossier))
+    if code != 0:
+        raise Echec(f"Démarrage du mandataire impossible (code {code}) : {e.strip()[:200]}")
     for p in MANDATAIRE_PORTS:
         code, _o, _e = ufw(hote, "allow", f"{p}/tcp")
         if code != 0:

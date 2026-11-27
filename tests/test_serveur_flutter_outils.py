@@ -28,6 +28,153 @@ exit "${FAUX_CODE:-0}"
 '''
 
 
+FAUX_FLUTTER_CONSTRUCTION = r"""#!/bin/sh
+printf 'flutter %s | %s\n' "$*" "$(pwd -P)" >> "$FAUX_JOURNAL"
+if [ "$1" = pub ] && [ "$2" = get ]; then mkdir -p .dart_tool && : > .dart_tool/package_config.json; fi
+if [ "$1" = build ]; then
+  mkdir -p build/app/intermediates/flutter/clientRelease/arm64-v8a build/app/outputs/flutter-apk
+  printf '%s' "${FAUX_LIBAPP:-rien}" > build/app/intermediates/flutter/clientRelease/arm64-v8a/app.so
+  : > build/app/outputs/flutter-apk/app-client-release.apk
+  [ -z "${FAUX_ECHO:-}" ] || echo "$FAUX_ECHO"
+fi
+exit "${FAUX_CODE:-0}"
+"""
+URL_FACTICE = "https://service.exemple:8443"
+JETON_FACTICE = "jeton-factice-0123456789"
+
+
+@unittest.skipUnless(shutil.which("bash"), "bash absent")
+class TestVariablesDeConstruction(unittest.TestCase):
+    """`construire-apk` ajoute `--dart-define` pour les variables déposées par le poste (/entree/construction.env) : l'adresse
+    et le jeton du service intégrés à l'APK Client. Essai réel FM_Stats (2026-11-27) : la construction ne passait rien, l'APK
+    Client n'avait pas l'adresse. Valeurs factices ; jamais de valeur réelle."""
+
+    def setUp(self):
+        self._t = tempfile.TemporaryDirectory()
+        self.addCleanup(self._t.cleanup)
+        t = self.t = Path(self._t.name)
+        self.bin, self.outils, self.projet = t / "bin", t / "outils", t / "projet"
+        for d in (self.bin, self.outils, self.projet / "android_app"):
+            d.mkdir(parents=True)
+        (self.projet / "android_app" / "pubspec.yaml").write_text("name: x\n", newline="\n")
+        (self.bin / "flutter").write_text(FAUX_FLUTTER_CONSTRUCTION, newline="\n")
+        (self.bin / "flutter").chmod(0o755)
+        for nom in NOMS:
+            shutil.copy(OUTIL, self.outils / nom)
+            (self.outils / nom).chmod(0o755)
+        self.conf = t / "dossier-flutter"
+        self.conf.write_text("android_app\n", newline="\n")
+        self.construction = t / "construction.env"
+        self.journal_fichier = t / "appels.txt"
+
+    def variables(self, *lignes):
+        self.construction.write_text("".join(l + "\n" for l in lignes), newline="\n")
+
+    def lancer(self, nom="construire-apk", *args, **env):
+        e = dict(os.environ, PATH=self.bin.as_posix() + os.pathsep + os.environ["PATH"],
+                 FAUX_JOURNAL=self.journal_fichier.as_posix(), OUTIL_FLUTTER_RACINE=self.projet.as_posix(),
+                 OUTIL_FLUTTER_CONF=self.conf.as_posix(), OUTIL_FLUTTER_CONSTRUCTION=self.construction.as_posix(),
+                 OUTIL_FLUTTER_NUMERO="777", **env)
+        return subprocess.run(["bash", (self.outils / nom).as_posix(), *args], capture_output=True, text=True,
+                              encoding="utf-8", env=e, timeout=60, stdin=subprocess.DEVNULL)
+
+    @property
+    def appels(self):
+        return self.journal_fichier.read_text(encoding="utf-8").splitlines() if self.journal_fichier.exists() else []
+
+    def apk(self):
+        return self.projet / "android_app" / "build" / "app" / "outputs" / "flutter-apk" / "app-client-release.apk"
+
+    def construction_lancee(self):
+        return [a for a in self.appels if a.startswith("flutter build")][0]
+
+    def test_les_variables_de_la_variante_sont_passees_en_dart_define(self):
+        self.variables(f"client SERVEUR_URL {URL_FACTICE}", f"client SERVEUR_JETON {JETON_FACTICE}")
+        r = self.lancer("construire-apk", "release", "client", FAUX_LIBAPP=URL_FACTICE)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn(f"--dart-define=SERVEUR_URL={URL_FACTICE}", self.construction_lancee())
+        self.assertIn(f"--dart-define=SERVEUR_JETON={JETON_FACTICE}", self.construction_lancee())
+        self.assertIn("Adresse du service intégrée à l'APK : oui.", r.stdout)
+
+    def test_une_autre_variante_ne_recoit_pas_les_variables_de_la_premiere(self):
+        self.variables(f"client SERVEUR_URL {URL_FACTICE}", "maitre MODE test")
+        r = self.lancer("construire-apk", "release", "maitre")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("--dart-define=MODE=test", self.construction_lancee())
+        self.assertNotIn("SERVEUR_URL", self.construction_lancee())
+
+    def test_l_etoile_vaut_pour_toutes_les_variantes(self):
+        self.variables("* NIVEAU 3")
+        for v in ("client", "maitre"):
+            self.journal_fichier.unlink(missing_ok=True)
+            r = self.lancer("construire-apk", "release", v)
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            self.assertIn("--dart-define=NIVEAU=3", self.construction_lancee())
+
+    def test_aucune_valeur_n_apparait_dans_la_sortie(self):
+        """Le jeton ne doit jamais ressortir : un message de la construction qui le citerait est masqué."""
+        self.variables(f"client SERVEUR_URL {URL_FACTICE}", f"client SERVEUR_JETON {JETON_FACTICE}")
+        r = self.lancer("construire-apk", "release", "client", FAUX_LIBAPP=URL_FACTICE,
+                        FAUX_ECHO=f"define {JETON_FACTICE} et {URL_FACTICE}")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertNotIn(JETON_FACTICE, r.stdout + r.stderr)
+        self.assertNotIn(URL_FACTICE, r.stdout + r.stderr)
+        self.assertIn("define *** et ***", r.stdout)
+
+    def test_l_apk_sans_l_adresse_est_refuse_et_retire(self):
+        """Jamais livré comme réussi : un APK construit sans l'adresse demandée (code 5, fichier supprimé)."""
+        self.variables(f"client SERVEUR_URL {URL_FACTICE}")
+        r = self.lancer("construire-apk", "release", "client", FAUX_LIBAPP="une autre adresse")
+        self.assertEqual(r.returncode, 5, r.stdout + r.stderr)
+        self.assertIn("NON", r.stdout + r.stderr)
+        self.assertNotIn(URL_FACTICE, r.stdout + r.stderr)
+        self.assertFalse(self.apk().exists(), "l'APK sans l'adresse doit être retiré")
+
+    def test_une_ligne_hostile_est_refusee_sans_rien_lancer(self):
+        lignes = (f"client SERVEUR_URL {URL_FACTICE} --extra", "client serveur_url https://x.exemple",
+                  "client SERVEUR_URL https://x.exemple/'a'", "client SERVEUR_URL https://x.exemple/a\\b",
+                  "client SERVEUR_URL $(id)", "client SERVEUR_URL `id`", "Client SERVEUR_URL https://x.exemple",
+                  "client SERVEUR_URL", "client SERVEUR_URL " + "a" * 513, "client " + "A" * 65 + " x")
+        for ligne in lignes:
+            with self.subTest(ligne=ligne[:60]):
+                self.journal_fichier.unlink(missing_ok=True)
+                self.variables(ligne)
+                r = self.lancer("construire-apk", "release", "client")
+                self.assertEqual(r.returncode, 4, ligne[:60] + r.stdout + r.stderr)
+                self.assertEqual(self.appels, [])
+
+    def test_trop_de_lignes_est_refuse(self):
+        self.variables(*[f"* V{i} 1" for i in range(17)])
+        r = self.lancer("construire-apk", "release", "client")
+        self.assertEqual(r.returncode, 4)
+        self.assertEqual(self.appels, [])
+
+    def test_un_lien_au_lieu_du_fichier_est_refuse(self):
+        reel = self.t / "reel.env"
+        reel.write_text(f"client SERVEUR_URL {URL_FACTICE}\n", newline="\n")
+        try:
+            self.construction.symlink_to(reel)
+        except (OSError, NotImplementedError):
+            self.skipTest("liens symboliques indisponibles")
+        r = self.lancer("construire-apk", "release", "client")
+        self.assertEqual(r.returncode, 4, r.stdout + r.stderr)
+        self.assertEqual(self.appels, [])
+
+    def test_analyser_et_tester_ignorent_le_fichier(self):
+        self.variables(f"client SERVEUR_URL {URL_FACTICE}")
+        for nom in ("analyser-flutter", "tester-flutter"):
+            self.journal_fichier.unlink(missing_ok=True)
+            r = self.lancer(nom)
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+            self.assertNotIn("dart-define", " ".join(self.appels))
+
+    def test_sans_fichier_la_construction_est_inchangee(self):
+        r = self.lancer("construire-apk", "release", "client")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertNotIn("dart-define", " ".join(self.appels))
+        self.assertNotIn("Adresse du service", r.stdout)
+
+
 @unittest.skipUnless(shutil.which("bash"), "bash absent")
 class TestOutilFlutter(unittest.TestCase):
     def setUp(self):

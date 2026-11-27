@@ -16,14 +16,22 @@
 # signature de la release (androidComponents.finalizeDsl, signingConfig = null), puis l'APK est rangé sous
 # build/app/outputs/flutter-apk/app-release-unsigned.apk (une sortie que le rapatriement accepte) ; aucune clé n'est lue.
 # Fichier absent : « aucune » (rien ne change) ; toute autre valeur que aucune|debug_serveur|poste_signe : refus 3.
-# Codes : celui de flutter ; 2 nom ou argument refusé (rien n'est lancé) ; 3 dossier Flutter ou choix de signature refusé.
+# Codes : celui de flutter ; 2 nom ou argument refusé (rien n'est lancé) ; 3 dossier Flutter ou choix de signature refusé ;
+# 4 variables de construction refusées (fichier mal formé) ; 5 l'adresse du service demandée n'est pas dans l'APK construit.
+# Variables de construction (`construire-apk` seul) : si /entree/construction.env existe (déposé par le poste, 0600, jamais
+# dans le dépôt du projet), chaque ligne « <variante|*> <NOM> <valeur> » dont la variante est celle de la construction (ou
+# « * ») ajoute `--dart-define=NOM=valeur` : l'adresse du service (et son jeton) intégrés à l'APK Client. Noms et valeurs
+# sont validés de nouveau ici (motifs stricts, jamais d'espace ni de guillemet), les arguments sont construits par ce script et
+# jamais par l'agent ; la sortie est masquée (aucune valeur n'y apparaît). Après la construction, si une variable
+# SERVEUR_URL a été passée, le script vérifie que l'adresse est bien DANS l'APK construit (libapp.so) : sinon code 5.
 # Réservées aux tests : OUTIL_FLUTTER_RACINE (/travail/projet), OUTIL_FLUTTER_CONF (/opt/outils/dossier-flutter),
-# OUTIL_FLUTTER_SIGNATURE (/opt/outils/signature).
+# OUTIL_FLUTTER_SIGNATURE (/opt/outils/signature), OUTIL_FLUTTER_CONSTRUCTION (/entree/construction.env).
 set -u
 export LC_ALL=C
 RACINE="${OUTIL_FLUTTER_RACINE:-/travail/projet}"
 CONF="${OUTIL_FLUTTER_CONF:-/opt/outils/dossier-flutter}"
 CONF_SIGNATURE="${OUTIL_FLUTTER_SIGNATURE:-/opt/outils/signature}"
+CONF_CONSTRUCTION="${OUTIL_FLUTTER_CONSTRUCTION:-/entree/construction.env}"
 SORTIE_MAX=200000
 
 refuser() { printf '%s\n' "$2" >&2; exit "$1"; }
@@ -59,6 +67,28 @@ case "${0##*/}" in
     [ -z "$VARIANTE" ] || COMMANDE+=("--flavor=$VARIANTE") ;;
   *) refuser 2 "Commande inconnue : analyser-flutter, tester-flutter ou construire-apk." ;;
 esac
+
+# Variables de construction : seulement pour `construire-apk`. Une ligne : « <variante|*> <NOM> <valeur> ».
+# Valeur : lettres, chiffres et . _ ~ : / ? # @ & + = % - seulement (jamais d'espace, de guillemet, d'antislash ni de $).
+DEFINES=()          # les arguments --dart-define=NOM=valeur (construits ici, jamais par l'agent)
+VALEURS=()          # les valeurs à masquer dans la sortie
+URL_ATTENDUE=""     # la valeur de SERVEUR_URL, vérifiée dans l'APK construit
+if [ "${0##*/}" = construire-apk ] && [ -e "$CONF_CONSTRUCTION" ]; then
+  [ -f "$CONF_CONSTRUCTION" ] && [ ! -L "$CONF_CONSTRUCTION" ] || refuser 4 "Variables de construction refusées : fichier non ordinaire."
+  MOTIF_VARIABLE='^(\*|[a-z][A-Za-z0-9]{0,29}) ([A-Z][A-Z0-9_]{0,63}) ([A-Za-z0-9._~:/?#@&+=%-]{1,512})$'
+  nb=0
+  while IFS= read -r ligne || [ -n "$ligne" ]; do
+    [ -n "$ligne" ] || continue
+    nb=$((nb + 1)); [ "$nb" -le 16 ] || refuser 4 "Variables de construction refusées : 16 au plus."
+    [[ $ligne =~ $MOTIF_VARIABLE ]] || refuser 4 "Variables de construction refusées : la ligne $nb est mal formée."
+    var="${BASH_REMATCH[1]}"; nom="${BASH_REMATCH[2]}"; valeur="${BASH_REMATCH[3]}"
+    if [ "$var" = "*" ] || [ "$var" = "${VARIANTE:-}" ]; then
+      DEFINES+=("--dart-define=$nom=$valeur"); VALEURS+=("$valeur")
+      [ "$nom" != SERVEUR_URL ] || URL_ATTENDUE="$valeur"
+    fi
+  done < "$CONF_CONSTRUCTION"
+  [ "${#DEFINES[@]}" -eq 0 ] || COMMANDE+=("${DEFINES[@]}")      # (un tableau vide fait échouer set -u sous bash < 4.4)
+fi
 
 signature=aucune
 if [ -f "$CONF_SIGNATURE" ]; then IFS= read -r signature < "$CONF_SIGNATURE" || true; fi
@@ -126,10 +156,43 @@ lancer() {
         { echo "Script d'init Gradle non écrit (${init%/*})." >&2; return 1; }
     fi
     flutter "${COMMANDE[@]}" || return $?
+    if [ -n "$URL_ATTENDUE" ]; then verifier_l_adresse || return $?; fi
     if [ -n "$NON_SIGNEE" ]; then ranger_non_signee || return 1; fi
   }
 }
-lancer 2>&1 | tail -c "$SORTIE_MAX"
+
+# L'adresse demandée (SERVEUR_URL) doit être DANS l'APK construit : on la cherche dans le code natif de l'application
+# (libapp.so / app.so, sous build/). Sinon la construction est refusée (code 5) et l'APK est retiré : jamais livré comme
+# réussi un APK qui n'a pas l'adresse. Le message ne montre jamais la valeur.
+verifier_l_adresse() {
+  local f trouve=0
+  while IFS= read -r f; do
+    if grep -a -F -q -- "$URL_ATTENDUE" "$f" 2>/dev/null; then trouve=1; break; fi
+  done < <(find build -type f \( -name libapp.so -o -name app.so \) 2>/dev/null)
+  if [ "$trouve" = 1 ]; then
+    echo "Adresse du service intégrée à l'APK : oui."
+    return 0
+  fi
+  echo "Adresse du service intégrée à l'APK : NON. Construction refusée : l'APK n'a pas reçu SERVEUR_URL." >&2
+  local nom="app-release"
+  [ -z "${VARIANTE:-}" ] || nom="app-$VARIANTE-release"
+  rm -f -- "build/app/outputs/flutter-apk/$nom.apk" "build/app/outputs/flutter-apk/$nom.apk.sha1"            "build/app/outputs/flutter-apk/$nom-unsigned.apk"
+  return 5
+}
+
+# Aucune valeur de variable de construction n'apparaît dans la sortie : chacune est remplacée par ***.
+masquer() {
+  if [ "${#VALEURS[@]}" -eq 0 ]; then cat; return; fi
+  VALEURS_A_MASQUER=$(printf '%s\n' "${VALEURS[@]}") awk '
+    BEGIN { n = split(ENVIRON["VALEURS_A_MASQUER"], v, "\n") }
+    { l = $0
+      for (i = 1; i <= n; i++) {
+        if (v[i] == "") continue
+        while ((p = index(l, v[i])) > 0) l = substr(l, 1, p - 1) "***" substr(l, p + length(v[i]))
+      }
+      print l }'
+}
+lancer 2>&1 | masquer | tail -c "$SORTIE_MAX"
 code="${PIPESTATUS[0]}"
 [ -z "$init" ] || rm -f -- "$init"
 exit "$code"

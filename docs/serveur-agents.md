@@ -508,6 +508,40 @@ conteneur des agents des projets Flutter.
 - **Limites** : les tests routés au serveur (`lancer.py tests`) ne connaissent pas encore la famille `flutter`.
 
 <a id="connexion-a-l-abonnement"></a>
+## Variables de construction : l'adresse et le jeton du service dans l'APK
+
+Un APK **Client** qui parle au service du projet (FM_Stats : synchro vers `service.json`) ne doit jamais demander l'adresse ni
+le jeton : ils sont **intégrés à la construction** (`--dart-define`). Le code de l'application les lit
+(`String.fromEnvironment('SERVEUR_URL')`, `('SERVEUR_JETON')`, vides par défaut, `android_app/lib/config.dart`) ; la
+plateforme les passe à `construire-apk`, **sans jamais les écrire dans un dépôt, un journal, un rapport ou un message**.
+Essai réel FM_Stats (2026-11-27) : la construction ne passait rien, l'APK Client n'avait ni l'adresse ni le port
+(vérifié dans `libapp.so`) et affichait « Serveur injoignable ».
+
+- **Le réglage du projet** `variables_construction` (`.factory/reglages.json`) dit, par variante Android (`*` pour toutes),
+  le NOM de chaque variable et sa **SOURCE**, jamais sa valeur :
+  `{"client": {"SERVEUR_URL": "service.adresse", "SERVEUR_JETON": "service.jeton"}}`. Sources : `service.adresse` (l'adresse du
+  service permanent, le cache du poste), `service.jeton` (le jeton du service, le **coffre du poste**), ou
+  `valeur:<texte non secret>`. Noms `[A-Z][A-Z0-9_]{0,63}`, 16 variables au plus ; défaut : aucune (rien ne change).
+- **Au poste**, au lancement d'une tâche d'agent d'un projet Flutter (`moteur/executeur_serveur._construction_du_projet`,
+  `outils/serveur_construction.py`) : les valeurs sont résolues, puis écrites dans le fichier **`entree/construction.env`**
+  (une ligne `<variante> <NOM> <valeur>`, 0600), un membre de plus de l'archive d'entrée. Jamais dans `demande.json`, jamais dans
+  une commande. Une source qui manque (service non déployé, jeton absent du coffre) **refuse le lancement avant tout envoi**,
+  avec un message qui dit quoi régler et sans aucune valeur.
+- **Au serveur** : le fichier est monté en lecture seule avec les autres entrées (`/entree/construction.env`) ;
+  `construire-apk` (`serveur_ovh/agent-outils/outil-flutter.sh`) est la **seule commande qui le lit**. Elle revalide chaque
+  ligne (motifs stricts : jamais d'espace, de guillemet, d'antislash ni de `$` ; 16 lignes au plus ; refus code 4, rien n'est
+  lancé), construit elle-même les `--dart-define` de la variante construite (jamais l'agent : il n'a toujours aucun argument
+  libre) et **masque chaque valeur** dans sa sortie (`***`). Le fichier est supprimé à la fin de la tâche (`conclure`) et à
+  l'abandon.
+- **Contrôle après la construction** : si `SERVEUR_URL` a été passée, le script cherche l'adresse **dans l'APK construit**
+  (`libapp.so`). Absente : la construction est **refusée** (code 5), l'APK est **retiré** et le message ne montre jamais la valeur :
+  jamais un APK Client livré comme réussi sans l'adresse qu'il devait contenir.
+
+**Limite à connaître** : le jeton intégré à l'APK Client est **extractible par quiconque décompile l'application**. C'est un
+choix explicite du Directeur : l'APK Client est distribué à des personnes de confiance. Il n'est jamais dans le dépôt, mais
+l'agent qui construit l'APK peut le retrouver dans ce qu'il construit (le contrôle de secret de l'enveloppe protège le jeton de
+l'abonnement, pas celui du service). Un jeton limité à la lecture, qu'on peut révoquer, est la bonne pratique.
+
 ## Connexion à l'abonnement
 
 **Étape humaine, à faire une seule fois par le Directeur.** MyIAFactory ne saisit, ne lit et ne transmet jamais le jeton : c'est **vous** qui le créez et le déposez sur le serveur. Sans lui, la capacité

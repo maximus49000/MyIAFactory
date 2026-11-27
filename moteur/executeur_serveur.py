@@ -125,6 +125,30 @@ def _modules():
     return serveur_agent, serveur_tache
 
 
+def _construction_du_projet(projet, dossier):
+    """Le fichier `entree/construction.env` (octets) des variables de construction du projet (adresse et jeton du service
+    intégrés à l'APK), ou `b""` si le projet n'en déclare pas. Les valeurs sont résolues ICI, au poste (adresse : cache du
+    service ; jeton : coffre du poste) et ne sont écrites nulle part d'autre que dans l'archive d'entrée (0600). Un réglage
+    illisible vaut « aucune variable » ; une source manquante lève `ConstructionRefusee` (message sans valeur)."""
+    if _OUTILS not in sys.path:
+        sys.path.append(_OUTILS)
+    import serveur_construction
+    from bureau import reglages
+    racine = Path(projet)
+    for chemin in (racine / ".factory" / "reglages.json", racine / "reglages.json"):
+        if chemin.is_file():
+            try:
+                variables = reglages.charger(chemin).get("variables_construction") or {}
+            except (OSError, ValueError, reglages.ReglagesInvalides):
+                return b""
+            break
+    else:
+        return b""
+    if not variables:
+        return b""
+    return serveur_construction.contenu_entree(serveur_construction.resoudre(racine, variables, dossier))
+
+
 def _projet_flutter(projet):
     """Vrai si le projet du poste est un projet Flutter (`outils/projet_flutter.py`) ; faux s'il ne l'est pas ou si la
     lecture échoue (l'agent part alors sans le SDK Flutter, comme avant)."""
@@ -501,9 +525,14 @@ class ExecuteurServeur:
                 apk = chemin.read_bytes()
             except OSError as e:
                 return None, (1, f"APK illisible pour l'agent pilote ({e}) : {Path(str(apk)).name}".encode("utf-8")), False
+        try:
+            construction = _construction_du_projet(self.projet, self.dossier) if demande.get("flutter") else b""
+        except ValueError as e:        # ConstructionRefusee : rien n'est parti, le message dit quoi régler (jamais une valeur)
+            return None, (1, str(e).encode("utf-8")), False
         res = sa.lancer_agent(demande, paquet, distant, consigne, entree, dossier=self.dossier, ssh=self.ssh,
                               attente_max_s=self.attente_max_s, dormir=self._dormir, projet=self.projet,
-                              git=self._git_(sa), **({"apk": apk} if apk else {}))
+                              git=self._git_(sa), **({"apk": apk} if apk else {}),
+                              **({"construction": construction} if construction else {}))
         self.avertissement = res.get("avertissement")
         ident, etat = res.get("id"), res.get("etat")
         erreur = res.get("erreur") or res.get("raison") or ""

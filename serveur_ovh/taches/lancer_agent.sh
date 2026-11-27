@@ -323,6 +323,7 @@ veilleur() {
   conclure() {   # conclure <etat> <statut> <raison>
     FINI=1
     retirer_volumes_overlay                # projet Flutter : les volumes overlay de la tâche (le conteneur est arrêté)
+    rm -f -- "$DOSSIER/entree/construction.env"   # les variables de construction (adresse, jeton) ne restent pas sur le serveur
     ecrire_etat "$1" "$2" "$debut_iso" "$(maintenant_iso)" "$3"
     liberer_creneau
     exit 0

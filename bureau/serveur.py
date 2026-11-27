@@ -1591,7 +1591,11 @@ class Bureau(ThreadingHTTPServer):
                                      f"les {self.REESSAI_ADRESSE_S} s.")
                 manquants.append(genre)
                 continue
-            self._ouvrir_un_acces(genre, ip, port_distant)
+            if not self._ouvrir_un_acces(genre, ip, port_distant):
+                # L'adresse existe mais l'écoute échoue (l'interface Tailscale n'est pas encore utilisable juste après le
+                # démarrage du poste) : on réessaie comme pour une adresse introuvable. Essai réel (2026-11-27) : accès
+                # « ignoré » pour toujours, le téléphone n'atteignait plus le bureau.
+                manquants.append(genre)
         if manquants:
             threading.Thread(target=self._reessayer_les_adresses, args=(manquants, adresses, port_distant),
                              daemon=True).start()

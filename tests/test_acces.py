@@ -4,6 +4,7 @@ Un écouteur distant est simulé sur 127.0.0.1 (port libre) : aucune requête ne
 clés est dans un dossier temporaire."""
 import http.client
 import json
+import time
 import tempfile
 import threading
 import unittest
@@ -303,6 +304,26 @@ class TestAdresseIntrouvable(AvecBureauOuvert):
         tours = iter([{"tailscale": None}, {"tailscale": "127.0.0.1"}])
         self.srv._reessayer_les_adresses(["tailscale"], lambda: next(tours), port_distant=0, attendre=lambda: None)
         self.assertIn("tailscale", [d["genre"] for d in self.srv.distants])
+
+
+class TestEcouteEchoueAuDemarrage(AvecBureauOuvert):
+    """Essai réel (2026-11-27) : au démarrage du poste l'adresse Tailscale existe mais l'interface n'est pas encore
+    utilisable : l'écoute échoue, l'accès était « ignoré » pour toujours et le téléphone n'atteignait plus le bureau."""
+    ACCES = {"tailscale": True, "reseau_local": False}
+
+    def adresses(self):
+        return {"tailscale": "127.0.0.1"}
+
+    def test_un_echec_d_ecoute_est_mis_a_reessayer(self):
+        vus = []
+        self.srv._ouvrir_un_acces = lambda genre, ip, port_distant=None: False        # l'écoute échoue
+        self.srv._reessayer_les_adresses = lambda manquants, *a, **k: vus.append(list(manquants))
+        self.srv.ouvrir_distants({"tailscale": True, "reseau_local": False}, self.adresses, self.cles, 0)
+        for _ in range(50):
+            if vus:
+                break
+            time.sleep(0.05)
+        self.assertEqual(vus, [["tailscale"]])
 
 
 class TestUnProjet(unittest.TestCase):

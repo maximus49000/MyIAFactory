@@ -24,7 +24,7 @@
   py -3.12 lancer.py serveur-tache <lancer --apk <fichier> --mode scenario|pilote [--scenario <nom>] [--projet <dossier>] [--attendre]|etat <id>|arreter <id>|rapatrier <id> [--destination <dossier>] [--projet <dossier>]|lister> [--dossier <dossier>]
   py -3.12 lancer.py serveur-outil <id> <verbe> [arguments] [--projet <dossier>] [--dossier <dossier>]
       (les tâches d'émulation sur le serveur : voir `outils/serveur_tache_cli.py`)
-  py -3.12 lancer.py service <etat|journal|deployer|mettre-a-jour|redemarrer|arreter|supprimer|jeton|secrets <NOM>...> [--dossier <projet>] [--commit <sha>] [--lignes N]
+  py -3.12 lancer.py service <etat|journal|deployer|mettre-a-jour|redemarrer|arreter|supprimer|jeton|mandataire|mandataire-supprimer|secrets <NOM>...> [--dossier <projet>] [--commit <sha>] [--lignes N] [--domaine <nom>]
   python lancer.py deporter service etat|journal [--dossier <projet>]
       (le service permanent du projet sur le serveur ; agents : etat et journal seulement : voir docs/serveur-services.md)
 """

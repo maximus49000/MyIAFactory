@@ -181,8 +181,21 @@ enregistré qui déclare un service, jamais un chemin. Les actions tournent dans
   l'utilisateur du serveur (déjà maître de tout).
 - **La construction** (`docker build`) exécute le Dockerfile du projet, avec réseau sortant, comme les autres images du
   serveur ; elle ne monte aucun dossier de l'hôte.
-- Le service est en **HTTP** (pas de certificat : un port et un jeton, non-but de la conception) : le jeton circule en clair
-  sur le réseau. Un certificat (par exemple un mandataire devant le port) reste à décider.
+- Le service est par défaut en **HTTP** (un port et un jeton) : le jeton circule en clair sur le réseau. Pour un accès depuis un
+  site en HTTPS (forum, page publique), le **mandataire HTTPS** ci-dessous met un certificat devant le port.
+
+## Mandataire HTTPS
+
+`py -3.12 lancer.py service mandataire [--domaine <nom>] [--dossier <projet>]` (le Directeur seul) met le service en HTTPS :
+- un conteneur **Caddy** (image épinglée par empreinte, `--read-only`, sans capacité sauf `NET_BIND_SERVICE`, 256 Mo, réseau de
+  l'hôte) écoute sur les ports **80** (défi du certificat) et **443** ; il obtient et renouvelle seul un certificat Let's Encrypt ;
+- il relaie `https://<domaine>` vers `127.0.0.1:<port du service>` (rien d'autre : un site par service, `admin off`) ;
+- sans `--domaine`, le nom gratuit **`a-b-c-d.sslip.io`** qui désigne l'adresse IPv4 du serveur (rien à déclarer chez un
+  hébergeur de noms) ; un nom à vous convient aussi (un enregistrement DNS vers l'adresse du serveur) ;
+- le déploiement ne rend la main qu'une fois `https://<domaine>/sante` joignable (240 s), sinon l'échec porte le journal du
+  mandataire ; les ports 80 et 443 doivent être joignables depuis Internet ;
+- l'adresse est notée dans `services.json` (`adresse_https`) ; `service mandataire-supprimer` retire le relais (et le mandataire,
+  ports fermés, s'il n'en reste aucun). Le port du service (180xx) reste ouvert comme avant.
 
 ## Non vérifié en réel
 

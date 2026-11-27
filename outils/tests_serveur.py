@@ -793,15 +793,37 @@ def _premiere_ligne(commande):
     return ligne
 
 
+def _exclus_du_projet(racine):
+    """Les dossiers que le projet déclare ne pas envoyer au serveur (`tests.exclus_instantane` des réglages ENREGISTRÉS au
+    bureau, comme `unity_version_hote` : jamais un fichier quelconque). Ex. `["android_app/"]` pour un projet dont le service
+    se teste seul et dont l'application pèse des centaines de Mo (l'instantané est limité à 200 Mo). Entrées invalides
+    ignorées (`tests_instantane.exclus_valides`) ; plusieurs fichiers de réglages qui divergent, ou toute erreur : aucune
+    exclusion (davantage part, jamais moins que voulu)."""
+    import tests_instantane
+    vues = set()
+    try:
+        deport_types = _bureau("deport_types")
+        for fichier in deport_types.reglages_enregistres(racine) or []:
+            x = deport_types._lire_json_sur(fichier)
+            tests = x.get("tests") if isinstance(x, dict) else None
+            vues.add(tests_instantane.exclus_valides(tests.get("exclus_instantane") if isinstance(tests, dict) else None))
+    except Exception:  # noqa: BLE001
+        return ()
+    return vues.pop() if len(vues) == 1 else ()
+
+
 def _famille_exclusion(racine):
     """« unity » dès que `ProjectSettings/ProjectVersion.txt` existe à la racine : `Library/`, `Temp/`, `obj/`, `Builds/`
     ne partent pas, même pour une commande d'une autre famille (projet mixte)."""
     return "unity" if os.path.isfile(os.path.join(racine, "ProjectSettings", "ProjectVersion.txt")) else None
 
 
-def _instantane(instantane, racine, fichier, dire, famille=None):
+def _instantane(instantane, racine, fichier, dire, famille=None, exclus=()):
     """Écrit l'archive dans `fichier` (fermé en sortant, même sur Ctrl-C) ; `famille` (« unity ») ajoute les exclusions de la famille ; `Repli` (R5) si elle ne peut pas partir."""
     plus = {"famille": famille} if famille else {}
+    if exclus:
+        plus["exclus"] = tuple(exclus)
+        dire("Instantané : dossiers que le projet n'envoie pas : " + ", ".join(exclus))
     try:
         fichiers, ecartes = instantane.lister(racine, **plus)
         if ecartes:
@@ -1078,7 +1100,7 @@ def _au_serveur(commande, racine, attendre, places, dossier_etat, ssh, noter, ho
     prive = tempfile.mkdtemp(prefix="myiafactory-tests-")      # 0700 ; jamais dans le projet
     try:
         archive = os.path.join(prive, "entree.tar")
-        _instantane(instantane, racine, archive, dire, _famille_exclusion(racine))
+        _instantane(instantane, racine, archive, dire, _famille_exclusion(racine), _exclus_du_projet(racine))
         ident = None
         for _ in range(ESSAIS_ID):
             essai = nouvel_id()

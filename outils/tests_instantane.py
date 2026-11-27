@@ -174,10 +174,37 @@ def _exclu(nom: str) -> bool:
     return any(segments[i:i + len(suite)] == list(suite) for suite in _SUITES for i in range(len(segments)))
 
 
-def _exclu_famille(nom: str, famille: Optional[str]) -> bool:
-    """Vrai si `nom` est sous un dossier de `exclus_de_famille(famille)` à la racine (sans tenir compte de la casse)."""
+def _exclu_famille(nom: str, famille: Optional[str], exclus: Iterable[str] = ()) -> bool:
+    """Vrai si `nom` est sous un dossier de `exclus_de_famille(famille)` ou de `exclus` (les dossiers que le projet déclare
+    ne pas envoyer, voir `exclus_valides`), à la racine (sans tenir compte de la casse)."""
     bas = nom.lower()
-    return any(bas.startswith(d.lower()) for d in exclus_de_famille(famille))
+    return any(bas.startswith(d.lower()) for d in tuple(exclus_de_famille(famille)) + tuple(exclus))
+
+
+MAX_EXCLUS = 16
+
+
+def exclus_valides(valeurs: object) -> Tuple[str, ...]:
+    """Les dossiers que le projet déclare ne pas envoyer (réglage `tests.exclus_instantane`) : une liste de chemins relatifs
+    à la racine, chacun un dossier (`android_app/`). Une entrée invalide (pas du texte, vide, absolue, `..`, antislash,
+    deux-points, caractère nul, trop longue) est IGNORÉE : elle n'exclut rien, donc davantage part, jamais moins que voulu par
+    erreur. Au plus `MAX_EXCLUS` ; rendu normalisé (barre oblique, un `/` final), sans doublon."""
+    if not isinstance(valeurs, (list, tuple)):
+        return ()
+    rendus = []                         # type: List[str]
+    for v in valeurs[:MAX_EXCLUS]:
+        if not isinstance(v, str):
+            continue
+        d = v.strip()
+        if not d or len(d) > 200 or d.startswith("/") or chr(92) in d or ":" in d or chr(0) in d:
+            continue
+        morceaux = [m for m in d.split("/") if m]
+        if not morceaux or any(m in (".", "..") for m in morceaux):
+            continue
+        d = "/".join(morceaux) + "/"
+        if d.lower() not in [x.lower() for x in rendus]:
+            rendus.append(d)
+    return tuple(rendus)
 
 
 def _nom_windows_douteux(nom: str) -> Optional[str]:
@@ -379,9 +406,11 @@ def _contenu_secret(debut: bytes) -> bool:
 
 # ---------------------------------------------------------------- liste
 
-def lister(racine: str, git: Optional[Git] = None, famille: Optional[str] = None) -> Tuple[List[str], List[str]]:
+def lister(racine: str, git: Optional[Git] = None, famille: Optional[str] = None,
+           exclus: Iterable[str] = ()) -> Tuple[List[str], List[str]]:
     """(fichiers retenus triés, écartés nommés « nom (raison) ») ; `famille` ajoute les dossiers de `exclus_de_famille`,
-    écartés en silence comme les `EXCLUS` ; `HorsLimites` hors dépôt git, sans git, au-delà de
+    écartés en silence comme les `EXCLUS`, comme `exclus` (dossiers que le projet déclare ne pas envoyer) ;
+    `HorsLimites` hors dépôt git, sans git, au-delà de
     MAX_FICHIERS candidats ou sur un disque sans identité de fichier."""
     git = git or _git_local
     code, sortie = git(["ls-files", "-co", "--exclude-standard", "-z"], racine)
@@ -401,7 +430,7 @@ def lister(racine: str, git: Optional[Git] = None, famille: Optional[str] = None
             if not _exclu(nom):
                 ecartes.append("%s (dossier : sous-module ou dépôt imbriqué)" % nom.rstrip("/"))
             continue
-        if nom_sur(nom) and (_exclu(nom) or _exclu_famille(nom, famille)):
+        if nom_sur(nom) and (_exclu(nom) or _exclu_famille(nom, famille, exclus)):
             continue
         candidats.append(nom)
     if len(candidats) > MAX_FICHIERS:
@@ -477,7 +506,8 @@ class _Lecteur:
 
 
 def ecrire_tar(racine: str, fichiers: Iterable[str], destination: BinaryIO,
-               executables: Optional[Iterable[str]] = None, famille: Optional[str] = None) -> Tuple[int, int]:
+               executables: Optional[Iterable[str]] = None, famille: Optional[str] = None,
+               exclus: Iterable[str] = ()) -> Tuple[int, int]:
     """Écrit l'archive USTAR de `fichiers` (relatifs à `racine`) dans `destination` (flux en écriture, sans retour en
     arrière) ; (nombre de fichiers, octets de contenu). Droits 0755 si le fichier est exécutable sur le disque, commence
     par `#!` ou est dans `executables` (voir `executables()`), 0644 sinon. Chaque fichier est revérifié (nom, exclusions,
@@ -494,7 +524,7 @@ def ecrire_tar(racine: str, fichiers: Iterable[str], destination: BinaryIO,
     with tarfile.open(fileobj=destination, mode="w|", format=tarfile.USTAR_FORMAT, encoding="utf-8",
                       errors="strict") as tar:
         for nom in fichiers:
-            if nom_sur(nom) and (_exclu(nom) or _exclu_famille(nom, famille)):
+            if nom_sur(nom) and (_exclu(nom) or _exclu_famille(nom, famille, exclus)):
                 raise HorsLimites("fichier exclu de l'instantané : " + nom)
             st, raison = _verifier(racine, nom, parents)
             if st is None:

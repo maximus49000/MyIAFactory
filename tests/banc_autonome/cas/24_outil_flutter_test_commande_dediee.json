@@ -1,0 +1,111 @@
+{
+ "id": "24_outil_flutter_test_commande_dediee",
+ "titre": "Hugo demande `flutter test` alors que `tester-flutter` existe",
+ "type": "jugement",
+ "negatif": false,
+ "source": "Essai réel FM_Stats d122, t294, 2026-11-27 (04:07)",
+ "note": "Le projet Flutter serveur a une commande dédiée `tester-flutter` (donnée par le Chef à 00:01). Bonne réponse : refuser avec la consigne exacte de l'employer ; pas de repli (python -m unittest) ni « test non rejoué ».",
+ "dossier": {
+  "decision": {
+   "genre": "outil_agent",
+   "texte": "Hugo demande l'outil Bash(flutter:*) pour lancer `flutter test` sur les tests de synchro.",
+   "programme": "flutter",
+   "outil": "Bash(flutter:*)",
+   "commande": "flutter test test/synchro_test.dart",
+   "analyse": "Vérifier la synchro Flutter de l'APK Client."
+  },
+  "verdicts": [
+   "autoriser",
+   "refuser",
+   "relancer"
+  ],
+  "choix": [],
+  "questions": [],
+  "tache": {
+   "id": "t294",
+   "titre": "Vérification de l'APK Client",
+   "etape": "recette",
+   "metier": "testeur",
+   "element": null,
+   "journal": [
+    "Lance les tests Flutter de synchro avec `tester-flutter` (Chef, 00:01).",
+    "flutter test refusé : outil non ouvert à ta fiche."
+   ]
+  },
+  "fonctionnalite": {
+   "id": "f30",
+   "nom": "Statistiques par équipe",
+   "etape": "serie",
+   "flux": [
+    {
+     "nom": "Dev",
+     "validation": false
+    },
+    {
+     "nom": "Recette",
+     "validation": false
+    },
+    {
+     "nom": "Validation du Directeur",
+     "validation": true
+    }
+   ]
+  },
+  "lecons_du_metier": [],
+  "deja_appris": [],
+  "recentes": [],
+  "mots_interdits": [
+   "ProjetExemple"
+  ],
+  "anomalies": [],
+  "service": {
+   "adresse": "https://service.exemple"
+  },
+  "commandes_dediees": [
+   {
+    "commande": "tester-flutter",
+    "role": "lance les tests Flutter du projet au serveur",
+    "exemple": "tester-flutter test/synchro_test.dart"
+   },
+   {
+    "commande": "analyser-flutter",
+    "role": "analyse statique du projet Flutter",
+    "exemple": "analyser-flutter"
+   },
+   {
+    "commande": "construire-apk",
+    "role": "construit l'APK",
+    "exemple": "construire-apk release client"
+   }
+  ],
+  "commande_dediee_pour_la_demande": {
+   "commande": "tester-flutter",
+   "exemple": "tester-flutter test/synchro_test.dart"
+  }
+ },
+ "attendu": {
+  "verdicts": [
+   "refuser"
+  ],
+  "texte_evoque": [
+   [
+    "tester-flutter"
+   ]
+  ],
+  "texte_exclut": [
+   "unittest"
+  ]
+ },
+ "simule": {
+  "raison": "La commande dédiée existe : on la donne, on ne la remplace pas par un repli.",
+  "verdict": "refuser",
+  "texte": "Utilise `tester-flutter` seule, au début de la commande, sans guillemets ni `flutter test` ni chemin complet : par exemple `tester-flutter test/synchro_test.dart`. Rapporte le résultat des tests.",
+  "choix": null,
+  "reponses": null,
+  "generalisable": false,
+  "lecon": null,
+  "amelioration": null,
+  "anomalies": null
+ },
+ "decision_id": "d24"
+}

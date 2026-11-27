@@ -421,6 +421,19 @@ VERBES_DU_PONT = ("demarrer", "installer", "lancer", "toucher <x> <y>", "glisser
 TOUCHES_DU_PONT = ("retour", "accueil", "menu")    # `serveur_tache.MOTIF_TOUCHE` (test de concordance)
 
 
+# Les commandes dédiées d'un agent serveur Flutter : ce qu'elles remplacent (un motif de la commande brute demandée), leur rôle
+# et un exemple. Un agent qui demande la commande brute reçoit celle-ci, jamais un repli (essai réel FM_Stats d122 : `flutter test`
+# refusé alors que `tester-flutter` existait). Voir `CONSIGNE_FLUTTER_SERVEUR`.
+COMMANDES_DEDIEES_FLUTTER = (
+    {"commande": "tester-flutter", "remplace": r"\bflutter\s+test\b", "role": "lance les tests Flutter du projet au serveur",
+     "exemple": "tester-flutter test/synchro_test.dart"},
+    {"commande": "analyser-flutter", "remplace": r"\bflutter\s+analyze\b", "role": "analyse statique du projet Flutter",
+     "exemple": "analyser-flutter"},
+    {"commande": "construire-apk", "remplace": r"\bflutter\s+build\s+(?:apk|appbundle)\b|\bgradlew\b|\bassemble(?:Release|Debug)\b",
+     "role": "construit l'APK (release par défaut, ou debug ; une variante après release)",
+     "exemple": "construire-apk release client"},
+)
+
 # Projet Flutter au serveur : personne n'approuve les commandes (refus automatique de tout ce que la fiche ne couvre pas).
 CONSIGNE_FLUTTER_SERVEUR = (
     "Au serveur, personne n'approuve tes commandes : chaque commande doit être SIMPLE et commencer par un programme "

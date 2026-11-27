@@ -646,6 +646,41 @@ class TacheBloquee(tsr.AvecValidation):
         self.assertEqual(self.etat["anomalies_vues"]["Amélioration : " + a["titre"]], 3)
         self.assertTrue(any("revenue 3 fois" in str(j["texte"]) for j in self.la(self.recette)["journal"]))
 
+    # --- Une commande brute qui a une commande dédiée (FM_Stats d122 : `flutter test` refusé, `tester-flutter` existait).
+
+    def accord_flutter(self):
+        self.ok("decision", entree={"action": "poser", "portee": "projet", "genre": "outil_agent", "agent": "chef",
+                                    "tache": self.recette, "outil": "Bash(flutter:*)", "programme": "flutter",
+                                    "commande": "flutter test test/synchro_test.dart", "texte": "Hugo demande flutter test."})
+        self.projet.claude_autonome = True
+
+    def test_flutter_test_recoit_la_commande_dediee_dans_le_dossier_et_autoriser_est_refuse(self):
+        self.accord_flutter()
+        with mock.patch.object(regles, "_projet_flutter", return_value=True):
+            (action,) = regles.repondre_en_autonome(self.projet, self.etat)
+        dossier = action[2]
+        self.assertEqual({c["commande"] for c in dossier["commandes_dediees"]}, {"tester-flutter", "analyser-flutter", "construire-apk"})
+        self.assertEqual(dossier["commande_dediee_pour_la_demande"]["commande"], "tester-flutter")
+        self.assertIn("tester-flutter", jugement.valider("decider_autonome", objet(verdict="autoriser"), dossier))
+        self.assertIn("commande dédiée", jugement.valider("decider_autonome", objet(verdict="refuser", texte="Lance python -m unittest."), dossier))
+        self.assertIsNone(jugement.valider("decider_autonome", objet(
+            verdict="refuser", texte="Utilise `tester-flutter test/synchro_test.dart` seule, au début de la commande."), dossier))
+
+    def test_hors_projet_flutter_rien_n_est_ajoute(self):
+        self.accord_flutter()
+        with mock.patch.object(regles, "_projet_flutter", return_value=False):
+            (action,) = regles.repondre_en_autonome(self.projet, self.etat)
+        self.assertNotIn("commandes_dediees", action[2])
+        self.assertNotIn("commande_dediee_pour_la_demande", action[2])
+
+    def test_les_autres_commandes_brutes_ont_leur_commande_dediee(self):
+        from orchestrateur import depart as dp
+        pour = lambda brute: next((c["commande"] for c in dp.COMMANDES_DEDIEES_FLUTTER if regles.re.search(c["remplace"], brute, regles.re.I)), None)
+        self.assertEqual(pour("flutter analyze lib/"), "analyser-flutter")
+        self.assertEqual(pour("flutter build apk --release"), "construire-apk")
+        self.assertEqual(pour("./gradlew assembleRelease"), "construire-apk")
+        self.assertIsNone(pour("rm -rf /tmp/x"))
+
     # --- Cas 8 : une relance par changement de cause, jamais sans changement.
 
     def passer(self, signature):

@@ -434,11 +434,25 @@ COMMANDES_DEDIEES_FLUTTER = (
      "exemple": "construire-apk release client"},
 )
 
+# Contrôler le code HTTP d'une adresse : `curl` n'est pas ouvert à un agent serveur, Python l'est (FM_Stats a27 : des demandes de
+# `curl` refusées chaque fois). Le script s'écrit dans un fichier (Write) : une commande reste simple.
+CONSIGNE_CONTROLE_HTTP = (
+    "Pour contrôler le code HTTP d'une adresse (service en ligne, page, `/sante`), n'utilise jamais `curl` : écris avec Write un "
+    "petit fichier `controle.py` puis lance `python3 controle.py`. Modèle : `import urllib.request, urllib.error` ; `try:` "
+    "`print(urllib.request.urlopen(URL, timeout=20).status)` ; `except urllib.error.HTTPError as e:` `print(e.code)` ; "
+    "`except OSError as e:` `print('injoignable', e)` (délai de 20 s, sans jeton : rapporte les codes tels quels).")
+
+
+def _commandes_dediees_flutter():
+    return " ".join(f"`{c['commande']}` ({c['role']} ; exemple : `{c['exemple']}`)." for c in COMMANDES_DEDIEES_FLUTTER)
+
+
 # Projet Flutter au serveur : personne n'approuve les commandes (refus automatique de tout ce que la fiche ne couvre pas).
 CONSIGNE_FLUTTER_SERVEUR = (
     "Au serveur, personne n'approuve tes commandes : chaque commande doit être SIMPLE et commencer par un programme "
     "ouvert. Pour une étape complète, emploie les commandes uniques, chacune seule : `analyser-flutter`, "
-    "`tester-flutter`, `construire-apk` (ou `construire-apk debug`) : elles se placent d'elles-mêmes dans le dossier "
+    "`tester-flutter`, `construire-apk` (ou `construire-apk debug`), jamais `flutter test`, `flutter analyze` ni `flutter build` "
+    "à leur place : elles se placent d'elles-mêmes dans le dossier "
     "Flutter du projet et font `flutter pub get` si besoin. Un projet à variantes Android (flavors) construit chaque "
     "variante par `construire-apk release <variante>` (par exemple `construire-apk release client` : un APK par "
     "variante, `app-<variante>-release.apk`), jamais par `flutter build apk --flavor`. Sinon, une commande `flutter` simple. "
@@ -504,6 +518,8 @@ def consigne_serveur(mode, tache_id, flutter=False):
     lignes.append(CONSIGNE_AVANCEMENT_SERVEUR)
     if flutter is True:                    # projet Flutter : des commandes simples, la fiche n'ouvre que `flutter`
         lignes.append(CONSIGNE_FLUTTER_SERVEUR)
+        lignes.append("Les commandes dédiées : " + _commandes_dediees_flutter())
+    lignes.append(CONSIGNE_CONTROLE_HTTP)
     return "\n".join(lignes)
 
 

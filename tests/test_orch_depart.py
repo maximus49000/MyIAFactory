@@ -180,6 +180,19 @@ class TestDepart(unittest.TestCase):
             self.assertEqual(depart.consigne_serveur(mode, "t7"), depart.consigne_serveur(mode, "t7", flutter=False))
             self.assertNotIn("personne n'approuve", depart.consigne_serveur(mode, "t7"))
 
+    def test_consigne_serveur_donne_python_pour_les_codes_http_et_les_commandes_dediees(self):
+        """FM_Stats a27 : le testeur demandait `curl` et `flutter test` alors que Python et `tester-flutter` existent."""
+        for mode in ("seul", "pilote"):
+            c = depart.consigne_serveur(mode, "t7", flutter=True)
+            for mot in ("n'utilise jamais `curl`", "urllib.request", "timeout=20", "python3 controle.py"):
+                self.assertIn(mot, c)
+            for cmd in depart.COMMANDES_DEDIEES_FLUTTER:
+                self.assertIn(f"exemple : `{cmd['exemple']}`", c)
+            self.assertIn("jamais `flutter test`", c)
+            sans = depart.consigne_serveur(mode, "t7")                       # un projet non Flutter : Python seulement
+            self.assertIn("urllib.request", sans)
+            self.assertNotIn("tester-flutter", sans)
+
     def test_consigne_serveur_ne_demande_aucun_nettoyage_du_poste(self):
         """La fin d'étape commune dit de fermer l'émulateur et le démon Gradle pour que le poste retrouve sa mémoire : sans
         objet dans un conteneur jeté (FM_Stats, 2026-11-26 : un outil refusé à chaque recette, malgré trois leçons)."""

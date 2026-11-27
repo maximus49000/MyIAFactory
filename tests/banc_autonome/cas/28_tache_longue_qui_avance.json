@@ -1,0 +1,116 @@
+{
+ "id": "28_tache_longue_qui_avance",
+ "titre": "Une tâche longue dont l'avancement bouge",
+ "type": "jugement",
+ "negatif": false,
+ "source": "FM_Stats t323 (f36, 2026-11-27) : une vérification attendait un service dont l'index se construisait",
+ "note": "L'avancement progresse (points cochés au fil de l'eau), pas de répétition. Bonne réponse : laisser, ne rien envoyer.",
+ "dossier": {
+  "decision": {
+   "genre": "tache_longue",
+   "texte": "La tâche « Vérification de l'index du service » est active depuis 47 minutes sans que rien ne bouge (journal, avancement).",
+   "minutes": 47
+  },
+  "verdicts": [
+   "conclure",
+   "recadrer",
+   "laisser",
+   "signaler"
+  ],
+  "choix": [],
+  "questions": [],
+  "tache": {
+   "id": "t323",
+   "titre": "Vérification de l'index du service",
+   "etape": "recette",
+   "metier": "testeur",
+   "element": "index",
+   "journal": [
+    "Je lis les 9 routes du catalogue.",
+    "Route 4 sur 9 contrôlée : 200 en 0,3 s.",
+    "Route 5 sur 9 contrôlée : 200 en 0,4 s."
+   ]
+  },
+  "fonctionnalite": {
+   "id": "f30",
+   "nom": "Statistiques par équipe",
+   "etape": "serie",
+   "flux": [
+    {
+     "nom": "Dev",
+     "validation": false
+    },
+    {
+     "nom": "Recette",
+     "validation": false
+    },
+    {
+     "nom": "Validation du Directeur",
+     "validation": true
+    }
+   ]
+  },
+  "lecons_du_metier": [],
+  "deja_appris": [],
+  "recentes": [],
+  "mots_interdits": [
+   "ProjetExemple"
+  ],
+  "anomalies": [],
+  "service": {
+   "adresse": "https://service.exemple",
+   "redeployable": false
+  },
+  "taches_dev": [],
+  "faits_du_service": {
+   "commit": "2b0ad4a",
+   "etat": "actif",
+   "sante_ok": true,
+   "secrets": {},
+   "pages": [
+    {
+     "chemin": "/sante",
+     "code": 200,
+     "ms": 15
+    }
+   ],
+   "journal": [],
+   "erreur": null
+  },
+  "minutes_active": 47,
+  "avancement": {
+   "points": [
+    {
+     "texte": "Routes 1 à 4",
+     "fait": true
+    },
+    {
+     "texte": "Routes 5 à 9",
+     "fait": false
+    }
+   ],
+   "en_cours": "route 5 sur 9"
+  },
+  "lignes_repetees": [],
+  "corrections_en_cours_sur_le_meme_element": [],
+  "retours_deja_envoyes": [],
+  "decision_id": "d28"
+ },
+ "attendu": {
+  "verdicts": [
+   "laisser"
+  ]
+ },
+ "simule": {
+  "raison": "L'avancement bouge : l'agent contrôle les routes une à une, il travaille vraiment.",
+  "verdict": "laisser",
+  "texte": null,
+  "choix": null,
+  "reponses": null,
+  "generalisable": false,
+  "lecon": null,
+  "amelioration": null,
+  "anomalies": null
+ },
+ "decision_id": "d26"
+}

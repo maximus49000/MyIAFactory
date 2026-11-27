@@ -15,3 +15,12 @@ début, et une heure sur une autre pour des raisons de forme. La règle vaut pou
 
 Jamais présenté « terminé » : un élément clôturé « non vérifié » reste à valider par le Directeur, qui voit ce qui n'a pas
 été vérifié. Le motif de deux échecs est le même quand plus de la moitié des mots significatifs du plus court se retrouvent.
+
+## Les tâches actives longues
+
+Sous « Claude autonome », une tâche d'agent active depuis plus de 15 minutes (vérification) ou 45 minutes (autre travail) sans
+que son journal ni son avancement bougent est revue une fois par minute (`_taches_longues`). Claude lit son journal, son
+avancement, les lignes répétées, les corrections en cours sur le même élément et l'état réel du service, puis répond :
+`conclure` (retour : ce qui est vérifié, le reste « non vérifié : <cause> », aucune nouvelle correction), `recadrer` (elle tourne
+en rond), `laisser` (elle avance) ou `signaler` (cas douteux : rien n'est envoyé, une anomalie « Tâche longue »). Le Chef le dit ;
+le même retour n'est jamais renvoyé pour la même tâche ; le retour ne contient ni jeton, ni demande de redéploiement.

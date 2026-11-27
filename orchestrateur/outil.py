@@ -87,7 +87,7 @@ TYPES_DEMANDE = ("bouton", "deplacer", "retour", "lecon", "challenge", "solution
                  "partenaires_maj", "installer_outil", "parallelisme", "recruter", "depot_git", "outil_agent", "accord_agent", "regle_projet",
                  "serie_arretee", "fin_vue", "fable_tache", "passer_polyvalent", "proposer_decoupage", "decoupage_lieux",
                  "lieu_etape", "regroupement_etape", "blocage_analyse", "anomalie", "livrer_maintenant", "publier_livrable",
-                 "question", "question_approfondir", "tests_serveur", "evaluer_tests_serveur", "tache_bloquee", "fusion_conflit")
+                 "question", "question_approfondir", "tests_serveur", "evaluer_tests_serveur", "tache_bloquee", "fusion_conflit", "tache_longue")
 AGENT_ORCHESTRATEUR = "orchestrateur"   # les appels de jugement du moteur : connu de chaque projet, sans fiche
 MODELES_INTERDITS = ("Fable",)   # un outil ne choisit jamais Fable
 

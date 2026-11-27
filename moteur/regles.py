@@ -8589,6 +8589,7 @@ SUIVRE, PRECISER, LAISSER = "suivre", "preciser", "laisser"
 # --- Claude autonome : le réglage `claude_autonome` répond à la place du Directeur, sauf aux validations.
 
 GENRE_FUSION = "fusion_conflit"         # une branche d'agent qui ne fusionne pas : la question posée dans la discussion
+GENRE_TACHE_LONGUE = "tache_longue"       # pas une décision posée : une tâche active depuis longtemps sans que rien ne bouge
 GENRE_TACHE_BLOQUEE = "tache_bloquee"   # pas une décision posée : une tâche restée bloquée après l'essai du Chef
 AUTONOME_SERVICE_ATTENTE_S = 2700       # un redéploiement qui n'a pas abouti en 45 min revient au Directeur
 AUTONOME_MAX_REPRISES = 3      # une série ou une tâche qui se rebloque après trois réponses revient au Directeur
@@ -8653,12 +8654,13 @@ CHAMPS_AUTONOME = {"accord_agent": ("quoi", "pourquoi", "partenaire", "cout", "i
                                     "regle"),
                    "outil_agent": ("programme", "outil", "commande", "analyse", "recommandation", "verdict_recommande"),
                    "blocage_analyse": ("motif", "analyse", "question", "recommandation"),
-                   "serie_arretee": ("fonctionnalite",), GENRE_TACHE_BLOQUEE: ("motif",)}
+                   "serie_arretee": ("fonctionnalite",), GENRE_TACHE_BLOQUEE: ("motif",), GENRE_TACHE_LONGUE: ("minutes",)}
 VERDICTS_AUTONOMES = {"accord_agent": ("accepter", "choisir", "repondre", "refuser"),
                       "outil_agent": ("autoriser", "refuser", "relancer"),
                       "blocage_analyse": ("suivre", "preciser"), "serie_arretee": ("relancer", "laisser"),
                       GENRE_TACHE_BLOQUEE: ("relancer", "renvoyer", "redeployer", "laisser"),
-                      GENRE_FUSION: ("garder_depot", "garder_branche", "renvoyer", "laisser")}
+                      GENRE_FUSION: ("garder_depot", "garder_branche", "renvoyer", "laisser"),
+                      GENRE_TACHE_LONGUE: ("conclure", "recadrer", "laisser", "signaler")}
 APPRENDRE = ("accepter", "autoriser", "refuser")     # les seules réponses que le moteur peut redonner sans appel
 
 
@@ -8796,6 +8798,8 @@ def _dossier_autonome(projet, etat, d):
         rapport = _rapport_de_la_tache(projet, t) if t is not None else None
         if rapport:
             plus["rapport_de_la_tache"] = rapport
+    if d["genre"] == GENRE_TACHE_LONGUE and t is not None:
+        plus.update(_faits_de_la_tache_longue(projet, etat, d, t))
     mots = [m for m in list(fac.get("mots_interdits") or []) + [fac.get("nom") or ""] if m]
     return {
         "decision": decision, "verdicts": verdicts,
@@ -8824,6 +8828,8 @@ def _demande_autonome(d, o):
         demande.update(tache=d["tache"], branche=d.get("branche"), fonctionnalite=d.get("fonctionnalite"), raison=o.get("raison"))
         if o.get("texte"):
             demande["texte"] = o["texte"]
+    if d["genre"] == GENRE_TACHE_LONGUE:
+        demande.update(tache=d["tache"])
     if d["genre"] == GENRE_TACHE_BLOQUEE:
         demande.update(tache=d["tache"], motif=d.get("motif"))
         if o["verdict"] == "renvoyer":
@@ -8866,6 +8872,13 @@ def _phrase_autonome(projet, d, demande, raison, lecon, defaut=None):
                                     "(documentation seulement ; rien n'est poussé).",
                   "renvoyer": f"J'ai renvoyé le conflit de la branche {d.get('branche')} à la tâche, avec les deux versions : {texte}",
                   "laisser": f"J'ai laissé le conflit de la branche {d.get('branche')} au Directeur."}.get(v, f"J'ai répondu {v}.")
+    elif d["genre"] == GENRE_TACHE_LONGUE:
+        phrase = {"conclure": f"J'ai demandé à l'agent de la tâche{titre} de conclure maintenant : ce qu'il a vérifié est gardé, le "
+                              f"reste est « non vérifié ». Consigne : {texte}",
+                  "recadrer": f"J'ai recadré l'agent de la tâche{titre}, qui tournait en rond : {texte}",
+                  "signaler": f"La tâche{titre} est longue et je ne sais pas pourquoi : j'ai noté une anomalie « tâche longue » pour "
+                              "vous, sans rien envoyer à l'agent.",
+                  "laisser": f"La tâche{titre} est longue mais elle avance : je la laisse."}.get(v, f"J'ai répondu {v}.")
     elif d["genre"] == GENRE_TACHE_BLOQUEE:
         phrase = {"relancer": f"J'ai relancé la tâche{titre} avec une consigne précise : {texte}",
                   "renvoyer": f"J'ai renvoyé le défaut à l'agent de développement (tâche {demande.get('tache_dev')}) avec le "
@@ -9090,6 +9103,125 @@ def _revue_des_anomalies(projet, etat):
         revues[a["id"]] = verdict
 
 
+# --- Claude autonome : les tâches ACTIVES LONGUES (FM_Stats t323 : une vérification attendait depuis 10:17 un service dont l'index se
+# construisait, pendant qu'une autre correction le refaisait ; le Directeur a dû le faire remarquer).
+
+LONGUE_VERIF_S = 60                 # la revue est faite une fois par minute
+LONGUE_MIN_VERIFICATION = 15        # minutes sans changement avant de revoir une vérification (recette, test)
+LONGUE_MIN_AUTRE = 45               # … avant de revoir un autre travail
+LONGUE_REPETITION = 3               # une même ligne du journal rendue 3 fois : l'agent tourne en rond
+
+
+def _avancement_de_la_tache(projet, tid):
+    """L'avancement que l'agent publie (`{points, en_cours}`), ou None s'il n'est pas lisible."""
+    try:
+        a = json.loads(Path(_chemin_avancement(projet, tid)).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return a if isinstance(a, dict) else None
+
+
+def _taches_longues(projet, etat):
+    """Les tâches d'agent ACTIVES depuis longtemps sans que rien ne bouge (journal, avancement), en pseudo-décisions `tache_longue` :
+    plus de `LONGUE_MIN_VERIFICATION` minutes pour une vérification, `LONGUE_MIN_AUTRE` pour le reste. Une fois par tâche et par
+    état (jamais le même retour deux fois). Les validations du Directeur ne sont jamais revues."""
+    maintenant = time.time()
+    if maintenant - etat.get("longues_le", 0) < LONGUE_VERIF_S:
+        return [x for x in (etat.get("autonome_pseudo") or {}).values() if x.get("genre") == GENRE_TACHE_LONGUE
+                and x["id"] not in etat.setdefault("autonome_faites", set())]
+    etat["longues_le"] = maintenant
+    vues, pseudo = etat.setdefault("longues", {}), etat.setdefault("autonome_pseudo", {})
+    envoyees = etat.setdefault("longues_envoyees", set())
+    rendues = []
+    for tid in list(etat.get("en_cours") or []):
+        try:
+            t = _tache(projet, tid)
+        except Refus:
+            vues.pop(tid, None)
+            continue
+        if t["colonne"] == "fait" or t.get("bloquee") or str(t.get("etape") or "").startswith(ETAPES_DE_VALIDATION):
+            vues.pop(tid, None)
+            continue
+        journal = [str(j.get("texte") or "") for j in t.get("journal") or []]
+        avancement = _avancement_de_la_tache(projet, tid)
+        signature = hashlib.sha1(json.dumps([len(journal), journal[-1:] , avancement], ensure_ascii=False, sort_keys=True,
+                                            default=str).encode()).hexdigest()[:10]
+        v = vues.setdefault(tid, {"sig": signature, "depuis": maintenant})
+        if v["sig"] != signature:
+            v.update(sig=signature, depuis=maintenant)
+            continue
+        verification = str(t.get("role") or "").lower() in ROLES_DE_RECETTE
+        minutes = (maintenant - v["depuis"]) / 60
+        if minutes < (LONGUE_MIN_VERIFICATION if verification else LONGUE_MIN_AUTRE):
+            continue
+        i = f"longue:{tid}:{signature}"
+        if i in etat.setdefault("autonome_faites", set()):
+            continue
+        pseudo[i] = {"id": i, "genre": GENRE_TACHE_LONGUE, "tache": tid, "fonctionnalite": t.get("fonctionnalite"),
+                     "minutes": int(minutes), "envoyees": sorted(x[1] for x in envoyees if x[0] == tid),
+                     "texte": f"La tâche « {t.get('titre')} » est active depuis {int(minutes)} minutes sans que rien ne bouge "
+                              "(journal, avancement)."}
+        rendues.append(pseudo[i])
+    return rendues
+
+
+def _faits_de_la_tache_longue(projet, etat, d, t):
+    """Ce que Claude lit pour juger une tâche longue : son avancement, ce qui se répète dans son journal, les corrections en cours
+    sur le même élément, et l'état réel du service (commit, `/sante`, les pages citées par la tâche)."""
+    journal = [" ".join(str(j.get("texte") or "").split())[:200] for j in t.get("journal") or []]
+    repetees = sorted({x for x in journal if x and journal.count(x) >= LONGUE_REPETITION})[:4]
+    meme_element = [{"id": x["id"], "titre": x.get("titre"), "etape": x.get("etape")} for x in _etat(projet)["taches"]
+                    if x["id"] != t["id"] and x["colonne"] != "fait" and t.get("element") and x.get("element") == t.get("element")
+                    and str(x.get("etape") or "") in ("correction", "retour")]
+    plus = {"minutes_active": d.get("minutes"), "avancement": _avancement_de_la_tache(projet, t["id"]),
+            "lignes_repetees": repetees, "corrections_en_cours_sur_le_meme_element": meme_element,
+            "retours_deja_envoyes": d.get("envoyees") or []}
+    if _adresse_du_service(projet):
+        textes = " ".join(journal[-12:] + [str(t.get("titre") or "")])
+        try:
+            plus["faits_du_service"] = service_permanent.faits_du_service(
+                projet.dossier, ["/sante"] + MOTIF_PAGE.findall(textes)[:3], lignes=0)
+        except Exception:  # noqa: BLE001
+            pass
+    return plus
+
+
+def _sur_tache_longue(projet, demande, etat):
+    """La réponse de Claude autonome à une tâche active depuis longtemps : `conclure` (un retour à l'agent : ce qu'il a vérifié,
+    le reste « non vérifié : <cause> », aucune nouvelle correction), `recadrer` (un retour : il tourne en rond), `laisser` (elle
+    travaille vraiment) ou `signaler` (cas douteux : rien n'est envoyé, une anomalie « tâche longue » pour le Chef). Un même retour
+    n'est jamais renvoyé pour la même tâche."""
+    tid, verdict = demande["tache"], demande.get("verdict")
+    t = _tache(projet, tid)
+    if t["colonne"] == "fait" or t.get("bloquee"):
+        raise Refus("cette tâche n'est plus active")
+    texte = " ".join(str(demande.get("texte") or "").split())
+    envoyees = etat.setdefault("longues_envoyees", set())
+    if verdict in ("conclure", "recadrer"):
+        if (tid, verdict) in envoyees:
+            raise Refus("ce retour a déjà été envoyé à cette tâche")
+        if not texte:
+            raise Refus("le retour est vide")
+        envoyees.add((tid, verdict))
+        return _sur_retour(projet, {"id": demande["id"], "tache": tid, "texte": texte}, etat)
+    if verdict == "signaler":
+        try:
+            _noter_une_anomalie(projet, etat, tid, t.get("titre") or "", f"Tâche longue : {t.get('titre')}"[:120],
+                                (texte or f"La tâche « {t.get('titre')} » est active depuis longtemps et rien ne dit pourquoi.")[:600])
+        except Refus:
+            pass
+        _terminer(projet, {"demande": demande["id"]}, "J'ai noté l'anomalie « tâche longue » pour le Chef.")
+        return []
+    if verdict == LAISSER:
+        _journal(projet, tid, "Claude autonome laisse la tâche travailler : son avancement bouge.")
+        _terminer(projet, {"demande": demande["id"]}, "La tâche travaille : je la laisse.")
+        return []
+    raise Refus(f"réponse inconnue : {verdict}")
+
+
+_SUR[GENRE_TACHE_LONGUE] = _sur_tache_longue
+
+
 def _autonome_rate(projet, ctx, etat):
     """Claude n'a pas pu réfléchir (deux essais sans réponse valable) : la réponse mécanique par défaut, pour que la
     suite avance quand même ; le journal le dit."""
@@ -9198,6 +9330,8 @@ def _blocage_encore_a_debloquer(projet, etat, i):
         t = _tache(projet, d["tache"])
     except Refus:
         return None
+    if d["genre"] == GENRE_TACHE_LONGUE:      # encore active, ni faite ni bloquée
+        return d if t["colonne"] != "fait" and not t.get("bloquee") else None
     return d if t["colonne"] != "fait" and t.get("bloquee") else None
 
 
@@ -9602,7 +9736,8 @@ def repondre_en_autonome(projet, etat):
     actions += _relancer_si_la_cause_a_change(projet, etat)
     _blocages_orphelins(projet, etat)
     _revue_des_anomalies(projet, etat)
-    for d in _etat(projet)["decisions"] + _blocages_sans_decision(projet, etat) + _fusions_en_conflit(projet, etat):
+    for d in (_etat(projet)["decisions"] + _blocages_sans_decision(projet, etat) + _fusions_en_conflit(projet, etat)
+              + _taches_longues(projet, etat)):
         if d["id"] in faites or d.get("genre") not in VERDICTS_AUTONOMES:
             continue
         cle = d.get("tache") or d.get("fonctionnalite") or d["id"]

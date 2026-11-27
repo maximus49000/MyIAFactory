@@ -1,0 +1,137 @@
+{
+ "id": "27_verification_longue_service_pas_pret",
+ "titre": "Une vérification attend depuis 20 minutes un service dont l'index se construit",
+ "type": "jugement",
+ "negatif": false,
+ "source": "FM_Stats t323 (f36, 2026-11-27) : une vérification attendait un service dont l'index se construisait",
+ "note": "Service 503 (index en préparation) et une correction en cours qui va refaire la construction : la vérification ne peut pas conclure. Bonne réponse : conclure maintenant, ce qui est vérifié gardé, le reste « non vérifié : service pas prêt », aucune nouvelle correction ni redéploiement.",
+ "dossier": {
+  "decision": {
+   "genre": "tache_longue",
+   "texte": "La tâche « Vérification de l'index du service » est active depuis 20 minutes sans que rien ne bouge (journal, avancement).",
+   "minutes": 20
+  },
+  "verdicts": [
+   "conclure",
+   "recadrer",
+   "laisser",
+   "signaler"
+  ],
+  "choix": [],
+  "questions": [],
+  "tache": {
+   "id": "t323",
+   "titre": "Vérification de l'index du service",
+   "etape": "recette",
+   "metier": "testeur",
+   "element": "index",
+   "journal": [
+    "Je réessaie /equipe/77 : 503 Index en préparation.",
+    "Je réessaie /equipe/77 : 503 Index en préparation.",
+    "Je réessaie /equipe/77 : 503 Index en préparation.",
+    "J'attends que l'index soit prêt."
+   ]
+  },
+  "fonctionnalite": {
+   "id": "f30",
+   "nom": "Statistiques par équipe",
+   "etape": "serie",
+   "flux": [
+    {
+     "nom": "Dev",
+     "validation": false
+    },
+    {
+     "nom": "Recette",
+     "validation": false
+    },
+    {
+     "nom": "Validation du Directeur",
+     "validation": true
+    }
+   ]
+  },
+  "lecons_du_metier": [],
+  "deja_appris": [],
+  "recentes": [],
+  "mots_interdits": [
+   "ProjetExemple"
+  ],
+  "anomalies": [],
+  "service": {
+   "adresse": "https://service.exemple",
+   "redeployable": false
+  },
+  "taches_dev": [],
+  "faits_du_service": {
+   "commit": "2b0ad4a",
+   "etat": "actif",
+   "sante_ok": true,
+   "secrets": {},
+   "pages": [
+    {
+     "chemin": "/sante",
+     "code": 200,
+     "ms": 15
+    },
+    {
+     "chemin": "/equipe/77",
+     "code": 503,
+     "ms": 20
+    }
+   ],
+   "journal": [],
+   "erreur": null
+  },
+  "minutes_active": 20,
+  "avancement": {
+   "points": [
+    {
+     "texte": "Contrôler /sante",
+     "fait": true
+    },
+    {
+     "texte": "Contrôler /equipe/77",
+     "fait": false
+    }
+   ],
+   "en_cours": "j'attends l'index"
+  },
+  "lignes_repetees": [
+   "Je réessaie /equipe/77 : 503 Index en préparation."
+  ],
+  "corrections_en_cours_sur_le_meme_element": [
+   {
+    "id": "t331",
+    "titre": "Correction : index du service",
+    "etape": "correction"
+   }
+  ],
+  "retours_deja_envoyes": [],
+  "decision_id": "d27"
+ },
+ "attendu": {
+  "verdicts": [
+   "conclure"
+  ],
+  "texte_evoque": [
+   [
+    "non vérifié",
+    "non verifie",
+    "non_verifie"
+   ]
+  ]
+ },
+ "simule": {
+  "raison": "La vérification attend un état externe (index en construction) qu'une autre correction va refaire : elle ne pourra pas conclure, on la clôture en non vérifié.",
+  "verdict": "conclure",
+  "texte": "Conclus maintenant : écris ce que tu as vérifié (/sante répond 200). Le reste, /equipe/77 qui répond 503 pendant que l'index se construit, va dans non_verifie : service pas prêt. Aucune nouvelle correction.",
+  "choix": null,
+  "reponses": null,
+  "generalisable": false,
+  "lecon": null,
+  "amelioration": null,
+  "anomalies": null
+ },
+ "decision_id": "d26"
+}

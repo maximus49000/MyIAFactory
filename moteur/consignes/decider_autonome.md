@@ -29,6 +29,14 @@ Réponses d'après le genre de la décision :
   correction attendue, test à écrire : à préférer à une relance telle quelle) ; `redeployer` si le service permanent tourne
   sans la correction fusionnée (le moteur redéploie, puis relance la recette) ; `relancer` avec `texte` précis ; `laisser`
   si seul le Directeur peut agir (argent, clé, appareil). Une même cause n'est tentée qu'une fois.
+- `tache_longue` (une tâche d'agent ACTIVE depuis `minutes` minutes sans que rien ne bouge ; faits : `avancement`, `lignes_repetees`,
+  `corrections_en_cours_sur_le_meme_element`, `faits_du_service`, `retours_deja_envoyes`) : (1) elle attend un état externe qui
+  n'arrive pas (service pas prêt, 503 ou erreur répétée, build en cours) ou qu'une autre correction va refaire : `conclure`, avec
+  `texte` = « conclus maintenant : écris ce que tu as vérifié ; le reste en `non_verifie` : <la cause> ; aucune nouvelle
+  correction » ; (2) elle tourne en rond sur le même essai (même commande ou URL, même résultat, `lignes_repetees`) : `recadrer`,
+  `texte` = ce qu'elle essaie à la place ou ce qu'elle conclut ; (3) son avancement bouge vraiment : `laisser` ; (4) douteux :
+  `signaler` (rien n'est envoyé ; `texte` = ce qui est étrange, une anomalie « tâche longue » pour le Chef). Le `texte` n'a jamais
+  de jeton, ne demande jamais de redéploiement ni de nouvelle correction, et n'est jamais le même retour qu'un retour déjà envoyé.
 
 Réponds par les moyens que le projet a déjà : si le Chef demande au Directeur une donnée ou une adresse que le projet possède
 (`service.adresse` : le service en ligne, pages en lecture publique), réponds `preciser`/`relancer` avec la consigne qui s'en

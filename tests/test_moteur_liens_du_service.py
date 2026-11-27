@@ -10,21 +10,25 @@ from tests import test_moteur_registre_apk as reg
 
 BASE = "https://service.exemple"
 FAITS = {"commit": "2b0ad4a" + "0" * 33, "etat": "actif", "sante_ok": True, "secrets": {}, "journal": [],
-         "pages": [{"chemin": "/sante", "code": 200, "ms": 12}], "erreur": None}
+         "pages": [{"chemin": "/sante", "code": 200, "ms": 12}, {"chemin": "/equipe/77", "code": 200, "ms": 20},
+                   {"chemin": "/catalogue.json", "code": 200, "ms": 9}], "erreur": None}
 
 
 class Fiche(reg.Depot):
     def setUp(self):
         super().setUp()
         self.etat = regles.nouvel_etat()
+        self.statut = mock.patch.object(regles.service_permanent, "statut_du_serveur", return_value=("a_jour", "ok")).start()
+        self.addCleanup(mock.patch.stopall)
         for p in (mock.patch.object(regles, "_adresse_du_service", return_value=BASE),
-                  mock.patch.object(regles.service_permanent, "faits_du_service", return_value=dict(FAITS))):
+                  mock.patch.object(regles.service_permanent, "faits_du_service", return_value=dict(FAITS)),
+                  mock.patch.object(regles.service_permanent, "_commit_du_depot", return_value="a" * 40)):
             p.start()
             self.addCleanup(p.stop)
 
     def element(self, eid, nom, *fichiers):
         tid = self.ok("tache", entree={"titre": f"Dev {eid}", "fonctionnalite": "f1", "role": "dev", "etape": "flux:dev",
-                                       "colonne": "fait", "active": False})["id"]
+                                       "colonne": "fait", "active": False, "element": eid})["id"]
         self.git("checkout", "-q", "-b", f"agent/{tid}")
         for f in fichiers:
             self.ecrire(f, f"contenu {f}\n")
@@ -62,13 +66,6 @@ class Fiche(reg.Depot):
         self.assertEqual((d["service"]["pret"], d["service"]["commit"][:7]), (True, "2b0ad4a"))
         self.assertEqual(d["acces"]["url"], BASE + "/")
 
-    def test_le_service_pas_pret_dit_index_en_preparation(self):
-        faits = dict(FAITS, pages=[{"chemin": "/sante", "code": 503, "ms": 40}], sante_ok=False)
-        with mock.patch.object(regles.service_permanent, "faits_du_service", return_value=faits):
-            d = self.poser(self.element("e1", "Pages publiques", "serveur/pages.py"))
-        self.assertIs(d["service"]["pret"], False)
-        self.assertIn("Index en préparation", d["service"]["detail"])
-
     def test_un_element_application_est_valide_comme_avant(self):
         d = self.poser(self.element("e1", "Écran des équipes", f"{reg.APP}/lib/equipes.dart"))
         self.assertNotIn("liens", d)
@@ -100,6 +97,104 @@ class Fiche(reg.Depot):
     def test_jamais_de_jeton_dans_les_liens(self):
         d = self.poser(self.element("e1", "Pages publiques", "serveur/pages.py"))
         self.assertNotIn("jeton", json.dumps(d["liens"]).lower())
+
+
+class ValidationPossible(Fiche):
+    """Une validation n'est demandée que lorsqu'elle est possible : service chargé, prêt, liens donnés (décision du Directeur)."""
+
+    def decisions(self):
+        return [x for x in self.ok("etat")["decisions"] if x["genre"] == "valider_etape"]
+
+    def paroles(self):
+        return [m["texte"] for m in self.suivi()["fonctionnalites"][0]["discussion"] if m["auteur"] == "chef"]
+
+    def poser_sans_fiche(self, v):
+        self.ecrire(f"{reg.APP}/build/app-maitre-release.apk", "APK")
+        with mock.patch.object(regles, "_projet_flutter", return_value=True):
+            regles._attendre_le_directeur(self.projet, self.etat, v, {"id": "valider", "nom": "Validation", "validation": True})
+
+    def test_le_commit_deploye_ancien_aucune_validation_et_le_deploiement_est_demande(self):
+        self.statut.return_value = ("attente", "le service n'a pas encore cette version")
+        v = self.element("e1", "Pages publiques", "serveur/pages.py")
+        with mock.patch.object(regles.service_permanent, "declencher", return_value="Service permanent : lancé.") as declencher:
+            self.poser_sans_fiche(v)
+            self.poser_sans_fiche(v)
+        self.assertEqual(self.decisions(), [])
+        self.assertEqual(v["phase"], "attente_service")
+        declencher.assert_called_once()                                   # une seule demande de déploiement
+        self.assertEqual(len([p for p in self.paroles() if "n'est pas demandée tout de suite" in p]), 1)
+
+    def test_service_503_aucune_validation(self):
+        faits = dict(FAITS, pages=[{"chemin": "/sante", "code": 200}, {"chemin": "/equipe/77", "code": 503}])
+        v = self.element("e1", "Pages publiques", "serveur/pages.py")
+        with mock.patch.object(regles.service_permanent, "faits_du_service", return_value=faits):
+            self.poser_sans_fiche(v)
+        self.assertEqual((self.decisions(), v["phase"]), ([], "attente_service"))
+        self.assertIn("index en préparation", v["attente_service"]["manque"])
+
+    def test_tout_pret_la_validation_est_posee_avec_les_liens(self):
+        v = self.element("e1", "Pages publiques", "serveur/pages.py")
+        self.poser_sans_fiche(v)
+        (d,) = self.decisions()
+        self.assertTrue(d["liens"])
+
+    def test_apres_un_redemarrage_une_validation_deja_posee_est_aussi_retiree(self):
+        v = self.element("e1", "Pages publiques", "serveur/pages.py")
+        self.poser_sans_fiche(v)
+        self.etat = regles.nouvel_etat()                                      # le moteur relancé : plus rien en mémoire
+        faits503 = dict(FAITS, pages=[{"chemin": "/sante", "code": 503}, {"chemin": "/equipe/77", "code": 503}])
+        with mock.patch.object(regles.service_permanent, "faits_du_service", return_value=faits503),                 mock.patch.object(regles, "_projet_flutter", return_value=True):
+            regles.attendre_le_service(self.projet, self.etat)
+        self.assertEqual(self.decisions(), [])
+
+    def test_un_element_application_n_attend_pas_le_service(self):
+        self.statut.return_value = ("attente", "x")
+        v = self.element("e1", "Écran des équipes", f"{reg.APP}/lib/equipes.dart")
+        self.poser_sans_fiche(v)
+        self.assertEqual(len(self.decisions()), 1)
+
+    def test_apres_l_attente_la_validation_est_posee_une_fois_le_service_pret(self):
+        self.statut.return_value = ("attente", "x")
+        v = self.element("e1", "Pages publiques", "serveur/pages.py")
+        with mock.patch.object(regles.service_permanent, "declencher", return_value=None):
+            self.poser_sans_fiche(v)
+        self.assertEqual(self.decisions(), [])
+        self.statut.return_value = ("a_jour", "ok")                        # le service est chargé
+        v["attente_service"]["dernier"] = 0
+        regles.attendre_le_service(self.projet, self.etat)
+        self.assertEqual(len(self.decisions()), 1)
+        self.assertEqual(v["phase"], "validation")
+
+    def test_un_service_toujours_pas_pret_apres_le_delai_ouvre_une_anomalie_qui_dit_laquelle_manque(self):
+        self.statut.return_value = ("attente", "x")
+        v = self.element("e1", "Pages publiques", "serveur/pages.py")
+        with mock.patch.object(regles.service_permanent, "declencher", return_value=None):
+            self.poser_sans_fiche(v)
+            v["attente_service"].update(dernier=0, depuis=0)
+            regles.attendre_le_service(self.projet, self.etat)
+            v["attente_service"]["dernier"] = 0
+            regles.attendre_le_service(self.projet, self.etat)
+        (a,) = self.ok("anomalies")["anomalies"]
+        self.assertIn("Validation en attente du service", a["titre"])
+        self.assertIn("n'a pas encore la version", a["description"])
+        self.assertEqual(self.decisions(), [])                                # jamais une validation vide
+
+    def test_une_validation_deja_posee_devenue_impossible_est_retiree_puis_rouverte(self):
+        v = self.element("e1", "Pages publiques", "serveur/pages.py")
+        self.poser_sans_fiche(v)
+        (d,) = self.decisions()
+        faits503 = dict(FAITS, pages=[{"chemin": "/sante", "code": 200}, {"chemin": "/equipe/77", "code": 503}])
+        with mock.patch.object(regles.service_permanent, "faits_du_service", return_value=faits503):
+            regles.attendre_le_service(self.projet, self.etat)
+        self.assertEqual(self.decisions(), [])                                # retirée
+        self.assertEqual(v["phase"], "attente_service")
+        self.assertEqual(v["tache_retiree"], d["tache"])                       # sa tâche est gardée, pas doublée
+        v["attente_service"]["dernier"] = 0
+        regles.attendre_le_service(self.projet, self.etat)                    # le service répond de nouveau
+        (rouverte,) = self.decisions()
+        self.assertEqual(rouverte["tache"], d["tache"])
+        validations = [t for t in self.suivi()["taches"] if str(t.get("etape")).startswith("validation")]
+        self.assertEqual(len(validations), 1)
 
 
 class BriefDeLaVerification(reg.Depot):

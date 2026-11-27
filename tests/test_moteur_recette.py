@@ -1,6 +1,7 @@
 """Une recette qui déclare son échec ne clôt pas la tâche ni n'ouvre la livraison (essai réel FM_Stats, t237 : « Recette NON
 réussie » acceptée avec le statut `fait`, la livraison était lancée)."""
 import json
+from unittest import mock
 
 from moteur import agents, rapport, regles
 from tests import test_moteur_regles as tmr
@@ -90,3 +91,30 @@ class Recette(tsr.AvecValidation):
 if __name__ == "__main__":
     import unittest
     unittest.main()
+
+
+class MotifDuRefus(tsr.AvecValidation):
+    def setUp(self):
+        super().setUp()
+        self.projet_avec_validation(flux=tsr.FLUX, elements=0)
+        self.etat = regles.nouvel_etat()
+
+    def corriger(self, points, consigne="Agrandis le titre."):
+        self.etat["elements"]["f1/e1"] = {"fid": "f1", "element": {"id": "e1", "nom": "Accueil"}, "taches": [],
+                                          "phase": "relecture", "points": points}
+        regles._apres_apres_refus(self.projet, {"suite": "corriger", "consigne": consigne, "raison": "r"},
+                                  {"fonctionnalite": "f1", "element": "e1"}, self.etat)
+        (corr,) = [t for t in self.suivi()["taches"] if t["titre"].startswith("Correction : ")]
+        return json.dumps(corr["journal"], ensure_ascii=False)
+
+    def test_la_correction_recoit_le_motif_du_refus_meme_si_la_consigne_l_oublie(self):
+        journal = self.corriger(["Le titre fait 12 px", "Le bouton est coupé"])
+        self.assertIn("Agrandis le titre.", journal)
+        self.assertIn("Motif du refus : Le titre fait 12 px ; Le bouton est coupé", journal)
+
+    def test_sans_point_pas_de_motif_inventé(self):
+        self.assertNotIn("Motif du refus", self.corriger([]))
+
+    def test_une_branche_citee_absente_est_dite_a_l_agent(self):
+        with mock.patch.object(regles, "_avec_les_branches_verifiees", side_effect=lambda p, t: t + " [vérifiée]"):
+            self.assertIn("[vérifiée]", self.corriger(["x"], consigne="Reprends agent/t289."))

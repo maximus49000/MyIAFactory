@@ -9457,8 +9457,10 @@ def _apres_apres_refus(projet, o, ctx, etat):
     if o["suite"] == "corriger":
         role = _role_production(projet, fid)
         local = _refus_venu_du_poste(projet, v)
+        motif = _motif_du_refus(v)
+        consigne = _avec_les_branches_verifiees(projet, o["consigne"])
         tid = _creer_tache(projet, f"Correction : {v['element']['nom'] if v else eid}", fid, role, "correction",
-                           element=eid, journal=[o["consigne"]] + ([CORRECTION_SUR_LE_POSTE] if local else []),
+                           element=eid, journal=[consigne] + ([motif] if motif else []) + ([CORRECTION_SUR_LE_POSTE] if local else []),
                            **({"sur_le_poste": True} if local else {}))
         if v:
             v["phase"] = "correction"
@@ -9471,6 +9473,13 @@ def _apres_apres_refus(projet, o, ctx, etat):
     _bloquer_element(projet, etat, fid, eid, o["raison"])
     _dire(projet, fid, f"L'élément « {eid} » est bloqué : {o['raison']}")
     return []
+
+
+def _motif_du_refus(v):
+    """Le motif du refus (les défauts relevés, ceux de `v["points"]`), toujours donné à la correction, quelle que soit la
+    consigne rédigée par le jugement : la correction ne repart jamais sans savoir pourquoi elle est demandée."""
+    points = [str(p) for p in (v or {}).get("points") or [] if str(p).strip()][:5]
+    return ("Motif du refus : " + " ; ".join(" ".join(p.split())[:200] for p in points))[:900] if points else ""
 
 
 CORRECTION_SUR_LE_POSTE = ("Le refus vient d'un contrôle fait sur le poste (compilation, tests, émulateur) : la correction "

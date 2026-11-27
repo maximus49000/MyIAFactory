@@ -52,7 +52,7 @@ class Mandataire(Base):
         self.service_en_marche()
         self.appeler("mandataire", "fm-stats", DOMAINE)
         argv = " ".join(self.hote.conteneurs[S.MANDATAIRE_NOM]["argv"])
-        for attendu in ("--read-only", "--cap-drop ALL", "--cap-add NET_BIND_SERVICE", "--security-opt no-new-privileges",
+        for attendu in ("--read-only", "--cap-drop ALL", "--cap-add NET_BIND_SERVICE", "--cap-add DAC_OVERRIDE", "--security-opt no-new-privileges",
                         "--memory 256m", "--pids-limit 128", "--network host", "--restart unless-stopped"):
             self.assertIn(attendu, argv)
         self.assertNotIn("--privileged", argv)
@@ -76,7 +76,7 @@ class Mandataire(Base):
         self.assertEqual(code, 0, rep)
         texte = (self.racine / "mandataire" / "Caddyfile").read_text("utf-8")
         self.assertEqual(len(re.findall("reverse_proxy", texte)), 2)
-        self.assertTrue(any(a[:5] == ["sudo", "-n", "docker", "exec", S.MANDATAIRE_NOM] for a in self.hote.appels))  # rechargé
+        self.assertTrue(any(a[:5] == ["sudo", "-n", "docker", "rm", "-f"] and a[-1] == S.MANDATAIRE_NOM for a in self.hote.appels))  # recréé
         self.assertEqual(sum(1 for n in self.hote.conteneurs if n == S.MANDATAIRE_NOM), 1)
 
     def test_un_domaine_ne_sert_qu_un_service(self):

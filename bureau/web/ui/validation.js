@@ -257,8 +257,14 @@ export function aVerifier(d, options = {}) {
                                              options.origine || null)});
     } else autres.push({chemin: f.chemin, titre});
   }
+  // Le service en ligne : des adresses cliquables (http/https seulement) et son état (commit déployé, prêt ou non).
+  const liens = (Array.isArray(d?.liens) ? d.liens : []).filter((l) => plein(l?.libelle) && plein(l?.adresse)
+    && /^https?:\/\//i.test(l.adresse)).map((l) => ({libelle: l.libelle.trim(), adresse: l.adresse.trim()}));
+  const sv = d?.service && typeof d.service === "object" ? d.service : null;
+  const service = sv ? {commit: plein(sv.commit) ? sv.commit : "", pret: sv.pret === true ? true : sv.pret === false ? false : null,
+    detail: plein(sv.detail) ? sv.detail : ""} : null;
   return {changements, comparaisons, avantIndisponible, sansCapture, images, sons, livrables, documents, autres,
-    acces: lienAcces(d, options)};
+    acces: lienAcces(d, options), liens, service};
 }
 
 // La demande envoyée : `null` tant qu'un point n'a pas sa réponse ; sinon une réponse par point (dans l'ordre), le
@@ -418,6 +424,23 @@ export function contenuValidation(ctx, d, {fermer = () => {}, hotePage = hoteDeL
     ligne.append(texte, a);
     s2.append(ligne);
   }
+  if (v.liens.length || v.service) {
+    const bloc = el("div", "val-service");
+    bloc.append(el("h4", "", "Le service en ligne"));
+    if (v.service) {
+      const etat = v.service.pret === true ? "prêt" : v.service.pret === false ? "pas prêt" : "état inconnu";
+      bloc.append(el("p", "val-meta", ["Service : " + etat, v.service.commit ? "commit " + v.service.commit : "", v.service.detail]
+        .filter(Boolean).join(" — ")));
+    }
+    for (const l of v.liens) {
+      const a = el("a", "bouton val-ouvrir", l.libelle);
+      a.href = l.adresse;
+      a.target = "_blank";
+      a.rel = "noopener";
+      bloc.append(a);
+    }
+    s2.append(bloc);
+  }
   if (v.images.length) {
     const galerie = el("div", "val-images");
     v.images.forEach((im, n) => {
@@ -460,7 +483,7 @@ export function contenuValidation(ctx, d, {fermer = () => {}, hotePage = hoteDeL
     s2.append(blocMarkdown({titre: m.titre, adresse: m.url, lien}));
   }
   for (const f of v.autres) s2.append(el("p", "val-meta", `${f.titre} : ${f.chemin}`));
-  if (!v.livrables.length && !v.acces && !v.images.length && !v.sons.length && !v.documents.length) {
+  if (!v.livrables.length && !v.acces && !v.liens.length && !v.images.length && !v.sons.length && !v.documents.length) {
     s2.append(el("p", "val-meta", "Rien à télécharger ni à ouvrir pour cet élément (posé avant la fenêtre de "
       + "validation) : jugez-le sur son compte rendu, ou renvoyez-le en demandant de quoi le vérifier."));
   }

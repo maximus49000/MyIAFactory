@@ -1471,6 +1471,20 @@ def _validation_decidee(ctx, s, e):
         if not rel.acces_ok(e["acces"]):
             raise Refus("« acces » est {url (http ou https), description? (200 caractères au plus)}.")
         plus["acces"] = {k: v for k, v in e["acces"].items() if v is not None}
+    if e.get("liens") is not None:        # les adresses cliquables du service en ligne (jamais un jeton)
+        liens = e["liens"]
+        if (not isinstance(liens, list) or len(liens) > 12 or not all(
+                isinstance(x, dict) and isinstance(x.get("libelle"), str) and x["libelle"].strip() and len(x["libelle"]) <= 120
+                and rel.acces_ok({"url": x.get("adresse")}) for x in liens)):
+            raise Refus("« liens » est une liste de 12 au plus de {libelle (120 caractères), adresse (http ou https)}.")
+        plus["liens"] = [{"libelle": x["libelle"].strip(), "adresse": x["adresse"]} for x in liens]
+    if e.get("service") is not None:      # le commit déployé du service et s'il répond
+        sv = e["service"]
+        if not (isinstance(sv, dict) and isinstance(sv.get("pret"), (bool, type(None)))
+                and isinstance(sv.get("commit"), (str, type(None))) and len(str(sv.get("commit") or "")) <= 40
+                and isinstance(sv.get("detail", ""), str) and len(sv.get("detail", "")) <= 200):
+            raise Refus("« service » est {commit?, pret (vrai, faux ou null), detail? (200 caractères au plus)}.")
+        plus["service"] = {"commit": sv.get("commit"), "pret": sv.get("pret"), "detail": sv.get("detail", "")}
     if e.get("captures") is not None:     # les captures de l'application prises pour la validation, dans l'ordre
         captures = e["captures"]
         # `moment` (facultatif) : « avant » (l'APK de la dernière livraison) ou « apres », pour une correction ; au plus

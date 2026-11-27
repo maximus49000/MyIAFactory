@@ -13,11 +13,12 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 SHELL ["/bin/bash", "-euo", "pipefail", "-c"]
 
+# JDK 17 : les tests du proxy sortant de l'émulateur (source Java de lancer_emulation.sh) le compilent et le lancent.
 # Node : archive officielle de nodejs.org et son SHASUMS256.txt (même répertoire), vérifiée par sha256sum -c (échec de la
 # construction sinon) ; jamais de script d installation lu au vol. curl, xz-utils et le reste ne servent qu'ici ; curl est purgé en fin de
 # couche. Racine de confiance : TLS vers nodejs.org (pas de vérification de signature GPG).
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl ca-certificates git python3 python3-venv bash util-linux tar xz-utils build-essential \
+    && apt-get install -y --no-install-recommends curl ca-certificates git python3 python3-venv bash util-linux tar xz-utils build-essential openjdk-17-jdk-headless \
     && mkdir /tmp/node && cd /tmp/node \
     && curl -fsSL -o SHASUMS256.txt "https://nodejs.org/dist/latest-v${NODE_MAJEUR}.x/SHASUMS256.txt" \
     && grep -E "^[0-9a-f]{64}  node-v${NODE_MAJEUR}\.[0-9]+\.[0-9]+-linux-x64\.tar\.xz\$" SHASUMS256.txt > somme.txt \

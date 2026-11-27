@@ -3,7 +3,7 @@
 Reste compatible Python 3.9 : le code déporté est aussi lancé par les agents.
 """
 
-from .deport_types import (GENERIQUE, ROUTEES_AU_SERVEUR, SERVICES_PERMANENTS, SERVIES_AU_SERVEUR, SIGNEES_AU_POSTE,
+from .deport_types import (ACCORDS_AU_SERVEUR, GENERIQUE, ROUTEES_AU_SERVEUR, SERVICES_PERMANENTS, SERVIES_AU_SERVEUR, SIGNEES_AU_POSTE,
                            catalogue_union, sans_poste)
 
 # Vue d'ensemble du catalogue générique (compatibilité) : ce que chaque action produit et consomme.
@@ -38,7 +38,7 @@ def valider_lieux(lieux, etape_serveur=False, catalogue=GENERIQUE):
             raise ValueError("« %s » ne tourne pas au lieu « %s » : %s." % (action, _NOMS_LIEUX[lieu], raison))
         if lieu not in permis and not (lieu == "serveur"
                                        and action in SERVIES_AU_SERVEUR + ROUTEES_AU_SERVEUR + SIGNEES_AU_POSTE
-                                       + SERVICES_PERMANENTS):
+                                       + SERVICES_PERMANENTS + ACCORDS_AU_SERVEUR):
             raise ValueError("Le lieu « %s » n'est pas encore disponible pour « %s »." % (lieu, action))
     return dict(lieux)
 

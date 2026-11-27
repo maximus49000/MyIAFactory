@@ -337,7 +337,7 @@ attendre_fin() {
 # --- Verbes ----------------------------------------------------------------
 
 verbe_demarrer() {
-  local avd="${PONT_AVD:-emulateur}" limite pid debut etat ancien reste detache presente
+  local avd="${PONT_AVD:-emulateur}" limite pid debut etat ancien reste detache presente proxy
   [[ $avd =~ $MOTIF_NOM ]] || repondre 4 "Réglage PONT_AVD mal formé."
   reglage PONT_DEMARRAGE_S "${PONT_DEMARRAGE_S:-}" 300; limite=$REGLAGE
   debut=$SECONDS
@@ -346,8 +346,12 @@ verbe_demarrer() {
   ancien=$(pid_emulateur) && repondre 2 "Émulateur déjà démarré (processus $ancien) : arreter d'abord."
   # Détaché du pont (nouvelle session si setsid existe, insensible à SIGHUP sinon), sans le descripteur du verrou.
   if command -v setsid > /dev/null 2>&1; then detache=setsid; else detache=nohup; fi
+  # Réseau borné (posé par l'enveloppe hôte seulement quand le Directeur l'a accordé) : tout le trafic TCP de l'émulateur passe
+  # par le proxy à liste blanche. Seule la forme exacte http://proxy-sortant:<port> est admise ; tout autre contenu : ignoré.
+  proxy=()
+  if [[ ${PONT_PROXY:-} =~ ^http://proxy-sortant:[0-9]{2,5}$ ]]; then proxy=(-http-proxy "$PONT_PROXY"); fi
   "$detache" "$EMULATEUR" -avd "$avd" -no-window -no-audio -no-boot-anim -no-snapshot-save -gpu swiftshader_indirect \
-    > "$SORTIE/emulateur.log" 2>&1 9>&- &
+    ${proxy[@]+"${proxy[@]}"} > "$SORTIE/emulateur.log" 2>&1 9>&- &
   pid=$!
   printf '%s\n' "$pid" > "$SORTIE/emulateur.pid"
   # Verrou gardé jusqu'à ce que le processus soit reconnu comme l'émulateur (exec fait) : sinon un second `demarrer`

@@ -28,12 +28,12 @@ if str(Path(__file__).resolve().parent.parent) not in sys.path:      # le paquet
 from bureau import deport_types  # noqa: E402
 from bureau.deport_types import racine_du_projet, refus_accord  # noqa: E402
 
-USAGE = ("Usage : lancer.py serveur-tache <lancer --apk <fichier> --mode scenario|pilote [--scenario <nom>] [--projet <dossier>] "
-         "[--attendre] | etat <id> | arreter <id> | rapatrier <id> [--destination <dossier>] [--projet <dossier>] | lister> "
+USAGE = ("Usage : lancer.py serveur-tache <lancer --apk <fichier> --mode scenario|pilote [--scenario <nom>] [--hotes <h1,h2>] "
+         "[--projet <dossier>] [--attendre] | etat <id> | arreter <id> | rapatrier <id> [--destination <dossier>] [--projet <dossier>] | lister> "
          "[--dossier <d>]\n"
          "       lancer.py serveur-outil <id> <verbe> [arguments] [--projet <dossier>] [--dossier <d>]")
 COMMANDES = ("lancer", "etat", "arreter", "rapatrier", "lister")
-OPTIONS = {"lancer": {"--apk", "--mode", "--scenario", "--projet", "--dossier"},
+OPTIONS = {"lancer": {"--apk", "--mode", "--scenario", "--projet", "--dossier", "--hotes"},
            "etat": {"--dossier"}, "arreter": {"--dossier"}, "lister": {"--dossier"},
            "rapatrier": {"--destination", "--projet", "--dossier"},
            "outil": {"--projet", "--dossier"}}
@@ -41,7 +41,11 @@ DRAPEAUX = {"lancer": {"--attendre"}}
 ARRETS_MAX = 3          # `arreter` fait foi de l'état ; rappelé tant que l'état n'est pas final (plafonné)
 MOTIF_SCENARIO = re.compile(r"[a-z0-9_-]{1,40}", re.ASCII)
 ACTION = "recette-emulateur"
+ACTION_RESEAU = deport_types.ACTION_RESEAU      # l'accord qui ouvre le réseau borné de l'émulateur, projet par projet
 MSG_ACCORD = deport_types.MSG_REGLEZ_SERVEUR
+MSG_SANS_ACCORD = ("Le réseau de l'émulateur demande l'accord du Directeur pour ce projet : réglez « Recette sur émulateur : "
+                   "réseau borné » (recette-emulateur-reseau) sur « serveur » dans les réglages du projet (bureau, Réglages, "
+                   "Actions).")
 BUREAU = deport_types.BUREAU      # le fichier du bureau du Directeur (remplacé dans les essais)
 SIGNATURE_APK = b"PK\x03\x04"
 
@@ -190,7 +194,7 @@ def _tache(commande, pos, opts, drapeaux, d, moteur, recette, kw):
         if pos:
             raise _Usage()
         fiches = moteur.Index(d).lire()
-        champs = ("etat", "mode", "statut", "scenario", "projet", "serveur_id", "debut", "fin", "raison")
+        champs = ("etat", "mode", "statut", "scenario", "projet", "serveur_id", "debut", "fin", "raison", "reseau")
         _afficher({"taches": [{"id": i, **{c: f.get(c) for c in champs if c in f}} for i, f in sorted(fiches.items())]}, d)
         return 0
     if commande == "lancer":
@@ -276,9 +280,21 @@ def _lancer(opts, attendre, d, moteur, recette, kw):
     if refus:
         return _erreur(refus, 2, d)
     apk = _lire_apk(opts["apk"], moteur)
-    plan = recette.charger(str(projet), scenario) if mode == "scenario" else None      # refusée avant tout envoi
+    # Réseau borné : l'accord du Directeur (réglage du projet) se lit ICI, jamais dans la recette ni dans les options.
+    accord_reseau = refus_accord(str(projet), ACTION_RESEAU, bureau=BUREAU) is None
+    if mode == "scenario":
+        if opts.get("hotes"):
+            raise _Usage("--hotes ne vaut que pour le mode pilote : en mode scénario, les hôtes sont ceux de la recette.")
+        plan = recette.charger(str(projet), scenario, accord_reseau=accord_reseau)      # refusée avant tout envoi
+        hotes = list(plan.hotes) if plan.reseau else []
+    else:
+        plan, hotes = None, []
+        if opts.get("hotes"):
+            if not accord_reseau:
+                return _erreur(MSG_SANS_ACCORD, 2, d)
+            hotes = opts["hotes"].split(",")
     demande = moteur.valider_demande({"type": "emulation", "mode": mode, "scenario": scenario, "projet": projet.name,
-                                      "demandeur": "serveur-tache", "apk": Path(opts["apk"]).name})
+                                      "demandeur": "serveur-tache", "apk": Path(opts["apk"]).name, "hotes": hotes})
     if attendre:        # destination contrôlée AVANT l'envoi : une jonction sous .factory refuse sans prendre le créneau
         _destination(projet, demande.id, None)
     try:

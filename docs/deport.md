@@ -38,6 +38,11 @@ Elle est à part :
   de réglages que le bureau enregistre pour lui ; `--reglages` n'est admis que s'il désigne ce fichier.
 - Elle consomme l'APK mais **n'attend pas** une chaîne au même lieu : elle prend l'APK là où il est produit (aucun avertissement de
   chaîne pour elle).
+- **Réseau de l'émulateur, accord à part** : l'émulateur n'a aucun réseau. Pour une application qui parle à un service web, le
+  Directeur peut ouvrir un réseau **borné** (HTTPS vers des hôtes déclarés) avec l'action `recette-emulateur-reseau`
+  (« Recette sur émulateur : réseau borné »), réglée sur « serveur » dans les réglages du projet, comme la recette elle-même.
+  C'est un **accord**, pas une action à lancer (`deporter recette-emulateur-reseau` est refusé) ; sans lui, une recette qui
+  demande `reseau: true` est refusée. Détails et limites : [`serveur-taches.md`](serveur-taches.md), « Réseau borné ».
 
 Ce qui n'est pas proposé, et pourquoi :
 

@@ -3,7 +3,9 @@ déroulée par `serveur_tache.verbe`.
 
 Le fichier vient du projet, donc d'un agent : il est traité comme une donnée hostile. Chaque étape est validée au
 chargement par les motifs du pont (`serveur_tache.VERBES` / `valider_verbe`, source unique) ; rien n'est exécuté ici
-que par `serveur_tache.verbe`, qui revalide. Tranche A : `reseau: true` est refusé.
+que par `serveur_tache.verbe`, qui revalide. `reseau: false` (le défaut) : l'émulateur n'a aucun réseau. `reseau: true` ouvre un
+réseau BORNÉ aux `hotes` listés (HTTPS), et seulement si le Directeur a donné l'accord `recette-emulateur-reseau` à ce
+projet : l'accord est lu par l'appelant (`accord_reseau`), jamais dans le fichier de recette.
 """
 import json
 import os
@@ -19,7 +21,10 @@ import serveur_tache
 TAILLE_MAX = 64 * 1024
 ETAPES_MAX = 200
 MOTIF_NOM = re.compile(serveur_tache.MOTIF_NOM, re.ASCII)
-CLES_RECETTE = frozenset({"nom", "reseau", "etapes"})
+CLES_RECETTE = frozenset({"nom", "reseau", "hotes", "etapes"})
+MSG_SANS_ACCORD_RESEAU = ("Recette refusée : reseau: true demande l'accord du Directeur pour ce projet. Réglez « Recette sur "
+                          "émulateur : réseau borné » (recette-emulateur-reseau) sur « serveur » dans les réglages du projet "
+                          "(bureau, Réglages, Actions) ; une recette ne peut pas se donner cet accord.")
 CLES_ETAPE = frozenset({"verbe", "args"})
 
 
@@ -34,6 +39,7 @@ class Recette:
     nom: str
     reseau: bool
     etapes: tuple
+    hotes: tuple = ()        # hôtes joignables (réseau borné) ; vide si reseau est faux
 
 
 def _paires(paires):
@@ -116,8 +122,10 @@ def _etape(i, brut):
         raise ValueError(f"Étape {i} refusée : {e}") from None
 
 
-def charger(projet, nom):
-    """`Recette` validée ; `ValueError` en français pour tout refus (aucun contenu refusé n'est recopié)."""
+def charger(projet, nom, accord_reseau=False):
+    """`Recette` validée ; `ValueError` en français pour tout refus (aucun contenu refusé n'est recopié). `accord_reseau` :
+    vrai seulement si l'appelant a constaté l'accord du Directeur (`refus_accord(..., "recette-emulateur-reseau")`) ; sans
+    lui, `reseau: true` est refusé."""
     if not isinstance(nom, str) or not MOTIF_NOM.fullmatch(nom):
         raise ValueError("Nom de recette refusé (minuscules, chiffres, _ et -, 40 caractères au plus).")
     texte = _lire(projet, nom)
@@ -134,16 +142,30 @@ def charger(projet, nom):
     if brut.get("nom", nom) != nom:
         raise ValueError("Recette refusée : le nom du fichier et le champ nom diffèrent.")
     reseau = brut.get("reseau", False)
+    if reseau is not True and reseau is not False:
+        raise ValueError("Recette refusée : reseau doit être true ou false.")
+    hotes = ()
     if reseau is True:
-        raise ValueError("Recette refusée : l'accès réseau (reseau: true) n'est pas permis en tranche A.")
-    if reseau is not False:
-        raise ValueError("Recette refusée : reseau doit être false.")
+        if accord_reseau is not True:
+            raise ValueError(MSG_SANS_ACCORD_RESEAU)
+        if "hotes" not in brut:
+            raise ValueError("Recette refusée : reseau: true exige la liste hotes (les hôtes joignables, en HTTPS).")
+        if not isinstance(brut["hotes"], list) or not brut["hotes"]:
+            raise ValueError("Recette refusée : hotes doit être une liste non vide de noms d'hôtes.")
+        try:
+            hotes = serveur_tache.valider_hotes(brut["hotes"])
+        except ValueError as e:
+            raise ValueError(f"Recette refusée : {e}") from None
+    elif brut.get("hotes"):
+        raise ValueError("Recette refusée : hotes n'a de sens qu'avec reseau: true.")
+    elif "hotes" in brut and not isinstance(brut["hotes"], list):
+        raise ValueError("Recette refusée : hotes doit être une liste.")
     etapes = brut["etapes"]
     if not isinstance(etapes, list):
         raise ValueError("Recette refusée : etapes doit être une liste.")
     if len(etapes) > ETAPES_MAX:
         raise ValueError(f"Recette trop longue (plus de {ETAPES_MAX} étapes).")
-    return Recette(nom, False, tuple(_etape(i, e) for i, e in enumerate(etapes)))
+    return Recette(nom, reseau, tuple(_etape(i, e) for i, e in enumerate(etapes)), hotes)
 
 
 def _echec(i, etape, code, texte, dossier):

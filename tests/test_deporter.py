@@ -837,6 +837,14 @@ class TestRecetteEmulateur(Base):
         self.assertIn("n'est pas enregistré dans le bureau", sortie.getvalue())
         self.assertEqual(self.moteur.appels, [])
 
+    def test_l_accord_reseau_n_est_pas_une_action_a_lancer(self):
+        d = self.projet_recette({self.RECETTE: "serveur", "recette-emulateur-reseau": "serveur"})
+        self.assertEqual(self.lancer(["recette-emulateur-reseau", "--dossier", str(d)]), 2)
+        self.assertIn("accord du Directeur", self.sortie)
+        from bureau.deport_types import ANDROID as CATALOGUE
+        self.assertFalse(deporter.doit_passer_par_deporter("recette-emulateur-reseau", {"recette-emulateur-reseau": "serveur"},
+                                                           CATALOGUE))
+
     def test_dossier_imbrique_juge_pour_lui_meme(self):
         d = self.projet_recette()
         sous = d / "module"

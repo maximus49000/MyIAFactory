@@ -65,7 +65,7 @@ import github_actions  # noqa: E402
 from bureau import deport_conso  # noqa: E402
 from bureau.deport import a_attendre, lieu_effectif  # noqa: E402
 from bureau.registre import lieux_du_type  # noqa: E402
-from bureau.deport_types import (MSG_RELEASE_SIGNE, MSG_REGLEZ_SERVEUR, SERVICES_PERMANENTS,  # noqa: E402
+from bureau.deport_types import (ACCORDS_AU_SERVEUR, MSG_RELEASE_SIGNE, MSG_REGLEZ_SERVEUR, SERVICES_PERMANENTS,  # noqa: E402
                                  SERVIES_AU_SERVEUR,
                                  SIGNEES_AU_POSTE, catalogue_du_projet,
                                  racine_du_projet, refus_accord, refus_route, routee_au_serveur, servie_au_serveur)
@@ -207,7 +207,7 @@ def lieux_refuses(lieux, action, catalogue):
 def doit_passer_par_deporter(action, lieux, catalogue):
     """Vrai si l'action tourne sur GitHub, ou si elle dépend de la production d'une action d'un autre lieu (il y a
     alors une attente à faire) ; un lieu que `deporter` ne sert pas passe aussi par lui, qui le refuse."""
-    if action not in catalogue or action in SERVICES_PERMANENTS:
+    if action not in catalogue or action in SERVICES_PERMANENTS or action in ACCORDS_AU_SERVEUR:
         return False      # le service permanent n'est pas une action lancée : le moteur le déploie (`deporter service`)
     if servie_au_serveur(action, catalogue):
         # au seul serveur : réglée, seul `deporter` la lance ; non réglée, elle n'est pas déportée (et `deporter`,
@@ -624,6 +624,10 @@ def main(argv=None, executer_poste=campagne.executer, gh=github_actions, git=_gi
     if action not in catalogue:
         print("Action inconnue pour ce projet : « %s » (attendu : %s)." % (action, ", ".join(catalogue)),
               file=sys.stderr)
+        return 2
+    if action in ACCORDS_AU_SERVEUR:    # un accord du Directeur (réseau borné de l'émulateur) : rien à lancer
+        print("« %s » est un accord du Directeur, pas une action à lancer : il se règle sur « serveur » dans les réglages "
+              "du projet (bureau) et vaut pour la recette sur émulateur de ce projet." % action, file=sys.stderr)
         return 2
     if action in SIGNEES_AU_POSTE:      # jamais lancée ici : aucun agent ne signe ; la marche à suivre
         print(MSG_RELEASE_SIGNE, file=sys.stderr)

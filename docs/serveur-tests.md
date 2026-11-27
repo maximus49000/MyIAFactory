@@ -41,3 +41,26 @@ défaut). Au-delà, le processeur est plein
 
 `myiafactory/tests` : 3 min 10 s à construire ; `tests-android` : 116 s ; image dérivée Node : ~45 s, ~220 Mo propres ;
 `myiafactory/tests-unity-6000.6.7f1` (sur l'image GameCI présente, aucun tirage) : 451 s.
+
+## Dossiers que le projet n'envoie pas (`tests.exclus_instantane`)
+
+L'instantané de l'arbre de travail est limité à **200 Mo** (1 Go pour Unity et Godot). Un projet dont le service se teste
+seul et dont l'application est lourde (FM_Stats : `android_app/` 426 Mo, tests Python dans `serveur/`) était refusé
+(« instantané trop gros : plus de 200,0 Mo »). Il peut déclarer, dans ses réglages ENREGISTRÉS au bureau, les dossiers qui ne
+partent pas :
+
+```json
+{"tests": {"exclus_instantane": ["android_app/"]}}
+```
+
+- **Lu comme `unity_version_hote`** : dans les réglages enregistrés du projet seulement (`tests_serveur._exclus_du_projet`),
+  jamais dans un fichier quelconque ; plusieurs fichiers de réglages qui divergent, ou une erreur de lecture : aucune exclusion.
+- **Dossiers à la racine seulement**, sans tenir compte de la casse, comme les dossiers d'une famille (`Library/` d'Unity) :
+  `android_app/` n'exclut pas `sous/android_app/`.
+- **Entrées invalides ignorées** (`tests_instantane.exclus_valides` : vide, absolue, `..`, antislash, deux-points, caractère
+  nul, plus de 200 caractères ; 16 au plus). Une entrée ignorée n'exclut rien : il part davantage, jamais moins que voulu.
+- **Écarté en silence côté liste, dit à l'envoi** : la campagne écrit « Instantané : dossiers que le projet n'envoie pas : … ».
+- **L'archive revérifie** : `ecrire_tar` refuse (`HorsLimites`) un fichier d'un dossier exclu, comme pour une famille.
+- **Limite à connaître** : un test qui a besoin d'un fichier d'un dossier exclu échoue au serveur, il ne retombe pas au poste.
+  Ne déclarer que ce que les tests lancés au serveur n'utilisent pas (les tests Flutter passent par `tester-flutter`, pas
+  par cette route).

@@ -4563,6 +4563,7 @@ def _matiere(projet, etat, t):
         if str(t.get("role") or "").lower() in ROLES_DE_RECETTE:
             parties.append(CONSIGNE_RECETTE)
             parties += _consigne_de_l_apk_existant(projet, t)
+            parties += _consigne_du_service_en_ligne(projet, etat, t)
         rang = next((k for k, x in enumerate(production) if etape == ETAPES_DE_FLUX + x["id"]), None)
         if rang is not None and len(production) > 1 and rang == len(production) - 1 and _sans_relecteur(projet):
             parties.append(AVANT_DE_LIVRER)          # la dernière étape du flux : ne livre pas un défaut connu
@@ -6109,7 +6110,14 @@ def _attendre_le_directeur(projet, etat, v, s):
     precedent = v.get("dernier_rapport") or {}
     nature = precedent.get("nature") if rel.nature_ok(precedent.get("nature")) else None
     apk_exige = _apk_exige(projet, v)      # une correction d'un projet à APK : validée sur l'APK, quelle que soit sa nature
-    if nature in ("visuel", "son", "mecanique") and not apk_exige:   # jamais l'apk pour juger un visuel, un son…
+    besoin_apk, fichiers_elt = _l_element_a_besoin_d_un_apk(projet, v)
+    sans_apk = not besoin_apk and not apk_exige     # l'élément ne touche pas l'application : l'APK n'est pas à valider
+    liens, service = ([], None)
+    if _touche_le_service(projet, v, fichiers_elt if fichiers_elt is not None else _fichiers_de_l_element(projet, v)):
+        liens, service = _liens_du_service(projet, v, str(precedent.get("doit_marcher") or ""))
+    if liens and not rel.acces_ok(precedent.get("acces")):
+        precedent = {**precedent, "acces": {"url": liens[0]["adresse"], "description": "Le service en ligne"}}
+    if (nature in ("visuel", "son", "mecanique") and not apk_exige) or sans_apk:   # jamais l'apk pour juger un visuel, un son…
         precedent = {**precedent, "fichiers": [x for x in precedent.get("fichiers") or []
                                                if not rel.est_executable(x.get("chemin"))]}
     precedent = _avec_les_livrables_rapatries(projet, v, precedent)
@@ -6174,6 +6182,10 @@ def _attendre_le_directeur(projet, etat, v, s):
               "points": precedent.get("points") or _points_derives(objectif, precedent)}
     if precedent.get("acces"):
         entree["acces"] = precedent["acces"]
+    if liens:
+        entree["liens"] = liens
+    if service:
+        entree["service"] = service
     if nature:
         entree["nature"] = nature
         if nature == "en_jeu":
@@ -7257,17 +7269,27 @@ def _fichiers_de_la_tache(projet, tid):
     return None
 
 
+def _fichiers_de_l_element(projet, v):
+    """Les fichiers que les tâches de l'élément ont modifiés (leurs branches `agent/<tâche>`), ou None s'ils ne se lisent pas."""
+    if not v.get("taches"):
+        return None
+    fichiers = []
+    for tid in v.get("taches") or []:
+        f = _fichiers_de_la_tache(projet, tid)
+        if f is None:
+            return None
+        fichiers += [x for x in f if x not in fichiers]
+    return fichiers
+
+
 def _l_element_a_besoin_d_un_apk(projet, v):
     """`(besoin, fichiers)` : l'élément change-t-il l'application ? Vrai (comme avant) pour un projet qui n'est pas Flutter,
     ou si les fichiers modifiés par ses tâches ne se lisent pas (`fichiers` : None). Voir `moteur/apk_besoin.py`."""
     if not _projet_flutter(projet) or not v.get("taches"):
         return True, None
-    fichiers = []
-    for tid in v.get("taches") or []:
-        f = _fichiers_de_la_tache(projet, tid)
-        if f is None:
-            return True, None
-        fichiers += [x for x in f if x not in fichiers]
+    fichiers = _fichiers_de_l_element(projet, v)
+    if fichiers is None:
+        return True, None
     try:
         dossier_app = service_permanent_projet_flutter().dossier_flutter(projet.dossier)
     except Exception:  # noqa: BLE001
@@ -7275,6 +7297,83 @@ def _l_element_a_besoin_d_un_apk(projet, v):
     motifs = _factory(projet).get("apk_ignore")
     motifs = apk_besoin.IGNORE_PAR_DEFAUT if motifs is None else motifs
     return apk_besoin.touche_l_application(dossier_app, fichiers, motifs), fichiers
+
+
+MOTS_DU_SERVICE = ("page", "graphique", "catalogue", "route", "serveur", "service", "api", "svg", "en ligne")
+DOSSIERS_DU_SERVICE = ("serveur/", "server/")
+MOTIF_CHEMIN_PUBLIC = re.compile(r"/[A-Za-z0-9_./~%?=&+-]{0,200}")
+
+
+def _touche_le_service(projet, v, fichiers):
+    """L'élément concerne-t-il le service en ligne (pages, graphiques, catalogue, routes publiques) ? D'après les fichiers que ses
+    tâches ont modifiés quand ils se lisent (le dossier du serveur) ; sinon d'après les mots de son nom, de son objectif et de ce
+    qui doit marcher."""
+    if fichiers is not None:
+        return any(str(f).replace("\\", "/").startswith(DOSSIERS_DU_SERVICE) for f in fichiers)
+    if _projet_flutter(projet):
+        return False      # une application : sans fichiers lisibles, un mot comme « page » ne dit pas que c'est le service
+    texte = normaliser_mot(" ".join(str(x) for x in (v["element"].get("nom"), v.get("objectif"),
+                                                      (v.get("dernier_rapport") or {}).get("doit_marcher")) if x))
+    return any(m in texte for m in MOTS_DU_SERVICE)
+
+
+def _liens_du_service(projet, v, texte_libre=""):
+    """`(liens, service)` pour la fiche de validation d'un élément qui concerne le service : des adresses CLIQUABLES du service en
+    ligne (son adresse du cache du poste, jamais le jeton) : le service, son état, les chemins d'exemple du projet
+    (`liens_publics` de factory.json) et les pages citées par l'élément ; `service` : le commit déployé et si le service répond
+    (sinon « index en préparation »). ([], None) sans adresse connue."""
+    base = _adresse_du_service(projet)
+    if not base:
+        return [], None
+    base = base.rstrip("/")
+    chemins = [("Le service en ligne", "/"), ("État du service", "/sante")]
+    for x in (_factory(projet).get("liens_publics") or []):
+        chemins.append((x["libelle"], x["chemin"]))
+    cites = " ".join(str(c) for c in (texte_libre, v["element"].get("nom"), v.get("objectif")) if c)
+    for c in MOTIF_PAGE.findall(cites)[:4]:
+        if MOTIF_CHEMIN_PUBLIC.fullmatch(c) and c not in ("/", "/sante"):
+            chemins.append((f"Page {c}", c))
+    vus, liens = set(), []
+    for libelle, chemin in chemins:
+        if chemin not in vus:
+            vus.add(chemin)
+            liens.append({"libelle": libelle[:120], "adresse": base + chemin})
+    service = {"commit": None, "pret": None, "detail": ""}
+    try:
+        faits = service_permanent.faits_du_service(projet.dossier, ["/sante"], lignes=0)
+        code = next((p.get("code") for p in faits.get("pages") or [] if p.get("chemin") == "/sante"), None)
+        service["commit"] = str(faits.get("commit") or "")[:40] or None
+        if code == 200:
+            service.update(pret=True, detail="Le service répond.")
+        elif code == 503:
+            service.update(pret=False, detail="Index en préparation : le service ne répond pas encore (503).")
+        elif code is not None:
+            service.update(pret=False, detail=f"Le service répond {code}.")
+    except Exception:  # noqa: BLE001 : jamais une raison de ne pas poser la fiche
+        pass
+    return liens, service
+
+
+def _consigne_du_service_en_ligne(projet, etat, t):
+    """Le brief d'une vérification qui porte sur le service : son adresse (jamais le jeton) et les pages à interroger, pour tester
+    EN LIGNE au lieu d'écrire « aucune adresse »."""
+    try:
+        v = _m(etat, "elements").get(f"{t.get('fonctionnalite')}/{t.get('element')}") if t.get("element") else None
+        v = v or {"element": {"nom": str(t.get("titre") or "")}, "taches": []}
+        if not _touche_le_service(projet, v, _fichiers_de_l_element(projet, v)):
+            return []
+        liens, service = _liens_du_service(projet, v, str(t.get("titre") or ""))
+    except Exception:  # noqa: BLE001
+        return []
+    if not liens:
+        return []
+    texte = ("Cette vérification porte sur le service en ligne du projet : teste-le EN LIGNE, ne conclus jamais « aucune adresse ». "
+             "Adresses : " + " ; ".join(f"{x['libelle']} {x['adresse']}" for x in liens)
+             + ". Requêtes en lecture seulement, sans jeton (jamais de jeton dans une requête ni dans ton rapport)."
+             + (f" Commit déployé : {service['commit']}." if service and service.get("commit") else "")
+             + (f" {service['detail']}" if service and service.get("detail") else ""))
+    _journal(projet, t["id"], texte[:480])
+    return [texte]
 
 
 def service_permanent_projet_flutter():

@@ -889,6 +889,9 @@ def _verifier_validation(d, nom, erreurs):
         erreurs.append(f"{ici} : « points » : 1 à {MAX_POINTS} phrases de {MAX_POINT} caractères au plus.")
     if d.get("acces") is not None and not acces_ok(d["acces"]):
         erreurs.append(f"{ici} : « acces » est {{url (http ou https), description?}}.")
+    if d.get("liens") is not None and not (isinstance(d["liens"], list) and all(
+            _est_dict(x) and _texte_plein(x.get("libelle")) and acces_ok({"url": x.get("adresse")}) for x in d["liens"])):
+        erreurs.append(f"{ici} : « liens » est une liste de {{libelle, adresse (http ou https)}}.")
     for c, m, v in CHAMPS_DIT:
         if d.get(c) is not None and not texte_dit_ok(d[c], m, v):
             erreurs.append(f"{ici} : « {c} » est un texte de {m} caractères au plus{'' if v else ', non vide'}.")

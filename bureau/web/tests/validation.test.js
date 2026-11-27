@@ -435,3 +435,16 @@ test("« En clair » d'abord : la lecture pour n'importe qui, avant ce qu'on val
   assert.ok(i >= 0 && j > i && k > j, JSON.stringify([i, j, k]));
   assert.equal(rendre(D).boite.textContent.indexOf("En clair"), -1);      // absente : rien d'inventé
 });
+
+test("le service en ligne : des adresses cliquables (http/https seulement) et son état", () => {
+  const d = {...D, liens: [{libelle: "Le service en ligne", adresse: "https://service.exemple/"},
+                           {libelle: "Page équipe 77", adresse: "https://service.exemple/equipe/77"},
+                           {libelle: "dangereux", adresse: "javascript:alert(1)"}, {libelle: "", adresse: "https://x.exemple/"}],
+             service: {commit: "2b0ad4a", pret: false, detail: "Index en préparation : le service ne répond pas encore (503)."}};
+  const v = V.aVerifier(d, {projet: "demo"});
+  assert.deepEqual(v.liens, [{libelle: "Le service en ligne", adresse: "https://service.exemple/"},
+                             {libelle: "Page équipe 77", adresse: "https://service.exemple/equipe/77"}]);
+  assert.deepEqual(v.service, {commit: "2b0ad4a", pret: false, detail: "Index en préparation : le service ne répond pas encore (503)."});
+  const sans = V.aVerifier(D, {projet: "demo"});          // une décision d'avant : rien de neuf
+  assert.deepEqual([sans.liens, sans.service], [[], null]);
+});

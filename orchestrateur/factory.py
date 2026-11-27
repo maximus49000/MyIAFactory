@@ -16,7 +16,7 @@ RESERVES = ("cadrage", "fait")   # colonnes que l'orchestrateur ajoute lui-même
 CLES = ("nom", "skill", "genre", "mots_interdits", "fiches", "controles", "consignes", "reglages", "services",
         "flux", "workflows", "description", "seuil_methode", "catalogues", "sessions", "suivi", "pieces", "commandes", "memoire",
         "modele_orchestrateur", "agents_locaux_max", "agents_cloud_max", "agents_serveur_max", "ordre_lieux",
-        "ordre_lieux_par_metier", "environnement", "apk_ignore", "apk_adresse_integree")
+        "ordre_lieux_par_metier", "environnement", "apk_ignore", "apk_adresse_integree", "liens_publics")
 AGENTS_LOCAUX = (1, 16)     # les places locales d'un projet (2 par défaut)
 AGENTS_CLOUD = (0, 16)      # les places cloud d'un projet (0 par défaut ; absent : voir `depart.places_cloud`)
 AGENTS_SERVEUR = (0, 4)     # les places serveur d'un projet (0 par défaut)
@@ -214,6 +214,13 @@ def _lire(chemin):
     adresse_integree = d.get("apk_adresse_integree")
     if adresse_integree is not None and not isinstance(adresse_integree, bool):
         raise FactoryInvalide("Factory : « apk_adresse_integree » doit valoir true ou false.")
+    liens_publics = d.get("liens_publics")
+    if liens_publics is not None and not (
+            isinstance(liens_publics, list) and len(liens_publics) <= 8 and all(
+                isinstance(x, dict) and _texte(x.get("libelle")) and len(x["libelle"]) <= 120 and isinstance(x.get("chemin"), str)
+                and re.fullmatch(r"/[A-Za-z0-9_./~%?=&+-]{0,200}", x["chemin"]) and ".." not in x["chemin"] for x in liens_publics)):
+        raise FactoryInvalide("Factory : « liens_publics » est une liste de 8 au plus de {libelle, chemin} : un chemin du "
+                              "service public commençant par « / » (jamais une adresse complète ni un jeton).")
     seuil = d.get("seuil_methode", 3)
     if isinstance(seuil, bool) or not isinstance(seuil, int) or seuil < 1:
         raise FactoryInvalide("Factory : « seuil_methode » doit être un entier d'au moins 1.")
@@ -267,6 +274,7 @@ def _lire(chemin):
         "description": description, "seuil_methode": seuil,
         **({"apk_ignore": list(apk_ignore)} if apk_ignore is not None else {}),
         **({"apk_adresse_integree": adresse_integree} if adresse_integree is not None else {}),
+        **({"liens_publics": [dict(x) for x in liens_publics]} if liens_publics is not None else {}),
         "catalogues": catalogues, "sessions": chem("sessions", "sessions.json"),
         "suivi": chem("suivi", "suivi.json"), "pieces": chem("pieces", "pieces"),
         "commandes": {k: list(v) for k, v in commandes.items()},

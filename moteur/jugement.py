@@ -39,7 +39,8 @@ Dossiers attendus (préparés par la table de règles) :
   champs de la décision : quoi, choix, questions, programme, recommandation…), `verdicts` (ceux permis), `tache` (id,
   titre, etape, metier, element, journal) ou null, `fonctionnalite` (id, nom, etape, flux [{nom, validation}]),
   `lecons_du_metier`, `deja_appris` (les réponses que le moteur donne seul), `recentes` (les dernières décisions
-  autonomes), `mots_interdits`. Pour une tâche bloquée sans décision (`decision.genre` = `tache_bloquee`) : aussi
+  autonomes), `mots_interdits`. Une tâche active depuis longtemps (`decision.genre` = `tache_longue`) : aussi `minutes_active`, `avancement`, `lignes_repetees`,
+  `corrections_en_cours_sur_le_meme_element`, `faits_du_service`, `retours_deja_envoyes`. Pour une tâche bloquée sans décision (`decision.genre` = `tache_bloquee`) : aussi
   `taches_dev` ([{id, titre, etape, metier, journal}], les tâches faites de la fonctionnalité) et `service` (vrai si
   le projet déclare un service permanent redéployable). Tout dossier porte aussi `anomalies` (les anomalies du
   logiciel encore « nouvelles » : id, titre, description) et `commandes_dediees` ([{commande, role, exemple}] : projet Flutter serveur ; `commande_dediee_pour_la_demande` si la commande
@@ -813,11 +814,14 @@ def _valider_analyser_blocage(o, d):
     return _erreur_lecon(o, d)
 
 
+MOTIF_SECRET = re.compile(r"\b(?:sk-[A-Za-z0-9]{8,}|ghp_[A-Za-z0-9]{8,}|bearer\s+[A-Za-z0-9._-]{12,}|x-api-key)", re.IGNORECASE)
+MOTIF_REDEPLOIEMENT = re.compile(r"(?<!sans )(?<!aucun )(?<!pas de )red[ée]ploi|(?:lance|ouvre|fais|demande)\s+(?:une\s+)?nouvelle correction", re.IGNORECASE)
 VERDICTS_AUTONOME = {"accord_agent": ("accepter", "choisir", "repondre", "refuser"),
                      "outil_agent": ("autoriser", "refuser", "relancer"),
                      "blocage_analyse": ("suivre", "preciser"), "serie_arretee": ("relancer", "laisser"),
                      "tache_bloquee": ("relancer", "renvoyer", "redeployer", "laisser"),
-                     "fusion_conflit": ("garder_depot", "garder_branche", "renvoyer", "laisser")}
+                     "fusion_conflit": ("garder_depot", "garder_branche", "renvoyer", "laisser"),
+                     "tache_longue": ("conclure", "recadrer", "laisser", "signaler")}
 
 
 def _valider_decider_autonome(o, d):
@@ -849,6 +853,13 @@ def _valider_decider_autonome(o, d):
                 "réponds « refuser » avec un « texte » qui dit « déjà fait : … » et ce que l'agent vérifie à la place.")
     if (d.get("decision") or {}).get("genre") == "fusion_conflit" and verdict == "renvoyer" and not t:
         return "« texte » est obligatoire avec le verdict renvoyer (les deux versions, la correction attendue)."
+    if (d.get("decision") or {}).get("genre") == "tache_longue":      # une tâche active depuis longtemps
+        if verdict in ("conclure", "recadrer") and not t:
+            return f"« texte » est obligatoire avec le verdict {verdict} (le retour à envoyer à l'agent)."
+        if t and MOTIF_SECRET.search(t):
+            return "« texte » ne contient jamais de jeton ni de clé."
+        if verdict in ("conclure", "recadrer") and MOTIF_REDEPLOIEMENT.search(t or ""):
+            return "« texte » ne demande jamais un redéploiement ni une nouvelle correction : l'agent conclut avec ce qu'il a."
     if (d.get("decision") or {}).get("genre") == "tache_bloquee":      # une tâche bloquée sans décision posée
         if verdict in ("relancer", "renvoyer") and not t:
             return f"« texte » est obligatoire avec le verdict {verdict} (la consigne précise, ou le diagnostic)."

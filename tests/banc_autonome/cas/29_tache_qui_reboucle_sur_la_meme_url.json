@@ -1,0 +1,131 @@
+{
+ "id": "29_tache_qui_reboucle_sur_la_meme_url",
+ "titre": "Une vérification qui retente la même URL avec le même résultat",
+ "type": "jugement",
+ "negatif": false,
+ "source": "FM_Stats t323 (f36, 2026-11-27) : une vérification attendait un service dont l'index se construisait",
+ "note": "Le service répond (200 sur /sante) mais l'agent retente 6 fois la même URL avec la même erreur de sa propre commande. Bonne réponse : recadrer : conclure avec ce qu'il a, changer d'essai.",
+ "dossier": {
+  "decision": {
+   "genre": "tache_longue",
+   "texte": "La tâche « Vérification de l'index du service » est active depuis 25 minutes sans que rien ne bouge (journal, avancement).",
+   "minutes": 25
+  },
+  "verdicts": [
+   "conclure",
+   "recadrer",
+   "laisser",
+   "signaler"
+  ],
+  "choix": [],
+  "questions": [],
+  "tache": {
+   "id": "t323",
+   "titre": "Vérification de l'index du service",
+   "etape": "recette",
+   "metier": "testeur",
+   "element": "index",
+   "journal": [
+    "python3 controle.py http://service.exemple/equipe/77 : timeout",
+    "python3 controle.py http://service.exemple/equipe/77 : timeout",
+    "python3 controle.py http://service.exemple/equipe/77 : timeout",
+    "python3 controle.py http://service.exemple/equipe/77 : timeout"
+   ]
+  },
+  "fonctionnalite": {
+   "id": "f30",
+   "nom": "Statistiques par équipe",
+   "etape": "serie",
+   "flux": [
+    {
+     "nom": "Dev",
+     "validation": false
+    },
+    {
+     "nom": "Recette",
+     "validation": false
+    },
+    {
+     "nom": "Validation du Directeur",
+     "validation": true
+    }
+   ]
+  },
+  "lecons_du_metier": [],
+  "deja_appris": [],
+  "recentes": [],
+  "mots_interdits": [
+   "ProjetExemple"
+  ],
+  "anomalies": [],
+  "service": {
+   "adresse": "https://service.exemple",
+   "redeployable": false
+  },
+  "taches_dev": [],
+  "faits_du_service": {
+   "commit": "2b0ad4a",
+   "etat": "actif",
+   "sante_ok": true,
+   "secrets": {},
+   "pages": [
+    {
+     "chemin": "/sante",
+     "code": 200,
+     "ms": 15
+    },
+    {
+     "chemin": "/equipe/77",
+     "code": 200,
+     "ms": 900
+    }
+   ],
+   "journal": [],
+   "erreur": null
+  },
+  "minutes_active": 25,
+  "avancement": {
+   "points": [
+    {
+     "texte": "Contrôler /equipe/77",
+     "fait": false
+    }
+   ],
+   "en_cours": "retente /equipe/77"
+  },
+  "lignes_repetees": [
+   "python3 controle.py http://service.exemple/equipe/77 : timeout"
+  ],
+  "corrections_en_cours_sur_le_meme_element": [],
+  "retours_deja_envoyes": [],
+  "decision_id": "d29"
+ },
+ "attendu": {
+  "verdicts": [
+   "recadrer"
+  ],
+  "texte_evoque": [
+   [
+    "ne relance",
+    "stop",
+    "arrête",
+    "arrete",
+    "conclu",
+    "autre",
+    "différent"
+   ]
+  ]
+ },
+ "simule": {
+  "raison": "L'agent retente six fois la même commande avec le même résultat alors que le service répond : il tourne en rond.",
+  "verdict": "recadrer",
+  "texte": "Arrête de retenter la même URL (autre essai : un délai plus long, ou conclus avec ce que tu as vérifié et mets le reste dans non_verifie).",
+  "choix": null,
+  "reponses": null,
+  "generalisable": false,
+  "lecon": null,
+  "amelioration": null,
+  "anomalies": null
+ },
+ "decision_id": "d26"
+}

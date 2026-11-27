@@ -21,6 +21,7 @@ from pathlib import Path
 
 import plateforme_acces
 import serveur_recette
+import serveur_service
 import serveur_tache
 
 if str(Path(__file__).resolve().parent.parent) not in sys.path:      # le paquet `bureau` (racine du dépôt)
@@ -28,7 +29,7 @@ if str(Path(__file__).resolve().parent.parent) not in sys.path:      # le paquet
 from bureau import deport_types  # noqa: E402
 from bureau.deport_types import racine_du_projet, refus_accord  # noqa: E402
 
-USAGE = ("Usage : lancer.py serveur-tache <lancer --apk <fichier> --mode scenario|pilote [--scenario <nom>] [--hotes <h1,h2>] "
+USAGE = ("Usage : lancer.py serveur-tache <lancer --apk <fichier> --mode scenario|pilote [--scenario <nom>] [--hotes <h1,h2>] [--service] "
          "[--projet <dossier>] [--attendre] | etat <id> | arreter <id> | rapatrier <id> [--destination <dossier>] [--projet <dossier>] | lister> "
          "[--dossier <d>]\n"
          "       lancer.py serveur-outil <id> <verbe> [arguments] [--projet <dossier>] [--dossier <d>]")
@@ -37,7 +38,7 @@ OPTIONS = {"lancer": {"--apk", "--mode", "--scenario", "--projet", "--dossier", 
            "etat": {"--dossier"}, "arreter": {"--dossier"}, "lister": {"--dossier"},
            "rapatrier": {"--destination", "--projet", "--dossier"},
            "outil": {"--projet", "--dossier"}}
-DRAPEAUX = {"lancer": {"--attendre"}}
+DRAPEAUX = {"lancer": {"--attendre", "--service"}}
 ARRETS_MAX = 3          # `arreter` fait foi de l'état ; rappelé tant que l'état n'est pas final (plafonné)
 MOTIF_SCENARIO = re.compile(r"[a-z0-9_-]{1,40}", re.ASCII)
 ACTION = "recette-emulateur"
@@ -99,6 +100,18 @@ def _projet(brut):
     if not p.is_dir():
         raise ValueError("Dossier du projet introuvable.")
     return p
+
+
+def _point_du_service(projet, d):
+    """Le point d'accès du service permanent du projet, DÉRIVÉ de sa déclaration (`.factory/service.json`) et de l'adresse
+    que le cache du poste en connaît (`outils/serveur_service.py`) ; jamais saisi par une recette ni une option."""
+    if not serveur_service.a_un_service(projet):
+        raise ValueError("Le projet ne déclare pas de service permanent (.factory/service.json) : rien à ouvrir.")
+    fiche = serveur_service.lire_cache(d).get(serveur_service.identifiant(projet))
+    adresse = fiche.get("adresse") if isinstance(fiche, dict) else None
+    if not isinstance(adresse, str) or not adresse:
+        raise ValueError("L'adresse du service du projet est inconnue : déployez-le d'abord (lancer.py service).")
+    return serveur_tache.valider_point(adresse)
 
 
 def _lire_apk(brut, moteur):
@@ -202,7 +215,7 @@ def _tache(commande, pos, opts, drapeaux, d, moteur, recette, kw):
             raise _Usage()
         if opts.get("mode") == "scenario" and "attendre" not in drapeaux:
             raise _Usage("mode scénario : utilisez --attendre")
-        return _lancer(opts, "attendre" in drapeaux, d, moteur, recette, kw)
+        return _lancer(opts, "attendre" in drapeaux, d, moteur, recette, kw, service="service" in drapeaux)
     if len(pos) != 1:
         raise _Usage()
     ident = _id(pos[0], moteur)
@@ -263,7 +276,7 @@ def _fin_du_pont(moteur, ident, d, kw, destination=None):
             pass
 
 
-def _lancer(opts, attendre, d, moteur, recette, kw):
+def _lancer(opts, attendre, d, moteur, recette, kw, service=False):
     """Lance une tâche ; en mode scénario la recette est TOUJOURS chargée avant l'envoi (un nom mal écrit ne prend jamais
     le créneau) ; avec `attendre`, elle est déroulée, la tâche arrêtée et rapatriée."""
     mode, scenario = opts.get("mode"), opts.get("scenario")
@@ -283,18 +296,20 @@ def _lancer(opts, attendre, d, moteur, recette, kw):
     # Réseau borné : l'accord du Directeur (réglage du projet) se lit ICI, jamais dans la recette ni dans les options.
     accord_reseau = refus_accord(str(projet), ACTION_RESEAU, bureau=BUREAU) is None
     if mode == "scenario":
-        if opts.get("hotes"):
-            raise _Usage("--hotes ne vaut que pour le mode pilote : en mode scénario, les hôtes sont ceux de la recette.")
+        if opts.get("hotes") or service:
+            raise _Usage("--hotes et --service ne valent que pour le mode pilote : en mode scénario, les hôtes sont ceux de la recette.")
         plan = recette.charger(str(projet), scenario, accord_reseau=accord_reseau)      # refusée avant tout envoi
         hotes = list(plan.hotes) if plan.reseau else []
+        point = _point_du_service(projet, d) if plan.reseau and plan.service else None
     else:
-        plan, hotes = None, []
-        if opts.get("hotes"):
+        plan, hotes, point = None, [], None
+        if opts.get("hotes") or service:
             if not accord_reseau:
                 return _erreur(MSG_SANS_ACCORD, 2, d)
-            hotes = opts["hotes"].split(",")
+            hotes = opts["hotes"].split(",") if opts.get("hotes") else []
+            point = _point_du_service(projet, d) if service else None
     demande = moteur.valider_demande({"type": "emulation", "mode": mode, "scenario": scenario, "projet": projet.name,
-                                      "demandeur": "serveur-tache", "apk": Path(opts["apk"]).name, "hotes": hotes})
+                                      "demandeur": "serveur-tache", "apk": Path(opts["apk"]).name, "hotes": hotes, "point": point})
     if attendre:        # destination contrôlée AVANT l'envoi : une jonction sous .factory refuse sans prendre le créneau
         _destination(projet, demande.id, None)
     try:

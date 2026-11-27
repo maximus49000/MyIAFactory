@@ -13,6 +13,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "outils"))
 import serveur_recette  # noqa: E402
+import serveur_service  # noqa: E402
 import serveur_tache  # noqa: E402
 import serveur_tache_cli as cli  # noqa: E402
 
@@ -900,6 +901,76 @@ class TestReseauBorne(Base):
                                       "--projet", str(self.projet))
             self.assertEqual(code, 1, mauvais)
             self.assertEqual(self.noms(), [], mauvais)
+
+    ADRESSE = "http://203.0.113.10:18000"
+
+    def declarer_service(self, adresse=ADRESSE, declaration=True):
+        if declaration:
+            (self.projet / ".factory" / "service.json").write_text("{}", encoding="utf-8")
+        if adresse is not None:
+            (self.d / serveur_service.CACHE).write_text(
+                json.dumps({serveur_service.identifiant(self.projet): {"etat": "actif", "adresse": adresse}}), encoding="utf-8")
+
+    def test_service_derive_de_la_declaration_du_projet(self):
+        (self.projet / ".factory" / "recettes" / "web.json").write_text(
+            json.dumps({**RECETTE, "nom": "web", "reseau": True, "service": True}), encoding="utf-8")
+        self.accorder()
+        self.declarer_service()
+        code, sortie, erreur = self.lancer_web()
+        self.assertEqual((code, erreur), (0, ""), sortie)
+        demande = self.moteur.appels[0][1]
+        self.assertEqual((demande.point, demande.hotes), (self.ADRESSE, ()))
+
+    def test_service_sans_accord_refuse_avant_tout_envoi(self):
+        (self.projet / ".factory" / "recettes" / "web.json").write_text(
+            json.dumps({**RECETTE, "nom": "web", "reseau": True, "service": True}), encoding="utf-8")
+        self.declarer_service()
+        code, _s, erreur = self.lancer_web()
+        self.assertEqual(code, 1)
+        self.assertIn("recette-emulateur-reseau", erreur)
+        self.assertEqual(self.noms(), [])
+
+    def test_service_sans_declaration_ni_adresse_ou_adresse_privee_refuse(self):
+        (self.projet / ".factory" / "recettes" / "web.json").write_text(
+            json.dumps({**RECETTE, "nom": "web", "reseau": True, "service": True}), encoding="utf-8")
+        self.accorder()
+        for adresse, declaration, mot in ((None, False, "ne déclare pas"), (None, True, "inconnue"),
+                                          ("http://10.0.0.5:18000", True, "pas publique"),
+                                          ("http://127.0.0.1:18000", True, "pas publique"),
+                                          ("ftp://203.0.113.10:21", True, "refusé"), ("pas une adresse", True, "refusé")):
+            for f in (self.d / serveur_service.CACHE, self.projet / ".factory" / "service.json"):
+                if f.exists():
+                    f.unlink()
+            self.declarer_service(adresse, declaration)
+            code, _s, erreur = self.lancer_web()
+            self.assertEqual(code, 1, (adresse, declaration))
+            self.assertIn(mot, erreur)
+            self.assertEqual(self.noms(), [])
+
+    def test_pilote_service_avec_accord_et_sans(self):
+        self.declarer_service()
+        code, _s, erreur = self.tache("lancer", "--apk", str(self.apk), "--mode", "pilote", "--service", "--projet", str(self.projet))
+        self.assertEqual(code, 2)
+        self.assertIn("recette-emulateur-reseau", erreur)
+        self.assertEqual(self.noms(), [])
+        self.accorder()
+        code, _s, erreur = self.tache("lancer", "--apk", str(self.apk), "--mode", "pilote", "--service", "--projet", str(self.projet))
+        self.assertEqual((code, erreur), (0, ""))
+        self.assertEqual(self.moteur.appels[0][1].point, self.ADRESSE)
+
+    def test_scenario_refuse_l_option_service(self):
+        self.accorder()
+        self.declarer_service()
+        code, _s, _e = self.tache("lancer", "--apk", str(self.apk), "--mode", "scenario", "--scenario", "demo", "--service",
+                                  "--projet", str(self.projet), "--attendre")
+        self.assertEqual(code, 2)
+        self.assertEqual(self.noms(), [])
+
+    def test_sans_service_demande_aucun_point_meme_avec_declaration_et_accord(self):
+        self.accorder()
+        self.declarer_service()
+        self.tache("lancer", "--apk", str(self.apk), "--mode", "pilote", "--projet", str(self.projet))
+        self.assertIsNone(self.moteur.appels[0][1].point)
 
     def test_scenario_refuse_l_option_hotes(self):
         self.accorder()

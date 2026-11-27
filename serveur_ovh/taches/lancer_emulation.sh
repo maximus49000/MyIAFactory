@@ -2,7 +2,9 @@
 # Enveloppe HÔTE d'une tâche d'émulation : exécutée sur le serveur (par SSH), elle prend le créneau, démarre le conteneur
 # `myiafactory/emulateur` puis rend la main ; un veilleur DÉTACHÉ (setsid + nohup, survit à la fin de la session SSH) tient le
 # créneau, applique les limites et écrit l'état final. Un appelant mort ne laisse donc ni conteneur ni créneau.
-# Usage : lancer_emulation.sh <id> <mode> [duree_s [inactivite_s [memoire_mo [cpus [captures [octets [hotes]]]]]]]
+# Usage : lancer_emulation.sh <id> <mode> [duree_s [inactivite_s [memoire_mo [cpus [captures [octets [hotes [point]]]]]]]]
+#   point (facultatif, après hotes ; « - » pour hotes s'il n'y en a pas) : le point d'accès exact du service permanent du projet,
+#   <http|https>://<adresse IPv4 ou nom>:<port> (un seul, dérivé de sa déclaration par le lanceur du poste).
 #   hotes (facultatif, après captures et octets) : noms d'hôtes séparés par des virgules, 5 au plus. Absent : l'émulateur n'a AUCUN
 #   réseau (--network none), comme toujours. Présent : réseau BORNÉ (voir « Réseau borné » plus bas). L'accord du Directeur est
 #   vérifié par le lanceur du poste AVANT l'envoi (`serveur_tache_cli`), jamais ici : cette enveloppe n'a pas de moyen de le lire.
@@ -65,7 +67,7 @@ refuser() { printf '%s\n' "lancer_emulation : $1" >&2; exit 2; }
 
 VEILLEUR=0
 if [ "${1:-}" = --veilleur ]; then VEILLEUR=1; shift; fi
-[ $# -ge 2 ] && [ $# -le 9 ] || refuser "usage : <id> <scenario|pilote> [duree_s [inactivite_s [memoire_mo [cpus [captures [octets [hotes]]]]]]]"
+[ $# -ge 2 ] && [ $# -le 10 ] || refuser "usage : <id> <scenario|pilote> [duree_s [inactivite_s [memoire_mo [cpus [captures [octets [hotes [point]]]]]]]]"
 for argument in "$@"; do                 # aucun caractère de contrôle (retour à la ligne final compris : `$` d'un motif l'accepterait)
   [[ $argument == *[[:cntrl:]]* ]] && refuser "caractère de contrôle refusé dans un argument."
 done
@@ -85,21 +87,39 @@ if [ $# -ge 8 ]; then
   [[ $8 =~ ^[1-9][0-9]{0,8}$ ]] && [ "$8" -le 104857600 ] || refuser "octets refusés (1 à 104857600, sans zéro initial)."
   SUPPL+=("$8"); ENV_SUPPL+=(-e "PONT_OCTETS=$8")
 fi
-HOTES=""                                  # hôtes autorisés (réseau borné), séparés par des virgules ; vide : aucun réseau
+HOTES=""; POINT=""; LISTE_HOTES=()          # hôtes (noms DNS, HTTPS) et point d'accès du service ; tout vide : aucun réseau
+MOTIF_HOTE='^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*\.[a-z]{2,24}$'
+MOTIF_IPV4='^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$'
+nom_interne() { case "$1" in *.local|*.localhost|*.internal|*.lan|*.home|*.corp|*.arpa|*.onion|*.intranet) return 0 ;; esac; return 1; }
 if [ $# -ge 9 ]; then
-  MOTIF_HOTE='^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*\.[a-z]{2,24}$'
-  case "$9" in ,*|*,|*,,*) refuser "hotes refusés (liste mal formée)." ;; esac     # read -a ignorerait un champ vide final
-  IFS=, read -r -a LISTE_HOTES <<< "$9"
-  [ "${#LISTE_HOTES[@]}" -ge 1 ] && [ "${#LISTE_HOTES[@]}" -le 5 ] || refuser "hotes refusés (1 à 5 noms séparés par des virgules)."
-  for h in "${LISTE_HOTES[@]}"; do
-    [ "${#h}" -le 253 ] && [[ $h =~ $MOTIF_HOTE ]] || refuser "hôte refusé (nom DNS en minuscules, jamais une adresse IP)."
-    case "$h" in
-      *.local|*.localhost|*.internal|*.lan|*.home|*.corp|*.arpa|*.onion|*.intranet) refuser "hôte refusé (domaine interne)." ;;
-    esac
-  done
-  HOTES="$9"
+  if [ "$9" != "-" ]; then
+    case "$9" in ,*|*,|*,,*) refuser "hotes refusés (liste mal formée)." ;; esac     # read -a ignorerait un champ vide final
+    IFS=, read -r -a LISTE_HOTES <<< "$9"
+    [ "${#LISTE_HOTES[@]}" -ge 1 ] && [ "${#LISTE_HOTES[@]}" -le 5 ] || refuser "hotes refusés (1 à 5 noms séparés par des virgules)."
+    for h in "${LISTE_HOTES[@]}"; do
+      [ "${#h}" -le 253 ] && [[ $h =~ $MOTIF_HOTE ]] || refuser "hôte refusé (nom DNS en minuscules, jamais une adresse IP)."
+      nom_interne "$h" && refuser "hôte refusé (domaine interne)."
+    done
+    HOTES="$9"
+  fi
   SUPPL+=("$9")                           # relayé au veilleur : il retire le réseau et le proxy à la fin
 fi
+if [ $# -ge 10 ]; then
+  # Point d'accès exact du service du projet : schéma http|https, adresse IPv4 ou nom DNS, port 1..65535 sans zéro initial.
+  [[ ${10} =~ ^(http|https)://([a-z0-9.-]{1,253}):([1-9][0-9]{0,4})$ ]] || refuser "point d'accès refusé (<http|https>://<hôte>:<port>)."
+  POINT_SCHEMA="${BASH_REMATCH[1]}"; POINT_HOTE="${BASH_REMATCH[2]}"; POINT_PORT="${BASH_REMATCH[3]}"
+  [ "$POINT_PORT" -le 65535 ] || refuser "point d'accès refusé (port de 1 à 65535)."
+  if [[ $POINT_HOTE =~ $MOTIF_IPV4 ]]; then
+    :                                     # adresse littérale : vérifiée publique après résolution (ip_publique)
+  else
+    [ "${#POINT_HOTE}" -le 253 ] && [[ $POINT_HOTE =~ $MOTIF_HOTE ]] || refuser "point d'accès refusé (nom DNS en minuscules ou adresse IPv4)."
+    nom_interne "$POINT_HOTE" && refuser "point d'accès refusé (domaine interne)."
+  fi
+  POINT="${10}"
+  SUPPL+=("${10}")
+fi
+[ $# -ne 9 ] || [ "$9" != "-" ] || refuser "hotes « - » sans point d'accès : rien à ouvrir."
+RESEAU_DEMANDE=0; [ -z "$HOTES$POINT" ] || RESEAU_DEMANDE=1
 [ -n "${HOME:-}" ] || refuser "HOME absent."
 SONDE="${ENVELOPPE_SONDE_S:-5}"
 [[ $SONDE =~ $MOTIF_SONDE ]] || SONDE=5
@@ -158,7 +178,7 @@ if [ "$MODE" = pilote ]; then AGENT_LIE=$(agent_lie); fi
 PROXY_PORT=3128
 RESEAU_NOM="reseau-$ID"
 nettoyer_reseau() {   # sans effet quand aucun hôte n'était demandé ; idempotent ; garde le journal du proxy (reseau-proxy.log)
-  [ -n "$HOTES" ] || return 0
+  [ "$RESEAU_DEMANDE" = 1 ] || return 0
   dk 30 logs --tail 500 "$RESEAU_NOM" > "$DOSSIER/reseau-proxy.log" 2>&1
   dk 30 rm -f "$RESEAU_NOM" >/dev/null 2>&1
   dk 30 network rm "$RESEAU_NOM" >/dev/null 2>&1
@@ -181,23 +201,40 @@ ip_publique() {
   return 0
 }
 
-# resoudre_hotes : remplit HOTES_IP (« hôte=ip[,ip] » séparés par des espaces) ; 1 avec RAISON_RESEAU si un hôte ne se résout pas
-# ou donne une adresse non publique. Au plus 4 adresses IPv4 par hôte.
+# resoudre_nom <hôte> : remplit IPS_RESOLUES (« ip[,ip] ») ; 1 avec RAISON_RESEAU si l'hôte ne se résout pas ou donne une adresse non
+# publique. Une adresse IPv4 littérale n'est pas résolue : elle est elle-même vérifiée. Au plus 4 adresses IPv4 par hôte.
+resoudre_nom() {
+  local h="$1" ip ips="" n=0
+  if [[ $h =~ $MOTIF_IPV4 ]]; then
+    ip_publique "$h" || { RAISON_RESEAU="hôte $h : l'adresse n'est pas publique (réseau interne, bouclage, métadonnées ou réservée)."; return 1; }
+    IPS_RESOLUES="$h"; return 0
+  fi
+  while read -r ip _; do
+    [ -n "$ip" ] || continue
+    ip_publique "$ip" || { RAISON_RESEAU="hôte $h : l'adresse $ip n'est pas publique (réseau interne, bouclage, métadonnées ou réservée)."; return 1; }
+    case ",$ips," in *",$ip,"*) continue ;; esac
+    n=$((n + 1)); [ "$n" -le 4 ] || break
+    ips="${ips:+$ips,}$ip"
+  done < <(getent ahostsv4 "$h" 2>/dev/null | awk '{print $1}')
+  [ -n "$ips" ] || { RAISON_RESEAU="hôte $h : aucune adresse IPv4 trouvée."; return 1; }
+  IPS_RESOLUES="$ips"
+}
+
+# resoudre_hotes : remplit HOTES_IP (« hôte=ip[,ip] », noms épinglés par --add-host) et ENTREES_PROXY (ce que le proxy reçoit : les
+# mêmes, plus « schéma://hôte:port=ip » pour le point d'accès) ; 1 avec RAISON_RESEAU au premier refus.
 resoudre_hotes() {
-  local h ip ips n
-  HOTES_IP=()
-  for h in "${LISTE_HOTES[@]}"; do
-    ips=""; n=0
-    while read -r ip _; do
-      [ -n "$ip" ] || continue
-      ip_publique "$ip" || { RAISON_RESEAU="hôte $h : l'adresse $ip n'est pas publique (réseau interne, bouclage, métadonnées ou réservée)."; return 1; }
-      case ",$ips," in *",$ip,"*) continue ;; esac
-      n=$((n + 1)); [ "$n" -le 4 ] || break
-      ips="${ips:+$ips,}$ip"
-    done < <(getent ahostsv4 "$h" 2>/dev/null | awk '{print $1}')
-    [ -n "$ips" ] || { RAISON_RESEAU="hôte $h : aucune adresse IPv4 trouvée."; return 1; }
-    HOTES_IP+=("$h=$ips")
+  local h
+  HOTES_IP=(); ENTREES_PROXY=()
+  for h in ${LISTE_HOTES[@]+"${LISTE_HOTES[@]}"}; do
+    resoudre_nom "$h" || return 1
+    HOTES_IP+=("$h=$IPS_RESOLUES"); ENTREES_PROXY+=("$h=$IPS_RESOLUES")
   done
+  if [ -n "$POINT" ]; then
+    resoudre_nom "$POINT_HOTE" || return 1
+    ENTREES_PROXY+=("$POINT_SCHEMA://$POINT_HOTE:$POINT_PORT=$IPS_RESOLUES")
+    [[ $POINT_HOTE =~ $MOTIF_IPV4 ]] || HOTES_IP+=("$POINT_HOTE=$IPS_RESOLUES")      # un nom : épinglé pour le DNS de l'émulateur
+    POINT_IP="$IPS_RESOLUES"
+  fi
   return 0
 }
 
@@ -211,26 +248,44 @@ import java.net.*;
 import java.util.*;
 import java.util.concurrent.*;
 
-/** Proxy sortant à liste blanche : CONNECT <hôte>:443 seulement, vers des adresses données en arguments (jamais de DNS). */
+/**
+ * Proxy sortant à liste blanche, sans DNS : il ne se connecte qu'aux adresses données en arguments.
+ * Arguments : <port> puis des cibles « <nom>=<ip>[,<ip>] » (nom DNS : CONNECT <nom>:443) ou
+ * « <schema>://<hote>:<port>=<ip>[,<ip>] » (point d'accès exact d'un service : CONNECT <hote>:<port>, et pour « http »
+ * aussi les requêtes GET, HEAD et POST à URI absolue vers ce seul hôte:port).
+ */
 public class ProxySortant {
-    static final Map<String, List<String>> HOTES = new HashMap<>();
-    static final Set<String> ADRESSES = new HashSet<>();
+    static final Map<String, List<String>> CIBLES = new HashMap<>();    // « hote:port » -> adresses
+    static final Map<String, String> SCHEMAS = new HashMap<>();         // « hote:port » -> http | https
+    static final Map<String, List<String>> PAR_ADRESSE = new HashMap<>(); // « ip:port » -> [ip] (CONNECT par adresse)
     static final int MAX_CONNEXIONS = 32, INACTIF_MS = 120000, ENTETE_MAX = 8192;
-    // 443 toujours ; la propriété système ne sert qu'aux essais automatiques (jamais posée au lancement du conteneur).
-    static final int PORT_DISTANT = Integer.getInteger("proxy.portdistant", 443);
+    // La propriété système ne sert qu'aux essais automatiques (jamais posée au lancement du conteneur).
+    static final int PORT_ESSAI = Integer.getInteger("proxy.portdistant", 0);
     static final java.util.regex.Pattern IPV4 = java.util.regex.Pattern.compile("[0-9]{1,3}(\\.[0-9]{1,3}){3}");
+    static final Set<String> METHODES = new HashSet<>(Arrays.asList("GET", "HEAD", "POST"));
 
     public static void main(String[] a) throws Exception {
         int port = Integer.parseInt(a[0]);
         for (int i = 1; i < a.length; i++) {
             String[] kv = a[i].split("=", 2);
+            String schema = "https", cle = kv[0] + ":443";
+            if (kv[0].contains("://")) {
+                String[] sp = kv[0].split("://", 2);
+                schema = sp[0];
+                cle = sp[1];
+                if (!schema.equals("http") && !schema.equals("https")) throw new IllegalArgumentException("schema refuse");
+            }
+            int deux = cle.lastIndexOf(':');
+            int p = Integer.parseInt(cle.substring(deux + 1));
+            if (p < 1 || p > 65535) throw new IllegalArgumentException("port refuse");
             List<String> ips = new ArrayList<>();
             for (String ip : kv[1].split(",")) {
-                if (!IPV4.matcher(ip).matches()) throw new IllegalArgumentException("adresse refusée");
+                if (!IPV4.matcher(ip).matches()) throw new IllegalArgumentException("adresse refusee");
                 ips.add(ip);
-                ADRESSES.add(ip);
+                PAR_ADRESSE.put(ip + ":" + p, List.of(ip));
             }
-            HOTES.put(kv[0], ips);
+            CIBLES.put(cle, ips);
+            SCHEMAS.put(cle, schema);
         }
         ExecutorService pool = Executors.newCachedThreadPool();
         Semaphore places = new Semaphore(MAX_CONNEXIONS);
@@ -249,9 +304,20 @@ public class ProxySortant {
         return b.toString();
     }
 
-    static void refuser(Socket client, String code, String hote) throws IOException {
-        System.out.println("REFUSE " + sur(hote));
+    static void refuser(Socket client, String code, String cible) throws IOException {
+        System.out.println("REFUSE " + sur(cible));
         client.getOutputStream().write(("HTTP/1.1 " + code + "\r\nConnection: close\r\n\r\n").getBytes("US-ASCII"));
+    }
+
+    static Socket joindre(List<String> ips, int port) {
+        for (String ip : ips) {
+            try {
+                Socket s = new Socket();
+                s.connect(new InetSocketAddress(InetAddress.getByName(ip), PORT_ESSAI > 0 ? PORT_ESSAI : port), 10000);
+                return s;
+            } catch (IOException e) { /* adresse suivante */ }
+        }
+        return null;
     }
 
     static void traiter(Socket client) {
@@ -267,40 +333,60 @@ public class ProxySortant {
                 if (dernier == 0x0D0A0D0A || entete.size() > ENTETE_MAX) break;
             }
             String texte = entete.toString("ISO-8859-1");
-            String ligne = texte.split("\r\n", 2)[0];
+            String[] lignes = texte.split("\r\n");
+            String ligne = lignes[0];
             String[] parties = ligne.split(" ");
-            if (entete.size() > ENTETE_MAX || dernier != 0x0D0A0D0A || parties.length != 3 || !parties[0].equals("CONNECT")) {
+            if (entete.size() > ENTETE_MAX || dernier != 0x0D0A0D0A || parties.length != 3) {
                 refuser(client, "405 Method Not Allowed", ligne);
                 return;
             }
-            int deux = parties[1].lastIndexOf(':');
-            String hote = deux < 0 ? parties[1] : parties[1].substring(0, deux);
-            String port = deux < 0 ? "" : parties[1].substring(deux + 1);
-            if (!port.equals("443")) { refuser(client, "403 Forbidden", parties[1]); return; }
-            hote = hote.toLowerCase(Locale.ROOT);
-            List<String> ips = HOTES.get(hote);
-            if (ips == null && ADRESSES.contains(hote)) ips = List.of(hote);
-            if (ips == null) { refuser(client, "403 Forbidden", parties[1]); return; }
-            for (String ip : ips) {
-                try {
-                    Socket s = new Socket();
-                    s.connect(new InetSocketAddress(InetAddress.getByName(ip), PORT_DISTANT), 10000);
-                    sortie = s;
-                    break;
-                } catch (IOException e) { /* adresse suivante */ }
+            byte[] debut = null;       // requête réécrite à envoyer en tête (HTTP clair seulement)
+            String cle;
+            if (parties[0].equals("CONNECT")) {
+                cle = parties[1].toLowerCase(Locale.ROOT);
+            } else if (METHODES.contains(parties[0]) && parties[1].startsWith("http://")) {
+                String reste = parties[1].substring(7);
+                int barre = reste.indexOf('/');
+                String autorite = (barre < 0 ? reste : reste.substring(0, barre)).toLowerCase(Locale.ROOT);
+                String chemin = barre < 0 ? "/" : reste.substring(barre);
+                cle = autorite.indexOf(':') < 0 ? autorite + ":80" : autorite;
+                if (!"http".equals(SCHEMAS.get(cle))) { refuser(client, "403 Forbidden", parties[1]); return; }
+                StringBuilder r = new StringBuilder(parties[0] + " " + chemin + " " + parties[2] + "\r\n");
+                for (int i = 1; i < lignes.length; i++) {
+                    String l = lignes[i].toLowerCase(Locale.ROOT);
+                    if (l.startsWith("proxy-") || l.startsWith("connection:") || l.startsWith("keep-alive:")) continue;
+                    r.append(lignes[i]).append("\r\n");
+                }
+                r.append("Connection: close\r\n\r\n");
+                debut = r.toString().getBytes("ISO-8859-1");
+            } else {
+                refuser(client, "405 Method Not Allowed", ligne);
+                return;
             }
-            if (sortie == null) { refuser(client, "502 Bad Gateway", parties[1]); return; }
+            int deux = cle.lastIndexOf(':');
+            if (deux < 0) { refuser(client, "403 Forbidden", cle); return; }
+            List<String> ips = CIBLES.get(cle);
+            if (ips == null) ips = PAR_ADRESSE.get(cle);
+            if (ips == null) { refuser(client, "403 Forbidden", cle); return; }
+            int portCible = Integer.parseInt(cle.substring(deux + 1));
+            sortie = joindre(ips, portCible);
+            if (sortie == null) { refuser(client, "502 Bad Gateway", cle); return; }
             sortie.setSoTimeout(INACTIF_MS);
-            System.out.println("OK " + sur(hote) + ":443");
-            client.getOutputStream().write("HTTP/1.1 200 Connection established\r\n\r\n".getBytes("US-ASCII"));
-            client.getOutputStream().flush();
+            System.out.println("OK " + sur(cle) + (debut == null ? "" : " " + parties[0]));
+            if (debut == null) {
+                client.getOutputStream().write("HTTP/1.1 200 Connection established\r\n\r\n".getBytes("US-ASCII"));
+                client.getOutputStream().flush();
+            } else {
+                sortie.getOutputStream().write(debut);
+                sortie.getOutputStream().flush();
+            }
             final Socket distant = sortie;
             Thread aller = new Thread(() -> copier(in, distant, client));
             aller.setDaemon(true);
             aller.start();
             copier(distant.getInputStream(), client, distant);
-        } catch (IOException e) {
-            // connexion coupée ou délai d'inactivité : fin normale
+        } catch (IOException | RuntimeException e) {
+            // connexion coupée, délai d'inactivité ou requête mal formée : fin normale
         } finally {
             if (sortie != null) try { sortie.close(); } catch (IOException e) { }
         }
@@ -466,7 +552,7 @@ fi
 
 RESEAU_EMUL=none                                    # fermé par défaut : seule la présence d'hôtes (accord vérifié par le lanceur) l'ouvre
 HOTES_IP=(); ADD_HOTES=(); ENV_PROXY=(); RAISON_DEMARRAGE="Conteneur en cours de démarrage."
-if [ -n "$HOTES" ]; then
+if [ "$RESEAU_DEMANDE" = 1 ]; then
   RAISON_RESEAU=""
   resoudre_hotes || fin_erreur "Réseau refusé : ${RAISON_RESEAU} Rien n'a démarré."      # d'abord : un refus ne touche à rien
   # Le créneau est tenu : un proxy ou un réseau `reseau-*` qui traîne est celui d'une tâche morte, on le retire.
@@ -475,25 +561,29 @@ if [ -n "$HOTES" ]; then
   case "$ICI$DOSSIER" in *,*) fin_erreur "Chemin non admis (virgule) : montage impossible." ;; esac
   ecrire_proxy || fin_erreur "Réseau refusé : le proxy n'a pas pu être écrit. Rien n'a démarré."
   RESEAU_EMUL="$RESEAU_NOM"
-  for hip in "${HOTES_IP[@]}"; do
+  for hip in ${HOTES_IP[@]+"${HOTES_IP[@]}"}; do
     for ip in $(printf '%s' "${hip#*=}" | tr ',' ' '); do ADD_HOTES+=(--add-host "${hip%%=*}:$ip"); done
   done
   ENV_PROXY=(-e "PONT_PROXY=http://proxy-sortant:$PROXY_PORT")
-  RAISON_DEMARRAGE="Conteneur en cours de démarrage ; réseau ouvert (HTTPS, port 443) vers : ${HOTES_IP[*]}."
-  printf '%s\n' "$(maintenant_iso) réseau ouvert (CONNECT :443 seulement) vers : ${HOTES_IP[*]}" > "$DOSSIER/reseau.txt"
+  DETAIL_RESEAU="${HOTES_IP[*]:+HTTPS port 443 vers : ${HOTES_IP[*]}}"
+  if [ -n "$POINT" ]; then
+    DETAIL_RESEAU="${DETAIL_RESEAU:+$DETAIL_RESEAU ; }point d'accès du service $POINT_SCHEMA://$POINT_HOTE:$POINT_PORT ($POINT_IP ; $POINT_SCHEMA : en clair si http, un jeton d'API y transite)"
+  fi
+  RAISON_DEMARRAGE="Conteneur en cours de démarrage ; réseau ouvert (${DETAIL_RESEAU})."
+  printf '%s\n' "$(maintenant_iso) réseau ouvert : ${DETAIL_RESEAU}" > "$DOSSIER/reseau.txt"
 fi
 
 honorer_final                                       # relu juste avant d'écrire en_cours
 printf '%s\n' "$$" > "$DOSSIER/enveloppe.pid"      # AVANT en_cours : un second lancement voit une enveloppe vivante, pas un veilleur mort
 ecrire_etat en_cours "" "$(maintenant_iso)" "" "$RAISON_DEMARRAGE"
 
-if [ -n "$HOTES" ]; then
+if [ "$RESEAU_DEMANDE" = 1 ]; then
   # Réseau interne (sans passerelle), puis le proxy : démarré sur le pont par défaut, puis branché sur le réseau interne.
   PROXY=(run --pull never --rm -d --init --name "$RESEAU_NOM" --network bridge --label myiafactory.genre=proxy
     --user 1000:1000 --cap-drop ALL --security-opt no-new-privileges --read-only --tmpfs /tmp:size=64m,mode=1777
     --memory 192m --memory-swap 192m --cpus 0.5 --pids-limit 128 -e HOME=/tmp --entrypoint java
     --mount "type=bind,src=$DOSSIER/reseau,dst=/proxy,readonly"
-    "$IMAGE" -Xmx96m /proxy/ProxySortant.java "$PROXY_PORT" "${HOTES_IP[@]}")
+    "$IMAGE" -Xmx96m /proxy/ProxySortant.java "$PROXY_PORT" "${ENTREES_PROXY[@]}")
   if ! dk 30 network create --internal --label myiafactory.genre=reseau "$RESEAU_NOM" >/dev/null 2>"$DOSSIER/docker-reseau.log" \
      || ! dk 120 "${PROXY[@]}" >/dev/null 2>>"$DOSSIER/docker-reseau.log" \
      || ! dk 30 network connect --alias proxy-sortant "$RESEAU_NOM" "$RESEAU_NOM" >/dev/null 2>>"$DOSSIER/docker-reseau.log"; then

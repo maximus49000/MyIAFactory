@@ -330,7 +330,7 @@ entrée dont le fichier mène ailleurs est écartée. La règle est la même dan
 projet affiche « serveur injoignable ». Quand l'application en a besoin, le Directeur peut ouvrir un réseau **borné**, projet
 par projet. Rien ne change pour un projet qui ne le demande pas.
 
-**Les trois conditions, toutes requises** (sinon : `--network none`, comme avant) :
+**Les conditions, toutes requises (hôtes DNS et/ou point d'accès du service, au moins un)** (sinon : `--network none`, comme avant) :
 
 1. **L'accord du Directeur, par projet** : l'action `recette-emulateur-reseau` (« Recette sur émulateur : réseau borné »)
    réglée sur « serveur » dans les réglages du projet (bureau, Réglages, Actions), comme `recette-emulateur`. Elle se lit
@@ -342,7 +342,16 @@ par projet. Rien ne change pour un projet qui ne le demande pas.
    minuscules (jamais une adresse IP, un port ou un chemin), **5 au plus**, sans doublon, ni domaine interne (`.local`,
    `.internal`, `.lan`...). Ce que dit le fichier de recette reste une donnée hostile : validé avant tout envoi, puis
    revalidé par l'enveloppe du serveur.
-3. **Des adresses publiques** : l'enveloppe résout chaque hôte **sur le serveur, avant le lancement** et refuse toute la demande
+3. **Le service du projet (point d'accès exact)** : pour l'application qui parle au service permanent du projet
+   (`.factory/service.json`, voir `serveur-services.md`), qui est souvent en HTTP clair, par adresse IP et sur un port à lui
+   (ex. `http://203.0.113.10:18000`). La recette écrit seulement `"service": true` (avec `"reseau": true` ; `hotes` devient
+   facultatif), ou le mode pilote `--service`. Le point d'accès n'est **jamais saisi** : le lanceur le **dérive** de la
+   déclaration du projet (le projet doit avoir un `.factory/service.json`) et de l'adresse que le cache du poste connaît du
+   service déployé (`~/MyIAFactory/services.json`, `outils/serveur_service.py`) ; une recette qui écrirait `point`, `adresse` ou
+   `ip` est refusée (clé inconnue). **Un seul** point d'accès par tâche, schéma `http` ou `https`, adresse IPv4 ou nom DNS,
+   port de 1 à 65535 : le proxy n'ouvre **que ce port-là** de cet hôte. Même accord `recette-emulateur-reseau`, mêmes
+   contrôles de l'enveloppe (point 4).
+4. **Des adresses publiques** : l'enveloppe résout chaque hôte **sur le serveur, avant le lancement** et refuse toute la demande
    si une adresse est privée, de bouclage, de lien local (métadonnées comprises), CGNAT, réservée ou multicast, ou si un hôte
    n'a aucune adresse IPv4 (IPv6 : jamais utilisé).
 
@@ -362,21 +371,37 @@ par projet. Rien ne change pour un projet qui ne le demande pas.
 - L'émulateur reçoit ces mêmes adresses par `--add-host` (son DNS les lit dans `/etc/hosts`) et démarre avec `-http-proxy` vers
   le proxy (`PONT_PROXY`, forme exacte `http://proxy-sortant:3128`, vérifiée par le pont). Un programme de l'application qui
   contournerait le proxy n'atteint rien : le réseau interne n'a pas de sortie (échec fermé).
+- **Point d'accès du service** : le proxy reçoit `<schéma>://<hôte>:<port>=<adresses>`. Il accepte `CONNECT <hôte>:<port>` (un
+  tunnel : il ne voit que la destination, pas les méthodes) et, pour le schéma `http`, les requêtes `GET`, `HEAD` et `POST` à URI
+  absolue vers ce seul hôte:port (réécrites en chemin, `Connection: close`, en-têtes `Proxy-*` retirés) ; toute autre méthode,
+  tout autre hôte ou port, `PUT`, `DELETE`, ou un `http` vers une cible déclarée en `https` : refusés. Une adresse littérale
+  (`203.0.113.10`) n'est pas résolue : elle est vérifiée publique sur l'hôte comme les autres, jamais privée, de bouclage, de
+  lien local, de métadonnées ni du réseau de l'hôte.
+- **Le trafic en clair sort vers une adresse publique** : avec un point d'accès `http`, tout ce que l'application envoie au
+  service (dont un jeton d'API `Authorization: Bearer ...`, intégré à l'APK Client par choix du Directeur) transite en clair
+  sur Internet, jusqu'à ce service. L'émulateur ne reçoit **jamais d'autre secret** : aucune clé du poste ni du serveur.
 - **Aucun secret** n'est transmis à l'émulateur ni au proxy (seules les variables posées par l'enveloppe) ; aucun socket Docker.
 
 **Durée et journal.** Le créneau unique, la durée maximale et l'inactivité sont ceux de toute tâche d'émulation ; le proxy et le
 réseau sont retirés à la fin, quelle qu'elle soit (arrêt, limite, plantage, veilleur interrompu) ; au lancement, un proxy ou un
 réseau `reseau-*` resté d'une tâche morte est retiré (le créneau est tenu). La tâche **dit que le réseau était ouvert et vers
-qui** : la raison d'`etat.json` (« réseau ouvert (HTTPS, port 443) vers : hôte=adresse »), le champ `reseau` de la fiche
+qui** : la raison d'`etat.json` (« réseau ouvert (HTTPS port 443 vers : hôte=adresse ; point d'accès du service ... »), le champ `reseau` de la fiche
 (`serveur-tache lister`), `~/taches/<id>/reseau.txt` et `~/taches/<id>/reseau-proxy.log` (hôtes acceptés ou refusés).
 
-**Ce que l'isolation permet et ne permet pas.** Permet : HTTPS vers les hôtes déclarés, rien d'autre ; pas d'accès au réseau
+**Ce que l'isolation permet et ne permet pas.** Permet : HTTPS vers les hôtes déclarés, plus le point d'accès exact du service du projet (HTTP ou HTTPS, son port seulement), rien d'autre ; pas d'accès au réseau
 interne de l'hôte, à ses ports, aux autres conteneurs, aux métadonnées, au socket Docker. Ne permet pas (limites assumées) :
-HTTP en clair, ports autres que 443, hôtes sans nom DNS public, IPv6, un service dont l'adresse change pendant la tâche (les
+HTTP en clair vers autre chose que le point d'accès du service, ports autres que 443 (hors ce point), hôtes sans nom DNS public, IPv6, un service dont l'adresse change pendant la tâche (les
 adresses sont figées au lancement : relancer), un site dont l'adresse dépend du client (CDN). Le proxy ne peut pas empêcher
 l'application d'envoyer ce qu'elle veut AUX hôtes déclarés : déclarer un hôte, c'est lui faire confiance pour la durée de la
 tâche (le service du projet, typiquement). Le proxy tourne sur le pont Docker par défaut : une règle de pare-feu de l'hôte qui
 limiterait ce pont renforcerait l'ensemble (non faite ici : la configuration du serveur n'est pas touchée).
+
+**Essai réel, une fois déployé** (service déployé, donc adresse dans le cache ; accord réglé ; recette avec `"reseau": true,
+"service": true`) :
+
+```powershell
+py -3.12 lancer.py serveur-tache lancer --apk <apk> --mode scenario --scenario <recette> --projet <dossier du projet> --attendre
+```
 
 **Déploiement (à faire, avec l'accord du Directeur).** `pont.sh` fait partie de l'image `emulateur-image` : la mise à jour de
 l'image (bureau, Serveurs, `emulateur-image`) est nécessaire avant le premier lancement après cette évolution (le lanceur refuse

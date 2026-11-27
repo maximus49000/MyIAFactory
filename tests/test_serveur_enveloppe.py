@@ -861,6 +861,70 @@ class TestReseauBorne(unittest.TestCase):
             b.attendre_final()
             self.assertIn(f"docker network rm reseau-{ID}", b.appels("docker "))
 
+    POINT = "http://203.0.113.10:18000"
+
+    def lancer_point(self, b, point=POINT, hotes="-", **env):
+        return b.lancer(*self.LIMITES, hotes, point, env=env)
+
+    def test_point_d_acces_par_adresse_ip_publique(self):
+        with Banc(FAUX_IP_HOTE="203.0.113.10") as b:
+            r = self.lancer_point(b)
+            self.assertEqual(r.returncode, 0, r.stderr + r.stdout)
+            a, p = b.run_args(), (b.et / "run-proxy.txt").read_text(encoding="utf-8").splitlines()
+            reseau = f"reseau-{ID}"
+            self.assertEqual([a[i + 1] for i in range(len(a) - 1) if a[i] == "--network"], [reseau])
+            self.assertNotIn("--add-host", a)                                # une adresse littérale n'a pas de nom à épingler
+            self.assertIn("http://203.0.113.10:18000=203.0.113.10", p)       # le proxy ne reçoit que ce point-là
+            e = b.etat()["raison"]
+            self.assertIn("point d'accès du service http://203.0.113.10:18000", e)
+            self.assertIn("en clair", e)                                       # le journal dit que le trafic sort en clair
+            self.assertIn("en clair", (b.dossier / "reseau.txt").read_text(encoding="utf-8"))
+            b.arreter()
+            b.attendre_final()
+            self.assertIn(f"docker network rm {reseau}", b.appels("docker "))
+
+    def test_point_d_acces_par_nom_est_epingle(self):
+        with Banc() as b:
+            self.assertEqual(self.lancer_point(b, "https://service.exemple:8443").returncode, 0)
+            a, p = b.run_args(), (b.et / "run-proxy.txt").read_text(encoding="utf-8").splitlines()
+            self.assertIn("service.exemple:93.184.216.34", a)
+            self.assertIn("https://service.exemple:8443=93.184.216.34", p)
+
+    def test_point_et_hotes_ensemble(self):
+        with Banc(FAUX_IP_HOTE="203.0.113.10") as b:
+            self.assertEqual(self.lancer_point(b, hotes="api.exemple.fr").returncode, 0)
+            p = (b.et / "run-proxy.txt").read_text(encoding="utf-8").splitlines()
+            self.assertIn("api.exemple.fr=203.0.113.10", p)
+            self.assertIn("http://203.0.113.10:18000=203.0.113.10", p)
+
+    def test_point_d_acces_non_public_refuse_avant_tout(self):
+        for ip in ("10.0.0.5", "127.0.0.1", "169.254.169.254", "192.168.1.10", "172.16.4.4", "100.64.0.1", "0.0.0.1", "224.0.0.1",
+                   "198.19.0.1", "192.0.0.8"):
+            with self.subTest(ip), Banc() as b:
+                r = self.lancer_point(b, f"http://{ip}:18000")
+                self.assertEqual(r.returncode, 1, r.stderr + r.stdout)
+                self.assertIn("pas publique", b.etat()["raison"])
+                self.assertEqual(b.appels("docker run"), [], b.journal)
+                self.assertEqual(self.appels_docker(b, "network"), [])
+        with Banc(FAUX_IP_HOTE="10.0.0.5") as b:                              # un nom qui se résout vers une adresse privée
+            self.assertEqual(self.lancer_point(b, "http://service.exemple:18000").returncode, 1)
+            self.assertEqual(b.appels("docker run"), [])
+
+    def test_point_d_acces_mal_forme_refuse(self):
+        for point in ("ftp://203.0.113.10:21", "tcp://203.0.113.10:18000", "203.0.113.10:18000", "http://203.0.113.10",
+                      "http://203.0.113.10:0", "http://203.0.113.10:65536", "http://203.0.113.10:018000", "http://203.0.113.10:18000/x",
+                      "http://u@203.0.113.10:18000", "HTTP://203.0.113.10:18000", "http://Service.Exemple:80", "http://localhost:80",
+                      "http://a.internal:80", "http://203.0.113.10:18000;touch", "http://[::1]:80", "http://203.0.113:80", ""):
+            with self.subTest(point), Banc() as b:
+                r = self.lancer_point(b, point)
+                self.assertEqual(r.returncode, 2, f"{point!r}: {r.stderr}")
+                self.assertEqual(b.appels("docker "), [])
+                self.assertFalse(b.dossier.exists())
+
+    def test_sans_hotes_ni_point_refuse(self):
+        with Banc() as b:
+            self.assertEqual(b.lancer(*self.LIMITES, "-").returncode, 2)
+
     def test_un_ancien_proxy_ou_reseau_est_retire_avant(self):
         with Banc() as b:
             self.assertEqual(self.lancer(b).returncode, 0)
@@ -908,7 +972,7 @@ class TestProxySortant(unittest.TestCase):
             cls.port = s.getsockname()[1]
         cls.proc = subprocess.Popen(
             ["java", f"-Dproxy.portdistant={cls.port_echo}", (cls.dossier / "ProxySortant.java").as_posix(), str(cls.port),
-             "service.exemple=127.0.0.1"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+             "service.exemple=127.0.0.1", "http://203.0.113.10:18000=127.0.0.1", "https://203.0.113.11:8443=127.0.0.1"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         fin = time.time() + 60
         while time.time() < fin:
             try:
@@ -955,9 +1019,52 @@ class TestProxySortant(unittest.TestCase):
             self.assertTrue(rep.startswith("HTTP/1.1 403"), f"{port}: {rep}")
 
     def test_autre_methode_refusee(self):
-        for texte in ("GET http://service.exemple/ HTTP/1.1\r\nHost: service.exemple\r\n\r\n", "POST / HTTP/1.1\r\n\r\n",
+        for texte in ("PATCH / HTTP/1.1\r\nHost: service.exemple\r\n\r\n", "POST / HTTP/1.1\r\n\r\n",
                       "CONNECT service.exemple:443\r\n\r\n", "connect service.exemple:443 HTTP/1.1\r\n\r\n"):
             self.assertTrue(self.requete(texte).startswith("HTTP/1.1 405"), texte)
+
+    def test_http_en_clair_vers_le_point_d_acces_declare_seulement(self):
+        rep = self.requete("GET http://203.0.113.10:18000/api/equipes?x=1 HTTP/1.1\r\nHost: 203.0.113.10:18000\r\n"
+                           "Authorization: Bearer jeton-fictif\r\nProxy-Connection: keep-alive\r\nConnection: keep-alive\r\n\r\n",
+                           None)
+        import socket
+        with socket.create_connection(("127.0.0.1", self.port), timeout=10) as s:
+            s.sendall(b"POST http://203.0.113.10:18000/api/x HTTP/1.1\r\nHost: 203.0.113.10:18000\r\nContent-Length: 2\r\n\r\nok")
+            recu = b""
+            while not recu.endswith(b"ok"):
+                bloc = s.recv(4096)
+                if not bloc:
+                    break
+                recu += bloc
+        texte = recu.decode("latin-1")
+        self.assertTrue(texte.startswith("ECHO:POST /api/x HTTP/1.1\r\n"), texte)      # URI absolue réécrite en chemin
+        self.assertIn("Host: 203.0.113.10:18000", texte)
+        self.assertIn("Connection: close", texte)
+        self.assertNotIn("keep-alive", texte.lower())
+        self.assertTrue(rep.startswith("ECHO:GET /api/equipes?x=1 HTTP/1.1\r\n"), rep)
+        self.assertIn("Authorization: Bearer jeton-fictif", rep)                          # le jeton passe, en clair, vers ce seul hôte
+        self.assertNotIn("Proxy-Connection", rep)
+
+    def test_http_autre_hote_port_ou_methode_refuse(self):
+        for texte, code in (("GET http://203.0.113.10:18001/ HTTP/1.1\r\n\r\n", "403"),
+                            ("GET http://203.0.113.10/ HTTP/1.1\r\n\r\n", "403"),
+                            ("GET http://203.0.113.12:18000/ HTTP/1.1\r\n\r\n", "403"),
+                            ("GET http://127.0.0.1:18000/ HTTP/1.1\r\n\r\n", "403"),
+                            ("GET http://169.254.169.254/ HTTP/1.1\r\n\r\n", "403"),
+                            ("GET http://service.exemple/ HTTP/1.1\r\n\r\n", "403"),      # cible https : pas de HTTP clair
+                            ("GET http://203.0.113.11:8443/ HTTP/1.1\r\n\r\n", "403"),     # idem
+                            ("PUT http://203.0.113.10:18000/ HTTP/1.1\r\n\r\n", "405"),
+                            ("DELETE http://203.0.113.10:18000/ HTTP/1.1\r\n\r\n", "405"),
+                            ("GET https://203.0.113.10:18000/ HTTP/1.1\r\n\r\n", "405"),
+                            ("GET /api HTTP/1.1\r\nHost: 203.0.113.10:18000\r\n\r\n", "405")):
+            self.assertTrue(self.requete(texte).startswith(f"HTTP/1.1 {code}"), texte)
+
+    def test_connect_vers_le_point_d_acces_et_son_port_seulement(self):
+        self.assertTrue(self.requete("CONNECT 203.0.113.10:18000 HTTP/1.1\r\n\r\n").startswith("HTTP/1.1 200"))
+        self.assertTrue(self.requete("CONNECT 203.0.113.11:8443 HTTP/1.1\r\n\r\n").startswith("HTTP/1.1 200"))
+        for refus in ("CONNECT 203.0.113.10:443 HTTP/1.1\r\n\r\n", "CONNECT 203.0.113.10:22 HTTP/1.1\r\n\r\n",
+                      "CONNECT 203.0.113.11:18000 HTTP/1.1\r\n\r\n", "CONNECT service.exemple:18000 HTTP/1.1\r\n\r\n"):
+            self.assertTrue(self.requete(refus).startswith("HTTP/1.1 403"), refus)
 
     def test_hote_en_majuscules_est_le_meme_hote(self):
         self.assertTrue(self.requete("CONNECT SERVICE.EXEMPLE:443 HTTP/1.1\r\n\r\n").startswith("HTTP/1.1 200"))

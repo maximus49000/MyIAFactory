@@ -316,6 +316,36 @@ class TestReseauBorne(Base):
         self.refuse_avec_accord(recette_json(reseau=True, hotes=["service.exemple", "service.exemple"]), "doublon")
         self.refuse_avec_accord(recette_json(reseau=True, hotes=[f"h{i}.exemple" for i in range(6)]), "Trop d'hôtes")
 
+    def test_service_true_sans_hotes_avec_accord(self):
+        self.ecrire("demo", recette_json(reseau=True, service=True))
+        r = sr.charger(str(self.projet), "demo", accord_reseau=True)
+        self.assertEqual((r.reseau, r.service, r.hotes), (True, True, ()))
+
+    def test_service_et_hotes_ensemble(self):
+        self.ecrire("demo", self.reseau(service=True))
+        r = sr.charger(str(self.projet), "demo", accord_reseau=True)
+        self.assertEqual((r.service, r.hotes), (True, ("service.exemple", "api.service.exemple")))
+
+    def test_service_sans_accord_refuse(self):
+        self.ecrire("demo", recette_json(reseau=True, service=True))
+        with self.assertRaises(ValueError) as c:
+            sr.charger(str(self.projet), "demo")
+        self.assertIn("recette-emulateur-reseau", str(c.exception))
+
+    def test_service_formes_fautives_refusees(self):
+        self.refuse_avec_accord(recette_json(reseau=True, service="oui", hotes=self.HOTES), "service")
+        self.refuse_avec_accord(recette_json(reseau=False, service=True), "reseau: true")
+        self.refuse_avec_accord(recette_json(reseau=True, service=False), "hotes")
+        self.refuse_avec_accord(recette_json(reseau=True, service=True, hotes=[]), "non vide")
+
+    def test_un_point_ecrit_dans_la_recette_est_refuse(self):
+        for cle in ("point", "adresse", "service_url", "ip"):
+            self.refuse_avec_accord(recette_json(reseau=True, service=True, **{cle: "http://203.0.113.10:18000"}), "objet")
+
+    def test_service_par_defaut_faux(self):
+        self.ecrire("demo", recette_json())
+        self.assertFalse(sr.charger(str(self.projet), "demo", accord_reseau=True).service)
+
     def test_reseau_ni_vrai_ni_faux_refuse(self):
         for faux in ("true", 1, None, [], "oui"):
             self.refuse_avec_accord(recette_json(reseau=faux), "true ou false")

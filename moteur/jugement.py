@@ -42,7 +42,9 @@ Dossiers attendus (préparés par la table de règles) :
   autonomes), `mots_interdits`. Pour une tâche bloquée sans décision (`decision.genre` = `tache_bloquee`) : aussi
   `taches_dev` ([{id, titre, etape, metier, journal}], les tâches faites de la fonctionnalité) et `service` (vrai si
   le projet déclare un service permanent redéployable). Tout dossier porte aussi `anomalies` (les anomalies du
-  logiciel encore « nouvelles » : id, titre, description) et `service` ({adresse} : le service en ligne du projet) ; une décision qui parle du service ajoute
+  logiciel encore « nouvelles » : id, titre, description) et `commandes_dediees` ([{commande, role, exemple}] : projet Flutter serveur ; `commande_dediee_pour_la_demande` si la commande
+  brute demandée en a une),
+  `service` ({adresse} : le service en ligne du projet) ; une décision qui parle du service ajoute
   `faits_du_service` (état, commit, santé, noms des secrets présents, pages) et `deja_fait` (vrai : l'action est déjà faite).
 
 - `repondre_question` : `projet` (nom, description), `genre`, `fonctionnalites` ([{id, nom, nature, etape, cahier}]),
@@ -834,6 +836,14 @@ def _valider_decider_autonome(o, d):
         return "« texte » ne peut pas demander un autre modèle : jamais Fable."
     if verdict in ("preciser", "refuser") and not t:
         return f"« texte » est obligatoire avec le verdict {verdict} (ce que l'agent doit faire à la place)."
+    dediee = d.get("commande_dediee_pour_la_demande")
+    if isinstance(dediee, dict) and dediee.get("commande"):      # la commande brute a une commande dédiée : elle se donne
+        if verdict == "autoriser":
+            return (f"« {dediee['commande']} » est la commande dédiée à ce que l'agent demande : réponds « refuser » avec la "
+                    "consigne exacte de l'employer, jamais « autoriser » la commande brute.")
+        if verdict == "refuser" and dediee["commande"] not in str(t or ""):
+            return (f"« texte » doit donner la commande dédiée « {dediee['commande']} » (son nom, sa place au début de la commande, "
+                    f"un exemple : {dediee.get('exemple')}), pas un repli : un outil qui existe se donne.")
     if d.get("deja_fait") and verdict in ("accepter", "choisir", "repondre"):
         return ("Les faits du service montrent que cette action est déjà faite (service en ligne, sain, à la version voulue) : "
                 "réponds « refuser » avec un « texte » qui dit « déjà fait : … » et ce que l'agent vérifie à la place.")

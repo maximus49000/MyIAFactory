@@ -54,6 +54,10 @@ Un `fusion_conflit` (branche d'agent qui ne fusionne pas) : lis `fichiers_en_con
 `garder_depot` (fusion `-s ours`) ou `garder_branche`, selon la version la plus complète et exacte ; du code ou des tests : `renvoyer`
 avec les deux versions, jamais de résolution seule ; `laisser` dans le doute.
 
+Un `outil_agent` pour une commande brute (`flutter test`, `flutter analyze`, `flutter build apk`, `gradlew`) : si le dossier donne
+`commandes_dediees`, l'outil existe déjà : `refuser` avec la consigne EXACTE (nom, au début de la commande, sans guillemets ni chemin,
+un exemple), jamais un repli ni « non vérifié ». Un outil qui existe se donne, on ne le remplace pas.
+
 Un `outil_agent` : avant de refuser un outil, vois si l'agent obtient le même résultat avec ceux qu'il a (`py`/Python : `urllib.request`,
 délai 20 s) et dis-le (`refuser` avec cette consigne : sans jeton, rapporte les codes) ; ne conclus jamais « non vérifié » sur ce qui se
 vérifie sans l'outil. Un contrôle « sans jeton → 401 » est une vérification de sécurité à garder. `autoriser` seulement sans équivalent.

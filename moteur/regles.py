@@ -8077,6 +8077,12 @@ def _dossier_autonome(projet, etat, d):
     except Refus:
         nouvelles = []
     plus = {"anomalies": nouvelles, "service": {"adresse": _adresse_du_service(projet)}}
+    if d["genre"] in (GENRE_OUTIL, GENRE_ACCORD, GENRE_BLOCAGE, GENRE_TACHE_BLOQUEE) and _projet_flutter(projet):
+        plus["commandes_dediees"] = [{k: c[k] for k in ("commande", "role", "exemple")} for c in dep.COMMANDES_DEDIEES_FLUTTER]
+        brute = " ".join(str(d.get(c) or "") for c in ("commande", "outil", "programme", "quoi", "texte"))
+        pour = next((c for c in dep.COMMANDES_DEDIEES_FLUTTER if re.search(c["remplace"], brute, re.IGNORECASE)), None)
+        if pour is not None and d["genre"] == GENRE_OUTIL:
+            plus["commande_dediee_pour_la_demande"] = {"commande": pour["commande"], "exemple": pour["exemple"]}
     if d["genre"] == GENRE_FUSION:
         fusion = _faits_de_la_fusion(projet, d)
         verdicts = [v for v in verdicts if not (v == "garder_depot" and not fusion["depot_possible"])

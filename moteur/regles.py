@@ -4235,14 +4235,19 @@ SECTIONS_CORRECTION = {"correctif": "Correctif", "verification": "Vérification"
 # arrivait avant l'étape qui construit l'APK, « Rien à valider », série close à vide ; « correctif déjà présent »
 # concluait sans rien livrer.
 CONSIGNE_APK_AVANT_VALIDATION = (
-    "Projet à livrable (APK) : le Directeur valide la correction en essayant l'APK. Avant ton rapport, construis l'APK de "
-    "ta branche, même si tu n'as rien modifié (correctif déjà présent, anomalie introuvable) : c'est alors l'APK actuel "
-    "qu'il essaie. S'il est déjà construit pour cette branche par l'étape d'avant, joins-le sans le reconstruire. "
-    "Déclare-le dans `fichiers` avec `\"livrable\": true` et `\"element\": \"correction\"` (chemin relatif au projet). "
-    "Sans cet APK, l'étape est refaite.")
+    "Projet à livrable (APK) : quand le problème corrigé est dans l'application, le Directeur valide la correction en "
+    "essayant l'APK. Avant ton rapport, construis alors l'APK de ta branche, même si tu n'as rien modifié (correctif déjà "
+    "présent, anomalie introuvable) : c'est l'APK actuel qu'il essaie. S'il est déjà construit pour cette branche par "
+    "l'étape d'avant, ou s'il existe déjà pour ces sources, joins-le sans le reconstruire. Déclare-le dans `fichiers` avec "
+    "`\"livrable\": true` et `\"element\": \"correction\"` (chemin relatif au projet). "
+    "Si le problème est AILLEURS que dans l'application (le serveur, les pages publiques, la documentation, les tests) et "
+    "que tu ne modifies pas l'application, ne construis AUCUN APK : une construction prend de 8 à 14 minutes pour rien. "
+    "Dis alors dans ton rapport que l'application n'a pas changé, et donne de quoi juger la correction (lien d'accès, "
+    "documents).")
 CONSIGNE_APK_A_LA_LIVRAISON = (
-    "Projet à livrable (APK) : construis l'APK de la branche livrée, même si rien n'a changé depuis la validation, et "
-    "déclare-le dans `fichiers` avec `\"livrable\": true` et `\"element\": \"correction\"`.")
+    "Projet à livrable (APK) : si la correction change l'application, construis l'APK de la branche livrée, même si rien "
+    "n'a changé depuis la validation, et déclare-le dans `fichiers` avec `\"livrable\": true` et `\"element\": "
+    "\"correction\"`. Si elle ne change que le serveur, des documents ou des tests, ne construis aucun APK.")
 CONSIGNE_APK_FLUTTER = (
     "Projet Flutter : construis l'APK par la commande unique `construire-apk` (au serveur ; elle se place dans le dossier "
     "Flutter et rend le fichier sous `build/app/outputs/flutter-apk/`), jamais `flutter build` directement (refusé au "
@@ -4260,8 +4265,15 @@ def _livrable_du_projet(projet):
 
 
 def _apk_exige(projet, v):
-    """Vrai si la validation de cet élément exige l'APK : une correction d'un projet qui produit un APK."""
-    return (_fonc(projet, v["fid"]) or {}).get("nature") == "correction" and _livrable_du_projet(projet) == "apk"
+    """Vrai si la validation de cet élément exige l'APK : une correction d'un projet qui produit un APK, SAUF si ses
+    tâches ont modifié des fichiers et qu'aucun ne touche l'application (le serveur, les documents, les tests) : un APK
+    n'est exigé, donc construit, que si l'évolution en a besoin (FM_Stats, 2026-11-27 : un correctif des pages du serveur
+    faisait construire un APK de 8 à 14 minutes). Rien de modifié du tout (« correctif déjà présent ») : l'APK actuel reste
+    exigé, c'est lui que le Directeur essaie."""
+    if not ((_fonc(projet, v["fid"]) or {}).get("nature") == "correction" and _livrable_du_projet(projet) == "apk"):
+        return False
+    besoin, fichiers = _l_element_a_besoin_d_un_apk(projet, v)
+    return bool(besoin or not fichiers)
 
 
 def _consigne_apk_de_correction(projet, pas):
@@ -5898,6 +5910,19 @@ def _etat_element(etat, fid, element):
         "attendus": 0, "rapports": []})
 
 
+def _est_une_etape_de_livraison(projet, fid, s):
+    """Vrai pour l'étape du flux qui remet le livrable : la livraison d'une correction (`<fid>-livraison`) ou la dernière étape
+    (hors validation) du workflow d'une fonctionnalité (même règle que `_est_une_livraison`, pour une étape)."""
+    sid = str(s.get("id") or "")
+    if sid.endswith("-livraison"):
+        return True
+    try:
+        production = _production(projet, fid)
+    except (Refus, fa.FactoryInvalide, KeyError, ValueError):
+        return False
+    return bool(production) and production[-1].get("id") == sid and not wf.est_validation(production[-1])
+
+
 def _tache_de_flux(projet, etat, v, journal=None):
     pas = _production(projet, v["fid"])
     s = pas[v["pas"]]
@@ -5907,6 +5932,15 @@ def _tache_de_flux(projet, etat, v, journal=None):
         return _tache_de_flux(projet, etat, v, journal)
     if wf.est_validation(s):
         return _attendre_le_directeur(projet, etat, v, s)
+    if _est_une_etape_de_livraison(projet, v["fid"], s) and not v.get("lot_livraison"):
+        # Un APK n'est construit que si l'évolution en a besoin, QUEL QUE SOIT le chemin qui mène à la livraison : après
+        # une validation du Directeur le moteur créait la tâche de livraison tout droit, sans le contrôle de
+        # `livrer_si_calme` (FM_Stats, 2026-11-27 : « le bureau refait un apk tout le temps », t305 pour un élément qui
+        # ne change que des documents). Un lot décidé par `livrer_si_calme` (`lot_livraison`) a déjà fait ce contrôle.
+        besoin, fichiers = _l_element_a_besoin_d_un_apk(projet, v)
+        if not besoin:
+            _livrer_sans_apk(projet, etat, v, fichiers)
+            return None
     journal = list(journal or []) + v.pop("journal_suivant", [])     # la note du Directeur jointe à sa validation
     revue = _revue_d_ensemble(projet, etat, v, journal)
     if revue == "saute":      # un élément qui n'est pas le dernier : conforme d'office, le dernier revoit l'ensemble

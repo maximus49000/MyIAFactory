@@ -282,6 +282,31 @@ class TestCorrectionAvecApk(Base):
         briefs.mkdir(parents=True, exist_ok=True)
         (briefs / "dev.md").write_text("# Brief du rôle : dev\n\nFait son métier.\n", encoding="utf-8")
         (self.dossier / "pubspec.yaml").write_text(PUBSPEC_FLUTTER, encoding="utf-8")
+        # Ces scénarios sont ceux d'une correction qui CHANGE l'application : leurs tâches n'ont ni agent ni branche, donc
+        # aucun fichier modifié connu, et « un APK n'est construit que si l'évolution en a besoin » (étape de livraison
+        # close sans APK) ne les concernerait pas. On dit explicitement que l'application change.
+        besoin = mock.patch.object(regles, "_l_element_a_besoin_d_un_apk", return_value=(True, ["lib/main.dart"]))
+        besoin.start()
+        self.addCleanup(besoin.stop)
+
+    def test_la_validation_n_exige_l_apk_que_si_l_element_touche_l_application(self):
+        """FM_Stats, 2026-11-27 : un correctif des pages du SERVEUR faisait construire un APK de 8 à 14 minutes, parce que
+        toute correction d'un projet à APK l'exigeait. Il n'est exigé que si l'application change."""
+        v = {"fid": "f1", "element": {"id": "correction", "nom": "Correction"}, "taches": []}
+        self.corriger()
+        for fichiers, besoin, attendu in ((["serveur/pages_web.py", "docs/api.md"], False, False),   # serveur et documents
+                                          (["android_app/lib/main.dart"], True, True),                # l'application change
+                                          ([], False, True),               # rien de modifié : l'APK actuel reste exigé
+                                          (None, True, True)):             # fichiers inconnus : comme avant
+            with self.subTest(fichiers=fichiers):
+                with mock.patch.object(regles, "_l_element_a_besoin_d_un_apk", return_value=(besoin, fichiers)):
+                    self.assertEqual(regles._apk_exige(self.projet, v), attendu)
+
+    def test_la_consigne_ne_demande_un_apk_que_si_le_probleme_est_dans_l_application(self):
+        for consigne in (regles.CONSIGNE_APK_AVANT_VALIDATION, regles.CONSIGNE_APK_A_LA_LIVRAISON):
+            with self.subTest(consigne=consigne[:40]):
+                self.assertIn("ne construis aucun apk", consigne.lower())
+        self.assertIn("AILLEURS", regles.CONSIGNE_APK_AVANT_VALIDATION)
 
     def preuve(self):
         p = self.dossier / "pieces" / "f1" / "preuve.md"

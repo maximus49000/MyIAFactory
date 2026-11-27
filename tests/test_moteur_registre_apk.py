@@ -197,6 +197,73 @@ class ConsigneDuTest(Depot):
         f.assert_called_once()
 
 
+MAITRE = f"{APP}/build/app/outputs/flutter-apk/app-maitre-release.apk"
+
+
+class BonneVariante(Depot):
+    """FM_Stats f35, t313 : la vérification d'une correction « APK Client » a reçu l'APK Maître."""
+
+    def setUp(self):
+        super().setUp()
+        from datetime import datetime, timezone
+        self.construire(CLIENT)
+        self.ecrire(MAITRE, "APK")
+        registre_apk.enregistrer(str(self.d), MAITRE, maintenant=datetime(2030, 1, 1, tzinfo=timezone.utc))     # le plus récent
+
+    def tache(self, titre, journal=None, fait=False):
+        e = {"titre": titre, "fonctionnalite": "f1", "role": "testeur", "etape": "flux:essai", "colonne": "fait" if fait else "essai",
+             "active": False}
+        if journal:
+            e["journal"] = journal
+        tid = self.ok("tache", entree=e)["id"]
+        return next(t for t in self.suivi()["taches"] if t["id"] == tid)
+
+    def donne(self, t):
+        (texte,) = regles._consigne_de_l_apk_existant(self.projet, t)
+        return texte
+
+    def test_une_correction_qui_cite_client_recoit_l_apk_client_meme_si_le_maitre_est_plus_recent(self):
+        texte = self.donne(self.tache("Vérification : correction « APK Client sans adresse du service »"))
+        self.assertIn(CLIENT, texte)
+        self.assertNotIn(MAITRE, texte)
+
+    def test_l_apk_rapatrie_par_une_tache_de_la_meme_fonctionnalite_l_emporte(self):
+        self.tache("Livraison de la correction", journal=[f"Livrable rapatrié : {CLIENT} (12 Mo)"], fait=True)
+        texte = self.donne(self.tache("Vérification de la correction"))           # rien ne nomme la variante
+        self.assertIn(CLIENT, texte)
+        self.assertNotIn(MAITRE, texte)
+
+    def test_le_rapatrie_l_emporte_meme_sur_le_texte(self):
+        self.tache("Livraison", journal=[f"Livrable rapatrié : {CLIENT} (12 Mo)"], fait=True)
+        texte = self.donne(self.tache("Vérification de l'APK Maître"))
+        self.assertIn(CLIENT, texte)
+
+    def test_aucune_regle_ne_tranche_la_consigne_liste_les_candidats_et_n_en_impose_pas(self):
+        texte = self.donne(self.tache("Vérification de la correction"))
+        self.assertIn(CLIENT, texte)
+        self.assertIn(MAITRE, texte)
+        self.assertIn("apk_utilise", texte)
+        self.assertNotIn("NE construis PAS d'APK et", texte)
+        self.assertFalse((self.d / ".factory" / registre_apk.NOM_DEMANDES).exists())
+
+    def test_une_seule_variante_connue_est_donnee(self):
+        (self.d / ".factory" / registre_apk.NOM_REGISTRE).write_text(json.dumps(
+            [x for x in registre_apk.lire(str(self.d)) if x["variante"] == "client"]), encoding="utf-8")
+        self.assertIn(CLIENT, self.donne(self.tache("Vérification de la correction")))
+
+    def test_deux_variantes_sans_apk_a_jour_et_sans_regle_aucune_construction_imposee(self):
+        self.ecrire(f"{APP}/lib/main.dart", "void main() { nouveau(); }\n")
+        self.valider("code")
+        texte = self.donne(self.tache("Vérification de la correction"))
+        self.assertIn("Variantes connues", texte)
+        self.assertFalse((self.d / ".factory" / registre_apk.NOM_DEMANDES).exists())
+
+    def test_deux_variantes_nommees_restent_ambigues(self):
+        texte = self.donne(self.tache("Vérification client et maitre"))
+        self.assertIn(CLIENT, texte)
+        self.assertIn(MAITRE, texte)
+
+
 class Rapport(unittest.TestCase):
     def test_apk_utilise_est_valide_ou_ecarte(self):
         bon = {"variante": "client", "empreinte": "ab12", "date": "2026-11-27T04:00:00Z"}

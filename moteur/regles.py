@@ -4662,15 +4662,66 @@ def _chemins_du_projet(projet, r, fid=None):
     return r
 
 
+def _variante_du_test(projet, t, variantes):
+    """La variante d'APK qu'une tâche de test vise, jamais « la première » par habitude : 1) l'APK construit et rapatrié par une
+    tâche de la MÊME fonctionnalité (journal « Livrable rapatrié : … .apk »), le plus récent ; 2) la seule variante nommée par la
+    fonctionnalité, la tâche, son élément ou son journal (client, maitre…) ; 3) la seule variante connue. None quand plusieurs
+    restent possibles."""
+    if not variantes:
+        return None
+    fid = t.get("fonctionnalite")
+    if fid:
+        try:
+            soeurs = lancer(projet, "detail", {"fonctionnalite": fid, "taches": True})["taches"]
+        except Refus:
+            soeurs = []
+        for x in reversed(soeurs):
+            if x["id"] == t["id"]:
+                continue
+            try:
+                journal = _tache(projet, x["id"]).get("journal") or []
+            except Refus:
+                continue
+            for j in reversed(journal):
+                m = re.match(r"Livrable rapatrié : (.+?\.apk) \(", str(j.get("texte") if isinstance(j, dict) else j), re.IGNORECASE)
+                if m and registre_apk.variante_de(m.group(1)) in variantes:
+                    return registre_apk.variante_de(m.group(1))
+    texte = [str(t.get("titre") or ""), str(t.get("element") or "")] + [
+        str(j.get("texte") or "") for j in (t.get("journal") or [])]
+    if fid:
+        try:
+            texte.append(str(_fonc(projet, fid).get("nom") or ""))
+        except (Refus, ErreurMoteur):
+            pass
+    plat = " " + normaliser_mot(" ".join(texte)) + " "
+    nommees = [v for v in variantes if f" {normaliser_mot(v)} " in plat]
+    if len(nommees) == 1:
+        return nommees[0]
+    return variantes[0] if len(variantes) == 1 else None
+
+
 def _consigne_de_l_apk_existant(projet, t):
     """Un test qui a besoin d'un APK reçoit L'APK EXISTANT dont l'empreinte des sources correspond au code testé (jamais une
     reconstruction ni une livraison) ; sinon UNE seule construction est demandée, partagée entre les tests qui l'attendent.
     Rend les lignes de la consigne (vide hors projet Flutter) et note la décision au journal de la tâche (traçabilité)."""
     try:
-        titre = str(t.get("titre") or "").lower()
-        connues = {x.get("variante") for x in registre_apk.lire(projet.dossier)}
-        variante = next((v for v in sorted(connues) if v and v.lower() in titre), None)
-        r = registre_apk.fournir(projet.dossier, variante, tache=t["id"], motifs=_factory(projet).get("apk_ignore"))
+        motifs = _factory(projet).get("apk_ignore")
+        variantes = sorted({x.get("variante") for x in registre_apk.lire(projet.dossier) if x.get("variante")})
+        variante = _variante_du_test(projet, t, variantes)
+        if variante is None and len(variantes) > 1:
+            # plusieurs variantes possibles, aucune règle ne tranche : jamais une par habitude, la liste des candidats
+            candidats = registre_apk.candidats(projet.dossier, motifs)
+            texte = ("Plusieurs variantes de l'APK existent et rien ne désigne celle que tu testes. "
+                     + ("APK dont les sources correspondent au code testé : " + " ; ".join(
+                         f"`{c['chemin']}` (variante {c['variante']}, sources {c['empreinte']}, construit le {c['date']})"
+                         for c in candidats) + ". Choisis celui que ta vérification vise (la correction, l'élément) et dis "
+                         "lequel dans `\"apk_utilise\": {\"variante\", \"empreinte\", \"date\"}` ; "
+                         if candidats else f"Variantes connues : {', '.join(variantes)} ; aucune ne correspond aux sources actuelles : "
+                         "dis laquelle tu testes et construis-la UNE fois seulement si tu dois la tester ; ")
+                     + "ne construis pas d'APK d'une autre variante.")
+            _journal(projet, t["id"], texte[:480])
+            return [texte]
+        r = registre_apk.fournir(projet.dossier, variante, tache=t["id"], motifs=motifs)
     except Exception:  # noqa: BLE001 : une lecture ratée ne change rien à la consigne
         return []
     if r["etat"] == "existant":

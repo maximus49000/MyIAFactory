@@ -5,6 +5,7 @@ L'index du poste n'est qu'un cache : la vérité est sur le serveur (`~/taches/<
 `serveur_ovh/taches/lancer_emulation.sh`). Sections : demande ; index du poste ; motifs du pont ; lanceur.
 """
 import io
+import ipaddress
 import json
 import os
 import re
@@ -36,7 +37,7 @@ INACTIVITE_MIN_S = 300           # mode pilote : jamais sous le budget de démar
 ETATS = ("en_attente", "en_cours", "terminee", "echouee", "arretee")
 TYPES = ("emulation",)
 MODES = ("scenario", "pilote")
-CLES_DEMANDE = frozenset({"id", "type", "projet", "mode", "scenario", "limites", "demandeur", "apk", "hotes"})
+CLES_DEMANDE = frozenset({"id", "type", "projet", "mode", "scenario", "limites", "demandeur", "apk", "hotes", "point"})
 # Réseau borné de l'émulateur (voir docs/serveur-taches.md « Réseau borné ») : des NOMS d'hôtes DNS (jamais une adresse IP), 5 au
 # plus, joints en HTTPS (port 443) seulement. Même motif que l'enveloppe (`lancer_emulation.sh`), qui revalide.
 HOTES_MAX = 5
@@ -56,6 +57,7 @@ class Demande:
     limites: object          # MappingProxyType : immuable
     demandeur: str
     apk: object
+    point: object = None     # point d'accès exact du service du projet (voir `valider_point`) ; None : aucun
     hotes: tuple = ()        # hôtes joignables par l'émulateur (réseau borné, accord du Directeur) ; vide : aucun réseau
 
 
@@ -106,6 +108,44 @@ def valider_hotes(brut):
     return tuple(vus)
 
 
+_NON_PUBLIQUES = tuple(ipaddress.IPv4Network(r) for r in (
+    "0.0.0.0/8", "10.0.0.0/8", "100.64.0.0/10", "127.0.0.0/8", "169.254.0.0/16", "172.16.0.0/12", "192.0.0.0/24",
+    "192.168.0.0/16", "198.18.0.0/15", "224.0.0.0/3"))
+
+
+def _adresse_publique(adresse):
+    """Les mêmes bornes que `ip_publique` de l'enveloppe (`lancer_emulation.sh`), qui revérifie sur le serveur."""
+    return not any(adresse in reseau for reseau in _NON_PUBLIQUES)
+
+
+MOTIF_POINT = re.compile(r"(http|https)://([a-z0-9.-]{1,253}):([1-9][0-9]{0,4})", re.ASCII)
+
+
+def valider_point(brut):
+    """Le point d'accès exact d'un service du projet, `<http|https>://<adresse IPv4 publique ou nom DNS>:<port>` (`None` :
+    aucun) ; `ValueError` en français sinon. Il n'est JAMAIS saisi par une recette : il est dérivé de la déclaration du service
+    du projet (`serveur_tache_cli`, adresse du cache du service). Une adresse littérale doit être publique (l'enveloppe du
+    serveur le revérifie après résolution)."""
+    if brut is None:
+        return None
+    m = MOTIF_POINT.fullmatch(brut) if isinstance(brut, str) else None
+    if not m or int(m.group(3)) > 65535:
+        raise ValueError("Point d'accès du service refusé : <http|https>://<adresse IPv4 ou nom>:<port> (port de 1 à 65535).")
+    hote = m.group(2)
+    if re.fullmatch(r"[0-9]{1,3}(\.[0-9]{1,3}){3}", hote, re.ASCII):
+        try:
+            adresse = ipaddress.IPv4Address(hote)
+        except ValueError:
+            raise ValueError("Point d'accès du service refusé : adresse IPv4 invalide.") from None
+        if not _adresse_publique(adresse):
+            raise ValueError("Point d'accès du service refusé : l'adresse n'est pas publique (réseau interne, bouclage, "
+                             "lien local ou métadonnées).")
+    else:
+        if not MOTIF_HOTE.fullmatch(hote) or hote.endswith(SUFFIXES_INTERNES):
+            raise ValueError("Point d'accès du service refusé : un nom DNS public en minuscules est attendu.")
+    return brut
+
+
 def _controle(c):
     o = ord(c)
     return o < 32 or 0x7F <= o <= 0x9F or o in (0x2028, 0x2029)
@@ -149,7 +189,7 @@ def valider_demande(brut):
     return Demande(id=ident, type="emulation", projet=_texte_court(brut.get("projet"), "projet"), mode=mode,
                    scenario=scenario, limites=limites,
                    demandeur=_texte_court(brut.get("demandeur"), "demandeur"),
-                   apk=_texte_court(brut.get("apk"), "apk", None), hotes=valider_hotes(brut.get("hotes")))
+                   apk=_texte_court(brut.get("apk"), "apk", None), hotes=valider_hotes(brut.get("hotes")), point=valider_point(brut.get("point")))
 
 
 # ---------------------------------------------------------------- index du poste
@@ -793,11 +833,11 @@ fi
 rm -rf "$d"
 exit $r
 """
-# Arguments de l'enveloppe : <id> <mode> <duree_s> <inactivite_s> <memoire_mo> <cpus> <captures> <octets> [<hotes>], les huit
+# Arguments de l'enveloppe : <id> <mode> <duree_s> <inactivite_s> <memoire_mo> <cpus> <captures> <octets> [<hotes> [<point>]], les huit
 # premiers des entiers validés (limites de la demande, toujours dans les bornes de l'enveloppe : captures 1..50, octets
 # 1..104857600) ; <hotes> (noms validés par `valider_hotes`, séparés par des virgules) seulement pour un réseau borné.
 _LANCER = f"""# tache:lancer @ID@
-exec bash "{ENVELOPPE_DISTANTE}" @ID@ @MODE@ @DUREE@ @INACTIVITE@ @MEMOIRE@ @CPUS@ @CAPTURES@ @OCTETS@@HOTES@
+exec bash "{ENVELOPPE_DISTANTE}" @ID@ @MODE@ @DUREE@ @INACTIVITE@ @MEMOIRE@ @CPUS@ @CAPTURES@ @OCTETS@@HOTES@@POINT@
 """
 # Empreinte de l'image de l'émulateur sur le serveur (marqueur écrit par l'étape d'installation) : une lecture fixe.
 _IMAGE = f"""# tache:image
@@ -1005,7 +1045,7 @@ def _demande_sure(demande):
         brut = {"id": demande.id, "type": demande.type, "projet": demande.projet, "mode": demande.mode,
                 "scenario": demande.scenario, "demandeur": demande.demandeur, "apk": demande.apk,
                 "limites": dict(limites) if isinstance(limites, (dict, MappingProxyType)) else limites,
-                "hotes": list(demande.hotes)}
+                "hotes": list(demande.hotes), "point": demande.point}
     elif isinstance(demande, dict):
         brut = demande
     else:
@@ -1019,7 +1059,7 @@ def _demande_sure(demande):
 def _demande_dict(d):
     return {"id": d.id, "type": d.type, "projet": d.projet, "mode": d.mode, "scenario": d.scenario,
             "limites": dict(d.limites), "demandeur": d.demandeur, "apk": d.apk,
-            "hotes": list(d.hotes)}
+            "hotes": list(d.hotes), "point": d.point}
 
 
 def _envoyer(serveur, ssh, demande, apk):
@@ -1121,8 +1161,8 @@ def lancer(demande, apk, dossier=plateforme_acces.DOSSIER, ssh=plateforme_ssh, a
     fiche = {"etat": "en_attente", "serveur_id": serveur.id, "mode": d.mode, "projet": d.projet,
              "scenario": d.scenario, "demandeur": d.demandeur, "limites": dict(d.limites), "cree": _maintenant_iso(),
              "debut": None, "fin": None, "statut": None, "raison": "APK envoyé : démarrage demandé."}
-    if d.hotes:
-        fiche["reseau"] = list(d.hotes)         # le journal de la tâche dit que le réseau était ouvert, et vers qui
+    if d.hotes or d.point:
+        fiche["reseau"] = list(d.hotes) + ([d.point] if d.point else [])         # le journal de la tâche dit que le réseau était ouvert, et vers qui
     try:
         Index(dossier).enregistrer(d.id, _masque(fiche, dossier))
     except (ErreurIndex, TimeoutError, ValueError, OSError) as e:
@@ -1139,7 +1179,8 @@ def lancer(demande, apk, dossier=plateforme_acces.DOSSIER, ssh=plateforme_ssh, a
     commande = _script(_LANCER, d.id, MODE=d.mode, DUREE=str(int(d.limites["duree_s"])),
                        INACTIVITE=str(int(d.limites["inactivite_s"])), MEMOIRE=str(MEMOIRE_MO), CPUS=str(CPUS),
                        CAPTURES=str(int(d.limites["captures"])), OCTETS=str(int(d.limites["octets"])),
-                       HOTES=(" " + ",".join(d.hotes)) if d.hotes else "")
+                       HOTES=(" " + ",".join(d.hotes)) if d.hotes else (" -" if d.point else ""),
+                       POINT=(" " + d.point) if d.point else "")
     attendu = 0
     while True:
         code, sortie_texte, erreur = _bash(serveur, ssh, commande, delai=180)

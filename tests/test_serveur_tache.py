@@ -749,6 +749,26 @@ class TestHotes(unittest.TestCase):
             with self.assertRaises(ValueError, msg=repr(mauvais)):
                 st.valider_demande(brut(hotes=mauvais))
 
+    def test_point_d_acces_du_service_valide(self):
+        for bon in ("http://203.0.113.10:18000", "https://203.0.113.10:8443", "http://service.exemple:18000",
+                    "https://service.exemple:443", "http://11.0.0.1:1", "http://223.255.255.254:65535"):
+            self.assertEqual(st.valider_point(bon), bon)
+            self.assertEqual(st.valider_demande(brut(point=bon)).point, bon)
+        self.assertIsNone(st.valider_point(None))
+        self.assertIsNone(st.valider_demande(brut()).point)
+
+    def test_point_d_acces_refuse(self):
+        for mauvais in ("http://10.0.0.5:18000", "http://127.0.0.1:18000", "http://169.254.169.254:80", "http://172.16.0.1:80",
+                        "http://192.168.1.1:80", "http://100.64.0.1:80", "http://0.0.0.0:80", "http://224.0.0.1:80",
+                        "http://198.18.0.1:80", "ftp://203.0.113.10:21", "tcp://203.0.113.10:18000", "203.0.113.10:18000",
+                        "http://203.0.113.10", "http://203.0.113.10:0", "http://203.0.113.10:65536", "http://203.0.113.10:018000",
+                        "http://203.0.113.10:18000/api", "http://203.0.113.10:18000/", "http://u@203.0.113.10:18000",
+                        "HTTP://203.0.113.10:18000", "http://Service.Exemple:80", "http://localhost:80", "http://a.internal:80",
+                        "http://203.0.113.256:80", "http://203.0.113.10:18000 ", "http://203.0.113.10:18000\n", "", 18000,
+                        ["http://203.0.113.10:18000"], "http://[::1]:80"):
+            with self.assertRaises(ValueError, msg=repr(mauvais)):
+                st.valider_point(mauvais)
+
     def test_champ_inconnu_toujours_refuse(self):
         with self.assertRaises(ValueError):
             st.valider_demande(brut(reseau=True))
@@ -770,6 +790,22 @@ class TestLancer(BaseLanceur):
         self.assertTrue(ligne.endswith(" 50 104857600 service.exemple,api.service.exemple"), ligne)
         self.assertEqual(self.srv.taches[ID1]["demande"]["hotes"], ["service.exemple", "api.service.exemple"])
         self.assertEqual(st.Index(self.dossier).lire()[ID1]["reseau"], ["service.exemple", "api.service.exemple"])
+
+    def test_point_dans_la_commande_et_la_fiche(self):
+        self.lancer(self.demande(point="http://203.0.113.10:18000"))
+        ligne = [x for x in self.srv.ops("lancer")[0][1].splitlines() if x.startswith("exec bash")][0]
+        self.assertTrue(ligne.endswith(" 50 104857600 - http://203.0.113.10:18000"), ligne)         # « - » : aucun hôte DNS
+        self.assertEqual(st.Index(self.dossier).lire()[ID1]["reseau"], ["http://203.0.113.10:18000"])
+
+    def test_hotes_et_point_ensemble(self):
+        self.lancer(self.demande(hotes=["service.exemple"], point="http://203.0.113.10:18000"))
+        ligne = [x for x in self.srv.ops("lancer")[0][1].splitlines() if x.startswith("exec bash")][0]
+        self.assertTrue(ligne.endswith(" 50 104857600 service.exemple http://203.0.113.10:18000"), ligne)
+
+    def test_un_point_prive_ne_part_jamais(self):
+        with self.assertRaises(st.RefusLancement):
+            self.lancer({**brut(id=ID1), "point": "http://10.0.0.1:18000"})
+        self.assertEqual(self.srv.ops("preparer"), [])
 
     def test_une_demande_a_hote_invalide_ne_part_jamais(self):
         with self.assertRaises(st.RefusLancement):
@@ -1956,7 +1992,7 @@ printf '{"id": "%s", "etat": "%s", "statut": "ok", "debut": "2026-11-19T10:15:00
                             "raison": "test"})
         rendus = {"_PREPARER": st._script(st._PREPARER, ID1), "_DEPOSER": st._DEPOSER, "_IMAGE": st._IMAGE,
                   "_LANCER": st._script(st._LANCER, ID1, MODE="pilote", DUREE="60", INACTIVITE="600", MEMOIRE="6144",
-                                        CPUS="2", CAPTURES="3", OCTETS="5000", HOTES=""),
+                                        CPUS="2", CAPTURES="3", OCTETS="5000", HOTES="", POINT=""),
                   "_ETAT": st._script(st._ETAT, ID1), "_NETTOYER": st._script(st._NETTOYER, ID1, JSON=final),
                   "_ARRETER": st._script(st._ARRETER, ID1, MOTIF="arret", JSON=final),
                   "_EFFACER": st._script(st._EFFACER, ID1), "_ABANDON": st._script(st._ABANDON, ID1),

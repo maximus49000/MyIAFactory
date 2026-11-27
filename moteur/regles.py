@@ -5890,6 +5890,27 @@ def _tache_de_flux(projet, etat, v, journal=None):
     return tid
 
 
+def _titre_du_fichier(chemin):
+    """Un titre lisible pour un fichier à valider : son nom, sans dossier."""
+    nom = str(chemin or "").replace("\\", "/").rstrip("/").rsplit("/", 1)[-1].strip()
+    return nom or "Fichier"
+
+
+def _fichiers_a_valider(fichiers):
+    """Les fichiers de la décision `valider_etape` : chacun `{chemin, titre}` non vides (la décision refuse le reste). Un
+    fichier sans titre reçoit son nom ; une entrée sans chemin est écartée."""
+    sortie = []
+    for x in fichiers or []:
+        if isinstance(x, str):
+            x = {"chemin": x}
+        if not isinstance(x, dict) or not isinstance(x.get("chemin"), str) or not x["chemin"].strip():
+            continue
+        titre = x.get("titre")
+        sortie.append({**x, "chemin": x["chemin"].strip(),
+                       "titre": titre.strip() if isinstance(titre, str) and titre.strip() else _titre_du_fichier(x["chemin"])})
+    return sortie
+
+
 def _avec_les_livrables_rapatries(projet, v, precedent):
     """Un agent serveur dont le rapport ne joint pas son livrable, alors que le moteur l'a rapatrié au poste (« Livrable
     rapatrié : <chemin> (… » au journal de sa tâche) : le livrable existe, la validation ne dépend pas de ce que l'agent
@@ -5909,7 +5930,8 @@ def _avec_les_livrables_rapatries(projet, v, precedent):
             except (OSError, ValueError):
                 existe = False
             if existe:
-                ajoutes.append({"chemin": m.group(1), "livrable": True, "element": v["element"]["id"]})
+                ajoutes.append({"chemin": m.group(1), "titre": _titre_du_fichier(m.group(1)), "livrable": True,
+                                "element": v["element"]["id"]})
                 break           # le plus récent suffit : le livrable rapatrié le plus récent de l'élément
     return {**precedent, "fichiers": fichiers + ajoutes} if ajoutes else precedent
 
@@ -5988,7 +6010,7 @@ def _attendre_le_directeur(projet, etat, v, s):
               "texte": f"L'élément « {element['nom']} » attend votre validation : « {s['nom']} ».",
               "element": {"id": element["id"], "nom": element["nom"]}, "etape": s["id"], "tache": tid,
               "objectif": objectif, "a_valider": a_valider[:OBJECTIF_MAX],
-              "compte_rendu": precedent.get("compte_rendu") or "", "fichiers": list(precedent.get("fichiers") or []),
+              "compte_rendu": precedent.get("compte_rendu") or "", "fichiers": _fichiers_a_valider(precedent.get("fichiers")),
               "points": precedent.get("points") or _points_derives(objectif, precedent)}
     if precedent.get("acces"):
         entree["acces"] = precedent["acces"]
@@ -6010,7 +6032,14 @@ def _attendre_le_directeur(projet, etat, v, s):
         if (_fonc(projet, v["fid"]) or {}).get("nature") == "correction" and not any(
                 c.get("moment") == "avant" for c in captures[0]):
             entree["avant_indisponible"] = True      # une correction sans son « avant » le dit ; une fonctionnalité, jamais
-    lancer(projet, "decision", entree)
+    try:
+        lancer(projet, "decision", entree)
+    except Refus as e:
+        # La décision est refusée alors que sa tâche existe déjà : sans ceci la validation restait ouverte sans fenêtre,
+        # que personne ne voyait (FM_Stats, 2026-11-27 : t297 pendant cinq heures, puis t302). C'est dit, jamais muet.
+        _bloquer_taches(projet, [tid], f"La fenêtre de validation n'a pas pu être posée : {e}")
+        _dire(projet, v["fid"], f"La validation « {s['nom']} » n'a pas pu s'afficher ({e}) : la tâche est bloquée, le "
+                                "Chef la reprend.")
     return tid
 
 

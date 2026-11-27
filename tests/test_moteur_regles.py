@@ -2006,6 +2006,46 @@ class Validation(Base):
         self.assertEqual(len(self.taches(etape="flux:livraison")), 1)
         self.assertEqual(self.etat["elements"]["f1/e1"]["phase"], "fait")
 
+    RAPPORTS = lambda self: [{"statut": "fait", "message": {"texte": "Programmé."}},
+                             {**verdict("e1"), **DIT, "message": {"texte": "Tout est vert, apk d'essai prêt."},
+                              "fichiers": [{"chemin": "pieces/f1/essai.png", "titre": "Capture de l'essai", "element": "e1"}]}]
+
+    def test_un_livrable_rapatrie_sans_titre_n_empeche_pas_la_fenetre_de_validation(self):
+        """FM_Stats, 2026-11-27 : le livrable rapatrié était joint sans titre, la décision était refusée alors que sa tâche
+        existait déjà : la validation restait ouverte sans fenêtre pendant cinq heures, que personne ne voyait."""
+        self.projet_avec_validation()
+        self.fichier("pieces/f1/essai.png")
+
+        def sans_titre(projet, v, precedent):
+            return {**precedent, "fichiers": [{"chemin": "pieces/f1/essai.png", "livrable": True, "element": "e1"}]}
+        with mock.patch.object(regles, "_avec_les_livrables_rapatries", side_effect=sans_titre):
+            self.piloter(regles.avancer(self.projet, self.etat), rapports=self.RAPPORTS())
+        (d,) = self.decisions()
+        self.assertEqual([f["titre"] for f in d["fichiers"]], ["essai.png"])
+
+    def test_une_decision_refusee_bloque_la_tache_au_lieu_de_la_laisser_muette(self):
+        self.projet_avec_validation()
+        self.fichier("pieces/f1/essai.png")
+        vrai = regles.lancer
+
+        def refuse(projet, nom, entree=None):
+            if nom == "decision" and (entree or {}).get("genre") == regles.GENRE_VALIDATION:
+                raise regles.Refus("decision : refus de test")
+            return vrai(projet, nom, entree)
+        with mock.patch.object(regles, "lancer", side_effect=refuse):
+            self.piloter(regles.avancer(self.projet, self.etat), rapports=self.RAPPORTS())
+        self.assertEqual(self.decisions(), [])
+        (validation,) = self.taches(etape="validation:valider")
+        self.assertTrue(validation.get("bloquee"), "la tâche de validation doit être bloquée, pas muette")
+        self.assertIn("refus de test", str(validation["bloquee"]))
+
+    def test_les_fichiers_a_valider_sont_toujours_chemin_et_titre(self):
+        r = regles._fichiers_a_valider(["a/b/app.apk", {"chemin": "x.png"}, {"chemin": " y.png ", "titre": "Y"},
+                                       {"titre": "sans chemin"}, 3, None])
+        self.assertEqual(r, [{"chemin": "a/b/app.apk", "titre": "app.apk"}, {"chemin": "x.png", "titre": "x.png"},
+                             {"chemin": "y.png", "titre": "Y"}])
+        self.assertEqual(regles._fichiers_a_valider(None), [])
+
     def test_renvoyer_refait_l_etape_precedente_avec_la_remarque(self):
         self.jusqu_a_la_validation()
         d, actions = self.repondre(verdict="renvoyer", texte="Le menu est trop chargé.")
